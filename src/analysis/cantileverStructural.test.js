@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createWall } from '@/domain/models';
 import {
   ASSUMED_CONCRETE_GRADE,
   CANTILEVER_SPAN_MULTIPLIER,
@@ -6,19 +7,26 @@ import {
   CONCRETE_MEAN_TENSILE_STRENGTH_MPA,
   CONCRETE_SECANT_MODULUS_MPA,
   DEFLECTION_SPAN_DENOMINATOR,
+  FRAMED_WALL_SELF_WEIGHT_KPA,
   IMPOSED_LOAD_BALCONY_KPA,
+  MASONRY_WALL_SELF_WEIGHT_KPA,
   PARTIAL_FACTOR_PERMANENT,
   PARTIAL_FACTOR_VARIABLE,
   QUASI_PERMANENT_FACTOR,
   REINFORCED_CONCRETE_UNIT_WEIGHT_KN_PER_M3,
+  STRIP_WIDTH_MM,
   SUPERIMPOSED_DEAD_LOAD_KPA,
   analyzeSlabCantilever,
   cantileverDeflectionLimitMm,
   cantileverRootMomentNmm,
   cantileverTipDeflectionMm,
+  deriveOverhangTipLoads,
   effectiveConcreteModulusMpa,
   overhangBackSpanMm,
   slabStripSection,
+  tipLineLoadStripForceN,
+  tipLoadDeflectionMm,
+  tipLoadRootMomentNmm,
 } from './cantileverStructural';
 
 /*
@@ -338,6 +346,244 @@ describe('analyzeSlabCantilever — several projecting runs', () => {
     };
 
     expect(analyzeSlabCantilever({ slab: referenceSlab(), overhang }).governing.lengthMm).toBeCloseTo(3000, 6);
+  });
+});
+
+/*
+ * The reference case again, with a wall standing on the free end.
+ *
+ *   p = 3 kN/m of run → on a 1 m strip, P = 3 kN = 3000 N at the tip.
+ *
+ * Ultimate (a facade is permanent load, so γ_G and no ψ)
+ *   M_tip = 1.35 · 3000 · 1000 = 4 050 000 N·mm = 4.05 kN·m
+ *   M_Ed  = 6.6375 + 4.05 = 10.6875 kN·m   → 10.6875/14.11778 = 0.7570
+ *
+ * Quasi-permanent (unfactored)
+ *   δ_tip = P L³/(3EI) = 3000 · 10⁹ / (3 · 10 333.33 · 666 666 666.67)
+ *         = 3 · 10¹² / 2.06667 · 10¹³ = 0.145161 mm
+ *   δ     = 0.134274 + 0.145161 = 0.279435 mm, still well inside the 8 mm limit
+ *
+ * Allowable imposed load — the wall spends its share of both limits first
+ *   bending:    w_max = 2(14.117782 − 4.05)/1² = 20.13556 kN/m²
+ *               q = (20.13556 − 1.35 · 6.5)/1.5 = 7.5737 kN/m²  (was 12.974)
+ *   deflection: w_max = 8EI(8 − 0.145161)/L⁴ = 440.889 · 0.981855 = 432.889
+ *               q = (432.889 − 6.5)/0.3 = 1421.30 kN/m²          (was 1447.96)
+ */
+describe('a wall standing on the tip', () => {
+  const modulus = effectiveConcreteModulusMpa();
+  const inertia = slabStripSection(THICKNESS_MM).inertiaMm4;
+  const TIP_LINE_LOAD_KN_PER_M = 3;
+  const TIP_FORCE_N = TIP_LINE_LOAD_KN_PER_M * STRIP_WIDTH_MM;
+
+  const bare = analyzeSlabCantilever({ slab: referenceSlab(), overhang: referenceOverhang() });
+  const loaded = analyzeSlabCantilever({
+    slab: referenceSlab(),
+    overhang: referenceOverhang(),
+    tipLoads: [{ lineLoadKnPerM: TIP_LINE_LOAD_KN_PER_M, wallCount: 1, wallIds: ['wall_face'] }],
+  });
+
+  it('reads kN/m along the edge as N/mm and multiplies by the strip it acts on', () => {
+    expect(tipLineLoadStripForceN(TIP_LINE_LOAD_KN_PER_M)).toBe(3000);
+    expect(tipLoadRootMomentNmm(3000, 1000)).toBe(3_000_000);
+    expect(tipLoadDeflectionMm(3000, 1000, modulus, inertia)).toBeCloseTo(0.145161, 6);
+  });
+
+  it('deflects three times as far under a tip load as the same load spread along the reach', () => {
+    // δ_point = PL³/3EI against δ_udl = wL⁴/8EI with W = wL: the ratio is 8/3.
+    const spread = cantileverTipDeflectionMm(TIP_FORCE_N / LENGTH_MM, LENGTH_MM, modulus, inertia);
+    expect(tipLoadDeflectionMm(TIP_FORCE_N, LENGTH_MM, modulus, inertia) / spread).toBeCloseTo(8 / 3, 9);
+  });
+
+  it('adds exactly gamma_G · P · L to the root moment', () => {
+    expect(loaded.governing.momentKnm - bare.governing.momentKnm).toBeCloseTo(
+      (PARTIAL_FACTOR_PERMANENT * TIP_FORCE_N * LENGTH_MM) / 1e6,
+      9,
+    );
+    expect(loaded.governing.tipMomentKnm).toBeCloseTo(4.05, 9);
+    expect(loaded.governing.momentKnm).toBeCloseTo(10.6875, 6);
+    expect(loaded.governing.bendingUtilization).toBeCloseTo(0.757, 3);
+  });
+
+  it('adds exactly P · L3/(3EI) to the tip deflection, with the wall unfactored', () => {
+    expect(loaded.governing.deflectionMm - bare.governing.deflectionMm).toBeCloseTo(
+      tipLoadDeflectionMm(TIP_FORCE_N, LENGTH_MM, modulus, inertia),
+      9,
+    );
+    expect(loaded.governing.deflectionMm).toBeCloseTo(0.279435, 5);
+  });
+
+  it('spends the wall out of both capacities before the imposed load gets a share', () => {
+    expect(loaded.governing.allowableImposedBendingKpa).toBeCloseTo(7.5737, 3);
+    expect(loaded.governing.allowableImposedDeflectionKpa).toBeCloseTo(1421.3, 1);
+    expect(loaded.governing.allowableImposedKpa).toBeLessThan(bare.governing.allowableImposedKpa);
+    expect(loaded.governing.allowableGovernedBy).toBe('bending');
+  });
+
+  it('never reports a negative allowance when the wall alone exhausts the section', () => {
+    const crushed = analyzeSlabCantilever({
+      slab: referenceSlab(),
+      overhang: referenceOverhang(),
+      tipLoads: [{ lineLoadKnPerM: 40, wallCount: 1 }],
+    });
+
+    expect(crushed.governing.allowableImposedKpa).toBe(0);
+    expect(crushed.governing.bendingUtilization).toBeGreaterThan(1);
+    expect(crushed.verdict.status).toBe('over');
+  });
+
+  it('is bit-identical to a bare plate when the tip load is zero', () => {
+    const zero = analyzeSlabCantilever({
+      slab: referenceSlab(),
+      overhang: referenceOverhang(),
+      tipLoads: [{ lineLoadKnPerM: 0, wallCount: 0, wallIds: [] }],
+    });
+
+    for (const key of [
+      'momentKnm',
+      'deflectionMm',
+      'bendingUtilization',
+      'deflectionUtilization',
+      'allowableImposedBendingKpa',
+      'allowableImposedDeflectionKpa',
+      'allowableImposedKpa',
+    ]) {
+      expect(zero.governing[key]).toBe(bare.governing[key]);
+    }
+    expect(zero.governing.cracked).toBe(bare.governing.cracked);
+    expect(zero.verdict.headline).toBe(bare.verdict.headline);
+  });
+
+  it('says in words which of the two load cases produced the numbers', () => {
+    expect(bare.assumptions.summary).toContain('No wall load detected on the tip');
+    expect(bare.assumptions.tipWallCount).toBe(0);
+
+    expect(loaded.assumptions.summary).toContain('facade line load from 1 wall(s) on the tip');
+    expect(loaded.assumptions.summary).toContain('3 kN/m of run');
+    expect(loaded.assumptions.tipWallCount).toBe(1);
+    expect(loaded.assumptions.tipLineLoadKnPerM).toBe(TIP_LINE_LOAD_KN_PER_M);
+  });
+
+  it('counts a wall that runs along two of a corner bay runs once', () => {
+    const slab = referenceSlab();
+    const overhang = {
+      slabId: 'slab_upper',
+      maxDepthMm: 1000,
+      overhangEdges: [
+        { start: { x: 3000, y: 5600 }, end: { x: 0, y: 5600 }, depthMm: 1000, lengthMm: 3000 },
+        { start: { x: 0, y: 5600 }, end: { x: 0, y: 0 }, depthMm: 1000, lengthMm: 5600 },
+      ],
+    };
+    const report = analyzeSlabCantilever({
+      slab,
+      overhang,
+      tipLoads: [
+        { lineLoadKnPerM: 2, wallCount: 1, wallIds: ['wall_face'] },
+        { lineLoadKnPerM: 4, wallCount: 2, wallIds: ['wall_face', 'wall_return'] },
+      ],
+    });
+
+    expect(report.assumptions.tipWallCount).toBe(2);
+    expect(report.assumptions.tipLineLoadKnPerM).toBe(4);
+    // Each run still carries its own load, not the slab's total.
+    expect(report.edges[0].tipLineLoadKnPerM).toBe(2);
+    expect(report.edges[1].tipLineLoadKnPerM).toBe(4);
+  });
+
+  it('looks a tip load up by the run measured, not the run analysed', () => {
+    // The first run is too shallow to analyse and is dropped on the way in, so
+    // the surviving run is edges[0] here and sourceIndex 1 in the geometry.
+    const overhang = {
+      slabId: 'slab_upper',
+      maxDepthMm: 1000,
+      overhangEdges: [
+        { start: { x: 3000, y: 5600 }, end: { x: 2000, y: 5600 }, depthMm: 20, lengthMm: 1000 },
+        { start: { x: 2000, y: 5600 }, end: { x: 0, y: 5600 }, depthMm: 1000, lengthMm: 2000 },
+      ],
+    };
+    const report = analyzeSlabCantilever({
+      slab: referenceSlab(),
+      overhang,
+      tipLoads: [
+        { lineLoadKnPerM: 99, wallCount: 1, wallIds: ['wall_nib'] },
+        { lineLoadKnPerM: 3, wallCount: 1, wallIds: ['wall_face'] },
+      ],
+    });
+
+    expect(report.edges).toHaveLength(1);
+    expect(report.edges[0].sourceIndex).toBe(1);
+    expect(report.edges[0].tipLineLoadKnPerM).toBe(3);
+  });
+});
+
+describe('deriveOverhangTipLoads — is there actually a wall on that edge?', () => {
+  function floorWith(walls) {
+    return { id: 'first', elevation: 0, floorToFloorHeight: 3000, columns: [], beams: [], slabs: [], walls };
+  }
+
+  /** Runs along the projecting edge of the reference plate, 2.4 m of 150 CHB. */
+  function tipWall(overrides = {}) {
+    return {
+      ...createWall({ x: 3000, y: 5600 }, { x: 0, y: 5600 }, 150, { height: 2400 }),
+      id: 'wall_tip',
+      ...overrides,
+    };
+  }
+
+  it('finds a wall standing on the projecting run and weighs it by assembly and height', () => {
+    const [load] = deriveOverhangTipLoads({ overhang: referenceOverhang(), floor: floorWith([tipWall()]) });
+
+    expect(load.wallCount).toBe(1);
+    expect(load.wallIds).toEqual(['wall_tip']);
+    expect(load.lineLoadKnPerM).toBeCloseTo(MASONRY_WALL_SELF_WEIGHT_KPA * 2.4, 9);
+    expect(load.lineLoadKnPerM).toBeCloseTo(6.48, 9);
+  });
+
+  it('leaves a wall standing on the back-span out of the tip load', () => {
+    const backSpan = { ...createWall({ x: 3000, y: 2000 }, { x: 0, y: 2000 }, 150, { height: 2400 }), id: 'wall_back' };
+
+    expect(deriveOverhangTipLoads({ overhang: referenceOverhang(), floor: floorWith([backSpan]) })).toEqual([
+      { lineLoadKnPerM: 0, wallCount: 0, wallIds: [] },
+    ]);
+  });
+
+  it('weighs a board wall as a board wall, not as masonry', () => {
+    const framed = tipWall({ assembly: { preset: 'fiber_cement' } });
+    const [load] = deriveOverhangTipLoads({ overhang: referenceOverhang(), floor: floorWith([framed]) });
+
+    expect(load.lineLoadKnPerM).toBeCloseTo(FRAMED_WALL_SELF_WEIGHT_KPA * 2.4, 9);
+    expect(load.lineLoadKnPerM).toBeLessThan(MASONRY_WALL_SELF_WEIGHT_KPA * 2.4);
+  });
+
+  it('takes a bypass wall over the whole run the views draw it on', () => {
+    // 250 below its own floor at 0, up to the floor above at 3000: 3.25 m tall,
+    // not the 2.4 m its stored height still says.
+    const bypass = tipWall({ framingMode: 'bypass', bypassDrop: 250 });
+    const [load] = deriveOverhangTipLoads({ overhang: referenceOverhang(), floor: floorWith([bypass]) });
+
+    expect(load.lineLoadKnPerM).toBeCloseTo(MASONRY_WALL_SELF_WEIGHT_KPA * 3.25, 9);
+  });
+
+  it('follows the wall to where it is BUILT, not where it is drawn', () => {
+    // Drawn 400 inboard of the projecting edge — too far to count — but built on
+    // it by its outboard offset.
+    const drawnInboard = { ...createWall({ x: 3000, y: 5200 }, { x: 0, y: 5200 }, 150, { height: 2400 }) };
+    const onAxis = deriveOverhangTipLoads({ overhang: referenceOverhang(), floor: floorWith([drawnInboard]) });
+    // start → end runs in −x, so "right" of it is −y; the offset goes the other way.
+    const offset = deriveOverhangTipLoads({
+      overhang: referenceOverhang(),
+      floor: floorWith([{ ...drawnInboard, outboardOffset: -400 }]),
+    });
+
+    expect(onAxis[0].wallCount).toBe(0);
+    expect(offset[0].wallCount).toBe(1);
+  });
+
+  it('has nothing to report about a floor with no walls, or a plate with no overhang', () => {
+    expect(deriveOverhangTipLoads({ overhang: referenceOverhang(), floor: floorWith([]) })).toEqual([
+      { lineLoadKnPerM: 0, wallCount: 0, wallIds: [] },
+    ]);
+    expect(deriveOverhangTipLoads({ overhang: null, floor: floorWith([tipWall()]) })).toEqual([]);
+    expect(deriveOverhangTipLoads({})).toEqual([]);
   });
 });
 

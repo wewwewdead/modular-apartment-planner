@@ -5,6 +5,7 @@ import { pointInPolygon } from './polygon';
 import { projectPointToSectionCut, sectionCutLength, sectionCutPointAtAlong } from './sectionCutGeometry';
 import { getParapetRenderData } from './roofPlanGeometry';
 import { SECTION_VISIBILITY_REASONS } from '@/sections/diagnostics';
+import { buildRoofSectionSurfaces } from '@/sections/roofGeometry';
 
 const EPSILON = 1e-6;
 
@@ -75,32 +76,6 @@ function polygonProjectionInfo(sectionCut, polygon = [], depthLimit = 0) {
   };
 }
 
-function subtractIntervals(baseInterval, openingIntervals = []) {
-  if (!baseInterval) return [];
-  const cuts = openingIntervals.filter(Boolean).sort((a, b) => a.left - b.left);
-
-  const segments = [];
-  let currentLeft = baseInterval.left;
-
-  for (const interval of cuts) {
-    if (interval.right <= currentLeft + EPSILON) continue;
-    if (interval.left > baseInterval.right - EPSILON) break;
-
-    const cutLeft = clamp(interval.left, baseInterval.left, baseInterval.right);
-    const cutRight = clamp(interval.right, baseInterval.left, baseInterval.right);
-    if (cutLeft - currentLeft > EPSILON) {
-      segments.push({ left: currentLeft, right: cutLeft });
-    }
-    currentLeft = Math.max(currentLeft, cutRight);
-  }
-
-  if (baseInterval.right - currentLeft > EPSILON) {
-    segments.push({ left: currentLeft, right: baseInterval.right });
-  }
-
-  return segments.filter((segment) => segment.right - segment.left > EPSILON);
-}
-
 function createSceneRect(id, category, renderMode, interval, bottom, top, depth, sourceId) {
   if (!interval) return null;
   return {
@@ -111,18 +86,6 @@ function createSceneRect(id, category, renderMode, interval, bottom, top, depth,
     right: interval.right,
     bottom,
     top,
-    depth,
-    sourceId,
-  };
-}
-
-function createScenePolygon(id, category, renderMode, points, depth, sourceId) {
-  if (!points || points.length < 3) return null;
-  return {
-    id,
-    category,
-    renderMode,
-    points,
     depth,
     sourceId,
   };
@@ -163,32 +126,6 @@ function summarizePolygonSectionVisibility(sectionCut, polygon = [], depthLimit 
   }
 
   return createDiagnostics(false, SECTION_VISIBILITY_REASONS.NO_GEOMETRY, 0);
-}
-
-function createSlopedSectionPolygon(id, roofGeometry, sectionCut, plane, interval, renderMode, depth, sourceId) {
-  if (!interval) return null;
-
-  const leftPoint = sectionCutPointAtAlong(sectionCut, interval.left);
-  const rightPoint = sectionCutPointAtAlong(sectionCut, interval.right);
-  const getPlaneElevation = plane?.getSurfaceElevation || roofGeometry.getSurfaceElevation;
-  const leftTop = getPlaneElevation(leftPoint, 'top');
-  const rightTop = getPlaneElevation(rightPoint, 'top');
-  const leftBottom = getPlaneElevation(leftPoint, 'bottom');
-  const rightBottom = getPlaneElevation(rightPoint, 'bottom');
-
-  return createScenePolygon(
-    id,
-    'slab',
-    renderMode,
-    [
-      { x: interval.left, z: leftTop },
-      { x: interval.right, z: rightTop },
-      { x: interval.right, z: rightBottom },
-      { x: interval.left, z: leftBottom },
-    ],
-    depth,
-    sourceId || plane.id,
-  );
 }
 
 function localRoofTopElevation(roofSystem, roofGeometry, sectionCut, along, fallbackTopElevation) {
@@ -250,8 +187,6 @@ export function buildRoofSectionElements(roofSystem, sectionCut) {
 
   const roofGeometry = buildRoofPlaneGeometry(roofSystem);
   const slabCutInterval = polygonCutInterval(sectionCut, roofSystem.boundaryPolygon || []);
-  const slabProjection = polygonProjectionInfo(sectionCut, roofSystem.boundaryPolygon || [], sectionCut.depth);
-  const slabInterval = slabCutInterval || slabProjection?.interval;
   const slabMode = slabCutInterval ? 'cut' : 'projection';
   const openingEntries = (roofSystem.roofOpenings || [])
     .map((opening) => {
@@ -269,53 +204,9 @@ export function buildRoofSectionElements(roofSystem, sectionCut) {
     })
     .filter(Boolean);
 
-  const slabSegments = subtractIntervals(
-    slabInterval,
-    openingEntries.map((entry) => entry.interval),
-  );
-  const slabDepth = slabMode === 'cut' ? 0 : (slabProjection?.depth ?? 0);
   const baseElevation = roofSystem.baseElevation ?? 0;
   const topElevation = baseElevation + (roofSystem.slabThickness ?? 0);
-
-  const rectElements = [];
-  const polygonElements = [];
-
-  if ((roofSystem.roofType || 'flat') === 'flat') {
-    rectElements.push(
-      ...slabSegments.map((segment, index) =>
-        createSceneRect(
-          `roof-slab-${roofSystem.id}-${index}`,
-          'slab',
-          slabMode,
-          segment,
-          baseElevation,
-          topElevation,
-          slabDepth,
-          roofSystem.id,
-        ),
-      ),
-    );
-  } else {
-    for (const plane of roofGeometry.planes || []) {
-      const cutInterval = polygonCutInterval(sectionCut, plane.outline || []);
-      const projection = polygonProjectionInfo(sectionCut, plane.outline || [], sectionCut.depth);
-      const interval = cutInterval || projection?.interval;
-      if (!interval) continue;
-
-      polygonElements.push(
-        createSlopedSectionPolygon(
-          `roof-plane-${plane.id}`,
-          roofGeometry,
-          sectionCut,
-          plane,
-          interval,
-          cutInterval ? 'cut' : 'projection',
-          cutInterval ? 0 : (projection?.depth ?? 0),
-          roofSystem.id,
-        ),
-      );
-    }
-  }
+  const { rectElements, polygonElements } = buildRoofSectionSurfaces(roofSystem, roofGeometry, sectionCut);
 
   for (const parapet of roofSystem.parapets || []) {
     const renderData = getParapetRenderData(parapet, roofSystem);

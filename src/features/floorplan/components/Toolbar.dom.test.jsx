@@ -40,6 +40,8 @@ const projectState = {
 
 vi.mock('@/features/floorplan/context/FloorplanContext', () => ({
   useEditor: () => editorState,
+  useEditorState: () => editorState,
+  useToolSettings: () => editorState.toolState,
   useProject: () => projectState,
 }));
 

@@ -75,6 +75,27 @@ const FIXTURE_ENVELOPE = Object.freeze({
   track: Object.freeze({ above: 0, below: 260 }),
 });
 
+/**
+ * How wide a patch of ceiling one aggregated bounce light stands in for.
+ *
+ * The indirect field is uniform by construction — that is the whole argument in
+ * `fixtureBounceIntensity` — so thirty downlights over one room are thirty
+ * copies of the same fiction, and every one of them is another iteration of the
+ * fragment loop on every lit surface in the building. Summing them into a single
+ * lamp carrying the whole flux is the same fiction stated once, for a thirtieth
+ * of the cost.
+ *
+ * Six metres because the stand-in is only exact at `r* = √(A/4π)` — 1.8 to 2.8 m
+ * for ordinary rooms — and a cell that size keeps every point in it within reach
+ * of its own bounce rather than borrowing one from the far end of an open plan.
+ * Measured in the ceiling's own U/V and anchored at its origin, so a single-room
+ * ceiling is one cell wherever in the plan it happens to sit.
+ */
+const BOUNCE_CELL_MM = 6000;
+
+/** The aggregate has no one aim to inherit; a fill arrives from everywhere. */
+const BOUNCE_AIM = Object.freeze({ x: 0, y: -1, z: 0 });
+
 function uvRectOutline(rect) {
   return [
     { u: rect.u0, v: rect.v0 },
@@ -255,24 +276,39 @@ function createSegmentDescriptor(id, kind, startPlan, endPlan, elevation, leg, m
 }
 
 /**
- * One luminaire as the three things the renderer needs from it: a fitting to
- * draw, the beam it throws, and the light the room throws back.
+ * Which aggregated bounce light a fixture's flux belongs to — its cell in the
+ * ceiling's own U/V grid. A pure function of the fixture's position, so the
+ * lamp descriptor and the bounce descriptor derive the same id without having to
+ * be built together.
+ */
+function bounceCellKey(fixture) {
+  return `${Math.floor(fixture.u / BOUNCE_CELL_MM)}.${Math.floor(fixture.v / BOUNCE_CELL_MM)}`;
+}
+
+function bounceLightId(ceilingId, fixture) {
+  return `${ceilingId}:bounce:${bounceCellKey(fixture)}`;
+}
+
+/**
+ * One luminaire as the two things the renderer needs from it: a fitting to draw
+ * and the beam it throws. The light the room throws back is a third thing, but
+ * it belongs to the room rather than to the lamp — see `buildCeilingBounceLights`.
  *
  * They are separate descriptors because they are separate objects in the scene
- * — a mesh group and two THREE lights — but they answer to the same fixture id,
- * so picking any of them in the RCP editor lights the whole thing. Everything
+ * — a mesh group and a THREE light — but they answer to the same fixture id,
+ * so picking either of them in the RCP editor lights the whole thing. Everything
  * here is data: the aperture the fitting is built around, the lamp inside it,
  * the direction it is aimed, and photometry already converted into what a
  * renderer takes. Nothing in this file knows what a SpotLight is.
  *
- * Multi-lamp fixtures get ONE beam and ONE bounce. A chandelier's five candles
- * are five shadow maps and five shading passes for a source the eye reads as one
- * glowing thing hanging in one place; `photometrics.lumens` is already the whole
- * luminaire's output, and the five bulbs still glow individually because they
- * are meshes with an emissive material.
+ * Multi-lamp fixtures get ONE beam. A chandelier's five candles are five shadow
+ * maps and five shading passes for a source the eye reads as one glowing thing
+ * hanging in one place; `photometrics.lumens` is already the whole luminaire's
+ * output, and the five bulbs still glow individually because they are meshes
+ * with an emissive material.
  */
 function buildCeilingLightFixtureObjects(fixture, context) {
-  const { space, shared } = context;
+  const { space, shared, ceilingId } = context;
   const type = getFixtureType(fixture.fixtureType);
   const bulb = getBulbType(resolveFixtureBulbId(type.id, fixture.bulbType));
   const photometrics = fixture.photometrics;
@@ -341,11 +377,18 @@ function buildCeilingLightFixtureObjects(fixture, context) {
     id: `${fixture.id}:light`,
     kind: 'ceiling',
     geometry: 'ceilingLightSource',
+    role: 'lamp',
     lightType: isSpot ? 'spot' : 'point',
     position,
     aim,
     color,
     intensity: fixtureLightIntensity(photometrics.lumens, beamAngleDeg),
+    // Where this lamp's flux goes when the scene-wide light budget cannot afford
+    // to run it as a light of its own: the same flux, spread over the sphere
+    // instead of through the beam, added to the bounce fill for its cell. A room
+    // past the budget loses the pool under the lamp, not the lamp's lumens.
+    bounceLightId: bounceLightId(ceilingId, fixture),
+    fillIntensity: fixtureLightIntensity(photometrics.lumens, null),
     // Half the beam, because a spot's angle is measured from its axis to the
     // edge of the cone rather than across it.
     angleRad: isSpot ? Math.min(MAX_SPOT_HALF_ANGLE, ((beamAngleDeg / 2) * Math.PI) / 180) : null,
@@ -365,58 +408,104 @@ function buildCeilingLightFixtureObjects(fixture, context) {
     },
   };
 
-  /**
-   * The light this lamp puts into the room by way of the room itself.
-   *
-   * `fixtureBounceIntensity` carries the argument for the figure; this is the
-   * argument for where it hangs. The indirect field has no source position at
-   * all, so any point is a fiction — but not every fiction costs the same. Set
-   * exactly in the mounting plane, the fitting's own ceiling is edge-on to it
-   * and receives nothing, which is both free (`N·L` is zero by coplanarity, so
-   * there is no ring of light to tune away) and right: a room lit by recessed
-   * downlights has a dark ceiling, and that cave effect is the most recognisable
-   * thing about it. A pendant's ceiling is still lit — by the pendant's own lamp
-   * hanging below it, which is where that light really comes from.
-   *
-   * Shadowless, for the same reason the viewport's fill light is: this is
-   * standing in for light that has already bounced off everything in the room,
-   * and bounce does not cast a shadow. It is also what keeps it out of the
-   * eight-caster budget, which belongs to the beams that make legible shadows.
-   *
-   * It does double the light count on a lit ceiling — thirty downlights become
-   * sixty lights — and although a shadowless point light is only another
-   * iteration of the fragment loop rather than another render pass, that is a
-   * real cost on a crowded flat and the reason there is one of these per
-   * fixture rather than one per lamp.
-   */
-  const bounce = {
-    id: `${fixture.id}:bounce`,
-    kind: 'ceiling',
-    geometry: 'ceilingLightSource',
-    lightType: 'point',
-    position: { x: fixture.plan.x, y: fixture.elevations.mountPlane, z: fixture.plan.y },
-    aim,
-    // The room has filtered this light but not tinted it: without knowing what
-    // the walls are finished in, the lamp's own colour is the only one that is
-    // not invented.
-    color,
-    intensity: fixtureBounceIntensity(photometrics.lumens),
-    angleRad: null,
-    penumbra: 0,
-    castShadow: false,
-    distanceMm: 0,
-    metadata,
-    bounds: {
-      minX: fixture.plan.x,
-      maxX: fixture.plan.x,
-      minY: fixture.plan.y,
-      maxY: fixture.plan.y,
-      minElevation: fixture.elevations.mountPlane,
-      maxElevation: fixture.elevations.mountPlane,
-    },
-  };
+  return [housing, light];
+}
 
-  return [housing, light, bounce];
+/**
+ * The light a ceiling's lamps put into the room by way of the room itself, as
+ * one lamp per patch of ceiling rather than one per fixture.
+ *
+ * `fixtureBounceIntensity` carries the argument for the figure; this is the
+ * argument for where it hangs and how many of it there are. The indirect field
+ * has no source position at all, so any point is a fiction — but not every
+ * fiction costs the same. Set exactly in the mounting plane, the fittings' own
+ * ceiling is edge-on to it and receives nothing, which is both free (`N·L` is
+ * zero by coplanarity, so there is no ring of light to tune away) and right: a
+ * room lit by recessed downlights has a dark ceiling, and that cave effect is
+ * the most recognisable thing about it. A pendant's ceiling is still lit — by
+ * the pendant's own lamp hanging below it, which is where that light really
+ * comes from.
+ *
+ * Shadowless, for the same reason the viewport's fill light is: this is standing
+ * in for light that has already bounced off everything in the room, and bounce
+ * does not cast a shadow. It is also what keeps it out of the eight-caster
+ * budget, which belongs to the beams that make legible shadows.
+ *
+ * Aggregated because the field is uniform and a sum of uniform fields is a
+ * uniform field: the cell's intensity is exactly the sum of the fixtures'
+ * bounces, so a ceiling emits the same total flux into its indirect term
+ * whichever way it is counted. What is lost is *where* inside a cell the fill
+ * comes from, which is a property the stand-in never had — and what is bought is
+ * that a thirty-can flat carries thirty-one lights instead of sixty.
+ */
+function buildCeilingBounceLights(fixtures, context) {
+  const { shared, ceilingId } = context;
+  const cells = new Map();
+
+  for (const fixture of fixtures) {
+    const intensity = fixtureBounceIntensity(fixture.photometrics.lumens);
+    if (!(intensity > 0)) continue;
+
+    const key = bounceCellKey(fixture);
+    let cell = cells.get(key);
+    if (!cell) {
+      cell = { key, intensity: 0, x: 0, y: 0, elevation: 0, r: 0, g: 0, b: 0 };
+      cells.set(key, cell);
+    }
+
+    // Flux-weighted throughout: the aggregate stands where the light in the cell
+    // actually is, not where the fittings happen to average out — one 3000 lm
+    // panel beside three 400 lm cans is a fill that comes from the panel.
+    const color = kelvinToRgb(fixture.photometrics.colorTempK);
+    cell.intensity += intensity;
+    cell.x += fixture.plan.x * intensity;
+    cell.y += fixture.plan.y * intensity;
+    cell.elevation += fixture.elevations.mountPlane * intensity;
+    cell.r += color.r * intensity;
+    cell.g += color.g * intensity;
+    cell.b += color.b * intensity;
+  }
+
+  // Sorted by cell so the descriptors come out in the same order every build —
+  // the scene cache compares them positionally, and an order that depended on
+  // which fixture was edited last would rebuild lights that had not changed.
+  return [...cells.values()]
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map((cell) => {
+      const weight = cell.intensity;
+      const position = { x: cell.x / weight, y: cell.elevation / weight, z: cell.y / weight };
+      return {
+        id: `${ceilingId}:bounce:${cell.key}`,
+        kind: 'ceiling',
+        geometry: 'ceilingLightSource',
+        role: 'bounce',
+        lightType: 'point',
+        position,
+        aim: BOUNCE_AIM,
+        // The room has filtered this light but not tinted it: without knowing
+        // what the walls are finished in, the lamps' own colour is the only one
+        // that is not invented. Mixed colour temperatures average by flux, which
+        // is what a room lit by both of them looks like.
+        color: { r: cell.r / weight, g: cell.g / weight, b: cell.b / weight },
+        intensity: cell.intensity,
+        angleRad: null,
+        penumbra: 0,
+        castShadow: false,
+        distanceMm: 0,
+        // No `ceilingDetailElementId`: an aggregate belongs to no one fixture, so
+        // there is nothing here for the RCP editor to select. It still answers to
+        // the ceiling, which is what the plan selects.
+        metadata: { ...shared, ceilingDetailKind: 'bounce' },
+        bounds: {
+          minX: position.x,
+          maxX: position.x,
+          minY: position.z,
+          maxY: position.z,
+          minElevation: position.y,
+          maxElevation: position.y,
+        },
+      };
+    });
 }
 
 /**
@@ -597,8 +686,12 @@ export function buildCeilingPreviewObjects(ceiling, project, options = {}) {
   // several hundred screws, and the fixtures are half the reason to look at the
   // ceiling in 3D at all.
   const lighting = detail.lightFixtures.flatMap((fixture) =>
-    buildCeilingLightFixtureObjects(fixture, { space, shared }),
+    buildCeilingLightFixtureObjects(fixture, { space, shared, ceilingId: ceiling.id }),
   );
+  // After the fixtures, and separately from them: the indirect field is a
+  // property of the room the ceiling closes, so it is counted once per patch of
+  // ceiling rather than once per lamp.
+  const bounceLights = buildCeilingBounceLights(detail.lightFixtures, { shared, ceilingId: ceiling.id });
 
-  return [...boards, ...framing, ...hangers, ...openings, ...fasteners, ...lighting];
+  return [...boards, ...framing, ...hangers, ...openings, ...fasteners, ...lighting, ...bounceLights];
 }

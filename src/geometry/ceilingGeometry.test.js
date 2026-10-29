@@ -527,10 +527,12 @@ describe('ceiling fasteners in 3D', () => {
 });
 
 /**
- * Every luminaire is three descriptors — the fitting you can see, the beam it
- * throws, and the light the room throws back — and the renderer needs all three
- * to be true at once: a lamp drawn 900 mm down a cord that lights the room from
- * the ceiling plane is a lamp nobody believes.
+ * Every luminaire is two descriptors — the fitting you can see and the beam it
+ * throws — and the renderer needs both to be true at once: a lamp drawn 900 mm
+ * down a cord that lights the room from the ceiling plane is a lamp nobody
+ * believes. The third thing a lit room needs, the light it throws back at
+ * itself, belongs to the room rather than to any one lamp and is counted once
+ * per patch of ceiling — see the aggregation suite below.
  *
  * The ceiling under test is plan-aligned and 4000 × 3000 over BOUNDARY, so
  * ceiling-local u maps to plan x + 1000 and v maps to plan y measured back from
@@ -547,8 +549,12 @@ describe('ceiling luminaires in 3D', () => {
     { id: 'lt_track', u: 500, v: 2000, fixtureType: 'track_head', aim: { tiltDeg: 90, azimuthDeg: 0 } },
   ];
 
+  function litCeiling(fixtures = FIXTURES, overrides = {}) {
+    return manualCeiling({ ...overrides, detailing: { ...overrides.detailing, lighting: { fixtures } } });
+  }
+
   function litDescriptors(fixtures = FIXTURES, overrides = {}) {
-    const ceiling = manualCeiling({ ...overrides, detailing: { ...overrides.detailing, lighting: { fixtures } } });
+    const ceiling = litCeiling(fixtures, overrides);
     return buildCeilingPreviewObjects(ceiling, createProject([ceiling]));
   }
 
@@ -556,12 +562,10 @@ describe('ceiling luminaires in 3D', () => {
     descriptors.filter((entry) => entry.metadata.ceilingDetailElementId === fixtureId);
   const housingOf = (descriptors, fixtureId) =>
     partsOf(descriptors, fixtureId).find((entry) => entry.geometry === 'ceilingLightFixture');
-  // Two of a fixture's three parts are `ceilingLightSource` now, so they are
-  // told apart by the suffix their ids carry rather than by geometry.
   const lightOf = (descriptors, fixtureId) =>
     partsOf(descriptors, fixtureId).find((entry) => entry.id.endsWith(':light'));
-  const bounceOf = (descriptors, fixtureId) =>
-    partsOf(descriptors, fixtureId).find((entry) => entry.id.endsWith(':bounce'));
+  /** The room's own fills, which answer to the ceiling rather than to a fixture. */
+  const bouncesOf = (descriptors) => descriptors.filter((entry) => entry.role === 'bounce');
 
   it('fixes the fitting to the board underside and drops the light clear of it', () => {
     const descriptors = litDescriptors();
@@ -630,48 +634,33 @@ describe('ceiling luminaires in 3D', () => {
     // Five candles are one luminaire with five candles' worth of light, not five
     // lights: the chandelier's arms glow from its emissive material instead.
     const chandelier = litDescriptors([{ id: 'lt_chandelier', u: 1000, v: 1000, fixtureType: 'chandelier_5' }]);
-    expect(partsOf(chandelier, 'lt_chandelier')).toHaveLength(3);
+    expect(partsOf(chandelier, 'lt_chandelier')).toHaveLength(2);
     expect(lightOf(chandelier, 'lt_chandelier').intensity).toBeCloseTo(fixtureLightIntensity(1500, null), 6);
     expect(housingOf(chandelier, 'lt_chandelier').bulb.count).toBe(5);
   });
 
-  it('gives every fixture one shadowless bounce light, set in the ceiling plane', () => {
+  /**
+   * A lamp the scene-wide light budget cannot afford to run is not simply put
+   * out: the descriptor carries where its flux goes instead, and how much of it
+   * arrives once it is spread over the sphere rather than thrown through the
+   * beam. Without both of those the budget would be a dimmer switch.
+   */
+  it('tells each lamp which fill its flux falls back to, and how much of it', () => {
     const descriptors = litDescriptors();
+    const bounceIds = new Set(bouncesOf(descriptors).map((entry) => entry.id));
 
     for (const fixture of FIXTURES) {
-      const bounce = bounceOf(descriptors, fixture.id);
       const light = lightOf(descriptors, fixture.id);
-
-      // Set exactly in the mounting plane, not below it with the lamp: the
-      // ceiling is then edge-on to it and picks up nothing, which is what stops
-      // a ring of light appearing around every recessed can.
-      expect(bounce.position.y).toBe(BOARD_UNDERSIDE);
-      expect(bounce.position).toMatchObject({ x: light.position.x, z: light.position.z });
-      // Bounce arrives from everywhere at once, so it has no cone — and it casts
-      // no shadow, which is also what keeps it out of the eight-caster budget.
-      expect(bounce.lightType).toBe('point');
-      expect(bounce.angleRad).toBeNull();
-      expect(bounce.castShadow).toBe(false);
-      expect(bounce.distanceMm).toBe(0);
-      expect(bounce.color).toEqual(light.color);
+      expect(light.role).toBe('lamp');
+      expect(bounceIds.has(light.bounceLightId)).toBe(true);
+      expect(light.fillIntensity).toBeGreaterThan(0);
     }
 
-    // A pendant's lamp hangs 900 mm down; the light the room gives back still
-    // enters at the ceiling.
-    expect(lightOf(descriptors, 'lt_pendant').position.y).toBe(BOARD_UNDERSIDE - 900 - LIGHT_CLEARANCE);
-    expect(bounceOf(descriptors, 'lt_pendant').position.y).toBe(BOARD_UNDERSIDE);
-  });
-
-  it('bounces the whole luminaire’s flux once, however many lamps are in it', () => {
-    const can = bounceOf(litDescriptors(), 'lt_can');
-    expect(can.intensity).toBeCloseTo(fixtureBounceIntensity(650), 6);
-    // Well under the beam it belongs to: this is a fill, not a second lamp.
-    expect(can.intensity).toBeLessThan(lightOf(litDescriptors(), 'lt_can').intensity / 5);
-
-    // One chandelier is one bounce, carrying all five candles.
-    const chandelier = litDescriptors([{ id: 'lt_chandelier', u: 1000, v: 1000, fixtureType: 'chandelier_5' }]);
-    expect(partsOf(chandelier, 'lt_chandelier').filter((part) => part.id.endsWith(':bounce'))).toHaveLength(1);
-    expect(bounceOf(chandelier, 'lt_chandelier').intensity).toBeCloseTo(fixtureBounceIntensity(1500), 6);
+    // The same flux, omnidirectional: a 650 lm can through a 110° cone reads far
+    // brighter on axis than the same 650 lm spread over the whole sphere.
+    const can = lightOf(descriptors, 'lt_can');
+    expect(can.fillIntensity).toBeCloseTo(fixtureLightIntensity(650, null), 6);
+    expect(can.fillIntensity).toBeLessThan(can.intensity);
   });
 
   it('aims a tilted head along the ceiling’s own frame', () => {
@@ -704,14 +693,23 @@ describe('ceiling luminaires in 3D', () => {
 
     for (const fixture of FIXTURES) {
       const parts = partsOf(descriptors, fixture.id);
-      expect(parts, fixture.id).toHaveLength(3);
+      expect(parts, fixture.id).toHaveLength(2);
       for (const part of parts) {
         expect(part.kind).toBe('ceiling');
         expect(part.metadata.ceilingDetailKind).toBe('fixture');
         expect(part.metadata.ceilingId).toBe('ceiling_manual');
         expect(part.metadata.sourceId).toBe('ceiling_manual');
       }
-      expect(new Set(parts.map((part) => part.id)).size).toBe(3);
+      expect(new Set(parts.map((part) => part.id)).size).toBe(2);
+    }
+
+    // The fill answers to the ceiling and to nothing smaller: it stands in for
+    // every lamp in its cell at once, so there is no one fixture for the RCP
+    // editor to select it as.
+    for (const bounce of bouncesOf(descriptors)) {
+      expect(bounce.metadata.ceilingDetailElementId).toBeUndefined();
+      expect(bounce.metadata.ceilingDetailKind).toBe('bounce');
+      expect(bounce.metadata.sourceId).toBe('ceiling_manual');
     }
   });
 
@@ -721,11 +719,165 @@ describe('ceiling luminaires in 3D', () => {
 
     const plain = byDetailKind(buildCeilingPreviewObjects(ceiling, project), 'fixture');
     const detailed = byDetailKind(buildCeilingPreviewObjects(ceiling, project, { fasteners: true }), 'fixture');
-    expect(plain).toHaveLength(FIXTURES.length * 3);
+    expect(plain).toHaveLength(FIXTURES.length * 2);
     expect(detailed).toHaveLength(plain.length);
 
     // And nothing at all when the ceiling itself is switched off.
     const off = manualCeiling({ detailing: { enabled: false, lighting: { fixtures: FIXTURES } } });
     expect(buildCeilingPreviewObjects(off, createProject([off]))).toEqual([]);
+  });
+});
+
+/**
+ * The indirect field a lit room throws back at itself, as one lamp per patch of
+ * ceiling rather than one per fitting.
+ *
+ * The whole argument for aggregating is that the stand-in was already uniform —
+ * so the thing these have to prove is that nothing was lost in the sum: the same
+ * total flux, entering at the same plane, from the place inside the cell the
+ * light actually comes from. And that a room bigger than one patch still gets a
+ * fill at both ends of it rather than one bright one in the middle.
+ */
+describe('ceiling bounce light aggregation', () => {
+  const BOARD_UNDERSIDE = MANUAL_BASE_ELEVATION;
+
+  const litCeiling = (fixtures, overrides = {}) =>
+    manualCeiling({ ...overrides, detailing: { ...overrides.detailing, lighting: { fixtures } } });
+
+  function build(fixtures, overrides = {}) {
+    const ceiling = litCeiling(fixtures, overrides);
+    const project = createProject([ceiling]);
+    return {
+      bounces: buildCeilingPreviewObjects(ceiling, project).filter((entry) => entry.role === 'bounce'),
+      lamps: buildCeilingPreviewObjects(ceiling, project).filter((entry) => entry.role === 'lamp'),
+      fixtures: deriveCeilingDetail(ceiling, project).lightFixtures,
+    };
+  }
+
+  const FOUR_CANS = [
+    { id: 'lt_a', u: 800, v: 800, fixtureType: 'recessed_can_6' },
+    { id: 'lt_b', u: 2400, v: 800, fixtureType: 'recessed_can_6' },
+    { id: 'lt_c', u: 800, v: 2200, fixtureType: 'recessed_can_6' },
+    { id: 'lt_d', u: 2400, v: 2200, fixtureType: 'recessed_can_6' },
+  ];
+
+  it('replaces a room’s worth of fills with one, carrying all of their flux', () => {
+    const { bounces, fixtures } = build(FOUR_CANS);
+
+    // Four cans over a 4 × 3 m ceiling are one patch, so one fill.
+    expect(bounces).toHaveLength(1);
+
+    const expected = fixtures.reduce(
+      (total, fixture) => total + fixtureBounceIntensity(fixture.photometrics.lumens),
+      0,
+    );
+    expect(bounces[0].intensity).toBeCloseTo(expected, 6);
+    // Not a rounding of one can's worth: the sum is what the room receives.
+    expect(bounces[0].intensity).toBeCloseTo(fixtureBounceIntensity(650) * 4, 6);
+  });
+
+  it('sets the fill in the mounting plane at the centre of the flux, not of the fittings', () => {
+    // A panel worth several cans, off to one side of them. The fill has to be
+    // pulled toward it, because that is where the light in the room is.
+    const mixed = [
+      { id: 'lt_can', u: 500, v: 1500, fixtureType: 'recessed_can_6' },
+      { id: 'lt_panel', u: 3500, v: 1500, fixtureType: 'troffer_2x4' },
+    ];
+    const { bounces, fixtures } = build(mixed);
+    expect(bounces).toHaveLength(1);
+
+    const weights = fixtures.map((fixture) => fixtureBounceIntensity(fixture.photometrics.lumens));
+    const total = weights[0] + weights[1];
+    const expectedX = (fixtures[0].plan.x * weights[0] + fixtures[1].plan.x * weights[1]) / total;
+    const expectedZ = (fixtures[0].plan.y * weights[0] + fixtures[1].plan.y * weights[1]) / total;
+
+    expect(bounces[0].position.x).toBeCloseTo(expectedX, 6);
+    expect(bounces[0].position.z).toBeCloseTo(expectedZ, 6);
+    // The panel outshines the can, so the fill sits past the midpoint of the two.
+    expect(weights[1]).toBeGreaterThan(weights[0]);
+    expect(bounces[0].position.x).toBeGreaterThan((fixtures[0].plan.x + fixtures[1].plan.x) / 2);
+
+    // Set exactly in the mounting plane, not below it with the lamps: the ceiling
+    // is then edge-on to it and picks up nothing, which is what stops a ring of
+    // light appearing around every recessed can.
+    expect(bounces[0].position.y).toBe(BOARD_UNDERSIDE);
+  });
+
+  it('is a shadowless omnidirectional point, whatever the lamps under it are', () => {
+    // A pendant hangs its lamp 900 mm down and a track head throws a cone; the
+    // light the room gives back does neither.
+    const { bounces } = build([
+      { id: 'lt_pendant', u: 1000, v: 1000, fixtureType: 'pendant' },
+      { id: 'lt_track', u: 2000, v: 2000, fixtureType: 'track_head', aim: { tiltDeg: 90, azimuthDeg: 0 } },
+    ]);
+
+    expect(bounces).toHaveLength(1);
+    expect(bounces[0].lightType).toBe('point');
+    expect(bounces[0].angleRad).toBeNull();
+    expect(bounces[0].castShadow).toBe(false);
+    expect(bounces[0].distanceMm).toBe(0);
+    expect(bounces[0].aim).toEqual({ x: 0, y: -1, z: 0 });
+    expect(bounces[0].position.y).toBe(BOARD_UNDERSIDE);
+  });
+
+  it('gives an open plan a fill per patch, and still spends the same flux', () => {
+    // 14 m long: three 6 m cells across it, with lamps in the first and the third.
+    const wide = {
+      boundaryPolygon: [
+        { x: 1000, y: 500 },
+        { x: 15000, y: 500 },
+        { x: 15000, y: 3500 },
+        { x: 1000, y: 3500 },
+      ],
+    };
+    const { bounces, fixtures } = build(
+      [
+        { id: 'lt_west', u: 1000, v: 1500, fixtureType: 'recessed_can_6' },
+        { id: 'lt_east', u: 13000, v: 1500, fixtureType: 'recessed_can_6' },
+      ],
+      wide,
+    );
+
+    expect(bounces).toHaveLength(2);
+    // One at each end, not one bright one in the middle — the fill has to reach
+    // the far corner of a room it is standing in for.
+    expect(bounces[0].position.x).toBeCloseTo(2000, 6);
+    expect(bounces[1].position.x).toBeCloseTo(14000, 6);
+
+    const expected = fixtures.reduce(
+      (total, fixture) => total + fixtureBounceIntensity(fixture.photometrics.lumens),
+      0,
+    );
+    const emitted = bounces.reduce((total, bounce) => total + bounce.intensity, 0);
+    expect(emitted).toBeCloseTo(expected, 6);
+  });
+
+  it('names its cells the same way twice, so a rebuild reuses them', () => {
+    const first = build(FOUR_CANS);
+    const second = build(FOUR_CANS);
+    expect(second.bounces.map((entry) => entry.id)).toEqual(first.bounces.map((entry) => entry.id));
+    // And every lamp points at one that exists.
+    const ids = new Set(first.bounces.map((entry) => entry.id));
+    for (const lamp of first.lamps) expect(ids.has(lamp.bounceLightId)).toBe(true);
+  });
+
+  it('mixes colour temperature by flux rather than picking one', () => {
+    const { bounces } = build([
+      { id: 'lt_warm', u: 1000, v: 1500, fixtureType: 'recessed_can_6', colorTempK: 2700 },
+      { id: 'lt_cool', u: 3000, v: 1500, fixtureType: 'recessed_can_6', colorTempK: 5000 },
+    ]);
+
+    const warm = kelvinToRgb(2700);
+    const cool = kelvinToRgb(5000);
+    expect(bounces).toHaveLength(1);
+    // Two equal lamps, so the mean of the two — between them on every channel,
+    // and equal to neither.
+    expect(bounces[0].color.b).toBeCloseTo((warm.b + cool.b) / 2, 6);
+    expect(bounces[0].color.b).toBeGreaterThan(warm.b);
+    expect(bounces[0].color.b).toBeLessThan(cool.b);
+  });
+
+  it('emits nothing for a ceiling with no lamps on it', () => {
+    expect(build([]).bounces).toEqual([]);
   });
 });

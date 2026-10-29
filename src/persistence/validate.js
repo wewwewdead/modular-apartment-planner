@@ -1,9 +1,21 @@
 import { ProjectValidationError } from './errors';
 import { PHASE_ASSIGNABLE_KEYS } from '@/domain/phaseAssignments';
 import { resolveCeilingElevations } from '@/domain/ceilingModels';
+import {
+  getEligibleCeilingSupportBeams,
+  resolveCeilingSupportBeams,
+  selectCeilingBeamsForArea,
+  selectPreferredCeilingBeamLevel,
+} from '@/domain/ceilingBeamAttachment';
 import { syncCanonicalBuilding } from '@/domain/buildingModels';
-import { getOrderedFloors } from '@/domain/floorModels';
+import { getFloorTopElevation, getOrderedFloors, getProjectFloor } from '@/domain/floorModels';
 import { QUANTITY_RATE_KEYS } from '@/domain/quantityTakeoff';
+
+// A stored datum is compared against the storey top it was written from, so the
+// only difference to absorb is the arithmetic each side went through. A
+// millimetre is well inside anything a user could have meant by moving a ceiling
+// and well outside that noise.
+const STOREY_TOP_TOLERANCE = 1;
 
 /**
  * Which members a slab may legitimately name as its support.
@@ -1309,6 +1321,63 @@ export function repairBrokenReferences(project) {
   return { ...project, building, floors: repairedFloors, roofSystem, trussSystems, ceilings, sheets };
 }
 
+/**
+ * Ceilings a creation bug stranded on the storey datum, hung back on the beams
+ * they were always meant to hang from.
+ *
+ * A ceiling written while that bug was live claims manual attachment at
+ * `floor.elevation + floorToFloorHeight` on a floor that has beams overhead: the
+ * boards end up flush with the beam tops instead of hanging under them, and the
+ * furring and carriers built up off those boards climb into the slab above. That
+ * combination is not something the app can produce any other way — switching a
+ * ceiling to manual by hand stores the board underside, which is a suspension
+ * drop BELOW the beams it just let go of — so a manual ceiling sitting exactly on
+ * the storey top of a framed floor is residue, and re-attaching it writes what
+ * creation should have written in the first place.
+ *
+ * A manual ceiling on any other datum is somebody's decision about where their
+ * ceiling is, and a floor with no eligible beams has no attachment to offer at
+ * all; neither is touched. Nor is a hand-traced area that hangs from nothing —
+ * drawn clear of every bay on the floor and under no deck either, manual is the
+ * truth about it.
+ */
+export function reattachStoreyTopCeilings(project) {
+  if (!Array.isArray(project?.ceilings) || !project.ceilings.length) return project;
+
+  let changed = false;
+  const ceilings = project.ceilings.map((ceiling) => {
+    if (ceiling?.attachment?.mode !== 'manual' || (ceiling.attachment.beamIds || []).length) return ceiling;
+
+    const floor = getProjectFloor(project, ceiling.floorId);
+    if (!floor || !getEligibleCeilingSupportBeams(floor).length) return ceiling;
+    if (Math.abs(Number(ceiling.baseElevation) - getFloorTopElevation(floor)) > STOREY_TOP_TOLERANCE) return ceiling;
+
+    // Attached exactly the way creation attaches now: a traced outline asks which
+    // beams are over it — crossed, framing the bay it sits in, or carrying the
+    // deck it sits under — and a ceiling that traced nothing takes the level the
+    // floor itself prefers. The whole project goes to that question because the
+    // deck is the next storey's slab, which the floor alone cannot see.
+    const drawnPolygon =
+      ceiling.boundarySource === 'drawn' && (ceiling.boundaryPolygon || []).length >= 3
+        ? ceiling.boundaryPolygon
+        : null;
+    const beamIds = drawnPolygon
+      ? selectCeilingBeamsForArea(floor, drawnPolygon, project)
+      : selectPreferredCeilingBeamLevel(floor)?.beamIds || [];
+    const supportLevels = resolveCeilingSupportBeams(floor, beamIds)
+      .map((beam) => Number(beam.floorLevel))
+      .filter(Number.isFinite);
+    if (!supportLevels.length) return ceiling;
+
+    changed = true;
+    // The lowest top governs, as it does at creation: nothing hangs from higher
+    // than the support that stops first.
+    return { ...ceiling, attachment: { mode: 'beam', beamIds }, baseElevation: Math.min(...supportLevels) };
+  });
+
+  return changed ? { ...project, ceilings } : project;
+}
+
 export function validateAndRepair(project) {
   const structuralErrors = validateProjectStructure(project);
   if (structuralErrors.length > 0) {
@@ -1321,8 +1390,11 @@ export function validateAndRepair(project) {
   const warnings = validateProjectReferences(project);
   if (warnings.length > 0) {
     console.warn('[persistence] Referential integrity warnings:', warnings);
-    return syncCanonicalBuilding(repairBrokenReferences(project));
   }
-
-  return syncCanonicalBuilding(project);
+  // Reference repair only runs when something is broken. Bug residue is not
+  // broken — every id in it resolves and nothing warns about it — so it has to be
+  // looked for on every load rather than behind a warning, and after the repairs
+  // so it reads the floors and beams a project actually loaded with.
+  const repaired = warnings.length > 0 ? repairBrokenReferences(project) : project;
+  return syncCanonicalBuilding(reattachStoreyTopCeilings(repaired));
 }

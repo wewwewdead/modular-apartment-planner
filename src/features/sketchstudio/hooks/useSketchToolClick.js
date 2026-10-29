@@ -354,7 +354,7 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
 
       if (['line', 'rect', 'circle', 'holeCircle', 'cutoutRect'].includes(activeTool)) {
         const draftPoint = state.draft.startPoint
-          ? getConstrainedDraftPoint(activeTool, state.draft, snap.point ?? worldPoint)
+          ? getConstrainedDraftPoint(activeTool, state.draft, snap.point ?? worldPoint, snap)
           : (snap.point ?? worldPoint);
 
         if (!state.draft.type) {
@@ -491,7 +491,7 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
 
       if (activeTool === 'polyline') {
         const nextPoint = state.draft.points.length
-          ? getConstrainedDraftPoint('polyline', state.draft, snap.point ?? worldPoint)
+          ? getConstrainedDraftPoint('polyline', state.draft, snap.point ?? worldPoint, snap)
           : (snap.point ?? worldPoint);
         if (!state.draft.type) {
           dispatch(

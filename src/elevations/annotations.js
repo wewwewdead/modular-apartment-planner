@@ -1,5 +1,6 @@
 import { createAnnotationSettings } from '@/domain/models';
 import { createDimensionFigure } from '@/annotations/dimensions';
+import { getVisibleElevationDrawables } from './visibility';
 
 const EPSILON = 5;
 const OVERALL_WIDTH_OFFSET = 700;
@@ -7,8 +8,8 @@ const OVERALL_HEIGHT_OFFSET = -900;
 const LEVEL_OFFSET_START = -1400;
 const LEVEL_OFFSET_STEP = -350;
 const OPENING_HEIGHT_OFFSET = 260;
-const OPENING_SILL_OFFSET = 560;
-const OPENING_HEAD_OFFSET = 860;
+const OPENING_SILL_OFFSET = OPENING_HEIGHT_OFFSET;
+const OPENING_HEAD_OFFSET = 560;
 
 function toElevationPoint(x, z) {
   return { x, y: -z };
@@ -92,7 +93,9 @@ function buildOpeningDimensions(scene) {
   if (!scene?.elements?.length) return [];
 
   const figures = [];
-  const openings = scene.elements.filter((element) => element.category === 'door' || element.category === 'window');
+  const openings = getVisibleElevationDrawables(scene).filter(
+    (element) => element.category === 'door' || element.category === 'window',
+  );
 
   for (const opening of openings) {
     const idPrefix = `${scene.viewKey}-${opening.category}-${opening.sourceId || opening.id}`;
@@ -111,7 +114,7 @@ function buildOpeningDimensions(scene) {
     if (Math.abs(opening.bottom - scene.groundLevel) > EPSILON) {
       const sillFigure = createVerticalDimension(
         `${idPrefix}-sill`,
-        opening.left,
+        opening.right,
         scene.groundLevel,
         opening.bottom,
         OPENING_SILL_OFFSET,
@@ -122,7 +125,7 @@ function buildOpeningDimensions(scene) {
 
       const headFigure = createVerticalDimension(
         `${idPrefix}-head`,
-        opening.left,
+        opening.right,
         scene.groundLevel,
         opening.top,
         OPENING_HEAD_OFFSET,

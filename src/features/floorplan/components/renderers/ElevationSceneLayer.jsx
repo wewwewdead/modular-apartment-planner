@@ -1,6 +1,8 @@
-import { memo } from 'react';
+import { memo, useId } from 'react';
+import { getVisibleElevationDrawables } from '@/elevations/visibility';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 import BlueprintAnnotationLayer from './BlueprintAnnotationLayer';
+import OpeningDetails from './OpeningDetails';
 
 const STYLE_MAP = {
   wall: {
@@ -59,7 +61,7 @@ const STYLE_MAP = {
     strokeWidth: DRAWING_GRAPHICS.elevation.lineStrokeWidth,
   },
   window: {
-    fill: '#ffffff',
+    fill: '#edf3f7',
     stroke: DRAWING_GRAPHICS.elevation.lineStroke,
     strokeWidth: DRAWING_GRAPHICS.elevation.lineStrokeWidth,
   },
@@ -118,20 +120,20 @@ function polygonPoints(element) {
   return (element.points || []).map((point) => `${point.x},${-point.z}`).join(' ');
 }
 
-function linePoints(element) {
-  return `${element.start.x},${-element.start.z} ${element.end.x},${-element.end.z}`;
+function regionPath(regions) {
+  return regions
+    .flatMap(({ outline, holes }) => [outline, ...holes])
+    .map((ring) => `M${ring.map((p) => `${p.x},${p.y}`).join('L')}Z`)
+    .join(' ');
 }
 
 function ElevationSceneLayer({ scene, annotationScene, showTitle = true, selectedId = null, selectedType = null }) {
+  const clipPrefix = useId();
   if (!scene) return null;
 
   const titleX = (scene.bounds.minX + scene.bounds.maxX) / 2;
   const titleY = -scene.bounds.maxZ - 500;
-  const drawables = [
-    ...scene.elements.map((element) => ({ shape: 'rect', ...element })),
-    ...(scene.polygonElements || []).map((element) => ({ shape: 'polygon', ...element })),
-    ...(scene.lineElements || []).map((element) => ({ shape: 'line', ...element })),
-  ].sort((a, b) => b.depth - a.depth);
+  const drawables = getVisibleElevationDrawables(scene);
 
   return (
     <g className="elevation">
@@ -149,7 +151,7 @@ function ElevationSceneLayer({ scene, annotationScene, showTitle = true, selecte
           {scene.title}
         </text>
       )}
-      {drawables.map((element) => {
+      {drawables.map((element, index) => {
         const style = STYLE_MAP[element.style] || STYLE_MAP.wall;
         const isSelected =
           (selectedType === 'trussInstance' && element.sourceId === selectedId) ||
@@ -157,9 +159,9 @@ function ElevationSceneLayer({ scene, annotationScene, showTitle = true, selecte
           (element.category === selectedType && element.sourceId === selectedId);
         if (element.shape === 'line') {
           return (
-            <polyline
+            <path
               key={element.id}
-              points={linePoints(element)}
+              d={element.segments.map(([a, b]) => `M${a.x},${a.y}L${b.x},${b.y}`).join(' ')}
               fill="none"
               stroke={isSelected ? 'var(--color-selection)' : style.stroke}
               strokeWidth={isSelected ? 1.5 : style.strokeWidth}
@@ -167,24 +169,28 @@ function ElevationSceneLayer({ scene, annotationScene, showTitle = true, selecte
             />
           );
         }
-        return element.shape === 'rect' ? (
-          <polygon
-            key={element.id}
-            points={rectPoints(element)}
-            fill={style.fill}
-            stroke={isSelected ? 'var(--color-selection)' : style.stroke}
-            strokeWidth={isSelected ? 1.5 : style.strokeWidth}
-            vectorEffect="non-scaling-stroke"
-          />
-        ) : (
-          <polygon
-            key={element.id}
-            points={polygonPoints(element)}
-            fill={style.fill}
-            stroke={isSelected ? 'var(--color-selection)' : style.stroke}
-            strokeWidth={isSelected ? 1.5 : style.strokeWidth}
-            vectorEffect="non-scaling-stroke"
-          />
+        const clipId = `${clipPrefix}-elevation-${index}`;
+        const stroke = isSelected ? 'var(--color-selection)' : style.stroke;
+        return (
+          <g key={element.id} data-elevation-source={element.sourceId}>
+            <defs>
+              <clipPath id={clipId} clipPathUnits="userSpaceOnUse">
+                <path d={regionPath(element.visibleRegions)} clipRule="evenodd" />
+              </clipPath>
+            </defs>
+            <g clipPath={`url(#${clipId})`}>
+              <polygon
+                points={element.shape === 'rect' ? rectPoints(element) : polygonPoints(element)}
+                fill={style.fill}
+                stroke={stroke}
+                // The clip retains the inside half of the boundary stroke.
+                strokeWidth={(isSelected ? 1.5 : style.strokeWidth) * 2}
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+              />
+              <OpeningDetails element={element} stroke={stroke} />
+            </g>
+          </g>
         );
       })}
       {Number.isFinite(scene.groundLevel) && (

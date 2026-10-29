@@ -6,8 +6,11 @@ import {
   CEILING_BOUNDARY_SOURCES,
   CEILING_OPENING_TYPES,
   CEILING_SCHEMA_VERSION,
+  ceilingElevationRange,
   createCeiling,
   createCeilingDetailing,
+  createCeilingDimension,
+  createCeilingDimensions,
   createCeilingFace,
   createCeilingForProject,
   createCeilingFraming,
@@ -19,6 +22,7 @@ import {
   createManualCeilingFastener,
   deriveCeilingBoundaryForFloor,
   deriveCeilingDetail,
+  deriveCeilingDimensions,
   deriveCeilingFasteners,
   deriveCeilingFramingMembers,
   deriveCeilingHangers,
@@ -30,6 +34,7 @@ import {
   getProjectCeilings,
   resolveCeilingBoundary,
   resolveCeilingDetailing,
+  resolveCeilingDimensionReference,
   resolveCeilingElevations,
 } from './ceilingModels';
 
@@ -52,6 +57,21 @@ const L_BOUNDARY = [
   { x: 0, y: 4000 },
 ];
 
+// The same rectangle with a 300 wide bite taken 406 deep out of one long edge —
+// a nick whose return is shorter than one bay of the tightest module, so the
+// band that lands half across it has to be cut by the run-finder rather than
+// re-anchored to an edge station.
+const NICKED_BOUNDARY = [
+  { x: 0, y: 0 },
+  { x: 6000, y: 0 },
+  { x: 6000, y: 4000 },
+  { x: 3300, y: 4000 },
+  { x: 3300, y: 3594 },
+  { x: 3000, y: 3594 },
+  { x: 3000, y: 4000 },
+  { x: 0, y: 4000 },
+];
+
 function rectCeiling(options = {}) {
   return createCeiling('Ceiling', {
     id: 'ceiling_test',
@@ -65,6 +85,14 @@ function lCeiling(options = {}) {
   return createCeiling('L Ceiling', {
     id: 'ceiling_l',
     boundaryPolygon: L_BOUNDARY,
+    ...options,
+  });
+}
+
+function nickedCeiling(options = {}) {
+  return createCeiling('Nicked Ceiling', {
+    id: 'ceiling_nicked',
+    boundaryPolygon: NICKED_BOUNDARY,
     ...options,
   });
 }
@@ -115,6 +143,14 @@ describe('ceiling factories', () => {
     expect(detailing.suspension).toEqual({ drop: 150, hangerSpacing: 1200 });
     expect(detailing.openings).toEqual([]);
     expect(detailing.lighting).toEqual({ fixtures: [] });
+    expect(detailing.dimensions).toEqual({
+      precision: 0.01,
+      showOverall: true,
+      showOpenings: true,
+      showBoards: false,
+      showFraming: false,
+      manual: [],
+    });
   });
 
   it('rejects invalid enum values and non-finite numbers', () => {
@@ -591,10 +627,10 @@ describe('drawn ceiling boundaries', () => {
   });
 });
 
-// A ceiling closes off the underside of the slab above it, and a cantilever is
-// a slab drawn past the storey below — so the beams alone cannot say how far
-// the ceiling reaches.
-describe('ceiling coverage from the slab above', () => {
+// A ceiling is built in the bay its frame encloses, so the beams say how far it
+// reaches and the slab above says nothing at all — until there is no frame to
+// ask, where the slab is the only shape a ceiling has left.
+describe('ceiling coverage from the structure overhead', () => {
   const FLUSH_SLAB = [
     { x: 0, y: 0 },
     { x: 6000, y: 0 },
@@ -656,22 +692,33 @@ describe('ceiling coverage from the slab above', () => {
 
   const maxX = (points) => Math.max(...points.map((point) => point.x));
 
-  it('snapshots a new ceiling out to the slab edge rather than the beam faces', () => {
+  it('snapshots a new ceiling to the beam faces rather than out to the slab edge', () => {
     const ceiling = createCeilingForProject(stackedProject(CANTILEVERED_SLAB), { floorId: 'floor_1' });
 
-    // Still hung from the four beams, and still on their plane: only the extent
-    // came from the slab.
     expect(ceiling.attachment).toEqual({
       mode: CEILING_ATTACHMENT_MODES.BEAM,
       beamIds: ['beam_s', 'beam_n', 'beam_w', 'beam_e'],
     });
     expect(ceiling.baseElevation).toBe(3200);
-    expect(maxX(ceiling.boundaryPolygon)).toBeCloseTo(7500, 6);
-    expect(pointInPolygon({ x: 7000, y: 2000 }, ceiling.boundaryPolygon)).toBe(true);
+    // The eastern beam's inner face. The 1500 mm the slab cantilevers past it
+    // is left open: an AUTO ceiling traces the frame, and a ceiling wanted under
+    // an overhang is drawn by hand.
+    expect(maxX(ceiling.boundaryPolygon)).toBeCloseTo(5875, 6);
+    expect(pointInPolygon({ x: 7000, y: 2000 }, ceiling.boundaryPolygon)).toBe(false);
   });
 
-  it('re-reads the slab on every read, so dragging its edge out drags the ceiling with it', () => {
+  it('holds the beam faces however far the slab edge above is dragged', () => {
     const project = stackedProject(FLUSH_SLAB);
+    const ceiling = createCeilingForProject(project, { floorId: 'floor_1' });
+
+    expect(maxX(resolveCeilingBoundary(project, ceiling))).toBeCloseTo(5875, 6);
+    expect(maxX(resolveCeilingBoundary(withSlabAbove(project, CANTILEVERED_SLAB), ceiling))).toBeCloseTo(5875, 6);
+  });
+
+  it('re-reads the slab on every read where the beams frame nothing', () => {
+    // No frame to trace, so the slab is the shape — and it is still derived on
+    // every read rather than snapshotted, so dragging its edge moves the ceiling.
+    const project = stackedProject(FLUSH_SLAB, { beams: [] });
     const ceiling = createCeilingForProject(project, { floorId: 'floor_1' });
 
     expect(maxX(resolveCeilingBoundary(project, ceiling))).toBeCloseTo(6000, 6);
@@ -810,7 +857,12 @@ describe('ceiling elevations', () => {
       furringTop: 2723.5,
       carrierBottom: 2723.5,
       carrierTop: 2761.5,
+      // Nothing to hang from, so there is neither a soffit nor a bearing level
+      // to reach down to.
+      supportSoffit: null,
+      supportBearing: null,
     });
+    expect(ceilingElevationRange(elevations)).toEqual({ min: 2700, max: 2761.5 });
   });
 
   it('hangs the board below the beam tops by the suspension drop', () => {
@@ -828,6 +880,351 @@ describe('ceiling elevations', () => {
     expect(elevations.boardUnderside).toBe(2950);
     expect(elevations.boardTop).toBe(2954.5);
     expect(elevations.carrierTop).toBe(3011.5);
+    // 450-deep beams, so the bay the boards hang in bottoms out at 2750.
+    expect(elevations.supportSoffit).toBe(2750);
+  });
+
+  it('reaches the band down to the soffit of the beams a ceiling hangs in', () => {
+    const project = {
+      floors: [{ id: 'floor_1', elevation: 0, columns: RING_COLUMNS, beams: beamRing(3200) }],
+    };
+    const ceiling = rectCeiling({ floorId: 'floor_1', attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n'] } });
+
+    // The boards sit at 3050, but the walls fitted under the 450-deep beams stop
+    // at 2750 and still divide the bay, so the band has to see that far down.
+    expect(ceilingElevationRange(resolveCeilingElevations(project, ceiling))).toEqual({ min: 2750, max: 3200 });
+  });
+
+  it('takes the lowest soffit when the supports are different depths', () => {
+    const project = {
+      floors: [
+        {
+          id: 'floor_1',
+          elevation: 0,
+          columns: RING_COLUMNS,
+          beams: [
+            ringBeam('beam_s', 'col_sw', 'col_se', 3200),
+            { ...ringBeam('beam_n', 'col_nw', 'col_ne', 3200), depth: 600 },
+          ],
+        },
+      ],
+    };
+    const ceiling = rectCeiling({ floorId: 'floor_1', attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n'] } });
+
+    expect(resolveCeilingElevations(project, ceiling).supportSoffit).toBe(2600);
+  });
+
+  it('takes a beam with no usable depth at its own level', () => {
+    const project = {
+      floors: [
+        {
+          id: 'floor_1',
+          elevation: 0,
+          columns: RING_COLUMNS,
+          beams: [{ ...ringBeam('beam_s', 'col_sw', 'col_se', 3200), depth: null }],
+        },
+      ],
+    };
+    const ceiling = rectCeiling({ floorId: 'floor_1', attachment: { mode: 'beam', beamIds: ['beam_s'] } });
+
+    expect(resolveCeilingElevations(project, ceiling).supportSoffit).toBe(3200);
+  });
+
+  it('keeps the boards as the band bottom when they hang below the soffit', () => {
+    const project = {
+      floors: [{ id: 'floor_1', elevation: 0, columns: RING_COLUMNS, beams: beamRing(3200) }],
+    };
+    const ceiling = rectCeiling({
+      floorId: 'floor_1',
+      attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n'] },
+      // Dropped further than the beams are deep: the boards are now the lowest
+      // thing the assembly owns, and the band bottoms out on them.
+      detailing: { suspension: { drop: 600 } },
+    });
+
+    const elevations = resolveCeilingElevations(project, ceiling);
+    expect(elevations.boardUnderside).toBe(2600);
+    expect(elevations.supportSoffit).toBe(2750);
+    expect(ceilingElevationRange(elevations).min).toBe(2600);
+  });
+
+  it('reads the bearing level off the columns the support beams stand on', () => {
+    const project = {
+      floors: [{ id: 'floor_1', elevation: 0, columns: RING_COLUMNS, beams: beamRing(3200) }],
+    };
+    const ceiling = rectCeiling({ floorId: 'floor_1', attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n'] } });
+
+    const elevations = resolveCeilingElevations(project, ceiling);
+
+    // Beams sitting on their columns: the bearing level is the beam top, so the
+    // soffit 450 below it is still the lowest thing the band has to reach.
+    expect(elevations.supportBearing).toBe(3200);
+    expect(elevations.supportSoffit).toBe(2750);
+    expect(ceilingElevationRange(elevations).min).toBe(2750);
+  });
+
+  it('reaches the band down to the bearing when the beams are lifted off their columns', () => {
+    const project = {
+      floors: [{ id: 'floor_1', elevation: 0, columns: RING_COLUMNS, beams: beamRing(3800) }],
+    };
+    const ceiling = rectCeiling({ floorId: 'floor_1', attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n'] } });
+
+    const elevations = resolveCeilingElevations(project, ceiling);
+
+    // The beams have been retyped 600 above the 3200 columns carrying them —
+    // further than they are deep, so the soffit rode up past the column heads to
+    // 3350. Those heads are still where the support stops, and the columns get
+    // built up through the gap to meet the beams, so the band bottoms out on the
+    // bearing at 3200 instead of losing everything standing below the soffit.
+    expect(elevations.supportSoffit).toBe(3350);
+    expect(elevations.supportBearing).toBe(3200);
+    expect(ceilingElevationRange(elevations)).toEqual({ min: 3200, max: 3800 });
+  });
+
+  it('takes the highest bearing when the supports stand on columns of different heights', () => {
+    const columns = RING_COLUMNS.map((column) => (column.id === 'col_nw' ? { ...column, height: 2900 } : column));
+    const project = { floors: [{ id: 'floor_1', elevation: 0, columns, beams: beamRing(3600) }] };
+    const ceiling = rectCeiling({
+      floorId: 'floor_1',
+      attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n', 'beam_w', 'beam_e'] },
+    });
+
+    // The bearing level states where the bay's structure stood before the beams
+    // were raised off it, and that is the highest head its supports stand on:
+    // one column stopped 300 short describes its own corner, not the storey.
+    expect(resolveCeilingElevations(project, ceiling).supportBearing).toBe(3200);
+  });
+
+  it('reads the tall columns of a bay whose every beam also touches a short one', () => {
+    // Both beams run from a 3200 head to a 2000 stub, so the lowest head under
+    // each single beam is the stub — the case a per-beam minimum gets wrong
+    // twice over. Per end, the bay still reads the level its tall supports
+    // stand at.
+    const columns = RING_COLUMNS.map((column) =>
+      column.id === 'col_se' || column.id === 'col_ne' ? { ...column, height: 2000 } : column,
+    );
+    const project = {
+      floors: [
+        {
+          id: 'floor_1',
+          elevation: 0,
+          columns,
+          beams: [ringBeam('beam_s', 'col_sw', 'col_se', 3600), ringBeam('beam_n', 'col_nw', 'col_ne', 3600)],
+        },
+      ],
+    };
+    const ceiling = rectCeiling({ floorId: 'floor_1', attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n'] } });
+
+    expect(resolveCeilingElevations(project, ceiling).supportBearing).toBe(3200);
+  });
+
+  it('takes the column end of a beam whose other end is a bare point', () => {
+    const halfPointBeam = (id, columnId, end, level) => ({
+      ...createBeam({ kind: 'column', id: columnId }, { kind: 'point', ...end }, 250, 450, level),
+      id,
+    });
+    const bearingWithStorey = (floorToFloorHeight) => {
+      const project = {
+        floors: [
+          {
+            id: 'floor_1',
+            elevation: 0,
+            floorToFloorHeight,
+            columns: RING_COLUMNS,
+            beams: [
+              halfPointBeam('beam_s', 'col_sw', { x: 6000, y: 0 }, 3600),
+              halfPointBeam('beam_n', 'col_nw', { x: 6000, y: 4000 }, 3600),
+            ],
+          },
+        ],
+      };
+      const ceiling = rectCeiling({ floorId: 'floor_1', attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n'] } });
+      return resolveCeilingElevations(project, ceiling).supportBearing;
+    };
+
+    // One end names a column and the other names nothing. The fallback answers
+    // for a beam with no readable support at all, not for the half of one that
+    // has it — so the 3200 heads govern whether the storey stands below them or
+    // above, and neither storey can fake or overrule the answer.
+    expect(bearingWithStorey(2800)).toBe(3200);
+    expect(bearingWithStorey(4200)).toBe(3200);
+  });
+
+  it('ignores an end whose column is gone rather than letting it speak for the one left', () => {
+    const project = {
+      floors: [
+        {
+          id: 'floor_1',
+          elevation: 0,
+          // Above the columns, so a fallback let in per end would be visible: a
+          // 4200 answer could only have come from the deleted end.
+          floorToFloorHeight: 4200,
+          columns: RING_COLUMNS.filter((column) => column.id !== 'col_se'),
+          beams: [ringBeam('beam_s', 'col_sw', 'col_se', 3600)],
+        },
+      ],
+    };
+    const ceiling = rectCeiling({ floorId: 'floor_1', attachment: { mode: 'beam', beamIds: ['beam_s'] } });
+
+    // The deleted end resolves to nothing at all — not to the storey height,
+    // which would be a fallback overruling a column that is still standing.
+    expect(resolveCeilingElevations(project, ceiling).supportBearing).toBe(3200);
+  });
+
+  // The same bearing statements the scalar summarises, kept as positions so a
+  // caller can ask which support a particular thing stands beside instead of
+  // being handed the bay's highest plane and nothing else.
+  describe('as positioned bearing ends', () => {
+    const bearingEnds = (project, ceiling) => resolveCeilingElevations(project, ceiling).supportBearingEnds;
+    const describeEnd = (end) => `${end.x},${end.y}@${end.level}`;
+
+    it('names every beam end of a uniform bay at its own column centre', () => {
+      const project = { floors: [{ id: 'floor_1', elevation: 0, columns: RING_COLUMNS, beams: beamRing(3200) }] };
+      const ceiling = rectCeiling({
+        floorId: 'floor_1',
+        attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n', 'beam_w', 'beam_e'] },
+      });
+
+      const ends = bearingEnds(project, ceiling);
+
+      // Eight, not four: the ring's four beams have two ends each and every
+      // corner column carries two of them. Nothing is deduplicated, because a
+      // corner that two beams bear on is two statements about that corner — and
+      // repeating the same position at the same level cannot change which one is
+      // nearest to anything, so there is nothing to gain by collapsing them.
+      expect(ends).toHaveLength(8);
+      expect([...new Set(ends.map(describeEnd))].sort()).toEqual([
+        '0,0@3200',
+        '0,4000@3200',
+        '6000,0@3200',
+        '6000,4000@3200',
+      ]);
+    });
+
+    it('carries the level of each end where the bay steps', () => {
+      const columns = RING_COLUMNS.map((column) => (column.id === 'col_ne' ? { ...column, height: 2000 } : column));
+      const project = { floors: [{ id: 'floor_1', elevation: 0, columns, beams: beamRing(3600) }] };
+      const ceiling = rectCeiling({
+        floorId: 'floor_1',
+        attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n', 'beam_w', 'beam_e'] },
+      });
+
+      const elevations = resolveCeilingElevations(project, ceiling);
+
+      // The stub is not averaged away and does not take the bay over: it states
+      // its own corner twice, at the level it actually stops at, while the
+      // scalar goes on reporting the bay's highest plane.
+      expect(elevations.supportBearing).toBe(3200);
+      expect(elevations.supportBearingEnds.filter((end) => end.level === 2000).map(describeEnd)).toEqual([
+        '6000,4000@2000',
+        '6000,4000@2000',
+      ]);
+    });
+
+    it('anchors the storey-top fallback at the points a bare beam was drawn on', () => {
+      const pointBeam = (id, start, end) => ({
+        ...createBeam({ kind: 'point', ...start }, { kind: 'point', ...end }, 250, 450, 3600),
+        id,
+      });
+      const project = {
+        floors: [
+          {
+            id: 'floor_1',
+            elevation: 0,
+            floorToFloorHeight: 2800,
+            columns: RING_COLUMNS,
+            beams: [pointBeam('beam_s', { x: 0, y: 0 }, { x: 6000, y: 0 })],
+          },
+        ],
+      };
+      const ceiling = rectCeiling({ floorId: 'floor_1', attachment: { mode: 'beam', beamIds: ['beam_s'] } });
+
+      // A beam that names no column bears on nothing readable, so both its ends
+      // report the storey top — placed where that beam is, not floated over the
+      // bay. Deliberately not the 3200 columns standing at those points: the
+      // beam does not claim them.
+      expect(bearingEnds(project, ceiling).map(describeEnd)).toEqual(['0,0@2800', '6000,0@2800']);
+    });
+
+    it('lets a deleted end contribute nothing rather than a fallback beside a live column', () => {
+      const project = {
+        floors: [
+          {
+            id: 'floor_1',
+            elevation: 0,
+            // Above the columns, so a fallback let in per end would be visible.
+            floorToFloorHeight: 4200,
+            columns: RING_COLUMNS.filter((column) => column.id !== 'col_se'),
+            beams: [ringBeam('beam_s', 'col_sw', 'col_se', 3600)],
+          },
+        ],
+      };
+      const ceiling = rectCeiling({ floorId: 'floor_1', attachment: { mode: 'beam', beamIds: ['beam_s'] } });
+
+      // One live head, one ref to a column that is gone. The live end speaks;
+      // the deleted one has no place to speak from, and a storey-top entry
+      // dropped at its old corner would be the field inventing a support.
+      expect(bearingEnds(project, ceiling).map(describeEnd)).toEqual(['0,0@3200']);
+    });
+
+    it('says nothing at all for a ceiling with nothing to hang from', () => {
+      // Absent rather than empty, so the elevations of a manual ceiling are the
+      // same object they have always been — see the shape pinned by 'treats the
+      // manual base elevation as the board underside' above.
+      expect(bearingEnds(null, rectCeiling())).toBeUndefined();
+
+      const project = { floors: [{ id: 'floor_1', elevation: 0, columns: RING_COLUMNS, beams: beamRing(3200) }] };
+      const stranded = rectCeiling({ floorId: 'floor_1', attachment: { mode: 'beam', beamIds: ['beam_gone'] } });
+      expect(bearingEnds(project, stranded)).toBeUndefined();
+    });
+  });
+
+  it('falls back to the top of the storey for a beam that spans bare points', () => {
+    const pointBeam = (id, start, end) => ({
+      ...createBeam({ kind: 'point', ...start }, { kind: 'point', ...end }, 250, 450, 3600),
+      id,
+    });
+    const project = {
+      floors: [
+        {
+          id: 'floor_1',
+          elevation: 0,
+          floorToFloorHeight: 2800,
+          columns: RING_COLUMNS,
+          beams: [
+            pointBeam('beam_s', { x: 0, y: 0 }, { x: 6000, y: 0 }),
+            pointBeam('beam_n', { x: 0, y: 4000 }, { x: 6000, y: 4000 }),
+          ],
+        },
+      ],
+    };
+    const ceiling = rectCeiling({ floorId: 'floor_1', attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n'] } });
+
+    // Nothing named to bear on — the beam is drawn between two points, not two
+    // columns — so the storey height is the only statement left about where its
+    // support stops. Deliberately not the 3200 columns standing under it: the
+    // beam does not claim them.
+    expect(resolveCeilingElevations(project, ceiling).supportBearing).toBe(2800);
+    expect(ceilingElevationRange(resolveCeilingElevations(project, ceiling)).min).toBe(2800);
+  });
+
+  it('keeps the boards as the band bottom when they hang below the bearing too', () => {
+    const project = {
+      floors: [{ id: 'floor_1', elevation: 0, columns: RING_COLUMNS, beams: beamRing(3200) }],
+    };
+    const ceiling = rectCeiling({
+      floorId: 'floor_1',
+      attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n'] },
+      detailing: { suspension: { drop: 900 } },
+    });
+
+    // Dropped below the soffit and below the bearing: the boards win the min
+    // against both, because the band is simply the lowest of the three.
+    const elevations = resolveCeilingElevations(project, ceiling);
+    expect(elevations.boardUnderside).toBe(2300);
+    expect(elevations.supportSoffit).toBe(2750);
+    expect(elevations.supportBearing).toBe(3200);
+    expect(ceilingElevationRange(elevations).min).toBe(2300);
   });
 
   it('takes the lowest beam top when the supports disagree', () => {
@@ -856,6 +1253,11 @@ describe('ceiling elevations', () => {
 
     expect(elevations.attachment).toBe(3200);
     expect(elevations.boardUnderside).toBe(3050);
+    // No beam left to read a soffit or a bearing off, so the boards bound the
+    // band again.
+    expect(elevations.supportSoffit).toBeNull();
+    expect(elevations.supportBearing).toBeNull();
+    expect(ceilingElevationRange(elevations).min).toBe(3050);
   });
 });
 
@@ -1023,18 +1425,29 @@ describe('ceiling framing', () => {
     const carriers = members.filter((member) => member.kind === 'carrier');
     const wallAngle = members.filter((member) => member.kind === 'wall_angle');
 
-    // Rows at 0, 406 … 3654 plus the closing row at the far edge.
+    // Rows at 406 … 3629 between a whole member laid hard against each of the
+    // two edges the boards die into. Those two edge rows stand in for the
+    // module's own first and last station, which fell within a member's width
+    // of them.
     expect(furring).toHaveLength(11);
     expect(furring.every((member) => member.orientation === 'horizontal' && member.depth === 19)).toBe(true);
     expect(furring.every((member) => member.u0 === 0 && member.u1 === 6000)).toBe(true);
     expect(furring[0].v0).toBe(0);
-    expect(furring[0].v1).toBe(25);
-    expect(furring[0].id).toBe('ceiling_test:auto:furring:0:0');
+    expect(furring[0].v1).toBe(50);
+    expect(furring[0].id).toBe('ceiling_test:auto:furring:e0:0');
+    expect(furring.at(-1).v0).toBe(3950);
+    expect(furring.at(-1).v1).toBe(4000);
+    expect(furring.at(-1).id).toBe('ceiling_test:auto:furring:e1:0');
+    // The module rows in between keep the ids they have always had.
+    expect(furring[1].id).toBe('ceiling_test:auto:furring:1:0');
+    expect(furring[1].v0).toBe(381);
 
-    // Columns at 0, 1220 … 4880 plus the closing column at the far edge.
+    // Columns at 1220 … 4880, edge-hugging carriers at both ends.
     expect(carriers).toHaveLength(6);
     expect(carriers.every((member) => member.orientation === 'vertical' && member.depth === 38)).toBe(true);
     expect(carriers.every((member) => member.v0 === 0 && member.v1 === 4000)).toBe(true);
+    expect(carriers[0]).toMatchObject({ id: 'ceiling_test:auto:carrier:e0:0', u0: 0, u1: 12 });
+    expect(carriers.at(-1)).toMatchObject({ id: 'ceiling_test:auto:carrier:e1:0', u0: 5988, u1: 6000 });
 
     expect(wallAngle).toHaveLength(4);
     expect(wallAngle[0].start).toBeDefined();
@@ -1086,6 +1499,51 @@ describe('ceiling framing', () => {
     expect(notchCarriers.length).toBeGreaterThan(0);
     expect(notchCarriers.every((member) => Math.abs(member.v0 - 2000) < 0.01)).toBe(true);
     expect(members.filter((member) => member.kind === 'wall_angle')).toHaveLength(6);
+  });
+
+  it('stops a band at a nick instead of sizing the member off its bounding box', () => {
+    // A furring row landing half across the nick's return: what survives the
+    // clip is an L, and a member sized off the box around it would run the full
+    // width of the ceiling at full height, out over the missing bite.
+    //
+    // The nick's return is 300 long, short of one bay of the tightest module,
+    // so it draws no edge station of its own — which is exactly the case the
+    // run-finder still has to answer for.
+    const members = deriveCeilingFramingMembers(nickedCeiling(), null);
+    const straddling = members
+      .filter((member) => member.kind === 'furring' && member.v0 < 406 && member.v1 > 406)
+      .sort((first, second) => first.u0 - second.u0);
+
+    expect(straddling).toHaveLength(2);
+    expect(straddling[0].u0).toBeCloseTo(0, 6);
+    expect(straddling[0].u1).toBeCloseTo(3000, 6);
+    expect(straddling[1].u0).toBeCloseTo(3300, 6);
+    expect(straddling[1].u1).toBeCloseTo(6000, 6);
+  });
+
+  it('lays a member hard against every region edge that runs with its module', () => {
+    // The L's inner return at v 2000 is a face the boards die into just as much
+    // as the perimeter is, so it carries a whole member with its own face on it
+    // rather than whichever fraction of one the module happened to leave there.
+    const members = deriveCeilingFramingMembers(lCeiling(), null);
+    const furring = members.filter((member) => member.kind === 'furring');
+    const carriers = members.filter((member) => member.kind === 'carrier');
+
+    const onReturn = furring.find((member) => Math.abs(member.v0 - 2000) < 0.01);
+    expect(onReturn).toMatchObject({ id: 'ceiling_l:auto:furring:e1:0', v1: 2050, u0: 0, u1: 6000 });
+
+    // …and the return running the other way, at u 3000, carries a carrier whose
+    // own face stands on it.
+    const onLeg = carriers.find((member) => Math.abs(member.u1 - 3000) < 0.01);
+    expect(onLeg).toMatchObject({ id: 'ceiling_l:auto:carrier:e1:0', u0: 2988, v0: 0, v1: 4000 });
+
+    // A face shorter than one bay of the tightest module is left to the members
+    // running past it: the nick's 300 mm return draws no station of its own.
+    expect(
+      deriveCeilingFramingMembers(nickedCeiling(), null).some(
+        (member) => member.kind === 'furring' && Math.abs(member.v0 - 406) < 0.01,
+      ),
+    ).toBe(false);
   });
 
   it('frames each opening with four trimmers', () => {
@@ -1397,5 +1855,237 @@ describe('ceiling takeoff and detail', () => {
     expect(detail.lightFixtures[0]).toMatchObject({ id: 'l1', plan: { x: 2000, y: 2000 } });
     expect(detail.takeoff.lighting.fixtureCount).toBe(1);
     expect(detail.elevations.boardUnderside).toBe(2700);
+    expect(detail.dimensions).toEqual(deriveCeilingDimensions(ceiling, null));
+  });
+});
+
+/**
+ * A reflected ceiling plan is measured the way an elevation is: the same two-point
+ * model, the same rounding, the same associative anchors. What is ceiling-specific
+ * is which pieces an endpoint may be taken from, and which chains the drawing
+ * works out for itself.
+ */
+describe('ceiling dimensions', () => {
+  it('normalizes stored measurements and strips the invalid ones', () => {
+    const dimension = createCeilingDimension();
+    expect(dimension.id.startsWith('ceiling_dim_')).toBe(true);
+    expect(dimension).toMatchObject({
+      mode: 'aligned',
+      start: { u: 0, v: 0 },
+      end: { u: 0, v: 0 },
+      startRef: null,
+      endRef: null,
+      offset: 60,
+      textOverride: '',
+      tolerance: 0,
+      note: '',
+    });
+
+    const messy = createCeilingDimension({
+      id: 'dim_a',
+      mode: 'diagonal',
+      start: { u: '400', v: null },
+      end: { u: 900, v: Number.NaN },
+      // A reference with no anchor names nothing, so it is not a reference.
+      startRef: { entityType: 'panel', entityId: 'p1' },
+      endRef: { entityType: 'panel', entityId: 'p1', anchor: 'top_right', t: 4 },
+      offset: 'far',
+      tolerance: -3,
+    });
+    expect(messy.id).toBe('dim_a');
+    expect(messy.mode).toBe('aligned');
+    expect(messy.start).toEqual({ u: 400, v: 0 });
+    expect(messy.end).toEqual({ u: 900, v: 0 });
+    expect(messy.startRef).toBeNull();
+    expect(messy.endRef).toEqual({ entityType: 'panel', entityId: 'p1', anchor: 'top_right', t: 1 });
+    expect(messy.offset).toBe(60);
+    expect(messy.tolerance).toBe(0);
+  });
+
+  it('normalizes the settings block, rejecting unlisted precisions', () => {
+    expect(createCeilingDimensions({ precision: 0.5 }).precision).toBe(0.01);
+    expect(createCeilingDimensions({ precision: '1' }).precision).toBe(1);
+    expect(createCeilingDimensions({ showOverall: false, showBoards: true })).toMatchObject({
+      showOverall: false,
+      showOpenings: true,
+      showBoards: true,
+      showFraming: false,
+    });
+    expect(createCeilingDimensions({ manual: 'none' }).manual).toEqual([]);
+    expect(createCeilingDimensions({ manual: [{ id: 'a' }, { id: 'b' }] }).manual.map((entry) => entry.id)).toEqual([
+      'a',
+      'b',
+    ]);
+  });
+
+  it('carries measurements through the detailing factory, so a removed one is really gone', () => {
+    const kept = { id: 'keep', start: { u: 0, v: 0 }, end: { u: 1000, v: 0 } };
+    const detailing = createCeilingDetailing({
+      dimensions: { precision: 0.1, showFraming: true, manual: [kept, { id: 'drop' }] },
+    });
+    expect(detailing.dimensions.precision).toBe(0.1);
+    expect(detailing.dimensions.showFraming).toBe(true);
+    expect(detailing.dimensions.manual.map((entry) => entry.id)).toEqual(['keep', 'drop']);
+
+    const pruned = createCeilingDetailing({
+      ...detailing,
+      dimensions: { ...detailing.dimensions, manual: detailing.dimensions.manual.filter((e) => e.id !== 'drop') },
+    });
+    expect(pruned.dimensions.manual.map((entry) => entry.id)).toEqual(['keep']);
+  });
+
+  describe('reference resolution', () => {
+    const context = {
+      ceilingId: 'ceiling_test',
+      length: 6000,
+      depth: 4000,
+      panels: [
+        {
+          id: 'ceiling_test:panel:p1',
+          localId: 'p1',
+          u0: 100,
+          u1: 1300,
+          v0: 200,
+          v1: 2600,
+          outlinePoints: [
+            { u: 100, v: 200 },
+            { u: 1300, v: 200 },
+            { u: 1300, v: 2600 },
+            { u: 100, v: 2600 },
+          ],
+        },
+      ],
+      members: [
+        { id: 'f1', kind: 'furring', orientation: 'horizontal', u0: 0, u1: 6000, v0: 400, v1: 450 },
+        { id: 'wa1', kind: 'wall_angle', start: { u: 0, v: 0 }, end: { u: 6000, v: 0 } },
+      ],
+      openings: [{ id: 'hatch', u0: 1000, u1: 1600, v0: 1000, v1: 1600 }],
+      fasteners: [{ id: 's1', u: 250, v: 275 }],
+      hangers: [{ id: 'h1', u: 1200, v: 1200 }],
+      fixtures: [{ id: 'l1', u: 3000, v: 2000 }],
+    };
+    const resolve = (reference, fallback = { u: -1, v: -1 }) =>
+      resolveCeilingDimensionReference(reference, fallback, context);
+
+    it('reads the ceiling outline, boards, framing and openings off the drawing', () => {
+      expect(resolve(null, { u: 7, v: 9 })).toEqual({ u: 7, v: 9 });
+      expect(resolve({ entityType: 'ceiling', entityId: 'ceiling_test', anchor: 'top_right' })).toEqual({
+        u: 6000,
+        v: 4000,
+      });
+      // Boards answer to the id the drawing selects them by, and to their own.
+      expect(resolve({ entityType: 'panel', entityId: 'p1', anchor: 'vertex_2' })).toEqual({ u: 1300, v: 2600 });
+      expect(resolve({ entityType: 'panel', entityId: 'ceiling_test:panel:p1', anchor: 'center' })).toEqual({
+        u: 700,
+        v: 1400,
+      });
+      // A channel's centreline, a third of the way along it.
+      expect(resolve({ entityType: 'framing', entityId: 'f1', anchor: 'axis_center', t: 0.5 })).toEqual({
+        u: 3000,
+        v: 425,
+      });
+      expect(resolve({ entityType: 'opening', entityId: 'hatch', anchor: 'bottom_left' })).toEqual({
+        u: 1000,
+        v: 1000,
+      });
+    });
+
+    it('reads the marker points — screws, hangers and lights', () => {
+      expect(resolve({ entityType: 'fastener', entityId: 's1', anchor: 'center' })).toEqual({ u: 250, v: 275 });
+      expect(resolve({ entityType: 'hanger', entityId: 'h1', anchor: 'center' })).toEqual({ u: 1200, v: 1200 });
+      expect(resolve({ entityType: 'fixture', entityId: 'l1', anchor: 'center' })).toEqual({ u: 3000, v: 2000 });
+    });
+
+    it('falls back to the stored point when the piece is gone or has no anchor grid', () => {
+      const fallback = { u: 42, v: 84 };
+      expect(resolve({ entityType: 'panel', entityId: 'deleted', anchor: 'center' }, fallback)).toEqual(fallback);
+      expect(resolve({ entityType: 'fastener', entityId: 'deleted', anchor: 'center' }, fallback)).toEqual(fallback);
+      expect(resolve({ entityType: 'ceiling', entityId: 'other_ceiling', anchor: 'center' }, fallback)).toEqual(
+        fallback,
+      );
+      // A wall angle is a run of line rather than a rectangle: nothing to anchor to.
+      expect(resolve({ entityType: 'framing', entityId: 'wa1', anchor: 'center' }, fallback)).toEqual(fallback);
+      expect(resolve({ entityType: 'joist', entityId: 'f1', anchor: 'center' }, fallback)).toEqual(fallback);
+    });
+  });
+
+  it('draws the ceiling extent by default and adds the groups that are switched on', () => {
+    const plain = deriveCeilingDimensions(rectCeiling(), null);
+    expect(plain.map((entry) => entry.name)).toEqual(['Overall ceiling length', 'Overall ceiling depth']);
+    expect(plain.map((entry) => entry.label)).toEqual(['6000.00 mm', '4000.00 mm']);
+    expect(plain.every((entry) => entry.source === 'automatic')).toBe(true);
+
+    const opened = deriveCeilingDimensions(
+      rectCeiling({
+        detailing: {
+          openings: [{ id: 'hatch', type: 'access_hatch', u: 1000, v: 1000, width: 600, height: 600 }],
+          dimensions: { showOverall: false },
+        },
+      }),
+      null,
+    );
+    // Size in both directions, plus the set-out from each edge it is offset from.
+    expect(opened.map((entry) => entry.label)).toEqual(['600.00 mm', '600.00 mm', '1000.00 mm', '1000.00 mm']);
+    expect(opened[0].name).toBe('access hatch width');
+
+    const framed = deriveCeilingDimensions(
+      rectCeiling({ detailing: { dimensions: { showOverall: false, showFraming: true } } }),
+      null,
+    );
+    expect(framed.length).toBeGreaterThan(0);
+    expect(framed.every((entry) => entry.name.includes('centre spacing'))).toBe(true);
+  });
+
+  it('re-reads a hand-drawn measurement off the piece it was anchored to', () => {
+    const anchored = {
+      id: 'dim_a',
+      mode: 'horizontal',
+      start: { u: 0, v: 0 },
+      end: { u: 0, v: 0 },
+      startRef: { entityType: 'ceiling', entityId: 'ceiling_test', anchor: 'bottom_left' },
+      endRef: { entityType: 'opening', entityId: 'hatch', anchor: 'bottom_left' },
+      note: 'Hatch set-out',
+    };
+    const ceilingAt = (u) =>
+      rectCeiling({
+        detailing: {
+          openings: [{ id: 'hatch', type: 'access_hatch', u, v: 1000, width: 600, height: 600 }],
+          dimensions: { showOverall: false, showOpenings: false, manual: [anchored] },
+        },
+      });
+
+    const first = deriveCeilingDimensions(ceilingAt(1000), null);
+    expect(first).toHaveLength(1);
+    expect(first[0]).toMatchObject({ id: 'dim_a', name: 'Hatch set-out', source: 'custom', label: '1000.00 mm' });
+
+    // The hatch moves; the measurement moves with it, because it stores the
+    // corner rather than the number.
+    expect(deriveCeilingDimensions(ceilingAt(2500), null)[0].label).toBe('2500.00 mm');
+  });
+
+  it('drops a measurement that has collapsed to nothing, and honours a typed override', () => {
+    const dimensions = deriveCeilingDimensions(
+      rectCeiling({
+        detailing: {
+          dimensions: {
+            showOverall: false,
+            manual: [
+              { id: 'zero', start: { u: 500, v: 500 }, end: { u: 500, v: 500 } },
+              { id: 'named', start: { u: 0, v: 0 }, end: { u: 1200, v: 0 }, textOverride: 'FFL to grid' },
+              { id: 'toleranced', start: { u: 0, v: 0 }, end: { u: 0, v: 900 }, tolerance: 2 },
+            ],
+          },
+        },
+      }),
+      null,
+    );
+
+    expect(dimensions.map((entry) => entry.id)).toEqual(['named', 'toleranced']);
+    expect(dimensions[0].label).toBe('FFL to grid');
+    expect(dimensions[1].label).toBe('900.00 mm ±2.00 mm');
+  });
+
+  it('says nothing at all while the ceiling is not being detailed', () => {
+    expect(deriveCeilingDimensions(rectCeiling({ detailing: { enabled: false } }), null)).toEqual([]);
   });
 });

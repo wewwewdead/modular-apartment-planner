@@ -1,9 +1,10 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useEditor, useProject } from '@/features/floorplan/context/FloorplanContext';
+import { useEditorState, useProject } from '@/features/floorplan/context/FloorplanContext';
 import {
   WALL_ASSEMBLY_PRESETS,
   WALL_BOARD_MATERIALS,
   WALL_FRAME_MATERIALS,
+  boardDefaultThickness,
   createWallAssembly,
   resolveWallAssembly,
   wallAssemblyThickness,
@@ -29,10 +30,10 @@ import {
   createManualFastener,
   createWallDimension,
   createWallDetailing,
-  deriveWallDimensionGeometry,
   deriveWallDetail,
   deriveFastenerGuideLayout,
   formatWallDimensionValue,
+  retractPanelOverBoardSpan,
   wallDimensionMeasurement,
 } from '@/domain/wallDetailing';
 import {
@@ -87,7 +88,8 @@ import {
   placeSelectionTag,
   selectionTagLines,
 } from './wallDetailSelectionReadout';
-import { friendlyAnchorPhrase, mirrorAngleDegrees, wallLocalToSvg, wallUnitsPerPixel } from './wallDetailCanvasMath';
+import { friendlyAnchorPhrase, wallLocalToSvg, wallUnitsPerPixel } from './wallDetailCanvasMath';
+import { DimensionAcquisitionGraphic, DimensionGraphic } from './WallDimensionGraphics';
 import {
   AdvancedGroup,
   CollapsibleSection,
@@ -96,6 +98,7 @@ import {
   Metric,
   NumberField,
   SelectField,
+  SignedNumberField,
   StepStrip,
   TextField,
   Toggle,
@@ -341,6 +344,9 @@ const DIMENSION_POINT_GRAVITY_PX = 14;
 
 function faceColor(material) {
   if (material === WALL_BOARD_MATERIALS.PLYWOOD) return '#c9975d';
+  // A drawing tint, not the corten itself: the editor draws set-out lines and
+  // dimensions over this, so the fill has to stay light enough to read through.
+  if (material === WALL_BOARD_MATERIALS.RAINSCREEN) return '#dcc0ac';
   return material === WALL_BOARD_MATERIALS.FIBER_CEMENT ? '#dedbd1' : '#d3d7da';
 }
 
@@ -368,223 +374,108 @@ function panelRegionPath(region) {
     .join(' ');
 }
 
-function DimensionGraphic({
-  dimension,
-  view,
-  selected,
-  editable = false,
-  showScrewGuide = false,
-  unitPx = 1,
-  handleRadius = 4.5,
-  fontSize = null,
-  title = null,
-  onPointerDown,
-  onStartHandlePointerDown,
-  onEndHandlePointerDown,
-}) {
-  const geometry = deriveWallDimensionGeometry(dimension);
+/**
+ * The deck a bypass wall's plane runs past, drawn where it crosses the
+ * elevation.
+ *
+ * The wall editor is otherwise slab-blind — one rectangle of wall and nothing
+ * else — which is fine while v = 0 is the floor you stand on. A bypass wall
+ * starts BELOW its own deck, so without this band there is nothing on the sheet
+ * to say why the studs run on past the storey line or what the ledger is bolted
+ * to. Annotation weight and a dashed edge, never construction linework: the band
+ * is context for the drawing, not a piece of the wall.
+ */
+function SlabBandGraphic({ band, view, unitPx = 1, format }) {
   const px = unitPx > 0 ? unitPx : 1;
-  const labelOffset = fontSize ? fontSize * 0.62 : 10;
-  const svgPoint = (point) => wallLocalToSvg(point, view);
-  const textAngle = view.mirrorU ? mirrorAngleDegrees(geometry.angleDegrees) : geometry.angleDegrees;
-  const witnessStart = svgPoint(geometry.witnessStart);
-  const witnessEnd = svgPoint(geometry.witnessEnd);
-  const dimensionStart = svgPoint(geometry.dimensionStart);
-  const dimensionEnd = svgPoint(geometry.dimensionEnd);
-  const textPoint = svgPoint(geometry.textPoint);
-  const screwGuide = deriveWallDimensionGuideSegment(dimension);
-  const screwGuideStart = svgPoint(screwGuide.start);
-  const screwGuideEnd = svgPoint(screwGuide.end);
-  const dimensionLength = Math.hypot(dimensionEnd.x - dimensionStart.x, dimensionEnd.y - dimensionStart.y);
-  const direction =
-    dimensionLength > 1e-6
-      ? {
-          x: (dimensionEnd.x - dimensionStart.x) / dimensionLength,
-          y: (dimensionEnd.y - dimensionStart.y) / dimensionLength,
-        }
-      : { x: 1, y: 0 };
-  // Architectural tick terminators: 45° slashes across the dimension line,
-  // sized via unitPx so they hold the same screen size at every zoom level.
-  const tickHalf = 4 * px;
-  const tick = {
-    x: (direction.x - direction.y) * Math.SQRT1_2 * tickHalf,
-    y: (direction.x + direction.y) * Math.SQRT1_2 * tickHalf,
-  };
-  // Extension lines keep a small gap off the measured point and overshoot
-  // slightly past the dimension line, so they read as annotation rather than
-  // part of the construction linework.
-  const witnessLine = (from, to) => {
-    const length = Math.hypot(to.x - from.x, to.y - from.y);
-    if (length < 1e-6) return null;
-    const along = { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
-    const gap = Math.min(5 * px, length * 0.4);
-    return {
-      x1: from.x + along.x * gap,
-      y1: from.y + along.y * gap,
-      x2: to.x + along.x * 4 * px,
-      y2: to.y + along.y * 4 * px,
-    };
-  };
-  const witnessLines = [witnessLine(witnessStart, dimensionStart), witnessLine(witnessEnd, dimensionEnd)].filter(
-    Boolean,
-  );
+  const top = wallLocalToSvg({ u: 0, v: band.v1 }, view);
+  const bottom = wallLocalToSvg({ u: 0, v: band.v0 }, view);
+  const y = Math.min(top.y, bottom.y);
+  const height = Math.abs(bottom.y - top.y);
+  const name = band.name || 'Floor slab';
+  const label = `${name} · ${format(band.thickness)} deck`;
   return (
-    <g
-      className={`${styles.wallDimension} ${selected ? styles.wallDimensionSelected : ''}`}
-      data-source={dimension.source}
-      data-movable={editable ? 'true' : 'false'}
-      onPointerDown={onPointerDown}
-    >
-      {title ? <title>{title}</title> : null}
-      {showScrewGuide ? (
-        <>
-          <line
-            x1={screwGuideStart.x}
-            y1={screwGuideStart.y}
-            x2={screwGuideEnd.x}
-            y2={screwGuideEnd.y}
-            className={styles.dimensionScrewGuide}
-            style={{ strokeDasharray: `${8 * px} ${6 * px}` }}
-            vectorEffect="non-scaling-stroke"
-          />
-          <circle
-            cx={screwGuideStart.x}
-            cy={screwGuideStart.y}
-            r={handleRadius * 0.8}
-            className={styles.dimensionScrewGuidePoint}
-            vectorEffect="non-scaling-stroke"
-          />
-          <circle
-            cx={screwGuideEnd.x}
-            cy={screwGuideEnd.y}
-            r={handleRadius * 0.8}
-            className={styles.dimensionScrewGuidePoint}
-            vectorEffect="non-scaling-stroke"
-          />
-        </>
-      ) : null}
-      {witnessLines.map((line, index) => (
-        <line
-          key={`witness-${index}`}
-          x1={line.x1}
-          y1={line.y1}
-          x2={line.x2}
-          y2={line.y2}
-          className={styles.dimensionWitness}
-          vectorEffect="non-scaling-stroke"
-        />
-      ))}
-      <line
-        x1={dimensionStart.x}
-        y1={dimensionStart.y}
-        x2={dimensionEnd.x}
-        y2={dimensionEnd.y}
-        className={styles.dimensionHit}
+    <g className={styles.slabBand}>
+      <title>{`${name} · top at V ${format(band.v1)} · ${format(band.thickness)} thick`}</title>
+      <rect
+        className={styles.slabBandFill}
+        x={0}
+        y={y}
+        width={view.length}
+        height={height}
+        style={{ strokeDasharray: `${9 * px} ${6 * px}` }}
         vectorEffect="non-scaling-stroke"
       />
       <line
-        x1={dimensionStart.x}
-        y1={dimensionStart.y}
-        x2={dimensionEnd.x}
-        y2={dimensionEnd.y}
-        className={styles.dimensionLine}
+        className={styles.slabBandDatum}
+        x1={0}
+        x2={view.length}
+        y1={top.y}
+        y2={top.y}
+        style={{ strokeDasharray: `${14 * px} ${7 * px}` }}
         vectorEffect="non-scaling-stroke"
       />
-      <line
-        x1={dimensionStart.x - tick.x}
-        y1={dimensionStart.y - tick.y}
-        x2={dimensionStart.x + tick.x}
-        y2={dimensionStart.y + tick.y}
-        className={styles.dimensionTick}
-        vectorEffect="non-scaling-stroke"
-      />
-      <line
-        x1={dimensionEnd.x - tick.x}
-        y1={dimensionEnd.y - tick.y}
-        x2={dimensionEnd.x + tick.x}
-        y2={dimensionEnd.y + tick.y}
-        className={styles.dimensionTick}
-        vectorEffect="non-scaling-stroke"
-      />
-      <text
-        x={textPoint.x}
-        y={textPoint.y - labelOffset}
-        className={styles.dimensionText}
-        style={fontSize ? { fontSize, strokeWidth: 3 * px } : undefined}
-        transform={`rotate(${textAngle} ${textPoint.x} ${textPoint.y - labelOffset})`}
-      >
-        {dimension.label}
+      <text className={styles.slabBandLabel} x={9 * px} y={y - 5 * px} style={{ fontSize: 11 * px }}>
+        {label}
       </text>
-      {selected ? (
-        <>
-          <g
-            className={`${styles.dimensionGrip} ${editable ? styles.dimensionGripEditable : ''}`}
-            onPointerDown={editable ? onStartHandlePointerDown : undefined}
-          >
-            <circle
-              cx={witnessStart.x}
-              cy={witnessStart.y}
-              r={handleRadius * 2.4}
-              className={styles.dimensionGripHit}
-            />
-            <circle
-              cx={witnessStart.x}
-              cy={witnessStart.y}
-              r={handleRadius}
-              className={styles.dimensionGripDot}
-              vectorEffect="non-scaling-stroke"
-            />
-          </g>
-          <g
-            className={`${styles.dimensionGrip} ${editable ? styles.dimensionGripEditable : ''}`}
-            onPointerDown={editable ? onEndHandlePointerDown : undefined}
-          >
-            <circle cx={witnessEnd.x} cy={witnessEnd.y} r={handleRadius * 2.4} className={styles.dimensionGripHit} />
-            <circle
-              cx={witnessEnd.x}
-              cy={witnessEnd.y}
-              r={handleRadius}
-              className={styles.dimensionGripDot}
-              vectorEffect="non-scaling-stroke"
-            />
-          </g>
-        </>
-      ) : null}
     </g>
   );
 }
 
-function DimensionAcquisitionGraphic({ acquisition, view, precision, referenceLabel = '' }) {
-  if (!acquisition?.point) return null;
-  const radius = Math.max(1, acquisition.markerRadius || 10);
-  const { x, y } = wallLocalToSvg(acquisition.point, view);
-  const primary = acquisition.reference ? referenceLabel || 'Snapped' : 'Free point';
-  const coords = `U ${formatWallDimensionValue(acquisition.point.u, precision)} · V ${formatWallDimensionValue(
-    acquisition.point.v,
-    precision,
-  )}`;
+/**
+ * The stretch of board that is out past the end of the wall — and, just as
+ * importantly, the line where the wall itself stops.
+ *
+ * Without that line an overhanging board simply reads as a longer wall, which is
+ * the one thing it must not: the whole point of the number is that this board
+ * covers the NEXT wall's cut edge, so the drawing has to show it leaving its own
+ * wall. The end line is drawn at hidden-line weight, the convention for a thing
+ * that is genuinely there but not in section. A setback reads the other way —
+ * cool and empty — because that band is wall with no board on it, waiting for
+ * the neighbour's board to lap over.
+ */
+function BoardOverhangGraphic({ span, view, unitPx = 1, format }) {
+  const px = unitPx > 0 ? unitPx : 1;
+  const edges = [
+    { edge: 'start', wallU: 0, boardU: span.u0, distance: span.start },
+    { edge: 'end', wallU: view.length, boardU: span.u1, distance: span.end },
+  ].filter((entry) => Math.abs(entry.boardU - entry.wallU) > 0.01);
+  if (!edges.length) return null;
   return (
-    <g className={styles.dimensionAcquisition} data-snapped={acquisition.reference ? 'true' : 'false'}>
-      <circle cx={x} cy={y} r={radius} vectorEffect="non-scaling-stroke" />
-      <line x1={x - radius * 1.7} y1={y} x2={x + radius * 1.7} y2={y} vectorEffect="non-scaling-stroke" />
-      <line x1={x} y1={y - radius * 1.7} x2={x} y2={y + radius * 1.7} vectorEffect="non-scaling-stroke" />
-      <text
-        x={x + radius * 1.9}
-        y={y - radius * 3.1}
-        style={{ fontSize: radius * 1.3 }}
-        vectorEffect="non-scaling-stroke"
-      >
-        {primary}
-      </text>
-      <text
-        x={x + radius * 1.9}
-        y={y - radius * 1.5}
-        className={styles.dimensionAcquisitionCoords}
-        style={{ fontSize: radius * 1.05 }}
-        vectorEffect="non-scaling-stroke"
-      >
-        {coords}
-      </text>
+    <g className={styles.boardOverhang} data-testid="board-overhang">
+      {edges.map((entry) => {
+        const overhang = entry.distance > 0;
+        const a = wallLocalToSvg({ u: entry.boardU, v: 0 }, view);
+        const b = wallLocalToSvg({ u: entry.wallU, v: view.height }, view);
+        const x = Math.min(a.x, b.x);
+        const width = Math.abs(b.x - a.x);
+        const wallEnd = wallLocalToSvg({ u: entry.wallU, v: 0 }, view);
+        const label = `${overhang ? 'Board over' : 'Board set back'} ${format(Math.abs(entry.distance))}`;
+        return (
+          <g key={entry.edge} data-edge={entry.edge} data-kind={overhang ? 'overhang' : 'setback'}>
+            <title>{`Wall ${entry.edge} · ${label}`}</title>
+            <rect
+              className={overhang ? styles.boardOverhangFill : styles.boardSetbackFill}
+              x={x}
+              y={Math.min(a.y, b.y)}
+              width={width}
+              height={Math.abs(b.y - a.y)}
+              vectorEffect="non-scaling-stroke"
+            />
+            <line
+              className={styles.boardOverhangWallEnd}
+              x1={wallEnd.x}
+              x2={wallEnd.x}
+              y1={0}
+              y2={view.height}
+              style={{ strokeDasharray: `${14 * px} ${7 * px}` }}
+              vectorEffect="non-scaling-stroke"
+            />
+            <text className={styles.slabBandLabel} x={x + 6 * px} y={14 * px} style={{ fontSize: 11 * px }}>
+              {label}
+            </text>
+          </g>
+        );
+      })}
     </g>
   );
 }
@@ -755,7 +646,7 @@ function FastenerGraphic({
 
 export default function WallDetailEditor() {
   const { project, dispatch, canUndo = false, canRedo = false } = useProject();
-  const { wallDetailEditor, dispatch: editorDispatch } = useEditor();
+  const { wallDetailEditor, dispatch: editorDispatch } = useEditorState();
   const svgRef = useRef(null);
   const canvasFrameRef = useRef(null);
   const floor = project.floors.find((entry) => entry.id === wallDetailEditor?.floorId) || null;
@@ -909,7 +800,21 @@ export default function WallDetailEditor() {
   // The face on the wall's far side (relative to the U axis viewpoint) renders
   // and reads mirrored — the same reflection the built wall shows in 3D.
   const mirrorU = assembly ? wallFaceViewMirrorsU(assembly, activeSide) : false;
-  const bounds = detail ? { length: detail.length, height: detail.height, mirrorU } : null;
+  // What the canvas has to show: the wall, plus whatever this face's board runs
+  // on past it. `length` stays the WALL's length — everything that measures,
+  // clamps or bills reads that — while `u0`/`u1`/`spanU` say how much drawing
+  // there is around it.
+  const boardSpan = detail?.boardSpans?.[activeSide] || null;
+  const bounds = detail
+    ? {
+        length: detail.length,
+        height: detail.height,
+        mirrorU,
+        u0: boardSpan ? Math.min(0, boardSpan.u0) : 0,
+        u1: boardSpan ? Math.max(detail.length, boardSpan.u1) : detail.length,
+        spanU: boardSpan ? Math.max(detail.length, boardSpan.u1) - Math.min(0, boardSpan.u0) : detail.length,
+      }
+    : null;
   const canvasMetrics = useWallCanvasMetrics(canvasFrameRef, bounds, workspaceView);
   const previewProject = useMemo(
     () => createWallDetailPreviewProject(project, floor?.id, wall?.id),
@@ -1060,8 +965,7 @@ export default function WallDetailEditor() {
   const chooseBoardMaterial = (material) => {
     updateBoardLayer({
       material,
-      thickness:
-        material === WALL_BOARD_MATERIALS.PLYWOOD ? 12 : material === WALL_BOARD_MATERIALS.FIBER_CEMENT ? 6 : 0,
+      thickness: boardDefaultThickness(material),
       layerCount: material === WALL_BOARD_MATERIALS.NONE ? 0 : Math.max(1, assembly[activeSide].layerCount || 1),
     });
   };
@@ -1119,19 +1023,24 @@ export default function WallDetailEditor() {
     setSelection({ type: part.kind, id: part.id });
   };
 
+  // Boards are STORED on the wall's own run, with the corner lap taken back off
+  // them: the lap is derived on the way out again, so a board materialised while
+  // the face already laps a corner keeps following that corner instead of
+  // freezing where the old overhang happened to leave it.
   const editablePanels = () =>
-    panels.map((panel) =>
-      createCustomPanel(
+    panels.map((panel) => {
+      const stored = retractPanelOverBoardSpan(panel, boardSpan);
+      return createCustomPanel(
         {
-          u: panel.u0,
-          v: panel.v0,
-          width: panel.width,
-          height: panel.height,
-          ...(panel.polygonal ? { outlinePoints: panel.outlinePoints } : {}),
+          u: stored.u0,
+          v: stored.v0,
+          width: stored.u1 - stored.u0,
+          height: stored.v1 - stored.v0,
+          ...(panel.polygonal ? { outlinePoints: stored.outlinePoints } : {}),
         },
         { id: panel.localId, label: panel.label },
-      ),
-    );
+      );
+    });
 
   const editableFraming = () => frameMembers.map((member) => createCustomFramingMember({ ...member, id: member.id }));
 
@@ -2207,6 +2116,10 @@ export default function WallDetailEditor() {
           : null;
   const activeFastenerGuideSnap = canvasTool === CANVAS_TOOLS.ADD_FASTENER ? dimensionAcquisition?.reference : null;
   const unitPx = wallUnitsPerPixel(canvasMetrics, viewport, bounds);
+  // The drawing group already reflects U for a mirrored face, so the viewBox has
+  // to be given the reflected end of the span: what is left-most on screen is the
+  // board's FAR end when the face is viewed from the other side.
+  const canvasMinX = mirrorU ? detail.length - bounds.u1 : bounds.u0;
   const dimensionHandleRadius = 4.5 * unitPx;
   const dimensionFontSize = 12.5 * unitPx;
   // The elevation only draws the near frame, so clashes are measured against
@@ -2582,6 +2495,7 @@ export default function WallDetailEditor() {
                   <option value={WALL_BOARD_MATERIALS.NONE}>None</option>
                   <option value={WALL_BOARD_MATERIALS.FIBER_CEMENT}>HardieFlex / fiber cement</option>
                   <option value={WALL_BOARD_MATERIALS.PLYWOOD}>Plywood</option>
+                  <option value={WALL_BOARD_MATERIALS.RAINSCREEN}>Rainscreen panel</option>
                 </SelectField>
                 {assembly[activeSide].material !== WALL_BOARD_MATERIALS.NONE ? (
                   <>
@@ -2598,6 +2512,27 @@ export default function WallDetailEditor() {
                       suffix=""
                       onChange={(layerCount) => updateBoardLayer({ layerCount: Math.round(layerCount) })}
                     />
+                    {/* The same two numbers the wall properties panel writes —
+                        one stored value, so the plan, this drawing and the 3D
+                        preview cannot end up telling different stories about
+                        where the cladding stops. */}
+                    <SignedNumberField
+                      label="Overhang start"
+                      value={assembly[activeSide].overhangStart}
+                      step={10}
+                      onChange={(overhangStart) => updateBoardLayer({ overhangStart: Math.round(overhangStart) })}
+                    />
+                    <SignedNumberField
+                      label="Overhang end"
+                      value={assembly[activeSide].overhangEnd}
+                      step={10}
+                      onChange={(overhangEnd) => updateBoardLayer({ overhangEnd: Math.round(overhangEnd) })}
+                    />
+                    <p className={styles.inlineHelp}>
+                      Runs this board past the wall end — usually by the built depth of the wall it meets — so the
+                      corner closes over the neighbour&apos;s cut edge. Negative sets the board back instead. Framing
+                      never follows.
+                    </p>
                   </>
                 ) : null}
                 <SelectField
@@ -2842,9 +2777,11 @@ export default function WallDetailEditor() {
             </div>
             <InfoHint label="Studs, noggins and backing">
               <p className={styles.inlineHelp}>
-                Studs run floor to ceiling; noggins are the horizontal blocking between them. Every board joint needs a
-                member behind it, so use Add missing joint backing after moving boards around. To repeat a member you
-                already have, hold Ctrl and drag it with Select — the original stays put and the drag carries a copy.
+                Studs run floor to ceiling; noggins are the horizontal blocking between them. Each opening is framed
+                with a king stud outside a trimmer, and the header bears on the trimmer tops — nothing generated stands
+                inside a hole. Every board joint needs a member behind it, so use Add missing joint backing after moving
+                boards around. To repeat a member you already have, hold Ctrl and drag it with Select — the original
+                stays put and the drag carries a copy.
               </p>
             </InfoHint>
             <SelectField
@@ -3391,7 +3328,7 @@ export default function WallDetailEditor() {
                   <svg
                     ref={svgRef}
                     className={styles.canvas}
-                    viewBox={`0 0 ${detail.length} ${detail.height}`}
+                    viewBox={`${canvasMinX} 0 ${bounds.spanU} ${detail.height}`}
                     data-tool={canvasTool}
                     data-copy={
                       canvasTool === CANVAS_TOOLS.SELECT && !spacePanActive && (gesture?.copy || copyModifierActive)
@@ -3418,7 +3355,7 @@ export default function WallDetailEditor() {
                       setDimensionAcquisition(null);
                     }}
                   >
-                    <rect width={detail.length} height={detail.height} fill="#202830" />
+                    <rect x={canvasMinX} width={bounds.spanU} height={detail.height} fill="#202830" />
                     <g
                       data-mirrored={mirrorU ? 'true' : 'false'}
                       transform={
@@ -3645,6 +3582,12 @@ export default function WallDetailEditor() {
                         />
                       ) : null}
                     </g>
+                    {(detail.slabBands || []).map((band) => (
+                      <SlabBandGraphic key={band.slabId} band={band} view={bounds} unitPx={unitPx} format={formatMm} />
+                    ))}
+                    {boardSpan ? (
+                      <BoardOverhangGraphic span={boardSpan} view={bounds} unitPx={unitPx} format={formatMm} />
+                    ) : null}
                     {layerVisibility.fasteners &&
                       fastenerGuideLayouts.map((guide) => (
                         <FastenerGuideGraphic

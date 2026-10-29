@@ -4,7 +4,7 @@ import { applyIsometricOrthoPoint } from '../utils/isometricUtils';
 import { findTopmostEntityAtPoint } from '../utils/hitTest';
 import { snapWorldPoint } from '../utils/snapUtils';
 import { setCanvasSize, setViewport, syncPointer } from '../store/sketchStudioActions';
-import { HIT_TOLERANCE_PX, SNAP_TOLERANCE_PX, getEmptySnapState } from './sketchConstants';
+import { HIT_TOLERANCE_PX, SNAP_TOLERANCE_PX, getEmptySnapState, shouldSnapOverrideOrtho } from './sketchConstants';
 
 export default function useSketchViewport(state, dispatch, canvasRef, { visibleEntities, editableEntities }) {
   const activeTool = state.ui.activeTool;
@@ -46,9 +46,12 @@ export default function useSketchViewport(state, dispatch, canvasRef, { visibleE
     return null;
   }, []);
 
+  // `snap` is the snap hit that produced `point` (or null). A point snap on an
+  // entity wins over Ortho -- see shouldSnapOverrideOrtho. Preview (pointer
+  // move) and commit (click) both come through here, so they always agree.
   const getConstrainedDraftPoint = useCallback(
-    (toolId, draft, point) => {
-      if (!state.ui.orthoEnabled) {
+    (toolId, draft, point, snap = null) => {
+      if (!state.ui.orthoEnabled || shouldSnapOverrideOrtho(snap)) {
         return point;
       }
 
@@ -64,11 +67,15 @@ export default function useSketchViewport(state, dispatch, canvasRef, { visibleE
     [getOrthoReferencePoint, state.ui.orthoEnabled, state.ui.viewMode],
   );
 
+  // `excludeEntityIds` keeps an entity from snapping to itself -- a dragged
+  // handle would otherwise lock onto its own (one-render-stale) endpoint.
   const resolveSnap = useCallback(
-    (worldPoint, anchorPoint = null) =>
+    (worldPoint, anchorPoint = null, { excludeEntityIds = null } = {}) =>
       snapWorldPoint({
         worldPoint,
-        entities: visibleEntities,
+        entities: excludeEntityIds?.length
+          ? visibleEntities.filter((entity) => !excludeEntityIds.includes(entity.id))
+          : visibleEntities,
         toleranceWorld: pixelsToWorldUnits(SNAP_TOLERANCE_PX, state.viewport.zoom),
         enabled: state.ui.snapEnabled,
         anchorPoint,

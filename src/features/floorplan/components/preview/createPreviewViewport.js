@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { IS_DESKTOP_APP } from '@/platform/desktopApp';
 import { applyRenderStyleToPalette, createMaterialPalette, disposeMaterialPalette } from './materials';
-import { UNLIT_LENS_EMISSIVE_INTENSITY } from './buildPreviewObjects';
+import { UNLIT_LENS_EMISSIVE_INTENSITY, ensureOutlines } from './buildPreviewObjects';
 import { SOURCE_ONLY_LAYER } from './previewBatching';
 import { disposeScene } from './disposeScene';
+import { freezeStaticMatrices } from './staticMatrices';
 import { createInspectNavigation } from './createInspectNavigation';
 import { createWalkNavigation } from './createWalkNavigation';
 import { createWalkPhysics } from './createWalkPhysics';
@@ -145,6 +146,20 @@ export function createPreviewViewport(container) {
   const materialPalette = createMaterialPalette();
   const scene = new THREE.Scene();
   scene.background = null;
+  /*
+   * The scene sits at the origin and is never transformed, and saying so out
+   * loud is what makes freezing the world root worth anything.
+   *
+   * `Object3D.updateMatrix` ends by setting `matrixWorldNeedsUpdate`, and
+   * `updateMatrixWorld` turns that into `force = true` for the whole subtree. So
+   * a Scene left on auto re-derives every descendant's world matrix on every
+   * frame regardless of what its children have been set to — the building, its
+   * batches, the outline of every stud. With this off, the walk still visits
+   * every node but composes and multiplies nothing that has not moved. The
+   * children that do move (the sun, its sky, the ground, the grid) keep their
+   * own flag and go on forcing their own subtrees, which is all they need.
+   */
+  scene.matrixAutoUpdate = false;
   const raycaster = new THREE.Raycaster();
   // A batched member is drawn by an instanced batch in another root, and the
   // mesh the click has to resolve to is the one left behind on this layer. The
@@ -767,9 +782,21 @@ export function createPreviewViewport(container) {
     return new THREE.Sphere(new THREE.Vector3(0, 0, 0), 10000);
   }
 
-  /** The edge overlay is a drawing convention, so it goes away in the render. */
+  /**
+   * The edge overlay is a drawing convention, so it goes away in the render.
+   *
+   * A world built under a style that draws no outlines has none to hide, so a
+   * switch *to* one that does has to cut them first — `ensureOutlines` finds the
+   * meshes that were marked as wanting one and builds it from the geometry they
+   * still hold. Only ever additive: switching back hides the lines rather than
+   * destroying them, since rebuilding is exactly what the next switch would cost.
+   */
   function applyOutlineVisibility(root) {
     if (!root) return;
+    if (style.outlines && ensureOutlines(root, materialPalette)) {
+      // New nodes arrive on auto-update; the world they joined is frozen.
+      freezeStaticMatrices(root);
+    }
     root.traverse((object) => {
       if (object.isLineSegments) object.visible = style.outlines;
     });
@@ -819,7 +846,11 @@ export function createPreviewViewport(container) {
 
     worldRoot.traverse((node) => {
       if (node.userData?.isFixtureLight) {
-        node.visible = interiorLighting.lightsOn;
+        // `budgetSuppressed` outranks the switch, and has to: a lamp the scene
+        // could not afford to run has had its flux folded into the room's bounce
+        // fill, so turning the lights back on here would count it twice — and
+        // put back the light the budget exists to remove.
+        node.visible = interiorLighting.lightsOn && !node.userData.budgetSuppressed;
         // Photometry × adaptation. Always from `baseIntensity` rather than from
         // whatever the light is carrying, so repeated passes over a reused scene
         // graph cannot compound the factor.
@@ -1291,6 +1322,11 @@ export function createPreviewViewport(container) {
       selectionOverlay = nextOverlay;
       if (selectionOverlay) {
         scene.add(selectionOverlay);
+        // Built fresh from descriptors and never moved afterwards — the same
+        // deal the world root gets, and it has to be struck after the overlay is
+        // parented because a frozen node's world matrix is only right for the
+        // parent it was frozen under.
+        freezeStaticMatrices(selectionOverlay);
       }
       invalidate();
     },

@@ -1,5 +1,7 @@
 import { memo } from 'react';
 import { sectionCutLength } from '@/geometry/sectionCutGeometry';
+import { getSectionDepthMode, getSectionLimitedDepth } from '@/domain/sectionModels';
+import { SelectField } from './PanelKit';
 import InputField from '../InputField';
 import PhaseSelector from '../PhaseSelector';
 import styles from '../PropertiesPanel.module.css';
@@ -62,14 +64,24 @@ function SectionCutProperties({ sectionCut, dispatch, floorId, editorDispatch, u
         }
       />
       <div className={styles.subtitle}>Properties</div>
-      <InputField
-        label="Depth"
-        type="number"
-        suffix={u.suffix}
-        step={u.step(100)}
-        value={u.toDisplay(sectionCut.depth)}
-        onChange={(value) => updateSectionCut({ depth: Math.max(100, u.fromDisplay(value)) })}
-      />
+      <SelectField
+        label="View depth"
+        value={getSectionDepthMode(sectionCut)}
+        onChange={(depthMode) => updateSectionCut({ depthMode })}
+      >
+        <option value="full">Full building</option>
+        <option value="limited">Limited depth</option>
+      </SelectField>
+      {getSectionDepthMode(sectionCut) === 'limited' && (
+        <InputField
+          label="Depth"
+          type="number"
+          suffix={u.suffix}
+          step={u.step(100)}
+          value={u.toDisplay(getSectionLimitedDepth(sectionCut))}
+          onChange={(value) => updateSectionCut({ depth: Math.max(100, u.fromDisplay(value)), depthMode: 'limited' })}
+        />
+      )}
       <InputField label="Length" type="number" suffix={u.suffix} value={u.toDisplay(len)} readOnly />
       <button
         className={styles.actionBtn}

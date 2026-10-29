@@ -89,6 +89,51 @@ describe('WallProperties', () => {
     expect(html).not.toContain('>3D view<');
   });
 
+  it('folds the Facade section away for a wall on its axis, and says so on the tab', () => {
+    const { wall, floor } = makeFloor();
+    const html = render(wall, floor);
+
+    expect(html).toContain('>Facade<');
+    expect(html).toContain('>On the axis<');
+    // Nothing to read, so nothing unfolded.
+    expect(html).not.toContain('Offset from axis');
+  });
+
+  it('opens the Facade section for an offset wall and measures its outer face', () => {
+    const { wall, floor } = makeFloor();
+    // 100 thick, built 250 to the right of the axis.
+    const offset = { ...wall, outboardOffset: 250 };
+    const html = render(offset, { ...floor, walls: [offset] });
+
+    expect(html).toContain('Offset from axis');
+    expect(html).toContain('value="250"');
+    // The sign is the panel's business: the user picks a side.
+    expect(html).toContain('<option value="right" selected="">Right of start → end</option>');
+    // 250 out plus half of a 100 core, with no board outside it.
+    expect(html).toContain('Outboard face');
+    expect(html).toContain('>300<');
+  });
+
+  it('opens the Facade section for a bypass wall — that is where its run is explained', () => {
+    const { wall, floor } = makeFloor();
+    const bypass = { ...wall, framingMode: 'bypass' };
+    const html = render(bypass, { ...floor, walls: [bypass] });
+
+    expect(html).toContain('Framing');
+    expect(html).toContain('Runs from / to');
+    // The beam-fit report belongs to walls that were fitted to a beam.
+    expect(html).not.toContain('No beam runs along this wall');
+  });
+
+  it('tells an arc wall it cannot be built off its axis', () => {
+    const { wall, floor } = makeFloor();
+    const arcWall = { ...wall, controlPoint: { x: 1500, y: 400 }, outboardOffset: 250 };
+    const html = render(arcWall, { ...floor, walls: [arcWall] });
+
+    expect(html).not.toContain('Offset from axis');
+    expect(html).toContain('outboard facades are straight walls only');
+  });
+
   it('renders an arc wall without crashing (fillet path)', () => {
     const { wall, floor } = makeFloor();
     const arcWall = { ...wall, controlPoint: { x: 1500, y: 400 } };

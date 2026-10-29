@@ -7,8 +7,8 @@ import { getFloorElevation, getOrderedFloors } from './floorModels';
 
 /**
  * Which beams a ceiling may hang from, and the plan boundary the structure
- * around it gives it — the beams it hangs from together with the slab overhead
- * it closes off.
+ * around it gives it — the bay those beams enclose, falling back on the slab
+ * overhead only where they enclose nothing.
  *
  * A ceiling hangs under the beams that pass over it, so only a beam whose top
  * sits above the floor the ceiling belongs to can carry one: a tie or slab beam
@@ -121,26 +121,78 @@ export function selectPreferredCeilingBeamLevel(floor) {
 }
 
 /**
- * The beams a ceiling traced over `polygon` should hang from: the eligible ones
- * whose plan footprint that outline actually crosses, reduced to a single level
- * by the same rule the whole floor uses.
+ * The beams a ceiling traced over `polygon` should hang from, asked in three
+ * widening steps — the beams the outline crosses, the bay it sits in, the deck
+ * it sits under — each answer reduced to a single level by the same rule the
+ * whole floor uses.
  *
  * Drawing an area is a statement about one room, so the beams framing the next
- * room have no business setting this ceiling's plane. An outline that clears
- * every beam returns nothing, which leaves the ceiling on a manual datum rather
- * than hung from structure it never reaches.
+ * room have no business setting this ceiling's plane. The narrowest question is
+ * therefore the first one: which eligible beams does this outline actually run
+ * under?
+ *
+ * Crossing a beam is not the only way to be under one. The natural way to trace
+ * a room's ceiling is to follow the room — inside the beams' inner faces, or
+ * inside the plaster inside those — and such an outline touches no beam
+ * footprint at all while sitting squarely in the bay those beams frame. So an
+ * outline that crosses nothing is asked which level's bay it is drawn in. The
+ * bay is the level's own rectangle, inner face to inner face, which is exactly
+ * the area that level closes off.
+ *
+ * And an outline in no bay may still be under the building. A cantilever is not
+ * an object — it is the deck drawn past the frame — so nothing out there crosses
+ * a beam or falls inside a bay, and yet the underside of that deck is closed off
+ * by a ceiling hung from the very beams the deck rests on. The last question is
+ * that one: is this outline under a slab of the storey above, and is that slab
+ * carried by a level of this floor? Carried is read the same way the ceiling
+ * itself is bounded — the slab lies over the level's bay — so a level framing no
+ * bay is never asked, which is right: it encloses no area for a deck to bear on.
+ * A pair of parallel beams under a deck does frame one.
+ *
+ * A trace under no slab, or under one no level here carries, still returns
+ * nothing: a ceiling drawn where neither framing nor deck reaches genuinely
+ * hangs from nothing and belongs on a manual datum.
+ *
+ * `project` is optional and only the last step reads it — the slabs are the
+ * storey above's, which a floor has no way to see on its own. Without it the
+ * answer is exactly the first two steps.
  */
-export function selectCeilingBeamsForArea(floor, polygon) {
+export function selectCeilingBeamsForArea(floor, polygon, project = null) {
   const outline = (polygon || []).filter((point) => Number.isFinite(point?.x) && Number.isFinite(point?.y));
   if (outline.length < 3) return [];
 
   const columns = floor?.columns || [];
-  const overlapping = getEligibleCeilingSupportBeams(floor).filter((beam) => {
+  const eligible = getEligibleCeilingSupportBeams(floor);
+  const overlapping = eligible.filter((beam) => {
     const footprint = getBeamRenderData(beam, columns)?.outline || [];
     return footprint.length >= 3 && intersectionArea(footprint, outline) > MIN_AREA_OVERLAP;
   });
+  if (overlapping.length) return selectPreferredLevel(groupBeamsIntoLevels(overlapping))?.beamIds || [];
 
-  return selectPreferredLevel(groupBeamsIntoLevels(overlapping))?.beamIds || [];
+  // Levels arrive highest first and filtering keeps that order, so the same
+  // most-beams-then-highest preference applies to the bays as to the beams. The
+  // bays are derived once and read by both of the remaining steps: they ask the
+  // same rectangle about two different things.
+  const levels = groupBeamsIntoLevels(eligible).map((level) => ({
+    ...level,
+    bay: deriveCeilingBoundaryFromBeams(level.beams, floor),
+  }));
+
+  const framingLevels = levels.filter((level) => level.bay && intersectionArea(level.bay, outline) > MIN_AREA_OVERLAP);
+  if (framingLevels.length) return selectPreferredLevel(framingLevels)?.beamIds || [];
+
+  // Beside the bay, but under the same structure: the slabs overhead that this
+  // outline is actually drawn under.
+  const decks = getFloorFootprintSlabs(floorAbove(project, floor))
+    .map(slabRing)
+    .filter((ring) => intersectionArea(ring, outline) > MIN_AREA_OVERLAP);
+  if (!decks.length) return [];
+
+  const carryingLevels = levels.filter(
+    (level) => level.bay && decks.some((ring) => intersectionArea(ring, level.bay) > MIN_AREA_OVERLAP),
+  );
+
+  return selectPreferredLevel(carryingLevels)?.beamIds || [];
 }
 
 function buildSupport(beam, floor) {
@@ -251,31 +303,32 @@ function coverageSlabs(project, floor, beamBoundary) {
 }
 
 /**
- * One ring out of a union that may have come apart into several: the region the
- * beams are under, or the largest one when there are no beams to ask. Whatever
- * is left over is another part of the building that happens to share a slab.
+ * One ring out of a union that may have come apart into several: the largest.
+ * Whatever is left over is another part of the building that happens to share a
+ * slab, and a ceiling is one ring.
+ *
+ * Only the slab path asks, and the slab path only runs where the beams framed
+ * nothing — so there is no beam rectangle here to prefer a region by.
  */
-function pickPrimaryRing(regions, reference) {
+function pickPrimaryRing(regions) {
   if (!regions.length) return null;
-  const score = reference
-    ? (region) => intersectionArea(region.outline, reference)
-    : (region) => polygonArea(region.outline);
-  return regions.reduce((best, region) => (score(region) > score(best) ? region : best)).outline;
+  return regions.reduce((best, region) => (polygonArea(region.outline) > polygonArea(best.outline) ? region : best))
+    .outline;
 }
 
 /**
- * The slabs overhead that shape a ceiling's plan extent, and the storey they
- * belong to.
+ * The slabs overhead a ceiling sits under, and the storey they belong to.
  *
  * A floor's beams frame the TOP of its own storey and the next floor's slab
  * rests on them, so what a ceiling closes off is the underside of the slab
- * above. That ring already reaches over any cantilever — a cantilever is not an
- * object, it is a slab drawn past the storey below — which is exactly what the
- * beams cannot report, there being none under it.
+ * above. Two callers want to know which slabs those are: the RCP editor's
+ * preview, which shows the deck overhead the boards hang under, and the
+ * boundary itself in the one case where no beam frames a rectangle to use
+ * instead.
  *
  * Slabs clear of the beam group are left out: one floor can carry several
- * ceilings under several slabs, and unioning all of them would make every
- * ceiling cover everything. With no beam rectangle there is nothing to be local
+ * ceilings under several slabs, and taking all of them would show every ceiling
+ * the whole storey overhead. With no beam rectangle there is nothing to be local
  * to, so every slab counts.
  *
  * @returns {{floor: object | null, slabs: Array<object>}}
@@ -285,15 +338,36 @@ export function selectCeilingCoverageSlabs({ project, floor, supportBeams = [] }
 }
 
 /**
- * Plan boundary for a ceiling: the beams' rectangle widened to whatever the
- * slab above actually covers.
+ * Plan boundary for a ceiling: the beams' own rectangle, inner face to inner
+ * face, wherever the beams frame one.
  *
- * The beams still fix the plane and trim the outline where nothing overhead
- * disagrees; the slab says how far the storey being closed off really reaches.
- * The union of the two is the only answer that covers a cantilever, which has a
- * slab over it and no beam under it. No slab above — a top floor, or a frame
- * carrying nothing but roof beams — leaves the beams the sole authority, as
- * before.
+ * THE BEAMS GOVERN. A ceiling is built in the bay its frame encloses, and the
+ * faces a fitter sets the perimeter angle against are the beam faces — so the
+ * boundary has to be those faces and nothing else. The slab above gets no say
+ * while a beam rectangle exists, in either direction: not outwards, because a
+ * slab traced over the frame or out to the grid lines would run the boards and
+ * the framing past the beams into the zone the beams occupy, which is what the
+ * user looked at and rejected; and not inwards, because a slab traced short
+ * would pull the ceiling off the very faces it dies into and leave the beam
+ * soffit bare behind a cut board edge.
+ *
+ * Only where the frame answers nothing does the slab speak: no support beams at
+ * all, a single beam, or a set lying on one line all enclose no area, and a
+ * ceiling still needs a shape. There the slabs overhead are unioned and the
+ * largest ring taken, exactly as before.
+ *
+ * ACCEPTED TRADE-OFF: an AUTO ceiling no longer reaches a cantilever. A
+ * cantilever is not an object — it is a slab drawn past the frame with no beam
+ * under it — so a rule that traces beams cannot see it, and the ceiling stops at
+ * the perimeter beam with the overhang left open. That is deliberate: reaching
+ * it means asking the slab, and asking the slab is what put framing behind the
+ * beam faces. A ceiling wanted under an overhang is TRACED with the draw tool,
+ * and a drawn boundary is never re-derived — `resolveCeilingBoundary` returns
+ * the stored ring outright for a 'drawn' source, so the escape hatch costs the
+ * user one gesture and costs this rule nothing. No hybrid is attempted (slab
+ * outwards, beams inwards, or the reverse): the two rings differ by half a beam
+ * width against a column face, and every combination of them breeds slivers of
+ * ceiling a few millimetres wide along the perimeter.
  *
  * One flat ring comes back, holes dropped: every consumer of a ceiling boundary
  * is written for a single ring, and structure crossing a ceiling is already cut
@@ -304,9 +378,12 @@ export function selectCeilingCoverageSlabs({ project, floor, supportBeams = [] }
  */
 export function deriveCeilingStructuralCoverage({ project, floor, supportBeams = [] } = {}) {
   const beamBoundary = deriveCeilingBoundaryFromBeams(supportBeams, floor);
-  const { slabs } = coverageSlabs(project, floor, beamBoundary);
-  if (!slabs.length) return beamBoundary;
+  if (beamBoundary) return beamBoundary;
 
-  const rings = slabs.map(slabRing);
-  return pickPrimaryRing(unionPolygons(beamBoundary ? [...rings, beamBoundary] : rings), beamBoundary);
+  // Nothing framed: with no rectangle to be local to, every slab overhead is a
+  // candidate and the union of them is all this ceiling knows about its shape.
+  const { slabs } = coverageSlabs(project, floor, null);
+  if (!slabs.length) return null;
+
+  return pickPrimaryRing(unionPolygons(slabs.map(slabRing)));
 }

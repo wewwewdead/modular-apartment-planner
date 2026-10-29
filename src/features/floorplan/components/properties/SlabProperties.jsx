@@ -1,11 +1,15 @@
 import { memo, useMemo } from 'react';
-import { analyzeSlabCantilever, roundDeflectionMm } from '@/analysis/cantileverStructural';
+import { analyzeSlabCantilever, deriveOverhangTipLoads, roundDeflectionMm } from '@/analysis/cantileverStructural';
 import { getSlabDisplayLabel } from '@/domain/slabLabels';
 import {
   applyCantilever,
+  applyProjectingBay,
   CANTILEVER_DEFAULT_DISTANCE_MM,
   CANTILEVER_MIN_DISTANCE_MM,
+  CANTILEVER_MODES,
   describeCantileverBasis,
+  PROJECTING_BAY_DEFAULT_WIDTH_MM,
+  PROJECTING_BAY_MIN_WIDTH_MM,
   removeCantilever,
   resetCantileverToolState,
 } from '@/editor/handlers/cantileverHandler';
@@ -43,8 +47,19 @@ function SlabProperties({
   floorId,
   u,
   phases,
+  activePhaseId = null,
   activeTool = null,
   toolState = {},
+  // What is under this plate, answered by the panel above rather than here: the
+  // whole project is what says which storey that is and whether the overhang
+  // reaches anything, and this component is memoized precisely so it never
+  // holds the project.
+  ceilingHostFloorName = null,
+  ceilingHostBeamCount = 0,
+  cantileverCeilingCount = 0,
+  onTraceCantileverCeiling = NO_OP,
+  onDrawCeilingUnderSlab = NO_OP,
+  onPickCeilingBeams = NO_OP,
 }) {
   const updateSlab = (updates) => {
     dispatch({ type: 'SLAB_UPDATE', floorId, slab: { id: slab.id, ...updates } });
@@ -66,7 +81,14 @@ function SlabProperties({
    * material — the slab model has a thickness and nothing else — so the
    * assumption travels with the numbers, folded away under the readouts.
    */
-  const analysis = useMemo(() => analyzeSlabCantilever({ slab, overhang, profile }), [slab, overhang, profile]);
+  // What is standing on the free end. A bay's own walls are the usual answer,
+  // and they are the difference between a balcony's load case and a facade's —
+  // so the panel goes and looks rather than assuming a bare plate.
+  const tipLoads = useMemo(() => deriveOverhangTipLoads({ overhang, floor }), [overhang, floor]);
+  const analysis = useMemo(
+    () => analyzeSlabCantilever({ slab, overhang, profile, tipLoads }),
+    [slab, overhang, profile, tipLoads],
+  );
   const governing = analysis.governing;
 
   /* ── The run being looked at ────────────────────────────────────────────
@@ -113,13 +135,28 @@ function SlabProperties({
   const distanceMm = pick
     ? (pick.distanceMm ?? pick.defaultDistanceMm ?? CANTILEVER_DEFAULT_DISTANCE_MM)
     : CANTILEVER_DEFAULT_DISTANCE_MM;
+  // The bay macro rides the same tool; `cantileverMode` is what says which of
+  // the two the click is going to build.
+  const bayMode = toolState?.cantileverMode === CANTILEVER_MODES.BAY;
+  const bayPick = pick?.kind === CANTILEVER_MODES.BAY ? pick : null;
+  const bayWidthMm = bayPick
+    ? (bayPick.widthMm ?? bayPick.defaultWidthMm ?? PROJECTING_BAY_DEFAULT_WIDTH_MM)
+    : PROJECTING_BAY_DEFAULT_WIDTH_MM;
 
-  const startCantilever = () => {
+  const startCantilever = (mode = CANTILEVER_MODES.CANTILEVER) => {
     editorDispatch({ type: 'SET_TOOL', tool: TOOLS.CANTILEVER });
     // SET_TOOL clears the selection along with the old tool's state, and the
-    // whole flow is anchored on this plate — so it goes straight back.
+    // whole flow is anchored on this plate — so it goes straight back. The mode
+    // has to be set AFTER it for the same reason.
     editorDispatch({ type: 'SELECT_OBJECT', id: slab.id, objectType: 'slab' });
-    editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Click an edge of the slab to cantilever that side.' });
+    editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { cantileverMode: mode } });
+    editorDispatch({
+      type: 'SET_STATUS_MESSAGE',
+      message:
+        mode === CANTILEVER_MODES.BAY
+          ? 'Click an edge of the slab where the bay should project.'
+          : 'Click an edge of the slab to cantilever that side.',
+    });
   };
 
   const cancelCantilever = () => {
@@ -145,6 +182,33 @@ function SlabProperties({
   // committed value has not returned through the store yet.
   const applyPickedCantilever = (millimetres = distanceMm) => {
     applyCantilever({ slab, floorId, pick, distanceMm: millimetres, dispatch, editorDispatch });
+  };
+
+  const setBayWidth = (displayValue) => {
+    if (!bayPick) return;
+    editorDispatch({
+      type: 'UPDATE_TOOL_STATE',
+      payload: {
+        cantileverPick: {
+          ...bayPick,
+          widthMm: Math.max(PROJECTING_BAY_MIN_WIDTH_MM, Math.round(u.fromDisplay(displayValue))),
+        },
+      },
+    });
+  };
+
+  const applyPickedBay = (projection = distanceMm, width = bayWidthMm) => {
+    applyProjectingBay({
+      slab,
+      floor,
+      floorId,
+      pick: bayPick,
+      projectionMm: projection,
+      widthMm: width,
+      phaseId: activePhaseId,
+      dispatch,
+      editorDispatch,
+    });
   };
 
   return (
@@ -261,6 +325,19 @@ function SlabProperties({
                   muted
                 />
                 <Readout label="Checked at imposed load" value={analysis.loads.imposedKpa} unit="kN/m²" muted />
+                {/* Only shown where there is one. A row reading "0 kN/m from 0
+                    walls" would look like a measurement of nothing rather than
+                    the absence of a measurement — the assumption note below
+                    says which of the two cases this is, in words. */}
+                {shownEdge.tipWallCount ? (
+                  <Readout
+                    label="Facade load on tip"
+                    value={`${toTenth(shownEdge.tipLineLoadKnPerM)} from ${shownEdge.tipWallCount} wall${
+                      shownEdge.tipWallCount === 1 ? '' : 's'
+                    }`}
+                    unit="kN/m"
+                  />
+                ) : null}
                 {shownEdge.backSpanMm != null ? (
                   <>
                     <Readout
@@ -305,12 +382,64 @@ function SlabProperties({
         ) : null}
 
         {!cantileverActive ? (
-          <button type="button" className={styles.actionBtn} onClick={startCantilever}>
-            Add cantilever
-          </button>
+          <Stack>
+            <button type="button" className={styles.actionBtn} onClick={() => startCantilever()}>
+              Add cantilever
+            </button>
+            {/* The other thing a plate edge can grow. Same gesture, and it
+                brings its own walls — see applyProjectingBay. */}
+            <button type="button" className={styles.actionBtn} onClick={() => startCantilever(CANTILEVER_MODES.BAY)}>
+              Add projecting bay
+            </button>
+          </Stack>
         ) : !pick ? (
           <>
-            <Hint>Hover an edge of this slab on the plan to highlight it, then click to cantilever that side.</Hint>
+            <Hint>
+              {bayMode
+                ? 'Hover an edge of this slab on the plan to highlight it, then click where the bay should project.'
+                : 'Hover an edge of this slab on the plan to highlight it, then click to cantilever that side.'}
+            </Hint>
+            <Stack>
+              <button type="button" className={styles.actionBtn} onClick={cancelCantilever}>
+                Cancel
+              </button>
+            </Stack>
+          </>
+        ) : bayPick ? (
+          <>
+            <NumberField
+              label="Projection"
+              value={u.toDisplay(distanceMm)}
+              step={u.step(50)}
+              unit={u.suffix}
+              min={u.toDisplay(CANTILEVER_MIN_DISTANCE_MM)}
+              onChange={setCantileverDistance}
+              onSubmit={(displayValue) => applyPickedBay(toMillimetres(displayValue))}
+            />
+            <NumberField
+              label="Bay width"
+              value={u.toDisplay(bayWidthMm)}
+              step={u.step(100)}
+              unit={u.suffix}
+              min={u.toDisplay(PROJECTING_BAY_MIN_WIDTH_MM)}
+              onChange={setBayWidth}
+              onSubmit={(displayValue) =>
+                applyPickedBay(
+                  distanceMm,
+                  Math.max(PROJECTING_BAY_MIN_WIDTH_MM, Math.round(u.fromDisplay(displayValue))),
+                )
+              }
+            />
+            {/* A bay is measured from the edge it grows out of, not from the
+                storey below — stated for the same reason the cantilever states
+                its own basis. */}
+            <Readout label="Measured" value="from clicked edge" />
+            <Hint>Apply adds the protrusion and its three walls — two returns and the face — in one step.</Hint>
+            <Stack>
+              <button type="button" className={styles.confirmBtn} onClick={() => applyPickedBay()}>
+                Apply bay
+              </button>
+            </Stack>
             <Stack>
               <button type="button" className={styles.actionBtn} onClick={cancelCantilever}>
                 Cancel
@@ -339,6 +468,67 @@ function SlabProperties({
             <Stack>
               <button type="button" className={styles.actionBtn} onClick={cancelCantilever}>
                 Cancel
+              </button>
+            </Stack>
+          </>
+        )}
+      </Section>
+
+      {/* ── The underside ────────────────────────────────────────────────
+          A plate's ceiling is not this floor's business: a floor's slabs are
+          the deck it STANDS ON, so what closes the underside of this one
+          belongs to the storey below and is filed there. Offered from the
+          plate rather than the sidebar because the plate is what says which
+          deck is meant — the sidebar's ceiling list only knows about the floor
+          being edited, which is the wrong one for exactly this job. */}
+      <Section
+        id="slab.ceiling"
+        title="Ceiling"
+        summary={ceilingHostFloorName ? `Hangs on ${ceilingHostFloorName}` : 'No storey below'}
+      >
+        {!ceilingHostFloorName ? (
+          <Hint>This is the lowest floor — no storey below to ceil.</Hint>
+        ) : (
+          <>
+            {/* The interior first: most of a plate is the part standing inside
+                its own frame, and the line a ceiling stops on there is a beam
+                face rather than anything worth tracing by hand. Without beams
+                below there is no frame to pick, and the fix is a placement job
+                on the other storey rather than anything this panel can do. */}
+            {ceilingHostBeamCount ? null : (
+              <Hint>No beams overhead on {ceilingHostFloorName} — place top beams on its columns to pick from.</Hint>
+            )}
+            <Stack>
+              <button
+                type="button"
+                className={styles.actionBtn}
+                disabled={!ceilingHostBeamCount}
+                onClick={onPickCeilingBeams}
+              >
+                Pick beams
+              </button>
+            </Stack>
+            {/* The count arrives already narrowed to the picked run, so a run
+                with nothing to ceil and a plate with no overhang at all are two
+                different messages about two different things. */}
+            {cantileverCeilingCount ? null : focusedEdge ? (
+              <Hint>This cantilever is too small to carry a ceiling — draw the area instead.</Hint>
+            ) : (
+              <Hint>Slab does not overhang the floor below — draw the ceiling instead.</Hint>
+            )}
+            <Stack>
+              <button
+                type="button"
+                className={styles.actionBtn}
+                disabled={!cantileverCeilingCount}
+                onClick={onTraceCantileverCeiling}
+              >
+                {focusedEdge ? 'Trace ceiling for this cantilever' : 'Trace cantilever ceiling'}
+              </button>
+            </Stack>
+            <Stack>
+              <button type="button" className={styles.actionBtn} onClick={onDrawCeilingUnderSlab}>
+                Draw ceiling under slab
               </button>
             </Stack>
           </>

@@ -2,7 +2,7 @@ import { validateBasicDocumentShape } from './serializationUtils';
 import { normalizeSketchDocument } from './sketchDocumentUtils';
 
 export const SKETCH_WORKSPACE_KIND = 'sketchstudio-workspace';
-export const SKETCH_WORKSPACE_VERSION = 1;
+export const SKETCH_WORKSPACE_VERSION = 2;
 
 export const DEFAULT_SKETCH_VIEWPORT = {
   zoom: 1,
@@ -57,6 +57,7 @@ function normalizeUi(ui, document) {
       ? ui.isometricPlane
       : DEFAULT_SKETCH_UI.isometricPlane,
     craftsmanMode: ui?.craftsmanMode === true,
+    ...(ui?.workspaceMode === 'model' ? { workspaceMode: 'model' } : {}),
   };
 }
 
@@ -94,6 +95,8 @@ export function serializeSketchWorkspace(workspace, options = {}) {
 }
 
 export function normalizeParsedSketchWorkspace(parsed) {
+  if (parsed?.kind === SKETCH_WORKSPACE_KIND && parsed.version > SKETCH_WORKSPACE_VERSION)
+    throw new Error('This workspace uses a newer schema.');
   if (validateBasicDocumentShape(parsed)) {
     const normalizedDocument = normalizeSketchDocument(parsed);
     return {
@@ -124,7 +127,7 @@ export function normalizeParsedSketchWorkspace(parsed) {
 
   return {
     kind: SKETCH_WORKSPACE_KIND,
-    version: Number(parsed.version) || SKETCH_WORKSPACE_VERSION,
+    version: SKETCH_WORKSPACE_VERSION,
     savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : null,
     document: normalizedDocument,
     objectDraft: null,

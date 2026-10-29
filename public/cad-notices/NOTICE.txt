@@ -1,0 +1,39 @@
+Sketch Studio CAD dependencies
+
+The CAD modules are bundled locally. No hosted CAD service, CDN or remote
+geometry execution is required. Browser offline caches include both WASM files.
+Electron distributes them with the application's dist/assets directory.
+
+Replicad 1.2.0
+Copyright Steve Genoud. MIT license: Replicad-LICENSE.txt
+Source: https://github.com/sgenoud/replicad
+Package: https://www.npmjs.com/package/replicad/v/1.2.0
+The local exact-projection adapter follows Replicad's MIT-licensed curve
+conversion, with explicit empty-edge handling and resource ownership.
+
+replicad-opencascadejs 1.1.0 / OpenCascade
+LGPL-2.1-only: OpenCascade-LICENSE.txt
+Source and build configuration:
+https://github.com/sgenoud/replicad/tree/main/packages/replicad-opencascadejs
+https://github.com/donalffons/opencascade.js
+Package: https://www.npmjs.com/package/replicad-opencascadejs/v/1.1.0
+
+PlaneGCS 1.3.0
+Package metadata: LGPL-2.0-or-later; bundled license text:
+PlaneGCS-LICENSE.txt (LGPL 2.1).
+Source and build scripts: https://github.com/Salusoft89/planegcs
+FreeCAD solver source: https://github.com/FreeCAD/FreeCAD/tree/main/src/Mod/Sketcher/App/planegcs
+Package: https://www.npmjs.com/package/@salusoft89/planegcs/v/1.3.0
+
+jsPDF: MIT, jsPDF-LICENSE.txt
+Source: https://github.com/parallax/jsPDF
+svg2pdf.js: MIT, svg2pdf-LICENSE.txt
+Source: https://github.com/yWorks/svg2pdf.js
+svg-path-properties: ISC, svg-path-properties-LICENSE.txt
+Source: https://github.com/rveciana/svg-path-properties
+
+The kernel and solver are separate replaceable WebAssembly modules. To use
+modified versions, rebuild the corresponding dependency from its source,
+replace its JS/WASM package under node_modules and run npm run build.
+The app imports these modules through their documented library interfaces.
+Keep this notice and accompanying license texts with redistributed builds.

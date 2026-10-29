@@ -1,9 +1,48 @@
-import { memo } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { RenderProfilerScope, useRenderProfile } from './renderProfiling';
 import styles from './SvgCanvas.module.css';
 
+/**
+ * The live cursor coordinates.
+ *
+ * The canvas writes these straight into the DOM through `cursorChannelRef` — a ref
+ * holding a setter this publishes on mount — instead of passing a position down
+ * as a prop. The position changes on every hover frame, and a prop would make
+ * the whole canvas re-render to move two numbers.
+ *
+ * The spans render a fixed placeholder, so a re-render of the status bar for
+ * some other reason produces the same virtual text and React leaves the DOM
+ * alone: what the canvas wrote survives.
+ */
+const CursorReadout = memo(function CursorReadout({ cursorChannelRef }) {
+  const xRef = useRef(null);
+  const yRef = useRef(null);
+
+  useEffect(() => {
+    if (!cursorChannelRef) return undefined;
+    cursorChannelRef.current = (point) => {
+      if (xRef.current) xRef.current.textContent = `X: ${Math.round(point.x)} mm`;
+      if (yRef.current) yRef.current.textContent = `Y: ${Math.round(point.y)} mm`;
+    };
+    return () => {
+      cursorChannelRef.current = null;
+    };
+  }, [cursorChannelRef]);
+
+  return (
+    <>
+      <span ref={xRef} className={styles.statusCoords}>
+        X: 0 mm
+      </span>
+      <span ref={yRef} className={styles.statusCoords}>
+        Y: 0 mm
+      </span>
+    </>
+  );
+});
+
 const CanvasStatusBar = memo(function CanvasStatusBar({
-  cursorPos,
+  cursorChannelRef,
   zoomPercent,
   viewMode,
   modelTarget,
@@ -29,8 +68,6 @@ const CanvasStatusBar = memo(function CanvasStatusBar({
   coordinationIssues = [],
 }) {
   useRenderProfile('CanvasStatusBar', {
-    cursorX: Math.round(cursorPos.x),
-    cursorY: Math.round(cursorPos.y),
     zoomPercent,
     viewMode,
     modelTarget,
@@ -47,8 +84,7 @@ const CanvasStatusBar = memo(function CanvasStatusBar({
   return (
     <RenderProfilerScope name="CanvasStatusBar">
       <div className={styles.statusBar} role="status" aria-live="polite">
-        <span className={styles.statusCoords}>X: {Math.round(cursorPos.x)} mm</span>
-        <span className={styles.statusCoords}>Y: {Math.round(cursorPos.y)} mm</span>
+        <CursorReadout cursorChannelRef={cursorChannelRef} />
         <span className={styles.statusContext}>Zoom: {zoomPercent}%</span>
         <span className={styles.statusContext}>View: {viewMode}</span>
         <span className={styles.statusContext}>Mode: {modelTarget}</span>

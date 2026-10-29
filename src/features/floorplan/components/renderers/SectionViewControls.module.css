@@ -1,0 +1,36 @@
+.dock {
+  flex-direction: column;
+  align-items: stretch;
+  max-width: calc(100% - 100px);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.depth {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-secondary);
+  font: 11px var(--font-ui);
+}
+
+.depth input {
+  width: 76px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  background: var(--color-surface-elevated);
+}
+
+.notice {
+  margin: 2px 0 4px;
+  max-width: 480px;
+  color: var(--color-text-secondary);
+  font: 11px/1.5 var(--font-ui);
+}

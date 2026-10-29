@@ -19,7 +19,17 @@ import SlabPreview from './SlabPreview';
 import StairPreview from './StairPreview';
 import WallPreview from './WallPreview';
 
-const FloorPreviewLayer = memo(function FloorPreviewLayer({ toolState, activeTool, floor, selectedId, selectedType }) {
+const FloorPreviewLayer = memo(function FloorPreviewLayer({
+  toolState,
+  activeTool,
+  floor,
+  // The ceiling pick can be armed against another storey — see SvgCanvas. Only
+  // that one overlay follows it; everything else here previews what is being
+  // placed on the plan in front of you.
+  pickFloor = null,
+  selectedId,
+  selectedType,
+}) {
   if (!floor) return null;
 
   return (
@@ -41,7 +51,7 @@ const FloorPreviewLayer = memo(function FloorPreviewLayer({ toolState, activeToo
         selectedType={selectedType}
       />
       <CeilingPreview toolState={toolState} activeTool={activeTool} />
-      <CeilingBeamPickOverlay toolState={toolState} activeTool={activeTool} floor={floor} />
+      <CeilingBeamPickOverlay toolState={toolState} activeTool={activeTool} floor={pickFloor || floor} />
       <BeamPreview
         toolState={toolState}
         activeTool={activeTool}

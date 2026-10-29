@@ -4,10 +4,15 @@ import { createCeilingForProject } from '@/domain/ceilingModels';
 import { buildPreviewScene } from './buildPreviewScene';
 
 /**
- * A ceiling is filed on the floor it hangs in, but its extent comes from the
- * slab of the floor ABOVE — so the cache key that decides whether a floor's
- * geometry can be reused has to see that slab. Without it, pulling a slab edge
- * out over a cantilever leaves the ceiling below it cached at its old size.
+ * A ceiling is filed on the floor it hangs in, but where its own frame encloses
+ * nothing — no support beams, one beam, a collinear pair — its extent comes from
+ * the slab of the floor ABOVE. So the cache key that decides whether a floor's
+ * geometry can be reused has to see that slab. Without it, pulling the slab edge
+ * out leaves the ceiling below it cached at its old size.
+ *
+ * A beam-framed ceiling ignores the slab entirely, so the key is doing nothing
+ * for it — but the key is per floor, not per ceiling, and one unframed ceiling
+ * on a floor is enough to need it.
  */
 
 const CANTILEVERED_SLAB = [
@@ -21,7 +26,7 @@ function slabAbove(floorId, boundaryPoints) {
   return { id: 'slab_above', floorId, elevation: 3200, thickness: 200, boundaryPoints };
 }
 
-function stackedProject() {
+function stackedProject({ framed = true } = {}) {
   const ground = createFloor('Ground', 0, { elevation: 0, floorToFloorHeight: 3200 });
   ground.columns = [
     ['col_sw', 0, 0],
@@ -29,12 +34,18 @@ function stackedProject() {
     ['col_ne', 6000, 4000],
     ['col_nw', 0, 4000],
   ].map(([id, x, y]) => ({ ...createColumn(x, y, 300, 300, { height: 3200 }), id }));
-  ground.beams = [
-    ['beam_s', 'col_sw', 'col_se'],
-    ['beam_n', 'col_nw', 'col_ne'],
-    ['beam_w', 'col_sw', 'col_nw'],
-    ['beam_e', 'col_se', 'col_ne'],
-  ].map(([id, startId, endId]) => ({
+  ground.beams = (
+    framed
+      ? [
+          ['beam_s', 'col_sw', 'col_se'],
+          ['beam_n', 'col_nw', 'col_ne'],
+          ['beam_w', 'col_sw', 'col_nw'],
+          ['beam_e', 'col_se', 'col_ne'],
+        ]
+      : // One beam encloses no rectangle, so this ceiling's shape can only come
+        // from the slab overhead — which is what the key has to notice.
+        [['beam_s', 'col_sw', 'col_se']]
+  ).map(([id, startId, endId]) => ({
     ...createBeam({ kind: 'column', id: startId }, { kind: 'column', id: endId }, 250, 450, 3200),
     id,
   }));
@@ -65,7 +76,7 @@ function pullSlabOut(project, upperId) {
 
 describe('preview scene cache key — ceilings under a slab above', () => {
   it('changes the key of a ceiling floor when the slab over it is dragged out', () => {
-    const { project, groundId, upperId } = stackedProject();
+    const { project, groundId, upperId } = stackedProject({ framed: false });
     const pulled = pullSlabOut(project, upperId);
 
     const before = buildPreviewScene(project, { activeFloorId: groundId }).floors[0];
@@ -75,9 +86,21 @@ describe('preview scene cache key — ceilings under a slab above', () => {
     // identity cannot answer for the ceiling.
     expect(after.sourceKey.floor).toBe(before.sourceKey.floor);
     expect(after.sourceKey.slabsAbove).not.toBe(before.sourceKey.slabsAbove);
-    // ...and the ceiling really did follow the slab out over the cantilever.
+    // ...and the ceiling really did follow the slab out.
     expect(before.bounds.maxX).toBeLessThan(7000);
     expect(after.bounds.maxX).toBeCloseTo(7500, 6);
+  });
+
+  it('leaves a framed ceiling where its beams put it, slab or no slab', () => {
+    const { project, groundId, upperId } = stackedProject();
+
+    const before = buildPreviewScene(project, { activeFloorId: groundId }).floors[0];
+    const after = buildPreviewScene(pullSlabOut(project, upperId), { activeFloorId: groundId }).floors[0];
+
+    // The key still changes — it is a floor-wide key and cannot tell which
+    // ceilings care — but the geometry it rebuilds is the same ceiling.
+    expect(after.bounds.maxX).toBeCloseTo(before.bounds.maxX, 6);
+    expect(before.bounds.maxX).toBeLessThan(7000);
   });
 
   it('leaves a floor carrying no ceiling out of it', () => {

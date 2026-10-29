@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { buildProjectSectionScene } from '@/sections/scene';
 import { getSectionVisibilityMessage, SECTION_VISIBILITY_REASONS } from '@/sections/diagnostics';
 import SectionSceneLayer from './SectionSceneLayer';
@@ -38,6 +38,10 @@ function SectionRenderer({
 }) {
   const cuts = floor?.sectionCuts || [];
   const sectionCut = (activeSectionCutId && cuts.find((s) => s.id === activeSectionCutId)) || cuts[0] || null;
+  const scene = useMemo(
+    () => (sectionCut ? buildProjectSectionScene(project, floor?.id, sectionCut.id) : null),
+    [project, floor?.id, sectionCut],
+  );
 
   if (!sectionCut) {
     return (
@@ -57,7 +61,6 @@ function SectionRenderer({
     );
   }
 
-  const scene = buildProjectSectionScene(project, floor.id, sectionCut.id);
   if (!scene) return null;
 
   const roofReason = roofHiddenByPhase ? SECTION_VISIBILITY_REASONS.HIDDEN_BY_PHASE : scene.diagnostics?.roof?.reason;

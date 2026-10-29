@@ -14,6 +14,21 @@ function columnHeight(column) {
   return Number.isFinite(height) && height > 0 ? height : null;
 }
 
+// The level one named column's head finishes at, or null when there is nothing
+// to read there: no such column on the floor, or one carrying no usable height.
+// This is the same arithmetic resolveBeamBearingLevel does per column, exposed
+// on its own because not every caller wants that function's aggregation. A
+// caller that has to answer for a group of ends differently — the ceiling band
+// takes the HIGHEST head a bay's supports stand on, not the lowest — needs the
+// column-top rule without inheriting either the MIN or the storey-height
+// fallback, since a fallback folded in per end would let a deleted column speak
+// for a column that is still there.
+export function resolveColumnTopLevel(floor, columnId) {
+  if (!columnId) return null;
+  const height = columnHeight((floor?.columns || []).find((column) => column.id === columnId));
+  return height === null ? null : getFloorElevation(floor) + height;
+}
+
 export function resolveBeamBearingLevel(floor, columnIds = []) {
   const wanted = new Set(columnIds.filter(Boolean));
   const heights = (floor?.columns || [])

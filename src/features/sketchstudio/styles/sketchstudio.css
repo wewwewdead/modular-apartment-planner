@@ -1,5 +1,6 @@
 .sketchStudioPage {
   height: 100%;
+  min-width: 0;
   color: var(--dark-ss-text-body);
   background:
     radial-gradient(circle at top left, rgba(48, 92, 148, 0.24), transparent 28%),
@@ -11,47 +12,86 @@
 .sketchStudioShell {
   height: 100%;
   display: grid;
-  grid-template-rows: 64px minmax(0, 1fr) 34px;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.sketchStudioShell.has-craftsman {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
 }
 
 .sketchStudioTopBar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 12px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px 12px;
+  min-width: 0;
+  position: relative;
+  z-index: 10;
   border-bottom: 1px solid rgba(136, 165, 201, 0.16);
   background: var(--dark-ss-bg-toolbar);
   backdrop-filter: blur(12px);
-  overflow: hidden;
 }
 
 .sketchStudioTopBarPrimary {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .sketchStudioTopBarMeta {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.sketchStudioWorkspaceActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.sketchStudioToolbarButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--dark-ss-border);
+  border-radius: 6px;
+  background: var(--dark-ss-bg-surface);
+  color: var(--dark-ss-text-body);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sketchStudioToolbarButton:hover {
+  background: var(--dark-ss-bg-hover);
+  border-color: var(--dark-ss-border-hover);
+}
+
+.sketchStudioToolbarButton:focus-visible {
+  outline: 2px solid var(--dark-accent-blue);
+  outline-offset: 2px;
 }
 
 .sketchStudioTopBarSecondary {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-shrink: 1;
+  flex-wrap: wrap;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-}
-
-.sketchStudioTopBarSecondary::-webkit-scrollbar {
-  display: none;
+  padding-top: 8px;
+  border-top: 1px solid var(--dark-ss-border);
 }
 
 .sketchStudioTopBarBrand {
@@ -174,6 +214,9 @@
   font-family: var(--font-blueprint);
   font-size: 10px;
   white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sketchStudioBadgeInput {
@@ -501,7 +544,8 @@
     transform 0.15s ease;
 }
 
-.sketchStudioTooltipWrap:hover .sketchStudioTooltip {
+.sketchStudioTooltipWrap:hover .sketchStudioTooltip,
+.sketchStudioTooltipWrap:focus-within .sketchStudioTooltip {
   opacity: 1;
   transform: translateX(-50%) scale(1);
   transition-delay: 0.45s;
@@ -535,6 +579,7 @@
 
 .sketchStudioWorkspace {
   min-height: 0;
+  min-width: 0;
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr) 308px;
 }
@@ -1384,9 +1429,7 @@
   }
 
   .sketchStudioTopBar {
-    padding: 14px 16px;
-    align-items: flex-start;
-    flex-direction: column;
+    padding: 8px 12px;
   }
 
   .sketchStudioTopBarSecondary {
@@ -1443,7 +1486,12 @@
 
   .sketchStudioTopBarSecondary {
     gap: 4px;
-    justify-content: flex-end;
+    justify-content: flex-start;
+  }
+
+  .sketchStudioWorkspaceActions {
+    margin-left: 0;
+    width: 100%;
   }
   .sketchStudioWorkspace {
     grid-template-columns: 1fr;

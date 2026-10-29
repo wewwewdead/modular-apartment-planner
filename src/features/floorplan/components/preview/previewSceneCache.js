@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { buildFloorObjectGroup } from './buildPreviewObjects';
+import { applySceneLightBudgets, buildFloorObjectGroup } from './buildPreviewObjects';
 import { disposeScene } from './disposeScene';
+import { freezeStaticMatrices } from './staticMatrices';
 
 /**
  * Incremental builder for the 3D preview world root.
@@ -180,6 +181,17 @@ export function createPreviewSceneCache({ batch = true } = {}) {
     for (const group of orderedBatchGroups) {
       batchRoot.add(group);
     }
+
+    // Both of these are decisions about the finished scene, so both wait until
+    // every floor is in place — the ones just built and, just as importantly,
+    // the ones handed back untouched. A cross-floor pass that only saw rebuilt
+    // floors would hand the whole shadow budget to whichever storey the user
+    // happened to be editing.
+    applySceneLightBudgets(meshMap);
+    // After `clear()` + `add()`, because re-parenting is exactly the case where
+    // a frozen group's world matrix is stale and nothing else will notice.
+    freezeStaticMatrices(root);
+    freezeStaticMatrices(batchRoot);
 
     floorCache = nextCache;
     return { root, batchRoot, meshMap };

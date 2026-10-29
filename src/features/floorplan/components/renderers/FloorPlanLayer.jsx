@@ -22,6 +22,17 @@ import { RenderProfilerScope, useRenderProfile } from './renderProfiling';
 // collection (e.g. moving a door) skips re-rendering the untouched renderers.
 const EMPTY = Object.freeze([]);
 
+// The working canvas is not a drawing. A derived measurement on every wall —
+// and on every room the moment a wall closes one — turns a dense plan into a
+// lattice of overlapping labels, and the size of any one object is a click away
+// in the properties panel. So the derived wall and room dimensions are
+// suppressed here regardless of the floor's annotation settings. Those settings
+// still mean what they always did on the sheets, where a plan without its
+// dimensions is not a plan. Manual dimensions and the room name/area tags are
+// untouched: someone placed the former on purpose, and the latter are identity,
+// not measurement.
+const PLAN_CANVAS_ANNOTATIONS = Object.freeze({ showWallDimensions: false, showRoomDimensions: false });
+
 const FloorPlanLayer = memo(function FloorPlanLayer({ floor, filteredFloor, selectedId }) {
   useRenderProfile('FloorPlanLayer', {
     floor,
@@ -59,7 +70,7 @@ const FloorPlanLayer = memo(function FloorPlanLayer({ floor, filteredFloor, sele
         {(filteredFloor.sectionCuts || EMPTY).map((sectionCut) => (
           <SectionCutRenderer key={sectionCut.id} sectionCut={sectionCut} selectedId={selectedId} />
         ))}
-        <AnnotationRenderer floor={filteredFloor} />
+        <AnnotationRenderer floor={filteredFloor} settingsOverrides={PLAN_CANVAS_ANNOTATIONS} />
       </>
     </RenderProfilerScope>
   );

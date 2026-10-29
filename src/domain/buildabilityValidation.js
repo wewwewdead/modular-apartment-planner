@@ -5,6 +5,7 @@ import { add, normalize, perpendicular, scale, subtract } from '@/geometry/point
 import { intersectionArea } from '@/geometry/polygonBoolean';
 import { stairDirectionVector, stairRun, stairTotalRise } from '@/geometry/stairGeometry';
 import { doorOutlineOnWall, wallDirection, wallOutline } from '@/geometry/wallGeometry';
+import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { DESIGN_CONFIDENCE } from './trustModels';
 
 export const DEFAULT_BUILDABILITY_RULE_PROFILE = Object.freeze({
@@ -72,6 +73,12 @@ export function doorSwingEnvelope(wall, door, segments = 12) {
   return points;
 }
 
+/** The line a wall's body stands on, offset included. Identical to the drawn
+ *  axis for a wall with no outboard offset. */
+function wallBodyAxis(floor, wall) {
+  return getWallRenderData(wall, floor?.columns || []).bodyWall;
+}
+
 function validateDoorClearances(floor, profile) {
   const issues = [];
   const wallsById = new Map((floor.walls || []).map((wall) => [wall.id, wall]));
@@ -92,14 +99,18 @@ function validateDoorClearances(floor, profile) {
         ),
       );
     }
-    const envelope = doorSwingEnvelope(host, door);
+    // A door swings out of the wall as BUILT and hits the walls as built. Both
+    // sides of the test therefore run on the body axis rather than the drawn
+    // one — untrimmed, which is the same line and the same polygon for every
+    // wall nobody has offset, so nothing that passed before starts failing.
+    const envelope = doorSwingEnvelope(wallBodyAxis(floor, host), door);
     if (envelope.length < 3) continue;
     const obstacles = [
       ...(floor.columns || []).map((entity) => ({ type: 'column', entity, polygon: columnOutline(entity) })),
       ...(floor.fixtures || []).map((entity) => ({ type: 'fixture', entity, polygon: fixtureOutline(entity) })),
       ...(floor.walls || [])
         .filter((wall) => wall.id !== host.id)
-        .map((entity) => ({ type: 'wall', entity, polygon: wallOutline(entity) })),
+        .map((entity) => ({ type: 'wall', entity, polygon: wallOutline(wallBodyAxis(floor, entity)) })),
     ];
     for (const obstacle of obstacles) {
       const overlapArea = intersectionArea(envelope, obstacle.polygon);

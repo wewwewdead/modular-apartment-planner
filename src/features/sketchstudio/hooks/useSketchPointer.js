@@ -43,6 +43,7 @@ import {
   mergeSelection,
   parsePositiveNumber,
   HIT_TOLERANCE_PX,
+  shouldSnapOverrideOrtho,
 } from './sketchConstants';
 
 export default function useSketchPointer(state, dispatch, viewportHook, options) {
@@ -186,10 +187,10 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
               ? { x: draggedEntity.x2, y: draggedEntity.y2 }
               : { x: draggedEntity.x1, y: draggedEntity.y1 }
             : null;
-        const nextSnap = resolveSnap(rawWorldPoint, anchorPoint);
+        const nextSnap = resolveSnap(rawWorldPoint, anchorPoint, { excludeEntityIds: [draggedEntity.id] });
         const basePoint = nextSnap.point ?? rawWorldPoint;
         const nextPoint =
-          draggedEntity.type === 'line' && state.ui.orthoEnabled && anchorPoint
+          draggedEntity.type === 'line' && state.ui.orthoEnabled && anchorPoint && !shouldSnapOverrideOrtho(nextSnap)
             ? state.ui.viewMode === 'isometric'
               ? applyIsometricOrthoPoint(anchorPoint, basePoint)
               : applyOrthoPoint(anchorPoint, basePoint)
@@ -407,7 +408,7 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
       }
 
       if (state.draft.type === 'polyline' && state.draft.points.length >= 2) {
-        const nextPoint = getConstrainedDraftPoint('polyline', state.draft, snap.point ?? worldPoint);
+        const nextPoint = getConstrainedDraftPoint('polyline', state.draft, snap.point ?? worldPoint, snap);
         const startPoint = state.draft.points[0];
         const closeTolerance = pixelsToWorldUnits(PROFILE_CLOSE_TOLERANCE_PX, state.viewport.zoom);
         const closedPreview = calculateDistance(startPoint, nextPoint) <= closeTolerance;
@@ -416,7 +417,9 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
       }
 
       dispatch(
-        patchDraft({ currentPoint: getConstrainedDraftPoint(state.draft.type, state.draft, snap.point ?? worldPoint) }),
+        patchDraft({
+          currentPoint: getConstrainedDraftPoint(state.draft.type, state.draft, snap.point ?? worldPoint, snap),
+        }),
       );
     },
     [
@@ -470,6 +473,13 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
       }
 
       if (state.interaction.mode === 'handle-drag') {
+        // A drag that moved the handle ends with the cursor wherever snap/Ortho
+        // left it -- often off the entity -- so the click that follows must not
+        // reach the select tool and clear the selection. Each drag move writes a
+        // new document, so "moved" == the document is no longer the snapshot's.
+        if (state.document !== state.interaction.handleDrag?.historySnapshot?.document) {
+          dispatch(setSuppressNextClick(true));
+        }
         dispatch(endHandleDrag());
         return;
       }
@@ -498,7 +508,7 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
       editableEntities,
       readCanvasPoint,
       readWorldPoint,
-      state.document.groupIndex,
+      state.document,
       state.interaction,
       state.selection,
       state.viewport.zoom,

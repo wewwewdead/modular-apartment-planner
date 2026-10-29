@@ -1,10 +1,17 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
-import { useEditor } from '@/features/floorplan/context/FloorplanContext';
+import { useEditorState, useToolSettings, useToolState } from '@/features/floorplan/context/FloorplanContext';
 import { useConfirmDialog } from '@/ui/ConfirmDialog';
 import { BUILDING_COMMANDS } from '@/domain/buildingCommands';
 import { FILLET_DEFAULT_RADIUS, FILLET_MIN_RADIUS, FILLET_MAX_RADIUS } from '@/domain/defaults';
+import { getEligibleCeilingSupportBeams } from '@/domain/ceilingBeamAttachment';
 import { getProjectCeiling } from '@/domain/ceilingModels';
+import { getCeilingHostFloor, planCantileverCeilings } from '@/domain/cantileverCeiling';
+import {
+  addCantileverCeilings,
+  enterDrawCeilingUnderSlab,
+  enterPickCeilingBeamsUnderSlab,
+} from '@/features/floorplan/utils/addCeilingEntry';
 import { getOrderedFloors } from '@/domain/floorModels';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { findTrussInstance, getProjectTrussSystems } from '@/domain/trussModels';
@@ -99,7 +106,31 @@ function selectionMeta(selectedType, selectedId) {
   return selectedId || '';
 }
 
-export default function PropertiesPanel() {
+/**
+ * The wall being drawn, live.
+ *
+ * Its own component because it is the only part of the panel that tracks the
+ * pointer: the preview point is rewritten on every move of the wall tool, and
+ * subscribing the whole panel to that would put every properties scan on the
+ * per-frame budget for a readout of two numbers.
+ */
+function LiveWallDrawingInput({ dispatch, editorDispatch, activeFloorId, u }) {
+  const toolState = useToolState();
+  if (!toolState.start) return null;
+
+  return (
+    <WallDrawingInput
+      start={toolState.start}
+      preview={toolState.preview}
+      dispatch={dispatch}
+      editorDispatch={editorDispatch}
+      activeFloorId={activeFloorId}
+      u={u}
+    />
+  );
+}
+
+function PropertiesPanel() {
   const { project, dispatch, duplicateFloor } = useProject();
   const {
     selectedId,
@@ -111,29 +142,44 @@ export default function PropertiesPanel() {
     modelTarget,
     viewMode,
     activeTool,
-    toolState,
     activePhaseId,
     phaseViewMode,
     hiddenWallBoards,
     hiddenCeilingBoards,
     dispatch: editorDispatch,
-  } = useEditor();
-  const orderedFloors = getOrderedFloors(project);
+  } = useEditorState();
+  // Settled tool choices only. The fillet radius and the cantilever pick are the
+  // panel's whole interest in tool state, and neither of them moves with the
+  // pointer.
+  const toolSettings = useToolSettings();
+  const orderedFloors = useMemo(() => getOrderedFloors(project), [project]);
   const confirm = useConfirmDialog();
-  const phases = getOrderedPhases(project);
+  const phases = useMemo(() => getOrderedPhases(project), [project]);
   const filteredProject = useMemo(
     () => filterProjectByPhase(project, activePhaseId, phaseViewMode),
     [project, activePhaseId, phaseViewMode],
   );
-  const floor = orderedFloors.find((entry) => entry.id === activeFloorId) || null;
+  const floor = useMemo(
+    () => orderedFloors.find((entry) => entry.id === activeFloorId) || null,
+    [orderedFloors, activeFloorId],
+  );
   const roofSystem = project.roofSystem || null;
-  const floorTrussSystems = getProjectTrussSystems(project, activeFloorId);
-  const visibleFloorTrussSystems = getProjectTrussSystems(filteredProject, activeFloorId);
+  const floorTrussSystems = useMemo(() => getProjectTrussSystems(project, activeFloorId), [project, activeFloorId]);
+  const visibleFloorTrussSystems = useMemo(
+    () => getProjectTrussSystems(filteredProject, activeFloorId),
+    [filteredProject, activeFloorId],
+  );
   const visibleRoofSystem = filteredProject.roofSystem || null;
   const isRoofHiddenByPhase = Boolean(roofSystem && !visibleRoofSystem);
-  const visibleTrussIds = new Set((filteredProject.trussSystems || []).map((entry) => entry.id));
+  const visibleTrussIds = useMemo(
+    () => new Set((filteredProject.trussSystems || []).map((entry) => entry.id)),
+    [filteredProject.trussSystems],
+  );
   const activePhaseName = phases.find((phase) => phase.id === activePhaseId)?.name || null;
-  const sheet = (project.sheets || []).find((entry) => entry.id === activeSheetId) || null;
+  const sheet = useMemo(
+    () => (project.sheets || []).find((entry) => entry.id === activeSheetId) || null,
+    [project.sheets, activeSheetId],
+  );
   const overhangs = useFloorOverhangs(project.floors);
   // What the selected plate's overhang was measured against. Retracting an edge
   // has to be able to re-measure with the same footprint, or "the overhang is
@@ -147,6 +193,54 @@ export default function PropertiesPanel() {
       ),
     [project.floors, selectedSlabOverhang?.belowFloorId],
   );
+
+  /* ── The ceiling under the selected plate ───────────────────────────────
+   *
+   * Worked out here rather than in the panel because it takes the whole
+   * project — which storey is below this one, and what of the plate reaches
+   * past it — and SlabProperties is memoized so that it never holds one. What
+   * goes down is a name, a count and two callbacks.
+   */
+  const selectedSlab =
+    selectedType === 'slab' ? (floor?.slabs || []).find((entry) => entry.id === selectedId) || null : null;
+  const ceilingHostFloor = useMemo(
+    () => (selectedSlab ? getCeilingHostFloor(project, activeFloorId) : null),
+    [project, activeFloorId, selectedSlab],
+  );
+  // Which cantilever, if one of them is being pointed at. The run index is a
+  // position in geometry that is remeasured after every edit, so it is resolved
+  // rather than trusted: an index that no longer answers to a run leaves the
+  // trace covering every overhang, which is where it was before anyone clicked.
+  const focusRun =
+    selectedOverhangEdge?.slabId === selectedId
+      ? selectedSlabOverhang?.overhangEdges?.[selectedOverhangEdge.edgeIndex] || null
+      : null;
+  const cantileverCeilingPlan = useMemo(
+    () =>
+      selectedSlab && ceilingHostFloor
+        ? planCantileverCeilings(project, floor, selectedSlab, { phaseId: activePhaseId, focusRun })
+        : null,
+    [project, floor, selectedSlab, ceilingHostFloor, activePhaseId, focusRun],
+  );
+  // A count rather than the floor: the panel is memoized so that it never holds
+  // a floor object, and what it needs to know is only whether there is a frame
+  // down there to pick from at all.
+  const ceilingHostBeamCount = useMemo(
+    () => (ceilingHostFloor ? getEligibleCeilingSupportBeams(ceilingHostFloor).length : 0),
+    [ceilingHostFloor],
+  );
+
+  const traceCantileverCeiling = () => {
+    addCantileverCeilings({ plan: cantileverCeilingPlan, dispatch, editorDispatch });
+  };
+
+  const drawCeilingUnderSlab = () => {
+    enterDrawCeilingUnderSlab({ slab: selectedSlab, targetFloor: ceilingHostFloor, editorDispatch });
+  };
+
+  const pickCeilingBeams = () => {
+    enterPickCeilingBeamsUnderSlab({ slab: selectedSlab, targetFloor: ceilingHostFloor, editorDispatch });
+  };
   // The same planning limits the STRUCT rules check against, so a warning in
   // the model and a verdict in the panel can never disagree about the numbers.
   const coordinationProfile = useMemo(() => structuralProfile(project), [project]);
@@ -494,7 +588,7 @@ export default function PropertiesPanel() {
         content = <PhaseProperties phase={phase} project={project} dispatch={dispatch} />;
       }
     } else if (selectedType === 'slab') {
-      const slab = (floor.slabs || []).find((s) => s.id === selectedId) || null;
+      const slab = selectedSlab;
       if (slab) {
         content = (
           <SlabProperties
@@ -509,8 +603,17 @@ export default function PropertiesPanel() {
             floorId={activeFloorId}
             u={u}
             phases={phases}
+            activePhaseId={activePhaseId}
             activeTool={activeTool}
-            toolState={toolState}
+            // Only `cantileverPick` and `cantileverMode` are read in there, and
+            // both are settled choices rather than preview positions.
+            toolState={toolSettings}
+            ceilingHostFloorName={ceilingHostFloor?.name || null}
+            ceilingHostBeamCount={ceilingHostBeamCount}
+            cantileverCeilingCount={cantileverCeilingPlan?.ceilings.length || 0}
+            onTraceCantileverCeiling={traceCantileverCeiling}
+            onDrawCeilingUnderSlab={drawCeilingUnderSlab}
+            onPickCeilingBeams={pickCeilingBeams}
           />
         );
       }
@@ -712,11 +815,14 @@ export default function PropertiesPanel() {
               type="number"
               suffix={u.suffix}
               step={u.step(FILLET_DEFAULT_RADIUS / 4)}
-              value={u.toDisplay(toolState.radius ?? FILLET_DEFAULT_RADIUS)}
+              value={u.toDisplay(toolSettings.radius ?? FILLET_DEFAULT_RADIUS)}
               onChange={(v) => {
                 const mm = u.fromDisplay(v);
                 const clamped = Math.max(FILLET_MIN_RADIUS, Math.min(FILLET_MAX_RADIUS, mm));
-                editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { ...toolState, radius: clamped } });
+                // UPDATE_TOOL_STATE merges, so the radius goes in on its own
+                // rather than spreading a slice that no longer holds the
+                // pointer-driven fields.
+                editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { radius: clamped } });
               }}
             />
             <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '8px 0 0', lineHeight: 1.4 }}>
@@ -724,10 +830,8 @@ export default function PropertiesPanel() {
             </p>
           </div>
         )}
-        {activeTool === TOOLS.WALL && modelTarget === 'floor' && toolState.start && workspaceMode === 'model' && (
-          <WallDrawingInput
-            start={toolState.start}
-            preview={toolState.preview}
+        {activeTool === TOOLS.WALL && modelTarget === 'floor' && workspaceMode === 'model' && (
+          <LiveWallDrawingInput
             dispatch={dispatch}
             editorDispatch={editorDispatch}
             activeFloorId={activeFloorId}
@@ -746,3 +850,5 @@ export default function PropertiesPanel() {
     </div>
   );
 }
+
+export default memo(PropertiesPanel);

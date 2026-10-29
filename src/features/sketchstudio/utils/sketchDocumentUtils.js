@@ -1,4 +1,5 @@
 import sampleDocument from '../data/sampleDocument';
+import { normalizeModel, removeOrphanedConnections } from '../cad/model';
 import { cloneJoint as cloneJoineryJoint } from '../joinery';
 import { normalizeEntityGroupMemberships } from './groupUtils';
 
@@ -10,6 +11,9 @@ import { normalizeEntityGroupMemberships } from './groupUtils';
  *       (`entity.driving` / `entity.drivingValue`).
  *   3 — no constraints at all. Sketch Studio is pure freehand drafting again:
  *       dimensions MEASURE geometry and never drive it.
+ *   4 — a separate solid-model domain: part sketches (optionally constrained),
+ *       features, definitions, instances, connections, sheets and fabrication.
+ *       Legacy entities remain unconstrained and are never implicitly extruded.
  *
  * The v1/v2 -> v3 migration happens on load, in `normalizeSketchDocument`: a
  * stored `constraints` array is dropped and the `driving` / `drivingValue`
@@ -22,7 +26,7 @@ import { normalizeEntityGroupMemberships } from './groupUtils';
  * longer readable as a v2 one (its constraints are gone for good), so a file
  * written here must not claim to be the version that still carried them.
  */
-export const SKETCH_DOCUMENT_SCHEMA_VERSION = 3;
+export const SKETCH_DOCUMENT_SCHEMA_VERSION = 4;
 
 export function normalizeCommittedSketchName(name) {
   return String(name || '').trim() || 'Untitled Sketch';
@@ -87,6 +91,7 @@ function stripDimensionDrivingFields(entities = []) {
 
 export function normalizeSketchDocument(document) {
   const source = document && typeof document === 'object' ? document : {};
+  if (source.version > SKETCH_DOCUMENT_SCHEMA_VERSION) throw new Error('This sketch uses a newer document schema.');
   // `constraints` is dropped on load: see the schema note above.
   const { groupIndex: _runtimeGroupIndex, constraints: _legacyConstraints, ...sourceWithoutRuntimeFields } = source;
   const sourceEntities = Array.isArray(sourceWithoutRuntimeFields.entities)
@@ -121,6 +126,7 @@ export function normalizeSketchDocument(document) {
         ? sourceWithoutRuntimeFields.layers.map(cloneLayer)
         : (sampleDocument.layers || []).map(cloneLayer),
     entities: normalizedEntities,
+    model: removeOrphanedConnections(normalizeModel(source.model)),
   };
 }
 

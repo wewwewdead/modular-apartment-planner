@@ -46,6 +46,7 @@ export default function useSketchPersistence(state, dispatch) {
           viewMode: state.ui.viewMode,
           isometricPlane: state.ui.isometricPlane,
           craftsmanMode: state.ui.craftsmanMode,
+          workspaceMode: state.ui.workspaceMode,
         },
       }),
     [
@@ -56,6 +57,7 @@ export default function useSketchPersistence(state, dispatch) {
       state.ui.orthoEnabled,
       state.ui.snapEnabled,
       state.ui.viewMode,
+      state.ui.workspaceMode,
     ],
   );
 

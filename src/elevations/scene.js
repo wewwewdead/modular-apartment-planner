@@ -1,17 +1,17 @@
 import { getFloorElevation, getFloorStackBounds, getOrderedFloors, resolveProjectFloor } from '@/domain/floorModels';
 import { getProjectTrussSystems } from '@/domain/trussModels';
-import { wallBaseOffset } from '@/domain/wallFit';
+import { resolveWallVerticalSpan } from '@/domain/wallFit';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
-import { computeLandingElevation } from '@/geometry/landingGeometry';
+import { computeLandingElevation, landingOutline } from '@/geometry/landingGeometry';
 import { buildRailingElevationElements } from '@/geometry/railingElevationGeometry';
 import { buildRoofElevationElements } from '@/geometry/roofElevationGeometry';
 import { buildTrussElevationElements } from '@/geometry/trussElevationGeometry';
 import { getStairRenderData } from '@/geometry/stairGeometry';
 import { doorOutlineOnWall, windowOutlineOnWall } from '@/geometry/wallGeometry';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
-import { buildSlabElevationBands, getSlabBottomLevel, getSlabTopLevel } from './slab';
-import { getElevationView, projectPlanPoints } from './projection';
+import { getSlabBottomLevel, getSlabTopLevel } from './slab';
+import { getElevationView, projectElevationEdge } from './projection';
 
 function createSceneRect(id, category, projection, bottom, top, options = {}) {
   if (!projection) return null;
@@ -26,26 +26,35 @@ function createSceneRect(id, category, projection, bottom, top, options = {}) {
     bottom,
     top,
     depth: projection.depth,
+    depthSlope: projection.depthSlope,
+    depthIntercept: projection.depthIntercept,
     style: options.style || category,
     sourceId: options.sourceId || null,
   };
 }
 
+function buildPrismFaces(id, category, outline, view, bottom, top, options = {}) {
+  return outline.flatMap((point, index) => {
+    const face = createSceneRect(
+      `${id}-face-${index}`,
+      category,
+      projectElevationEdge(view, point, outline[(index + 1) % outline.length]),
+      bottom,
+      top,
+      options,
+    );
+    return face ? [face] : [];
+  });
+}
+
 function buildWallRects(floor, view) {
-  const floorElevation = getFloorElevation(floor);
-  return (floor.walls || [])
-    .map((wall) => {
-      const renderData = getWallRenderData(wall, floor.columns || []);
-      return createSceneRect(
-        `wall-elev-${wall.id}`,
-        'wall',
-        projectPlanPoints(view, renderData.outline),
-        floorElevation + wallBaseOffset(wall),
-        floorElevation + wallBaseOffset(wall) + (wall.height ?? 0),
-        { sourceId: wall.id },
-      );
-    })
-    .filter(Boolean);
+  return (floor.walls || []).flatMap((wall) => {
+    const renderData = getWallRenderData(wall, floor.columns || []);
+    const span = resolveWallVerticalSpan(wall, floor);
+    return buildPrismFaces(`wall-elev-${wall.id}`, 'wall', renderData.outline, view, span.base, span.top, {
+      sourceId: wall.id,
+    });
+  });
 }
 
 function buildSlabRects(floor, view) {
@@ -53,24 +62,21 @@ function buildSlabRects(floor, view) {
     const slabTop = getSlabTopLevel(slab);
     const slabBottom = getSlabBottomLevel(slab);
 
-    return buildSlabElevationBands(slab, view)
-      .map((band) =>
-        createSceneRect(`slab-elev-${slab.id}-${band.edgeIndex}`, 'slab', band, slabBottom, slabTop, {
-          sourceId: slab.id,
-        }),
-      )
-      .filter(Boolean);
+    return buildPrismFaces(`slab-elev-${slab.id}`, 'slab', slab.boundaryPoints || [], view, slabBottom, slabTop, {
+      sourceId: slab.id,
+    });
   });
 }
 
 function buildColumnRects(floor, view) {
   const floorElevation = getFloorElevation(floor);
   return (floor.columns || [])
-    .map((column) =>
-      createSceneRect(
+    .flatMap((column) =>
+      buildPrismFaces(
         `column-elev-${column.id}`,
         'column',
-        projectPlanPoints(view, columnOutline(column)),
+        columnOutline(column),
+        view,
         floorElevation,
         floorElevation + column.height,
         { sourceId: column.id },
@@ -81,13 +87,14 @@ function buildColumnRects(floor, view) {
 
 function buildBeamRects(floor, view) {
   return (floor.beams || [])
-    .map((beam) => {
+    .flatMap((beam) => {
       const renderData = getBeamRenderData(beam, floor.columns || []);
-      if (!renderData) return null;
-      return createSceneRect(
+      if (!renderData) return [];
+      return buildPrismFaces(
         `beam-elev-${beam.id}`,
         'beam',
-        projectPlanPoints(view, renderData.outline),
+        renderData.outline,
+        view,
         beam.floorLevel - beam.depth,
         beam.floorLevel,
         { sourceId: beam.id },
@@ -99,9 +106,9 @@ function buildBeamRects(floor, view) {
 function buildStairRects(floor, view, landingElevationMap) {
   const floorElevation = getFloorElevation(floor);
   return (floor.stairs || [])
-    .map((stair) => {
+    .flatMap((stair) => {
       const renderData = getStairRenderData(stair);
-      if (!renderData?.outline?.length) return null;
+      if (!renderData?.outline?.length) return [];
 
       let baseElevation = floorElevation;
       if (stair.startLandingAttachment) {
@@ -111,52 +118,95 @@ function buildStairRects(floor, view, landingElevationMap) {
         }
       }
 
-      return createSceneRect(
-        `stair-elev-${stair.id}`,
-        'stair',
-        projectPlanPoints(view, renderData.outline),
-        baseElevation,
-        baseElevation + renderData.totalRise,
-        { sourceId: stair.id },
+      const dx = (renderData.endPoint.x - renderData.startPoint.x) / stair.numberOfRisers;
+      const dy = (renderData.endPoint.y - renderData.startPoint.y) / stair.numberOfRisers;
+      // Match the treads in the 3D model, including the open space below a flight.
+      return renderData.treads.flatMap((tread, index) =>
+        buildPrismFaces(
+          `stair-elev-${stair.id}-${index}`,
+          'stair',
+          [
+            tread.start,
+            { x: tread.start.x + dx, y: tread.start.y + dy },
+            { x: tread.end.x + dx, y: tread.end.y + dy },
+            tread.end,
+          ],
+          view,
+          baseElevation + index * stair.riserHeight,
+          baseElevation + (index + 1) * stair.riserHeight,
+          { sourceId: stair.id },
+        ),
       );
     })
     .filter(Boolean);
 }
 
+function buildLandingRects(floor, view, landingElevationMap) {
+  return (floor.landings || []).flatMap((landing) => {
+    const bottom = getFloorElevation(floor) + (landingElevationMap.get(landing.id) || 0);
+    return buildPrismFaces(
+      `landing-elev-${landing.id}`,
+      'landing',
+      landingOutline(landing),
+      view,
+      bottom,
+      bottom + (landing.thickness ?? 200),
+      { sourceId: landing.id, style: 'slab' },
+    );
+  });
+}
+
+function openingProjection(view, info) {
+  // Project the opening's broad face, never its wall-thickness footprint.
+  // An edge-on window must disappear instead of becoming a narrow stripe.
+  const faces = [
+    [info.p1, info.p2],
+    [info.p4, info.p3],
+  ]
+    .map(([a, b]) => projectElevationEdge(view, a, b))
+    .filter(Boolean);
+  return faces.sort((a, b) => a.depth - b.depth)[0] || null;
+}
+
 function buildDoorRects(floor, view) {
-  const floorElevation = getFloorElevation(floor);
   return (floor.doors || [])
     .map((door) => {
       const wall = (floor.walls || []).find((entry) => entry.id === door.wallId);
       if (!wall) return null;
-      const info = doorOutlineOnWall(wall, door);
-      return createSceneRect(
+      const info = doorOutlineOnWall(getWallRenderData(wall, floor.columns || []).bodyWall, door);
+      // Measured off the wall's floor datum, so an opening follows its host
+      // wall up a plinth beam without following a bypass wall down past the
+      // deck — a door is on the floor whatever the wall does around it.
+      const sill = resolveWallVerticalSpan(wall, floor).datum + (door.sillHeight ?? 0);
+      const rect = createSceneRect(
         `door-elev-${door.id}`,
         'door',
-        projectPlanPoints(view, [info.p1, info.p2, info.p3, info.p4]),
-        floorElevation + wallBaseOffset(wall) + (door.sillHeight ?? 0),
-        floorElevation + wallBaseOffset(wall) + (door.sillHeight ?? 0) + (door.height ?? 0),
+        openingProjection(view, info),
+        sill,
+        sill + (door.height ?? 0),
         { sourceId: door.id },
       );
+      return rect ? { ...rect, openingType: door.type, actualWidth: door.width } : null;
     })
     .filter(Boolean);
 }
 
 function buildWindowRects(floor, view) {
-  const floorElevation = getFloorElevation(floor);
   return (floor.windows || [])
     .map((windowItem) => {
       const wall = (floor.walls || []).find((entry) => entry.id === windowItem.wallId);
       if (!wall) return null;
-      const info = windowOutlineOnWall(wall, windowItem);
-      return createSceneRect(
+      const info = windowOutlineOnWall(getWallRenderData(wall, floor.columns || []).bodyWall, windowItem);
+      const sill = resolveWallVerticalSpan(wall, floor).datum + (windowItem.sillHeight ?? 0);
+      const rect = createSceneRect(
         `window-elev-${windowItem.id}`,
         'window',
-        projectPlanPoints(view, [info.p1, info.p2, info.p3, info.p4]),
-        floorElevation + wallBaseOffset(wall) + (windowItem.sillHeight ?? 0),
-        floorElevation + wallBaseOffset(wall) + (windowItem.sillHeight ?? 0) + (windowItem.height ?? 0),
+        openingProjection(view, info),
+        sill,
+        sill + (windowItem.height ?? 0),
         { sourceId: windowItem.id },
       );
+      return rect ? { ...rect, openingType: windowItem.type, actualWidth: windowItem.width } : null;
     })
     .filter(Boolean);
 }
@@ -208,6 +258,7 @@ function buildFloorElevationElements(floor, view) {
       ...buildColumnRects(floor, view),
       ...buildBeamRects(floor, view),
       ...buildStairRects(floor, view, landingElevationMap),
+      ...buildLandingRects(floor, view, landingElevationMap),
       ...buildDoorRects(floor, view),
       ...buildWindowRects(floor, view),
       ...(railingElements.elements || []),

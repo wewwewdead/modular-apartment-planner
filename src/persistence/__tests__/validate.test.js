@@ -6,6 +6,8 @@ import {
   validateAndRepair,
 } from '../validate';
 import { createCanonicalBuilding } from '@/domain/buildingModels';
+import { createBeam, createColumn } from '@/domain/models';
+import { resolveCeilingElevations } from '@/domain/ceilingModels';
 
 function makeProject(overrides = {}) {
   const project = {
@@ -846,5 +848,198 @@ describe('ceiling persistence', () => {
     const project = makeProject({ floors: floorWithBeams(), ceilings: [ceiling] });
 
     expect(repairBrokenReferences(project).ceilings[0]).toBe(ceiling);
+  });
+});
+
+describe('storey-top ceiling re-attachment', () => {
+  const STOREY_TOP = 3000;
+  // Deliberately below the storey top: a ceiling standing on the storey datum
+  // while its beams stop lower is the residue, and the two heights have to differ
+  // for the repair to be seen doing anything.
+  const BEAM_TOP = 2700;
+  const DROP = 300;
+  const BAY_WIDTH = 9000;
+  const BAY_DEPTH = 6000;
+  const BEAM_IDS = ['beam_s', 'beam_n', 'beam_w', 'beam_e'];
+
+  const rect = (minX, minY, maxX, maxY) => [
+    { x: minX, y: minY },
+    { x: maxX, y: minY },
+    { x: maxX, y: maxY },
+    { x: minX, y: maxY },
+  ];
+
+  // One bay: four columns closed by four beams, all at the same level.
+  function framedFloor(level = BEAM_TOP) {
+    const column = (id, x, y) => ({ ...createColumn(x, y, 300, 300, { height: level }), id });
+    const beam = (id, startId, endId) => ({
+      ...createBeam({ kind: 'column', id: startId }, { kind: 'column', id: endId }, 250, 450, level),
+      id,
+    });
+    return {
+      id: 'floor_1',
+      elevation: 0,
+      floorToFloorHeight: STOREY_TOP,
+      walls: [],
+      doors: [],
+      windows: [],
+      columns: [
+        column('col_sw', 0, 0),
+        column('col_se', BAY_WIDTH, 0),
+        column('col_ne', BAY_WIDTH, BAY_DEPTH),
+        column('col_nw', 0, BAY_DEPTH),
+      ],
+      beams: [
+        beam('beam_s', 'col_sw', 'col_se'),
+        beam('beam_n', 'col_nw', 'col_ne'),
+        beam('beam_w', 'col_sw', 'col_nw'),
+        beam('beam_e', 'col_se', 'col_ne'),
+      ],
+      stairs: [],
+      landings: [],
+      fixtures: [],
+      annotations: [],
+      slabs: [],
+      sectionCuts: [],
+      rooms: [],
+      railings: [],
+    };
+  }
+
+  // The storey above, slabbed. `ring` is its footprint, so pulling that ring
+  // past the frame below is all a cantilever ever is.
+  function slabbedStorey(ring) {
+    return {
+      id: 'floor_2',
+      levelIndex: 1,
+      elevation: STOREY_TOP,
+      floorToFloorHeight: STOREY_TOP,
+      walls: [],
+      doors: [],
+      windows: [],
+      columns: [],
+      beams: [],
+      stairs: [],
+      landings: [],
+      fixtures: [],
+      annotations: [],
+      slabs: [{ id: 'slab_2', floorId: 'floor_2', elevation: STOREY_TOP, thickness: 200, boundaryPoints: ring }],
+      sectionCuts: [],
+      rooms: [],
+      railings: [],
+    };
+  }
+
+  // What the creation bug wrote: manual attachment on the storey datum, on a
+  // floor that had beams to hang from all along.
+  function residueCeiling(overrides = {}) {
+    return {
+      id: 'ceiling_1',
+      name: 'Ceiling',
+      floorId: 'floor_1',
+      phaseId: null,
+      attachment: { mode: 'manual', beamIds: [] },
+      boundarySource: 'auto',
+      boundaryPolygon: rect(0, 0, BAY_WIDTH, BAY_DEPTH),
+      baseElevation: STOREY_TOP,
+      detailing: { enabled: true, suspension: { drop: DROP } },
+      ...overrides,
+    };
+  }
+
+  it('re-hangs a storey-top manual ceiling from the beams on its floor', () => {
+    const project = makeProject({ floors: [framedFloor()], ceilings: [residueCeiling()] });
+
+    const loaded = validateAndRepair(project);
+    const ceiling = loaded.ceilings[0];
+
+    expect(ceiling.attachment).toEqual({ mode: 'beam', beamIds: BEAM_IDS });
+    expect(ceiling.baseElevation).toBe(BEAM_TOP);
+    // The point of the repair: the boards hang under the beams instead of sitting
+    // flush with their tops with the framing stacked above them.
+    const { boardUnderside } = resolveCeilingElevations(loaded, ceiling);
+    expect(boardUnderside).toBe(BEAM_TOP - DROP);
+    expect(boardUnderside).toBeLessThan(BEAM_TOP);
+  });
+
+  it('re-hangs a drawn ceiling from the bay its outline was traced inside', () => {
+    // Traced the way a room is traced — inside the beam faces, crossing no beam
+    // footprint at all.
+    const boundaryPolygon = rect(2000, 2000, 5000, 4000);
+    const project = makeProject({
+      floors: [framedFloor()],
+      ceilings: [residueCeiling({ boundarySource: 'drawn', boundaryPolygon })],
+    });
+
+    const ceiling = validateAndRepair(project).ceilings[0];
+
+    expect(ceiling.attachment).toEqual({ mode: 'beam', beamIds: BEAM_IDS });
+    expect(ceiling.baseElevation).toBe(BEAM_TOP);
+    expect(ceiling.boundaryPolygon).toBe(boundaryPolygon);
+  });
+
+  it('re-hangs a drawn ceiling traced under a cantilever from the beams the deck rests on', () => {
+    // Traced out past the east beam's outer face, under a slab pulled 1500 mm
+    // past the frame: it crosses no beam and lies in no bay, so before the deck
+    // was asked about this one stayed stranded on the storey datum on every load.
+    const boundaryPolygon = rect(BAY_WIDTH + 125, 0, BAY_WIDTH + 1500, 3000);
+    const project = makeProject({
+      floors: [framedFloor(), slabbedStorey(rect(0, 0, BAY_WIDTH + 1500, BAY_DEPTH))],
+      ceilings: [residueCeiling({ boundarySource: 'drawn', boundaryPolygon })],
+    });
+
+    const loaded = validateAndRepair(project);
+    const ceiling = loaded.ceilings[0];
+
+    expect(ceiling.attachment).toEqual({ mode: 'beam', beamIds: BEAM_IDS });
+    expect(ceiling.baseElevation).toBe(BEAM_TOP);
+    expect(ceiling.boundaryPolygon).toBe(boundaryPolygon);
+    expect(resolveCeilingElevations(loaded, ceiling).boardUnderside).toBe(BEAM_TOP - DROP);
+  });
+
+  it('leaves a drawn ceiling traced past the edge of the deck on its manual datum', () => {
+    // The same storey above, but the outline is drawn past the slab as well as
+    // past the frame. Nothing overhead reaches it at all.
+    const ceiling = residueCeiling({
+      boundarySource: 'drawn',
+      boundaryPolygon: rect(BAY_WIDTH + 2000, 0, BAY_WIDTH + 6000, BAY_DEPTH),
+    });
+    const project = makeProject({
+      floors: [framedFloor(), slabbedStorey(rect(0, 0, BAY_WIDTH + 1500, BAY_DEPTH))],
+      ceilings: [ceiling],
+    });
+
+    expect(validateAndRepair(project).ceilings[0]).toBe(ceiling);
+  });
+
+  it('leaves a drawn ceiling that hangs from nothing on its manual datum', () => {
+    // Off the end of the frame: no beam crossed and no bay containing it, so
+    // manual is the truth about this one.
+    const ceiling = residueCeiling({
+      boundarySource: 'drawn',
+      boundaryPolygon: rect(BAY_WIDTH + 2000, 0, BAY_WIDTH + 6000, BAY_DEPTH),
+    });
+    const project = makeProject({ floors: [framedFloor()], ceilings: [ceiling] });
+
+    expect(validateAndRepair(project).ceilings[0]).toBe(ceiling);
+  });
+
+  it('leaves a manual ceiling standing on a datum of its own', () => {
+    // The height the editor writes when someone switches a ceiling to manual: the
+    // board underside, a drop below the beams it just let go of. A decision, not
+    // residue.
+    const ceiling = residueCeiling({ baseElevation: BEAM_TOP - DROP });
+    const project = makeProject({ floors: [framedFloor()], ceilings: [ceiling] });
+
+    expect(validateAndRepair(project).ceilings[0]).toBe(ceiling);
+  });
+
+  it('leaves a storey-top ceiling alone on a floor with no beams to hang from', () => {
+    // The sidebar's legitimate output: nothing overhead, so the storey datum is
+    // where the ceiling belongs until beams are placed.
+    const ceiling = residueCeiling();
+    const project = makeProject({ ceilings: [ceiling] });
+
+    expect(validateAndRepair(project).ceilings[0]).toBe(ceiling);
   });
 });

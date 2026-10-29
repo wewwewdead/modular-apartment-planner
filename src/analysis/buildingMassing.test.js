@@ -153,6 +153,51 @@ describe('buildAnalysisMassing', () => {
     expect(masses[0].baseElevation).toBe(3000);
   });
 
+  // A facade that runs past its deck shades the strip below it too, and a study
+  // that massed it from the floor line up would report sun on a wall.
+  it('masses a bypass wall over the span the views draw, not its stored height', () => {
+    const slab = createSlab('first', [], 250, 3000);
+    slab.boundaryPoints = [
+      { x: -500, y: -500 },
+      { x: 10_500, y: -500 },
+      { x: 10_500, y: 10_500 },
+      { x: -500, y: 10_500 },
+    ];
+    const walls = squareWalls({ height: 2400 }).map((wall) => ({ ...wall, framingMode: 'bypass' }));
+    const project = {
+      floors: [floorOf({ id: 'first', elevation: 3000, walls, slabs: [slab] })],
+    };
+
+    const masses = buildAnalysisMassing(project, { includeSlabs: false });
+
+    expect(masses).toHaveLength(1);
+    // 250 below its own floor, up to the floor above — not 3000..5400.
+    expect(masses[0].baseElevation).toBe(2750);
+    expect(new Set(masses[0].topElevations)).toEqual(new Set([6000]));
+  });
+
+  // A shadow study projects the body, and the body is not always on the line it
+  // was drawn on. Massing an outboard facade from its grid line moved the whole
+  // elevation inboard and reported sun on ground the building covers.
+  it('masses an outboard wall where it is built, not where it is drawn', () => {
+    const drawn = createWall({ x: 0, y: 0 }, { x: 10000, y: 0 }, 200, { height: 3000 });
+    const built = { ...drawn, outboardOffset: 1000 };
+
+    const [onAxis] = buildAnalysisMassing({ floors: [floorOf({ walls: [drawn] })] });
+    const [offset] = buildAnalysisMassing({ floors: [floorOf({ walls: [built] })] });
+
+    const span = (mass) => {
+      const ys = mass.footprint.map((point) => point.y);
+      return [Math.min(...ys), Math.max(...ys)];
+    };
+
+    // start → end runs in +x, so positive is +y: the 200 body moves from
+    // straddling the axis to sitting a metre off it.
+    expect(span(onAxis)).toEqual([-100, 100]);
+    expect(span(offset)).toEqual([900, 1100]);
+    expect(massingBounds([offset]).minY).toBe(900);
+  });
+
   it('survives a roof system it cannot solve', () => {
     // Roof topology is the most failure-prone geometry in the app; a study that
     // omits the roof beats one that throws mid-render.

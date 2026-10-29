@@ -1,19 +1,14 @@
-import { useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
-import { useEditor } from '@/features/floorplan/context/FloorplanContext';
+import { useEditorState } from '@/features/floorplan/context/FloorplanContext';
 import { useConfirmDialog } from '@/ui/ConfirmDialog';
 import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { getColumnListLabel } from '@/domain/columnLabels';
 import { createFloorAboveHighest, getFloorElevation, getFloorLevelIndex, getOrderedFloors } from '@/domain/floorModels';
 import { createPhase, getNextPhaseOrder, getOrderedPhases, PHASE_COLORS, reorderPhases } from '@/domain/phaseModels';
 import { getAttachableRoofTrussSystems, getRoofTypeLabel } from '@/domain/roofModels';
-import { getEligibleCeilingSupportBeams } from '@/domain/ceilingBeamAttachment';
-import {
-  CEILING_ATTACHMENT_MODES,
-  CEILING_BOUNDARY_SOURCES,
-  createCeilingForProject,
-  getProjectCeilings,
-} from '@/domain/ceilingModels';
+import { CEILING_ATTACHMENT_MODES, CEILING_BOUNDARY_SOURCES, getProjectCeilings } from '@/domain/ceilingModels';
+import { enterAddCeiling } from '@/features/floorplan/utils/addCeilingEntry';
 import { ELECTRICAL_DEVICE_DEFAULTS, TOOLS } from '@/editor/tools';
 import { createSheet, getSheetDisplayLabel } from '@/domain/sheetModels';
 import { getSlabDisplayLabel } from '@/domain/slabLabels';
@@ -92,7 +87,20 @@ function TrashIcon() {
   );
 }
 
+/*
+ * Collapse is a CSS grid-row animation, so an open section's children have to
+ * stay in the tree for it to have something to fold away — which is why a
+ * section that has ever been opened keeps its list mounted. A section that has
+ * never been opened is a different case: nothing has been folded yet, so its
+ * list is not built at all. On a plan with a few hundred objects that is a real
+ * saving on every render the sidebar does.
+ */
 function Section({ title, count, collapsed, onToggle, collapsible = true, action, children }) {
+  const [hasOpened, setHasOpened] = useState(!collapsed);
+  // Adjusted during render rather than from an effect, so the list is in the
+  // very commit that opens the section and the fold has something to animate.
+  if (!collapsed && !hasOpened) setHasOpened(true);
+
   return (
     <div className={styles.section}>
       <div className={styles.sectionHeaderRow}>
@@ -109,13 +117,13 @@ function Section({ title, count, collapsed, onToggle, collapsible = true, action
         {action}
       </div>
       <div className={`${styles.sectionContent} ${collapsed ? styles.sectionContentCollapsed : ''}`}>
-        <div className={styles.sectionContentInner}>{children}</div>
+        <div className={styles.sectionContentInner}>{hasOpened ? children : null}</div>
       </div>
     </div>
   );
 }
 
-export default function Sidebar() {
+function Sidebar() {
   const { project, derived, dispatch, duplicateFloor } = useProject();
   const {
     activeFloorId,
@@ -132,16 +140,22 @@ export default function Sidebar() {
     daylight,
     solarAccess,
     dispatch: editorDispatch,
-  } = useEditor();
+  } = useEditorState();
   const confirm = useConfirmDialog();
   const daylightStudy = useDaylightStudy();
-  const orderedFloors = getOrderedFloors(project);
-  const orderedPhases = getOrderedPhases(project);
-  const floor = orderedFloors.find((entry) => entry.id === activeFloorId) || null;
+  // Four whole-project walks. The reducer is immutable, so keying them on the
+  // project (or the slice each one actually reads) means they run once per edit
+  // rather than once per render of a panel that re-renders for other reasons.
+  const orderedFloors = useMemo(() => getOrderedFloors(project), [project]);
+  const orderedPhases = useMemo(() => getOrderedPhases(project), [project]);
+  const floor = useMemo(
+    () => orderedFloors.find((entry) => entry.id === activeFloorId) || null,
+    [orderedFloors, activeFloorId],
+  );
   const roofSystem = project.roofSystem || null;
   const trussSystems = project.trussSystems || [];
-  const floorCeilings = getProjectCeilings(project, activeFloorId);
-  const attachableRoofTrussSystems = getAttachableRoofTrussSystems(project);
+  const floorCeilings = useMemo(() => getProjectCeilings(project, activeFloorId), [project, activeFloorId]);
+  const attachableRoofTrussSystems = useMemo(() => getAttachableRoofTrussSystems(project), [project]);
   const roofPhase = roofSystem?.phaseId ? orderedPhases.find((phase) => phase.id === roofSystem.phaseId) || null : null;
   const [collapsedSections, setCollapsedSections] = useState({
     floors: false,
@@ -169,6 +183,17 @@ export default function Sidebar() {
     columns: false,
     rooms: false,
   });
+
+  // Stable so the lifecycle panel — the most expensive child here — is not
+  // re-rendered by a fresh arrow on every sidebar render.
+  const setLifecycleStage = useCallback(
+    (stage) => editorDispatch({ type: 'SET_LIFECYCLE_STAGE', stage }),
+    [editorDispatch],
+  );
+  const executeBuildingCommand = useCallback(
+    (command) => dispatch({ type: 'EXECUTE_BUILDING_COMMAND', command }),
+    [dispatch],
+  );
 
   const selectObject = (id, type) => {
     editorDispatch({ type: 'SELECT_OBJECT', id, objectType: type });
@@ -343,39 +368,14 @@ export default function Sidebar() {
   };
 
   const addCeiling = () => {
-    // Which beams carry a ceiling is a decision about the room it covers, not
-    // something the floor can answer on its own, so the button hands the plan a
-    // tool and waits rather than grabbing every beam overhead.
-    if (getEligibleCeilingSupportBeams(floor).length) {
-      editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'floor' });
-      editorDispatch({ type: 'SET_ACTIVE_FLOOR', floorId: activeFloorId });
-      editorDispatch({ type: 'SET_VIEW_MODE', viewMode: 'plan' });
-      editorDispatch({ type: 'SET_TOOL', tool: TOOLS.CEILING_BEAM_PICK });
-      editorDispatch({
-        type: 'SET_STATUS_MESSAGE',
-        message: 'Click the beams the ceiling should hang from, then press Enter.',
-      });
-      return;
-    }
-
-    // Nothing overhead to pick from, so there is no selection to make: the
-    // ceiling arrives on a manual datum and the message names the fix.
-    const ceiling = createCeilingForProject(project, {
-      floorId: activeFloorId,
-      phaseId: activePhaseId || null,
-      attachment: { mode: CEILING_ATTACHMENT_MODES.MANUAL, beamIds: [] },
-      // Nothing was traced here either, so the boundary stays derived. Drawing a
-      // particular area is what the Ceiling tool is for.
-      boundarySource: CEILING_BOUNDARY_SOURCES.AUTO,
-    });
-    dispatch({ type: 'CEILING_ADD', ceiling });
-    openCeilingEditor(ceiling.id);
-    // Opening the editor clears the status line, so this has to be said after it.
-    editorDispatch({
-      type: 'SET_STATUS_MESSAGE',
-      message:
-        'No beams above this floor — ceiling added with a manual datum. Place top beams on the columns to attach it.',
-    });
+    // Which area a ceiling covers is a decision about a room, not something the
+    // floor can answer on its own, so the button hands the plan a tool and waits.
+    // Where that tool files the result is the one thing it does decide, and a
+    // selected plate is what decides it — see addCeilingEntry, which the P key
+    // and the toolbar share so all three behave alike.
+    editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'floor' });
+    editorDispatch({ type: 'SET_VIEW_MODE', viewMode: 'plan' });
+    enterAddCeiling({ project, activeFloorId, selectedId, selectedType, editorDispatch });
   };
 
   const handleDeleteCeiling = async (ceiling) => {
@@ -441,8 +441,8 @@ export default function Sidebar() {
         project={project}
         derived={derived}
         activeStage={lifecycleStage}
-        onStageChange={(stage) => editorDispatch({ type: 'SET_LIFECYCLE_STAGE', stage })}
-        onExecuteCommand={(command) => dispatch({ type: 'EXECUTE_BUILDING_COMMAND', command })}
+        onStageChange={setLifecycleStage}
+        onExecuteCommand={executeBuildingCommand}
       />
 
       <Section
@@ -1098,3 +1098,5 @@ export default function Sidebar() {
     </div>
   );
 }
+
+export default memo(Sidebar);

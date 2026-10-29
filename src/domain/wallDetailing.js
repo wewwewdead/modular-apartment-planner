@@ -2,7 +2,15 @@ import { generateId } from './ids';
 import { wallLength } from '@/geometry/wallGeometry';
 import { pointInPolygon, polygonArea, signedPolygonArea } from '@/geometry/polygon';
 import { subtractPolygons } from '@/geometry/polygonBoolean';
-import { deriveWallFramingLayout, resolveWallAssembly, WALL_BOARD_MATERIALS } from './wallAssemblies';
+import {
+  boardLayerUSpan,
+  deriveWallFramingLayout,
+  resolveWallAssembly,
+  wallOpeningRects,
+  RAINSCREEN_MODULE,
+  WALL_BOARD_MATERIALS,
+} from './wallAssemblies';
+import { resolveWallSlabBands, resolveWallVerticalSpan } from './wallFit';
 import {
   DEFAULT_WALL_JURISDICTION_PROFILE_ID,
   DEFAULT_WALL_PRODUCT_PROFILE_ID,
@@ -114,7 +122,7 @@ function polygonBounds(points) {
 function normalizeStoredOutline(value, bounds) {
   if (!Array.isArray(value?.outlinePoints) || value.outlinePoints.length < 3) return null;
   const outlinePoints = value.outlinePoints.map((point) => ({
-    u: clamp(finite(point?.u, finite(point?.x)), 0, bounds.u1),
+    u: clamp(finite(point?.u, finite(point?.x)), bounds.u0, bounds.u1),
     v: clamp(finite(point?.v, finite(point?.y)), 0, bounds.v1),
   }));
   return polygonAreaUv(outlinePoints) > EPSILON ? outlinePoints : null;
@@ -166,7 +174,7 @@ function subtractRectangles(source, cuts) {
 }
 
 function normalizeStoredRect(value, bounds) {
-  const u0 = clamp(finite(value?.u, value?.u0), 0, bounds.u1);
+  const u0 = clamp(finite(value?.u, value?.u0), bounds.u0, bounds.u1);
   const v0 = clamp(finite(value?.v, value?.v0), 0, bounds.v1);
   const u1 = clamp(finite(value?.u1, u0 + positive(value?.width, 600)), u0, bounds.u1);
   const v1 = clamp(finite(value?.v1, v0 + positive(value?.height, 1200)), v0, bounds.v1);
@@ -486,7 +494,7 @@ export function createFastenersFromGuide(guide, bounds, options = {}) {
   );
 }
 
-function normalizeDimensionPoint(point) {
+export function normalizeDimensionPoint(point) {
   return { u: finite(point?.u), v: finite(point?.v) };
 }
 
@@ -531,33 +539,61 @@ export function createAsBuiltMeasurement(measurement = {}) {
   };
 }
 
-export function deriveWallDetailOpenings(wall, floor) {
-  const length = wallLength(wall);
-  const height = Math.max(0, finite(wall?.height));
-  const items = [
+// One resolved frame per (wall, floor) pair. Floors and walls are replaced
+// wholesale on every edit, so an entry can never go stale — and a single
+// `deriveWallDetail` asks for the frame a dozen times over, each of which would
+// otherwise re-run the plan overlap that finds the wall's slab bands.
+const detailFrames = new WeakMap();
+
+/**
+ * The rectangle every wall-detail derivation is drawn inside, and where the
+ * finished floor sits within it.
+ *
+ * For a platform wall this is exactly what it always was — `wallLength` by
+ * `wall.height`, with the datum at v = 0. A bypass wall answers its RESOLVED
+ * span instead: the plane starts below its own deck and finishes at the floor
+ * above, so the frame is one uninterrupted run and v = 0 is the bottom of the
+ * plane, not the floor you stand on. `datumV` is that floor, and every sill
+ * measures from it.
+ */
+export function resolveWallDetailFrame(wall, floor, project = null) {
+  const cached = detailFrames.get(wall);
+  if (cached && cached.floor === floor && cached.project === project) return cached.frame;
+
+  const span = resolveWallVerticalSpan(wall, floor, project);
+  const height = Math.max(0, finite(span.top) - finite(span.base));
+  const frame = {
+    length: wallLength(wall),
+    height,
+    base: finite(span.base),
+    top: finite(span.top),
+    datumV: clamp(finite(span.datum) - finite(span.base), 0, height),
+    mode: span.mode,
+    drop: finite(span.drop),
+    slabBands: resolveWallSlabBands(wall, floor, project),
+  };
+  if (wall && typeof wall === 'object') detailFrames.set(wall, { floor, project, frame });
+  return frame;
+}
+
+/** The storey context a resolved frame hands the framing generator. */
+export function wallFramingLayoutOptions(frame) {
+  return { height: frame.height, datumV: frame.datumV, bands: frame.slabBands };
+}
+
+function wallOpeningSources(wall, floor) {
+  return [
     ...(floor?.doors || [])
       .filter((opening) => opening.wallId === wall.id)
-      .map((opening) => ({ ...opening, kind: 'door' })),
+      .map((opening) => ({ ...opening, openingKind: 'door' })),
     ...(floor?.windows || [])
       .filter((opening) => opening.wallId === wall.id)
-      .map((opening) => ({ ...opening, kind: 'window' })),
+      .map((opening) => ({ ...opening, openingKind: 'window' })),
   ];
-  return items
-    .map((opening) => {
-      const width = Math.max(0, finite(opening.width));
-      const center = finite(opening.offset);
-      const v0 = clamp(finite(opening.sillHeight), 0, height);
-      const v1 = clamp(v0 + Math.max(0, finite(opening.height)), v0, height);
-      return {
-        id: opening.id,
-        kind: opening.kind,
-        u0: clamp(center - width / 2, 0, length),
-        u1: clamp(center + width / 2, 0, length),
-        v0,
-        v1,
-      };
-    })
-    .filter((opening) => rectangleArea(opening) > EPSILON);
+}
+
+export function deriveWallDetailOpenings(wall, floor) {
+  return wallOpeningRects(wallOpeningSources(wall, floor), resolveWallDetailFrame(wall, floor));
 }
 
 function profileBoardSize(face) {
@@ -570,61 +606,125 @@ function profileBoardSize(face) {
     : { width: configuredWidth, height: configuredHeight };
 }
 
-function firstGridLine(origin, pitch) {
-  if (pitch <= EPSILON) return 0;
+// The last grid line at or before `from`. The set-out is anchored on the origin
+// and nothing else: moving where the layout STARTS must never move where the
+// joints LAND, or extending a board past the wall end would shuffle every
+// cassette on the elevation.
+function firstGridLine(origin, pitch, from = 0) {
+  if (pitch <= EPSILON) return from;
   let value = origin;
-  while (value > 0) value -= pitch;
-  while (value + pitch <= 0) value += pitch;
+  while (value > from) value -= pitch;
+  while (value + pitch <= from) value += pitch;
   return value;
 }
 
-function deriveGridRects(face, length, height) {
-  const size = profileBoardSize(face);
-  const pitchU = size.width + face.layout.horizontalGap;
-  const pitchV = size.height + face.layout.verticalGap;
-  const startU = firstGridLine(face.layout.originU, pitchU);
-  const startV = firstGridLine(face.layout.originV, pitchV);
+/**
+ * A regular grid of rectangles clipped to the face, the one generator behind
+ * both the sheet layout and the rainscreen module. `extra` is stamped onto every
+ * rect so a caller can carry its own bookkeeping — the rainscreen path uses it
+ * for the module indices its tone cycling reads.
+ *
+ * `span` is the board's u-range, which is the wall's own 0 → length for a board
+ * that stops at both ends and reaches beyond it for one that laps a corner. The
+ * column index still counts from the origin's own grid line, so a board given an
+ * overhang gains cassettes at the end rather than renumbering the ones already
+ * there — which is what keeps the rainscreen's tone pattern still.
+ */
+function gridRects(layout, span, height, extra = null) {
+  const pitchU = layout.width + layout.gapU;
+  const pitchV = layout.height + layout.gapV;
+  const originLine = firstGridLine(layout.originU, pitchU);
+  const startU = firstGridLine(layout.originU, pitchU, span.u0);
+  const startV = firstGridLine(layout.originV, pitchV);
   const rects = [];
-  let column = 0;
-  for (let u = startU; u < length - EPSILON; u += pitchU, column += 1) {
+  let column = pitchU > EPSILON ? Math.round((startU - originLine) / pitchU) : 0;
+  for (let u = startU; u < span.u1 - EPSILON; u += pitchU, column += 1) {
     let row = 0;
     for (let v = startV; v < height - EPSILON; v += pitchV, row += 1) {
       const rect = {
-        u0: clamp(u, 0, length),
-        u1: clamp(u + size.width, 0, length),
+        u0: clamp(u, span.u0, span.u1),
+        u1: clamp(u + layout.width, span.u0, span.u1),
         v0: clamp(v, 0, height),
-        v1: clamp(v + size.height, 0, height),
+        v1: clamp(v + layout.height, 0, height),
       };
       if (rectangleArea(rect) <= EPSILON) continue;
-      rects.push({ id: `grid-c${column}-r${row}`, ...rect, source: 'generated' });
+      rects.push({
+        id: `grid-c${column}-r${row}`,
+        ...rect,
+        source: 'generated',
+        ...(extra ? extra(column, row) : null),
+      });
     }
   }
   return rects;
 }
 
-export function deriveWallPanels(wall, floor, side = WALL_DETAIL_SIDES.INTERIOR) {
-  const detailing = resolveWallDetailing(wall);
-  const face = detailing.sides[side];
-  const length = wallLength(wall);
-  const height = Math.max(0, finite(wall?.height));
-  if (!detailing.enabled || !face?.enabled || length <= EPSILON || height <= EPSILON) return [];
+function deriveGridRects(face, span, height) {
+  const size = profileBoardSize(face);
+  return gridRects(
+    {
+      width: size.width,
+      height: size.height,
+      gapU: face.layout.horizontalGap,
+      gapV: face.layout.verticalGap,
+      originU: face.layout.originU,
+      originV: face.layout.originV,
+    },
+    span,
+    height,
+  );
+}
 
-  const bounds = { u0: 0, u1: length, v0: 0, v1: height };
-  const sourceRects =
-    face.layout.mode === PANEL_LAYOUT_MODES.CUSTOM
-      ? face.layout.customPanels.map((panel, index) => {
-          const outlinePoints = normalizeStoredOutline(panel, bounds);
-          const rect = outlinePoints ? polygonBounds(outlinePoints) : normalizeStoredRect(panel, bounds);
-          return {
-            id: panel.id || `custom-${index + 1}`,
-            ...rect,
-            outlinePoints: outlinePoints || rectOutline(rect),
-            polygonal: Boolean(outlinePoints),
-            source: 'custom',
-            label: panel.label || '',
-          };
-        })
-      : deriveGridRects(face, length, height);
+/** Whether the board hung on this face of the wall is a rainscreen cassette. */
+export function isRainscreenFace(wall, side = WALL_DETAIL_SIDES.INTERIOR) {
+  const assembly = resolveWallAssembly(wall);
+  return assembly.system === 'framed' && assembly[side]?.material === WALL_BOARD_MATERIALS.RAINSCREEN;
+}
+
+/**
+ * The cassette grid, set out from the bottom corner of the wall's RESOLVED span.
+ *
+ * Nothing here is configurable, and that is the point: a rainscreen's joints are
+ * a set-out, not a fitting allowance. A bypass wall's span is three storeys of
+ * one plane, so the courses run right past the floor lines exactly the way the
+ * cassettes do on the real building — which is what makes the facade read as one
+ * elevation rather than as three stacked walls.
+ */
+function rainscreenGridRects(span, height) {
+  return gridRects(
+    {
+      width: RAINSCREEN_MODULE.width,
+      height: RAINSCREEN_MODULE.height,
+      gapU: RAINSCREEN_MODULE.joint,
+      gapV: RAINSCREEN_MODULE.joint,
+      originU: 0,
+      originV: 0,
+    },
+    span,
+    height,
+    (column, row) => ({ moduleColumn: column, moduleRow: row }),
+  );
+}
+
+/**
+ * Where this face's board actually starts and stops along the wall, overhangs
+ * and all. Everything that draws, builds or bills the face reads it from here,
+ * so the plan, the elevation, the 3D preview and the schedule cannot disagree
+ * about how far the cladding runs.
+ */
+export function resolveWallBoardSpan(wall, floor, side = WALL_DETAIL_SIDES.INTERIOR, project = null) {
+  const assembly = resolveWallAssembly(wall);
+  return boardLayerUSpan(assembly[side], resolveWallDetailFrame(wall, floor, project).length);
+}
+
+/**
+ * Openings punched out of a set of source rectangles, in the wall's own
+ * elevation. Every panel answers both a rectangular fragment list (what gets
+ * cut and hung) and a polygonal region list (what gets drawn and billed), and a
+ * panel that falls entirely inside a door or window keeps no area at all and
+ * drops out — the hole is not clad.
+ */
+function panelsFromRects(wall, floor, side, sourceRects) {
   const openings = deriveWallDetailOpenings(wall, floor);
   const openingPolygons = openings.map((opening) => uvToXy(rectOutline(opening)));
 
@@ -657,135 +757,156 @@ export function deriveWallPanels(wall, floor, side = WALL_DETAIL_SIDES.INTERIOR)
     .filter((panel) => panel.netArea > EPSILON);
 }
 
-function horizontalMemberIntervals(length, v, openings) {
-  let intervals = [{ start: 0, end: length }];
-  for (const opening of openings) {
-    if (v <= opening.v0 + EPSILON || v >= opening.v1 - EPSILON) continue;
-    intervals = intervals.flatMap((interval) => {
-      if (opening.u1 <= interval.start || opening.u0 >= interval.end) return [interval];
-      return [
-        { start: interval.start, end: Math.max(interval.start, opening.u0) },
-        { start: Math.min(interval.end, opening.u1), end: interval.end },
-      ].filter((candidate) => candidate.end - candidate.start > EPSILON);
-    });
-  }
-  return intervals;
+/**
+ * The wall's own run, read back out of the span its board covers.
+ *
+ * `boardLayerUSpan` builds `u1` as run + end, so the run is still in there to be
+ * read back. Nothing therefore has to carry the wall's length alongside its
+ * board span, and no caller can pass a length that disagrees with the span it
+ * came from.
+ */
+function boardSpanWallRun(span) {
+  return span.u1 - span.end;
 }
 
-function deriveAutomaticFraming(wall, floor, assembly) {
-  const length = wallLength(wall);
-  const height = Math.max(0, finite(wall.height));
-  const openings = deriveWallDetailOpenings(wall, floor);
-  const openingInputs = openings.map((opening) => ({
-    id: opening.id,
-    offset: (opening.u0 + opening.u1) / 2,
-    width: opening.u1 - opening.u0,
-    openingKind: opening.kind,
-  }));
-  const layout = deriveWallFramingLayout(wall, openingInputs);
-  const frame = assembly.framing;
-  const members = layout.studs.map((stud) => ({
-    id: `${wall.id}:auto:stud:${stud.frameIndex}:${Math.round(stud.position * 10)}`,
-    kind: 'stud',
-    orientation: 'vertical',
-    u0: clamp(stud.position - frame.studWidth / 2, 0, length),
-    u1: clamp(stud.position + frame.studWidth / 2, 0, length),
-    v0: 0,
-    v1: height,
-    depth: frame.studDepth,
-    frameIndex: stud.frameIndex,
-    frameOffset: stud.frameOffset,
-    material: frame.material,
-    source: 'generated',
-  }));
+function mappedPanelU(geometry, mapU) {
+  const u0 = mapU(geometry.u0);
+  const u1 = mapU(geometry.u1);
+  // A mapping that turns the board inside out is no mapping at all: a board
+  // drawn wholly inside the overhang has only one of its edges on a wall end,
+  // and moving that one alone would invert it.
+  if (u1 - u0 <= EPSILON) return geometry;
+  return {
+    ...geometry,
+    u0,
+    u1,
+    ...(geometry.outlinePoints?.length
+      ? { outlinePoints: geometry.outlinePoints.map((point) => ({ ...point, u: mapU(point.u) })) }
+      : {}),
+  };
+}
 
-  const frameOffsets = [...new Map(layout.studs.map((stud) => [stud.frameIndex, stud.frameOffset])).entries()];
-  for (const [frameIndex, frameOffset] of frameOffsets) {
-    members.push(
-      {
-        id: `${wall.id}:auto:track:bottom:${frameIndex}`,
-        kind: 'bottom_track',
-        orientation: 'horizontal',
-        u0: 0,
-        u1: length,
-        v0: 0,
-        v1: Math.min(frame.studWidth, height),
-        depth: frame.studDepth,
-        frameIndex,
-        frameOffset,
-        material: frame.material,
-        source: 'generated',
-      },
-      {
-        id: `${wall.id}:auto:track:top:${frameIndex}`,
-        kind: 'top_track',
-        orientation: 'horizontal',
-        u0: 0,
-        u1: length,
-        v0: Math.max(0, height - frame.studWidth),
-        v1: height,
-        depth: frame.studDepth,
-        frameIndex,
-        frameOffset,
-        material: frame.material,
-        source: 'generated',
-      },
-    );
+/**
+ * A drawn board read back with this face's overhang applied to it.
+ *
+ * An overhang is a corner detail, so it moves the cladding that already reaches
+ * the corner and nothing else: an edge standing on the wall's own end runs out
+ * to the end of the board span, and every joint inside the wall stays exactly
+ * where it was drawn. Precisely what the solid skin does in plan and in 3D,
+ * where only the first and last segments of the run move.
+ *
+ * The stretch is DERIVED. The stored board keeps the numbers the user drew, so
+ * changing the overhang re-derives from scratch and setting it back to zero
+ * gives the drawing back untouched rather than leaving a lap baked into it.
+ */
+export function extendPanelOverBoardSpan(geometry, span) {
+  if (!span || (!span.start && !span.end)) return geometry;
+  const run = boardSpanWallRun(span);
+  return mappedPanelU(geometry, (u) => (Math.abs(u) <= EPSILON ? span.u0 : Math.abs(u - run) <= EPSILON ? span.u1 : u));
+}
 
-    for (let row = 1; row <= frame.nogginRows; row += 1) {
-      const centerV = (height * row) / (frame.nogginRows + 1);
-      horizontalMemberIntervals(length, centerV, openings).forEach((interval, index) => {
-        members.push({
-          id: `${wall.id}:auto:noggin:${frameIndex}:${row}:${index}`,
-          kind: 'noggin',
-          orientation: 'horizontal',
-          u0: interval.start,
-          u1: interval.end,
-          v0: clamp(centerV - frame.studWidth / 2, 0, height),
-          v1: clamp(centerV + frame.studWidth / 2, 0, height),
-          depth: frame.studDepth,
-          frameIndex,
-          frameOffset,
-          material: frame.material,
-          source: 'generated',
-        });
-      });
-    }
+/**
+ * The same board with the overhang taken back off it — what gets STORED when
+ * the editor turns derived boards into editable ones.
+ *
+ * Without it, materialising a face that already laps a corner would freeze that
+ * lap into the stored geometry, and the next change to the overhang would move
+ * the plan and the 3D preview while the drawn boards stayed exactly where the
+ * old overhang had put them.
+ */
+export function retractPanelOverBoardSpan(geometry, span) {
+  if (!span || (!span.start && !span.end)) return geometry;
+  const run = boardSpanWallRun(span);
+  return mappedPanelU(geometry, (u) =>
+    Math.abs(u - span.u0) <= EPSILON ? 0 : Math.abs(u - span.u1) <= EPSILON ? run : u,
+  );
+}
 
-    for (const opening of openings) {
-      members.push({
-        id: `${wall.id}:auto:header:${frameIndex}:${opening.id}`,
-        kind: 'header',
-        orientation: 'horizontal',
-        u0: opening.u0,
-        u1: opening.u1,
-        v0: clamp(opening.v1, 0, height),
-        v1: clamp(opening.v1 + frame.studWidth, 0, height),
-        depth: frame.studDepth,
-        frameIndex,
-        frameOffset,
-        material: frame.material,
-        source: 'generated',
-      });
-      if (opening.kind === 'window') {
-        members.push({
-          id: `${wall.id}:auto:sill:${frameIndex}:${opening.id}`,
-          kind: 'sill',
-          orientation: 'horizontal',
-          u0: opening.u0,
-          u1: opening.u1,
-          v0: clamp(opening.v0 - frame.studWidth, 0, height),
-          v1: clamp(opening.v0, 0, height),
-          depth: frame.studDepth,
-          frameIndex,
-          frameOffset,
-          material: frame.material,
-          source: 'generated',
-        });
-      }
-    }
+/**
+ * The rectangles a face's panels are cut from, before any opening touches them.
+ *
+ * A cassette face in grid mode is set out on the facade module rather than on
+ * the sheet size, so the drawing, the 3D preview and the bill all show the
+ * joints the facade is actually built to. Panels drawn by hand still override
+ * it — that is how a rainscreen with a special bay gets documented.
+ */
+function panelSourceRects(wall, side, face, span, height) {
+  if (face.layout.mode === PANEL_LAYOUT_MODES.CUSTOM) {
+    const bounds = { u0: span.u0, u1: span.u1, v0: 0, v1: height };
+    return face.layout.customPanels.map((panel, index) => {
+      const storedOutline = normalizeStoredOutline(panel, bounds);
+      // The generated grid is laid out over the span already; a drawn board is
+      // laid out on the wall, so the lap is applied to it here — the one place
+      // a stored board learns that its corner has been closed over.
+      const lapped = extendPanelOverBoardSpan(
+        storedOutline
+          ? { ...polygonBounds(storedOutline), outlinePoints: storedOutline }
+          : normalizeStoredRect(panel, bounds),
+        span,
+      );
+      const rect = lapped.outlinePoints ? polygonBounds(lapped.outlinePoints) : lapped;
+      return {
+        id: panel.id || `custom-${index + 1}`,
+        u0: rect.u0,
+        u1: rect.u1,
+        v0: rect.v0,
+        v1: rect.v1,
+        outlinePoints: lapped.outlinePoints || rectOutline(rect),
+        polygonal: Boolean(storedOutline),
+        source: 'custom',
+        label: panel.label || '',
+      };
+    });
   }
-  return members.filter((member) => member.u1 - member.u0 > EPSILON && member.v1 - member.v0 > EPSILON);
+  if (isRainscreenFace(wall, side)) return rainscreenGridRects(span, height);
+  return deriveGridRects(face, span, height);
+}
+
+export function deriveWallPanels(wall, floor, side = WALL_DETAIL_SIDES.INTERIOR) {
+  const detailing = resolveWallDetailing(wall);
+  const face = detailing.sides[side];
+  const { length, height } = resolveWallDetailFrame(wall, floor);
+  if (!detailing.enabled || !face?.enabled || length <= EPSILON || height <= EPSILON) return [];
+  const span = resolveWallBoardSpan(wall, floor, side);
+  return panelsFromRects(wall, floor, side, panelSourceRects(wall, side, face, span, height));
+}
+
+/**
+ * The cassette layout for a rainscreen face, whether or not anyone has opened
+ * the wall detail editor.
+ *
+ * The panelization is the finish, not a documentation option: a rainscreen that
+ * only breaks into cassettes once you switch detailing on would render as a
+ * blank slab on every wall nobody had detailed yet. A face the editor HAS taken
+ * over answers through `deriveWallPanels` instead, so a hand-drawn bay and the
+ * generated grid can never disagree about what is hanging there.
+ */
+export function deriveRainscreenPanels(wall, floor, side = WALL_DETAIL_SIDES.INTERIOR) {
+  if (!isRainscreenFace(wall, side)) return [];
+  const detailing = resolveWallDetailing(wall);
+  if (detailing.enabled && detailing.sides[side]?.enabled) return deriveWallPanels(wall, floor, side);
+  const { length, height } = resolveWallDetailFrame(wall, floor);
+  if (length <= EPSILON || height <= EPSILON) return [];
+  return panelsFromRects(wall, floor, side, rainscreenGridRects(resolveWallBoardSpan(wall, floor, side), height));
+}
+
+/**
+ * The generated frame for a wall, in that wall's own elevation.
+ *
+ * All of the geometry lives in `deriveWallFramingLayout`, which is also what the
+ * plan renderer and the takeoff read: one generator, so what is drawn, what is
+ * built, and what is billed cannot disagree. This adapter only supplies the
+ * storey context the layout cannot see — the resolved span, the finished-floor
+ * datum, and the slab bands a bypass wall's plane runs past — and stamps the
+ * members as generated so the editor can tell them from hand-placed ones.
+ */
+export function deriveAutomaticWallFraming(wall, floor) {
+  const layout = deriveWallFramingLayout(
+    wall,
+    wallOpeningSources(wall, floor),
+    wallFramingLayoutOptions(resolveWallDetailFrame(wall, floor)),
+  );
+  return layout.members.map((member) => ({ ...member, source: 'generated' }));
 }
 
 /**
@@ -807,12 +928,18 @@ export function deriveWallFramingMembers(wall, floor, { includeWhenDisabled = fa
 
   const removed = new Set(detailing.framing.removedGeneratedIds);
   return [
-    ...deriveAutomaticFraming(wall, floor, assembly).filter((member) => !removed.has(member.id)),
+    ...deriveAutomaticWallFraming(wall, floor).filter((member) => !removed.has(member.id)),
     ...detailing.framing.members.map((member) => createCustomFramingMember(member)),
   ];
 }
 
-function rectAnchorPoint(rect, reference) {
+/**
+ * The exact UV point an anchor id names on a rectangle — corner, edge midpoint,
+ * a fraction `t` along an edge, or a vertex of a traced outline. Shared with the
+ * ceiling editor, whose boards, framing and openings are the same kind of
+ * rectangle in the same kind of UV frame.
+ */
+export function rectAnchorPoint(rect, reference) {
   const anchor = typeof reference === 'string' ? reference : reference?.anchor;
   const t = clamp(finite(typeof reference === 'string' ? 0.5 : reference?.t, 0.5), 0, 1);
   if (anchor?.startsWith('vertex_') && rect.outlinePoints?.length) {
@@ -929,7 +1056,13 @@ export function deriveWallDimensionGeometry(dimension) {
   };
 }
 
-function derivedDimension(id, name, dimension, source = 'automatic', precision = 0.01) {
+/**
+ * A stored or generated dimension turned into the drawn one: the measured value
+ * and the text that goes above the line. Assembly-agnostic — it reads nothing
+ * but the dimension itself — so the ceiling plan labels its measurements the
+ * same way an elevation does.
+ */
+export function describeDimension(id, name, dimension, source = 'automatic', precision = 0.01) {
   const measurement = wallDimensionMeasurement(dimension);
   return {
     ...dimension,
@@ -943,7 +1076,7 @@ function derivedDimension(id, name, dimension, source = 'automatic', precision =
   };
 }
 
-function uniqueDimensionValues(values, tolerance = 0.5) {
+export function uniqueDimensionValues(values, tolerance = 0.5) {
   return [...values]
     .sort((a, b) => a - b)
     .filter((value, index, entries) => index === 0 || Math.abs(value - entries[index - 1]) > tolerance);
@@ -952,7 +1085,7 @@ function uniqueDimensionValues(values, tolerance = 0.5) {
 function automaticWallDimensions(side, face, context) {
   const dimensions = [];
   const makeDimension = (id, name, dimension) =>
-    derivedDimension(id, name, dimension, 'automatic', face.dimensions.precision);
+    describeDimension(id, name, dimension, 'automatic', face.dimensions.precision);
   if (face.dimensions.showOverall) {
     dimensions.push(
       makeDimension(`auto:${side}:overall:length`, 'Overall wall length', {
@@ -1066,10 +1199,11 @@ export function deriveWallDimensions(wall, floor, side = WALL_DETAIL_SIDES.INTER
   const detailing = resolveWallDetailing(wall);
   const face = detailing.sides[side];
   if (!detailing.enabled || !face?.enabled) return [];
+  const frame = resolveWallDetailFrame(wall, floor);
   const context = {
     wall,
-    length: wallLength(wall),
-    height: Math.max(0, finite(wall.height)),
+    length: frame.length,
+    height: frame.height,
     panels: deriveWallPanels(wall, floor, side),
     openings: deriveWallDetailOpenings(wall, floor),
     members: deriveWallFramingMembers(wall, floor),
@@ -1080,7 +1214,7 @@ export function deriveWallDimensions(wall, floor, side = WALL_DETAIL_SIDES.INTER
       const dimension = createWallDimension(stored);
       dimension.start = resolveWallDimensionReference(dimension.startRef, dimension.start, context);
       dimension.end = resolveWallDimensionReference(dimension.endRef, dimension.end, context);
-      return derivedDimension(
+      return describeDimension(
         dimension.id,
         dimension.note || 'User dimension',
         dimension,
@@ -1226,14 +1360,10 @@ export function deriveWallFasteners(wall, floor, side = WALL_DETAIL_SIDES.INTERI
   const guided =
     face.fasteners.mode === FASTENER_LAYOUT_MODES.CUSTOM
       ? face.fasteners.guides.flatMap((guide) =>
-          createFastenersFromGuide(
-            guide,
-            { length: wallLength(wall), height: Math.max(0, finite(wall.height)) },
-            {
-              panels,
-              type: face.fasteners.type || defaults.fastenerType || 'screw',
-            },
-          ),
+          createFastenersFromGuide(guide, resolveWallDetailFrame(wall, floor), {
+            panels,
+            type: face.fasteners.type || defaults.fastenerType || 'screw',
+          }),
         )
       : [];
   const removed = new Set(face.fasteners.removedGeneratedIds);
@@ -1246,9 +1376,13 @@ export function deriveWallFasteners(wall, floor, side = WALL_DETAIL_SIDES.INTERI
   ];
 }
 
-function issue(ruleId, severity, message, entity, evidence = {}) {
+// `variant` separates two findings of the same rule against the same thing —
+// a board with both its right and top edges off the frame raises two, and
+// without it they would share an id and the list would render one over the
+// other. Empty for every rule that can only fire once per entity.
+function issue(ruleId, severity, message, entity, evidence = {}, variant = '') {
   return {
-    id: `${ruleId}:${entity.type}:${entity.id}`,
+    id: `${ruleId}:${entity.type}:${entity.id}${variant ? `:${variant}` : ''}`,
     ruleId,
     severity,
     message,
@@ -1258,7 +1392,7 @@ function issue(ruleId, severity, message, entity, evidence = {}) {
   };
 }
 
-function validatePanelSupport(panel, members, issues) {
+function validatePanelSupport(panel, members, issues, wallRunEnd = Infinity) {
   const edges = (panel.outlinePoints || rectOutline(panel)).flatMap((start, index, points) => {
     const end = points[(index + 1) % points.length];
     if (Math.abs(start.u - end.u) <= EPSILON) {
@@ -1278,10 +1412,23 @@ function validatePanelSupport(panel, members, issues) {
     return [];
   });
   for (const edge of edges) {
+    // Edges in the overhang region are exempt: a board lapped past the wall end
+    // is CARRIED BY THE NEIGHBOURING WALL'S FRAME, which is the whole point of
+    // the lap, and no member of this wall could ever stand there. A vertical
+    // edge past the end is skipped whole; a horizontal edge is checked only
+    // over the stretch that lies within this wall's own frame.
+    if (edge.axis === 'vertical' && (edge.value < -EPSILON || edge.value > wallRunEnd + EPSILON)) continue;
+    let checkStart = edge.start;
+    let checkEnd = edge.end;
+    if (edge.axis === 'horizontal') {
+      checkStart = Math.max(checkStart, 0);
+      checkEnd = Math.min(checkEnd, wallRunEnd);
+      if (checkEnd - checkStart <= EPSILON) continue;
+    }
     const supported =
       edge.axis === 'vertical'
-        ? members.some((member) => supportsVerticalEdge(member, edge.value, edge.start, edge.end))
-        : members.some((member) => supportsHorizontalEdge(member, edge.value, edge.start, edge.end));
+        ? members.some((member) => supportsVerticalEdge(member, edge.value, checkStart, checkEnd))
+        : members.some((member) => supportsHorizontalEdge(member, edge.value, checkStart, checkEnd));
     if (supported) continue;
     issues.push(
       issue(
@@ -1290,6 +1437,7 @@ function validatePanelSupport(panel, members, issues) {
         `${panel.label} ${edge.label} edge has no continuous framing support.`,
         { type: 'panel', id: panel.id },
         { edge },
+        `${edge.axis}:${edge.label}:${Math.round(edge.value)}`,
       ),
     );
   }
@@ -1499,7 +1647,7 @@ function validateFace(wall, floor, side, detailing, members) {
   }
 
   const faceMembers = members.filter((member) => member.frameIndex === 0);
-  panels.forEach((panel) => validatePanelSupport(panel, faceMembers, issues));
+  panels.forEach((panel) => validatePanelSupport(panel, faceMembers, issues, wallLength(wall)));
   for (const fastener of fasteners) {
     if (faceMembers.some((member) => pointOnMember(fastener, member))) continue;
     issues.push(
@@ -1514,8 +1662,7 @@ function validateFace(wall, floor, side, detailing, members) {
   }
   const dimensionContext = {
     wall,
-    length: wallLength(wall),
-    height: Math.max(0, finite(wall.height)),
+    ...resolveWallDetailFrame(wall, floor),
     panels,
     openings: deriveWallDetailOpenings(wall, floor),
     members,
@@ -1634,8 +1781,7 @@ function panelJointLength(panel, length, height) {
 
 export function deriveWallDetailTakeoff(wall, floor) {
   const detailing = resolveWallDetailing(wall);
-  const length = wallLength(wall);
-  const height = Math.max(0, finite(wall.height));
+  const { length, height } = resolveWallDetailFrame(wall, floor);
   const sideResults = {};
   for (const side of Object.values(WALL_DETAIL_SIDES)) {
     const panels = deriveWallPanels(wall, floor, side);
@@ -1670,10 +1816,22 @@ export function deriveWallDetailTakeoff(wall, floor) {
 
 export function deriveWallDetail(wall, floor) {
   const detailing = resolveWallDetailing(wall);
+  const frame = resolveWallDetailFrame(wall, floor);
   return {
     wallId: wall.id,
-    length: wallLength(wall),
-    height: Math.max(0, finite(wall.height)),
+    length: frame.length,
+    height: frame.height,
+    // What the editor's V axis means: where the finished floor sits inside the
+    // drawn elevation, and the deck bands the plane runs past on the way up.
+    datumV: frame.datumV,
+    framingMode: frame.mode,
+    slabBands: frame.slabBands,
+    // How far each face's board runs, so the editor can draw past the wall end
+    // and still mark where the wall itself stops.
+    boardSpans: {
+      interior: resolveWallBoardSpan(wall, floor, WALL_DETAIL_SIDES.INTERIOR),
+      exterior: resolveWallBoardSpan(wall, floor, WALL_DETAIL_SIDES.EXTERIOR),
+    },
     configuration: detailing,
     openings: deriveWallDetailOpenings(wall, floor),
     panels: {

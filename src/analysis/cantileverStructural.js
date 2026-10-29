@@ -29,8 +29,11 @@
  */
 
 import { DEFAULT_STRUCTURAL_COORDINATION_PROFILE } from '@/domain/structuralCoordination';
-import { MIN_REPORTED_OVERHANG_MM, overhangEdgeInwardNormal } from '@/geometry/floorOverhang';
+import { resolveWallAssembly } from '@/domain/wallAssemblies';
+import { resolveWallVerticalSpan } from '@/domain/wallFit';
+import { beamSupportsOverhang, MIN_REPORTED_OVERHANG_MM, overhangEdgeInwardNormal } from '@/geometry/floorOverhang';
 import { distance } from '@/geometry/point';
+import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 
 /* ── Section ─────────────────────────────────────────────────────────────
  *
@@ -132,6 +135,41 @@ export const SUPERIMPOSED_DEAD_LOAD_KPA = 1.5;
  */
 export const IMPOSED_LOAD_RESIDENTIAL_FLOOR_KPA = 2.0;
 export const IMPOSED_LOAD_BALCONY_KPA = 3.0;
+
+/* ── The wall standing on the free end ───────────────────────────────────
+ *
+ * A projecting bay is not a balcony with a heavier finish. Its defining load is
+ * a facade standing on the tip, and a cantilever feels weight at its tip far
+ * more than the same weight spread along its reach: P·L against wL²/2 for the
+ * moment, P·L³/(3EI) against wL⁴/(8EI) for the droop. A wall in this model
+ * carries an assembly and no density, so the assembly is what its weight is
+ * assumed from — the same move the slab makes with its thickness, and stated in
+ * the UI for the same reason.
+ */
+
+/**
+ * Self-weight of a light framed wall — studs, board on both faces, insulation
+ * and fixings — per square metre of wall FACE.
+ *
+ * ASCE/SEI 7-22 Table C3.1-1a (minimum design dead loads) puts an exterior stud
+ * wall with board finishes at about 11 lb/ft², which is 0.53 kN/m². Building the
+ * same wall up from EN 1991-1-1:2002 Table A.1 material weights lands lower —
+ * two 6 mm fibre-cement skins are barely 0.2 kN/m² — so 0.5 sits at the generous
+ * end of the band, which is the safe end for a load.
+ */
+export const FRAMED_WALL_SELF_WEIGHT_KPA = 0.5;
+
+/**
+ * Self-weight of a CHB masonry wall, per square metre of face: 150 mm hollow
+ * concrete block, plastered both sides.
+ *
+ * Worked from EN 1991-1-1:2002 Table A.1. Normal-weight concrete at 24 kN/m³
+ * through a block roughly 57 % solid gives 0.150 · 24 · 0.57 ≈ 2.05 kN/m², and
+ * 16 mm of cement plaster on each face (21 kN/m³ in the same table) adds
+ * ≈ 0.67. The 2.7 kN/m² total is also the figure Philippine practice carries
+ * for 150 CHB, and PH is this model's default jurisdiction.
+ */
+export const MASONRY_WALL_SELF_WEIGHT_KPA = 2.7;
 
 /** γ_G and γ_Q, STR ultimate combination Eq. 6.10 — EN 1990:2002 Table A1.2(B). */
 export const PARTIAL_FACTOR_PERMANENT = 1.35;
@@ -272,6 +310,29 @@ export function cantileverTipDeflectionMm(lineLoadNPerMm, lengthMm, modulusMpa, 
   return (lineLoadNPerMm * lengthMm ** 4) / (8 * modulusMpa * inertiaMm4);
 }
 
+/**
+ * The force a metre-wide strip picks up from a line load running along the
+ * projecting edge.
+ *
+ * kN/m along the edge is N/mm — the same identity the area loads lean on — and
+ * the strip is STRIP_WIDTH_MM of that line, so the newtons fall out with no
+ * conversion factor and the strip width appears exactly once.
+ */
+export function tipLineLoadStripForceN(lineLoadKnPerM) {
+  return lineLoadKnPerM * STRIP_WIDTH_MM;
+}
+
+/** Root moment of a cantilever loaded at its tip: M = P·L. N·mm from N and mm. */
+export function tipLoadRootMomentNmm(pointLoadN, lengthMm) {
+  return pointLoadN * lengthMm;
+}
+
+/** Tip deflection under a load at the tip: δ = P·L³/(3EI). mm. */
+export function tipLoadDeflectionMm(pointLoadN, lengthMm, modulusMpa, inertiaMm4) {
+  if (!(modulusMpa > 0) || !(inertiaMm4 > 0)) return 0;
+  return (pointLoadN * lengthMm ** 3) / (3 * modulusMpa * inertiaMm4);
+}
+
 /** The deflection a cantilever of this projection is allowed: 2L/250. */
 export function cantileverDeflectionLimitMm(lengthMm) {
   return (CANTILEVER_SPAN_MULTIPLIER * lengthMm) / DEFLECTION_SPAN_DENOMINATOR;
@@ -298,7 +359,7 @@ export function overhangBackSpanMm(edge, boundary, depthMm) {
   return backSpan > 0 ? backSpan : 0;
 }
 
-function analyzeEdge({ edge, index, sourceIndex, boundary, section, loads, profile, modulusMpa }) {
+function analyzeEdge({ edge, index, sourceIndex, boundary, section, loads, profile, modulusMpa, tipLoad }) {
   const depthMm = edge.depthMm || 0;
   const lengthMm = edge.lengthMm ?? distance(edge.start, edge.end);
 
@@ -306,10 +367,25 @@ function analyzeEdge({ edge, index, sourceIndex, boundary, section, loads, profi
   const ultimateKpa = PARTIAL_FACTOR_PERMANENT * permanentKpa + PARTIAL_FACTOR_VARIABLE * loads.imposedKpa;
   const quasiPermanentKpa = permanentKpa + QUASI_PERMANENT_FACTOR * loads.imposedKpa;
 
+  // A facade standing on the free end is permanent load, so it takes γ_G in the
+  // ultimate combination and goes in unfactored under the quasi-permanent one —
+  // exactly the treatment the area permanent loads get, applied to a force
+  // instead of a pressure. There is no ψ₂ here: ψ₂ belongs to the variable
+  // action, and a wall never leaves.
+  const tipLineLoadKnPerM = Math.max(0, Number(tipLoad?.lineLoadKnPerM) || 0);
+  const tipWallCount = Math.max(0, Math.round(Number(tipLoad?.wallCount) || 0));
+  const tipForceN = tipLineLoadStripForceN(tipLineLoadKnPerM);
+  const ultimateTipMomentNmm = tipLoadRootMomentNmm(PARTIAL_FACTOR_PERMANENT * tipForceN, depthMm);
+  const quasiTipMomentNmm = tipLoadRootMomentNmm(tipForceN, depthMm);
+  const tipLoadDeflection = tipLoadDeflectionMm(tipForceN, depthMm, modulusMpa, section.inertiaMm4);
+
   // kN/m² on a 1 m strip is N/mm as a line load — see the units note at the top.
-  const momentNmm = cantileverRootMomentNmm(ultimateKpa, depthMm);
-  const serviceMomentNmm = cantileverRootMomentNmm(quasiPermanentKpa, depthMm);
-  const deflectionMm = cantileverTipDeflectionMm(quasiPermanentKpa, depthMm, modulusMpa, section.inertiaMm4);
+  // With no wall on the tip every term added below is exactly zero, so an
+  // untouched cantilever reports the same numbers it always did.
+  const momentNmm = cantileverRootMomentNmm(ultimateKpa, depthMm) + ultimateTipMomentNmm;
+  const serviceMomentNmm = cantileverRootMomentNmm(quasiPermanentKpa, depthMm) + quasiTipMomentNmm;
+  const deflectionMm =
+    cantileverTipDeflectionMm(quasiPermanentKpa, depthMm, modulusMpa, section.inertiaMm4) + tipLoadDeflection;
   const deflectionLimitMm = cantileverDeflectionLimitMm(depthMm);
 
   const bendingUtilization = section.momentResistanceNmm > 0 ? momentNmm / section.momentResistanceNmm : Infinity;
@@ -319,13 +395,21 @@ function analyzeEdge({ edge, index, sourceIndex, boundary, section, loads, profi
   // Turn each limit back into the imposed load that would just reach it, then
   // strip out the permanent load that is already spent. Both are per metre of
   // slab width; the smaller one is what the cantilever will actually take.
-  const bendingCapacityKpa = depthMm > 0 ? (2 * section.momentResistanceNmm) / depthMm ** 2 : Infinity;
+  //
+  // The tip load is spent before the area load ever gets a share, so it comes
+  // off the capacity rather than out of the answer: what the wall has already
+  // taken of the moment, and of the millimetres of droop, is not available to
+  // anything else. Both terms vanish when no wall stands there.
+  const bendingCapacityKpa =
+    depthMm > 0 ? (2 * (section.momentResistanceNmm - ultimateTipMomentNmm)) / depthMm ** 2 : Infinity;
   const allowableImposedBendingKpa = Math.max(
     0,
     (bendingCapacityKpa - PARTIAL_FACTOR_PERMANENT * permanentKpa) / PARTIAL_FACTOR_VARIABLE,
   );
   const deflectionCapacityKpa =
-    depthMm > 0 ? (8 * modulusMpa * section.inertiaMm4 * deflectionLimitMm) / depthMm ** 4 : Infinity;
+    depthMm > 0
+      ? (8 * modulusMpa * section.inertiaMm4 * (deflectionLimitMm - tipLoadDeflection)) / depthMm ** 4
+      : Infinity;
   const allowableImposedDeflectionKpa = Math.max(0, (deflectionCapacityKpa - permanentKpa) / QUASI_PERMANENT_FACTOR);
 
   const deflectionGoverns = allowableImposedDeflectionKpa < allowableImposedBendingKpa;
@@ -395,6 +479,12 @@ function analyzeEdge({ edge, index, sourceIndex, boundary, section, loads, profi
     boundaryEdgeIndex: Number.isInteger(edge?.boundaryEdgeIndex) ? edge.boundaryEdgeIndex : null,
     lengthMm,
     depthMm,
+    // What the wall on the tip contributes, kept separate from the total so the
+    // panel can name the load rather than leave the user to infer it from a
+    // moment that grew.
+    tipLineLoadKnPerM,
+    tipWallCount,
+    tipMomentKnm: ultimateTipMomentNmm / 1e6,
     momentKnm: momentNmm / 1e6,
     momentResistanceKnm: section.momentResistanceNmm / 1e6,
     bendingUtilization,
@@ -432,8 +522,12 @@ const STATUS_RANK = { ok: 0, watch: 1, over: 2 };
  * @param {object} input.overhang one entry from `computeFloorOverhangs`
  * @param {object} [input.profile] structural coordination profile, for the limits
  * @param {object} [input.loads] load overrides, in kN/m²
+ * @param {Array<{lineLoadKnPerM: number, wallCount: number, wallIds?: string[]}|null>} [input.tipLoads]
+ *   what stands on each projecting run's free end, indexed the same way
+ *   `overhang.overhangEdges` is — see `deriveOverhangTipLoads`. Omitted means no
+ *   wall load, which is what every cantilever was analysed as before.
  */
-export function analyzeSlabCantilever({ slab, overhang, profile, loads } = {}) {
+export function analyzeSlabCantilever({ slab, overhang, profile, loads, tipLoads } = {}) {
   const section = slabStripSection(slab?.thickness);
   const edges = (overhang?.overhangEdges || [])
     .map((edge, sourceIndex) => ({ edge, sourceIndex }))
@@ -462,8 +556,22 @@ export function analyzeSlabCantilever({ slab, overhang, profile, loads } = {}) {
       loads: resolvedLoads,
       profile: resolvedProfile,
       modulusMpa,
+      // Indexed by the run's place in the MEASURED geometry, not its place
+      // here: shallow runs are dropped on the way in, and a tip load looked up
+      // by the wrong index would be a wall put on the wrong side of a building.
+      tipLoad: tipLoads?.[sourceIndex] || null,
     }),
   );
+
+  // How many distinct walls the whole slab was found carrying. Counted by id
+  // where the caller supplied them, because one wall can run along two of a
+  // corner bay's runs and is still one wall in the sentence the panel shows.
+  const tipWallIds = new Set();
+  for (const { sourceIndex } of edges) {
+    for (const wallId of tipLoads?.[sourceIndex]?.wallIds || []) tipWallIds.add(wallId);
+  }
+  const tipWallCount = tipWallIds.size || analyzed.reduce((total, entry) => total + entry.tipWallCount, 0);
+  const heaviestTipLineLoadKnPerM = analyzed.reduce((worst, entry) => Math.max(worst, entry.tipLineLoadKnPerM), 0);
 
   // The governing run is the one closest to a limit, not the deepest: a short
   // run on a thin plate can be worse off than a longer one on a thick plate.
@@ -485,11 +593,22 @@ export function analyzeSlabCantilever({ slab, overhang, profile, loads } = {}) {
       creepCoefficient: CONCRETE_CREEP_COEFFICIENT,
       effectiveModulusMpa: modulusMpa,
       reinforcement: 'EN 1992-1-1 minimum',
+      tipWallCount,
+      tipLineLoadKnPerM: heaviestTipLineLoadKnPerM,
       summary:
         `Assuming a ${Math.round(section.thicknessMm)} mm ${ASSUMED_CONCRETE_GRADE} reinforced-concrete slab with ` +
         `code-minimum flexural reinforcement, ${resolvedLoads.superimposedDeadKpa} kN/m² of finishes and ` +
         `${resolvedLoads.imposedKpa} kN/m² imposed load. Deflection is long-term, under the quasi-permanent ` +
-        `combination, against a 2L/250 cantilever limit. Planning estimate only — not a structural design.`,
+        `combination, against a 2L/250 cantilever limit. ` +
+        // Which of the two load cases this is has to be said outright. A number
+        // that quietly did or did not include a facade is a number nobody can
+        // check, and the two answers differ by more than any of the assumptions
+        // above.
+        (tipWallCount > 0
+          ? `Including a facade line load from ${tipWallCount} wall(s) on the tip, ` +
+            `up to ${round1(heaviestTipLineLoadKnPerM)} kN/m of run, taken as permanent load. `
+          : 'No wall load detected on the tip, so no facade line load is included. ') +
+        `Planning estimate only — not a structural design.`,
     },
     loads: {
       ...resolvedLoads,
@@ -507,4 +626,75 @@ export function analyzeSlabCantilever({ slab, overhang, profile, loads } = {}) {
     },
     verdict: { status: governing.status, headline: governing.headline },
   };
+}
+
+/* ── Finding the wall ────────────────────────────────────────────────────
+ *
+ * The analysis above takes the tip load as an input because it is a strip
+ * calculation and has no opinion about plans. Somebody still has to look at the
+ * drawing and answer "is there a wall standing on that?", and this is it.
+ */
+
+/** kN per square metre of face, from the only thing a wall in this model knows. */
+export function wallAssemblySelfWeightKpa(wall) {
+  return resolveWallAssembly(wall)?.system === 'masonry' ? MASONRY_WALL_SELF_WEIGHT_KPA : FRAMED_WALL_SELF_WEIGHT_KPA;
+}
+
+/**
+ * The facade line load standing on each of a slab's projecting runs.
+ *
+ * "Standing on it" is the same plan question `beamSupportsOverhang` asks of a
+ * beam, asked of the wall's BUILT body instead of its drawn axis — an outboard
+ * facade is dimensioned on the grid line and lands somewhere else, and it is
+ * where it lands that the plate feels. Weight per metre of run is the assembly's
+ * weight per square metre of face times the height the views actually draw, so a
+ * bypass wall that runs a storey and a bit is counted over all of it.
+ *
+ * Two knowingly conservative simplifications, both in the direction of a heavier
+ * cantilever: a return wall running from the root out to the tip is counted at
+ * its full weight even though only its far end is really at the tip, and where
+ * two walls meet at a bay corner both are counted on both runs they touch.
+ *
+ * @param {object} input
+ * @param {object} input.overhang one entry from `computeFloorOverhangs`
+ * @param {object} input.floor the floor the slab and its walls belong to
+ * @param {object} [input.project] only sharpens the elevation of a floor that
+ *   carries none of its own
+ * @returns {Array<{lineLoadKnPerM: number, wallCount: number, wallIds: string[]}>}
+ *   one entry per `overhang.overhangEdges`, in the same order
+ */
+export function deriveOverhangTipLoads({ overhang, floor, project = null, proximityMm } = {}) {
+  const runs = overhang?.overhangEdges || [];
+  if (!runs.length) return [];
+
+  const nothing = () => runs.map(() => ({ lineLoadKnPerM: 0, wallCount: 0, wallIds: [] }));
+  const walls = floor?.walls || [];
+  if (!walls.length) return nothing();
+
+  const columns = floor?.columns || [];
+  const bodies = [];
+  for (const wall of walls) {
+    const rendered = getWallRenderData(wall, columns);
+    if (!rendered?.trimStart || !rendered?.trimEnd) continue;
+    const span = resolveWallVerticalSpan(wall, floor, project);
+    const heightMm = Math.max(0, (span?.top ?? 0) - (span?.base ?? 0));
+    if (!(heightMm > 0)) continue;
+    bodies.push({
+      wallId: wall.id,
+      start: rendered.trimStart,
+      end: rendered.trimEnd,
+      // kPa of face × metres of height = kN per metre of run.
+      lineLoadKnPerM: (wallAssemblySelfWeightKpa(wall) * heightMm) / MM_PER_M,
+    });
+  }
+  if (!bodies.length) return nothing();
+
+  return runs.map((run) => {
+    const carried = bodies.filter((body) => beamSupportsOverhang(body, [run], proximityMm));
+    return {
+      lineLoadKnPerM: carried.reduce((total, body) => total + body.lineLoadKnPerM, 0),
+      wallCount: carried.length,
+      wallIds: carried.map((body) => body.wallId),
+    };
+  });
 }

@@ -10,7 +10,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { createBeam, createFloor } from '@/domain/models';
-import { createCeiling, deriveCeilingHangers } from '@/domain/ceilingModels';
+import { createCeiling, deriveCeilingHangers, deriveCeilingPanels } from '@/domain/ceilingModels';
 import CeilingDetailEditor from './CeilingDetailEditor';
 
 const BOUNDARY = [
@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/features/floorplan/context/FloorplanContext', () => ({
   useProject: () => ({ project: mocks.project, dispatch: mocks.dispatch }),
   useEditor: () => ({ ...mocks.editor, dispatch: mocks.editorDispatch }),
+  useEditorState: () => ({ ...mocks.editor, dispatch: mocks.editorDispatch }),
 }));
 
 // The live 3D pane is lazy and pulls in three.js. Standing in for it keeps the
@@ -602,6 +603,37 @@ describe('per-board material override', () => {
 });
 
 /**
+ * The wall angle is the edge framing of every ring the ceiling was traced into —
+ * its perimeter, and the face of every beam, column and partition cut out of it.
+ * Drawn as a profile line it landed 12.5 mm off the ceiling outline in the same
+ * weight, which reads as the outline rather than as a member, and the faces of
+ * an obstruction looked as though nothing framed them at all.
+ */
+describe('wall angles on the reflected ceiling plan', () => {
+  function wallAngleLines(container) {
+    return Array.from(container.querySelectorAll('line')).filter(
+      (line) => line.querySelector('title')?.textContent === 'Wall angle',
+    );
+  }
+
+  it('draws the angle at the width of its own leg, not as a hairline', () => {
+    const { container } = mountManualCeiling({ beamless: true });
+    const angles = wallAngleLines(container);
+
+    // One per edge of the rectangle the ceiling was drawn on.
+    expect(angles).toHaveLength(4);
+    for (const angle of angles) {
+      expect(Number.parseFloat(angle.style.strokeWidth)).toBeGreaterThanOrEqual(25);
+      // A screen-constant stroke would draw the same hairline at every zoom.
+      expect(angle.getAttribute('vector-effect')).toBeNull();
+      // Nothing selects an angle, and a 25 mm band down every edge of the plan
+      // must not swallow the clicks meant for the board under it.
+      expect(angle.style.pointerEvents).toBe('none');
+    }
+  });
+});
+
+/**
  * Fixtures are stored on the ceiling and normalized by the catalog on every
  * commit, so the editor's job is to hand the factory whole objects rather than
  * patched fields: a luminaire has no socket for a lamp it was not built around,
@@ -760,6 +792,205 @@ describe('selected screw on the plan', () => {
     const ringed = screws.filter((screw) => screw.querySelectorAll('circle').length === 2);
     expect(ringed).toHaveLength(1);
     expect(ringed[0]).toBe(screws[3]);
+  });
+});
+
+/**
+ * Measuring on the reflected ceiling plan, to the same rules the wall elevation
+ * works by: two clicks or a drag, endpoints that lock onto real geometry and
+ * stay tied to it, and a figure drawn to CAD convention rather than a label
+ * floating over the drawing.
+ */
+describe('ceiling dimensions', () => {
+  // 600 × 400 px over a 6000 × 4000 mm ceiling: 10 mm per px, V up from the
+  // bottom. So clientX 100 is U 1000, and clientY 300 is V 1000.
+  const CANVAS = { left: 0, top: 0, width: 600, height: 400, right: 600, bottom: 400 };
+
+  const SPAN = {
+    id: 'dim_a',
+    mode: 'horizontal',
+    start: { u: 1000, v: 1000 },
+    end: { u: 4000, v: 1000 },
+    offset: 60,
+  };
+
+  function mountMeasuredCeiling(manual = [SPAN], settings = {}) {
+    return mountManualCeiling({ beamless: true, detailing: { dimensions: { manual, ...settings } } });
+  }
+
+  /** The last committed ceiling's stored measurements. */
+  function committedManualDimensions() {
+    return mocks.dispatch.mock.calls.at(-1)?.[0]?.ceiling?.detailing?.dimensions?.manual ?? null;
+  }
+
+  function checkboxLabelled(container, label) {
+    return Array.from(container.querySelectorAll('input[type="checkbox"]')).find(
+      (input) => input.parentElement?.textContent?.trim() === label,
+    );
+  }
+
+  function measurablePlan(container, { snap = false } = {}) {
+    if (!snap) fireEvent.click(checkboxLabelled(container, 'Snap'));
+    fireEvent.click(container.querySelector('button[title^="Draw measurement"]'));
+    const svg = container.querySelector('svg[data-tool="draw_dimension"]');
+    svg.setPointerCapture = () => {};
+    svg.releasePointerCapture = () => {};
+    svg.getBoundingClientRect = () => CANVAS;
+    return svg;
+  }
+
+  /** Every drawn measurement figure, keyed by whether it is derived or hand-drawn. */
+  function dimensionFigures(container, source) {
+    return Array.from(container.querySelectorAll(`g[data-source="${source}"]`));
+  }
+
+  it('draws the derived overall sizes, in the ceiling frame and to the chosen precision', () => {
+    const { container } = mountManualCeiling({ beamless: true });
+
+    const labels = dimensionFigures(container, 'automatic').map((figure) => figure.querySelector('text').textContent);
+    expect(labels).toContain('6000.00 mm');
+    expect(labels).toContain('4000.00 mm');
+    expect(sectionSummary(container, 'ceiling-dimensions')).toBe('2 shown · 0 yours');
+  });
+
+  it('places a measurement from two clicks and stores exactly what was clicked', () => {
+    const { container, ceiling } = mountManualCeiling({ beamless: true });
+    const svg = measurablePlan(container);
+
+    // Press and release without travelling: that is the first of two clicks, so
+    // nothing is committed yet and the run stays open.
+    fireEvent.pointerDown(svg, { button: 0, pointerId: 1, clientX: 100, clientY: 300 });
+    fireEvent.pointerUp(svg, { button: 0, pointerId: 1, clientX: 100, clientY: 300 });
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(svg, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+
+    expect(mocks.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'CEILING_UPDATE', ceiling: expect.objectContaining({ id: ceiling.id }) }),
+    );
+    expect(committedManualDimensions()).toHaveLength(1);
+    // A run this much closer to level than plumb is stored as a set-out along U.
+    expect(committedManualDimensions()[0]).toMatchObject({
+      mode: 'horizontal',
+      start: { u: 1000, v: 1000 },
+      end: { u: 4000, v: 1000 },
+      startRef: null,
+      endRef: null,
+    });
+  });
+
+  it('accepts a drag as one measurement instead of two clicks', () => {
+    const { container } = mountManualCeiling({ beamless: true });
+    const svg = measurablePlan(container);
+
+    fireEvent.pointerDown(svg, { button: 0, pointerId: 1, clientX: 100, clientY: 350 });
+    fireEvent.pointerMove(svg, { pointerId: 1, clientX: 100, clientY: 150 });
+    fireEvent.pointerUp(svg, { button: 0, pointerId: 1, clientX: 100, clientY: 150 });
+
+    expect(committedManualDimensions()).toHaveLength(1);
+    expect(committedManualDimensions()[0]).toMatchObject({
+      mode: 'vertical',
+      start: { u: 1000, v: 500 },
+      end: { u: 1000, v: 2500 },
+    });
+  });
+
+  it('locks an endpoint onto real geometry and records what it was taken from', () => {
+    const { container, ceiling } = mountManualCeiling({ beamless: true });
+    const board = deriveCeilingPanels(ceiling, mocks.project).find((panel) => panel.localId === 'grid-c0-r0');
+    const svg = measurablePlan(container, { snap: true });
+
+    // 2 mm short of that board's far corner — a fifth of a pixel at this scale.
+    fireEvent.pointerDown(svg, { button: 0, pointerId: 1, clientX: board.u1 / 10, clientY: 400 - board.v1 / 10 + 0.2 });
+    fireEvent.pointerUp(svg, { button: 0, pointerId: 1, clientX: board.u1 / 10, clientY: 400 - board.v1 / 10 + 0.2 });
+    fireEvent.pointerDown(svg, { button: 0, pointerId: 1, clientX: 500, clientY: 100 });
+
+    const stored = committedManualDimensions()[0];
+    // Not the point that was clicked — the corner it was aiming at, exactly, and
+    // named so the measurement moves when the board does.
+    expect(stored.start).toEqual({ u: board.u1, v: board.v1 });
+    expect(stored.startRef).toMatchObject({ entityType: 'panel', entityId: 'grid-c0-r0', anchor: 'vertex_2' });
+  });
+
+  it('draws a stored measurement as a CAD figure and reads it in the aside', () => {
+    const { container } = mountMeasuredCeiling();
+
+    const figures = dimensionFigures(container, 'custom');
+    expect(figures).toHaveLength(1);
+    expect(figures[0].querySelector('text').textContent).toBe('3000.00 mm');
+    // Tick terminators, not arrowheads, and no marker element anywhere on it.
+    expect(figures[0].querySelector('marker')).toBeNull();
+    expect(figures[0].querySelectorAll('line').length).toBeGreaterThanOrEqual(5);
+
+    const svg = container.querySelector('svg[data-tool]');
+    svg.setPointerCapture = () => {};
+    svg.releasePointerCapture = () => {};
+    svg.getBoundingClientRect = () => CANVAS;
+    fireEvent.pointerDown(figures[0], { button: 0, pointerId: 1, clientX: 250, clientY: 294 });
+
+    expect(container.textContent).toContain('Selected measurement');
+    expect(container.textContent).toContain('measurement selected');
+  });
+
+  it('drops a selected measurement from the stored list', () => {
+    const { container } = mountMeasuredCeiling([SPAN, { ...SPAN, id: 'dim_b', start: { u: 0, v: 2000 } }]);
+
+    const figures = dimensionFigures(container, 'custom');
+    expect(figures).toHaveLength(2);
+    const svg = container.querySelector('svg[data-tool]');
+    svg.setPointerCapture = () => {};
+    svg.releasePointerCapture = () => {};
+    svg.getBoundingClientRect = () => CANVAS;
+
+    fireEvent.pointerDown(figures[0], { button: 0, pointerId: 1, clientX: 250, clientY: 294 });
+    fireEvent.click(
+      Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Delete measurement'),
+    );
+
+    expect(committedManualDimensions().map((dimension) => dimension.id)).toEqual(['dim_b']);
+  });
+
+  it('keeps a measurement on the piece it was taken from when that piece moves', () => {
+    // Anchored to the north-east corner of an opening rather than to a coordinate.
+    const anchored = {
+      id: 'dim_anchored',
+      mode: 'horizontal',
+      start: { u: 0, v: 0 },
+      end: { u: 0, v: 0 },
+      startRef: { entityType: 'ceiling', entityId: 'ignored', anchor: 'bottom_left' },
+      endRef: { entityType: 'opening', entityId: 'hatch', anchor: 'bottom_left' },
+    };
+    const opening = { id: 'hatch', type: 'access_hatch', u: 2000, v: 1500, width: 600, height: 600 };
+    const { container } = mountManualCeiling({
+      beamless: true,
+      detailing: { openings: [opening], dimensions: { manual: [anchored], showOpenings: false } },
+    });
+
+    const figure = dimensionFigures(container, 'custom')[0];
+    // 2000 mm along U from the west edge to the hatch, read off the hatch as it
+    // stands rather than off anything stored on the measurement.
+    expect(figure.querySelector('text').textContent).toBe('2000.00 mm');
+  });
+
+  it('turns a derived group off without touching the hand-drawn ones', () => {
+    const { container } = mountMeasuredCeiling();
+    expect(dimensionFigures(container, 'automatic')).toHaveLength(2);
+
+    fireEvent.click(checkboxLabelled(container, 'Overall ceiling length and depth'));
+
+    const committed = mocks.dispatch.mock.calls.at(-1)[0].ceiling.detailing.dimensions;
+    expect(committed.showOverall).toBe(false);
+    expect(committed.manual).toHaveLength(1);
+  });
+
+  it('hides every measurement behind the Sizes layer toggle', () => {
+    const { container } = mountMeasuredCeiling();
+    expect(dimensionFigures(container, 'custom')).toHaveLength(1);
+
+    fireEvent.click(checkboxLabelled(container, 'Sizes'));
+
+    expect(dimensionFigures(container, 'custom')).toHaveLength(0);
+    expect(dimensionFigures(container, 'automatic')).toHaveLength(0);
   });
 });
 

@@ -335,6 +335,11 @@ export function buildFloorBatchGroup(floorGroup, materialPalette, previousBatchG
   batchGroup.position.copy(floorGroup.position);
   batchGroup.quaternion.copy(floorGroup.quaternion);
   batchGroup.scale.copy(floorGroup.scale);
+  // A refilled batch group has already been frozen by a previous build (see
+  // `staticMatrices`), and a frozen node's position is not read again. This is
+  // the one place in the preview that writes a transform onto a node that may
+  // already be frozen, so it is the one place that has to say so.
+  batchGroup.updateMatrix();
 
   const instanceMatrix = new THREE.Matrix4();
   const unitScale = new THREE.Matrix4();

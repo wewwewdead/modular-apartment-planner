@@ -36,6 +36,9 @@ const DETAIL_ASSIGNMENTS = {
   wallFiberCement: 'fibreCement',
   wallPlywood: 'timber',
   wallMixedBoard: 'board',
+  wallRainscreen: 'board',
+  wallRainscreenWarm: 'board',
+  wallRainscreenDeep: 'board',
   wallFramingSteel: 'metal',
   wallFramingTimber: 'timber',
   wallFastener: 'metal',
@@ -150,6 +153,24 @@ export function createMaterialPalette() {
     wallFiberCement: surface({ color: 0xdee0dd, roughness: 0.72 }),
     wallPlywood: surface({ color: 0xc0883f, roughness: 0.7 }),
     wallMixedBoard: surface({ color: 0xc7b391, roughness: 0.8 }),
+
+    // Weathering steel rainscreen cassettes.
+    //
+    // Dielectric, despite being steel: what you see on a corten facade is the
+    // stable oxide it grew to protect itself, and an oxide scatters light the
+    // way a mineral does. Give it `metalness: 1` and it starts mirroring the
+    // sky, which is exactly what weathering steel stops doing after its first
+    // winter. Roughness is high for the same reason — the patina is a crust.
+    //
+    // Three tones, not one. Cassettes come off different coils and weather at
+    // different rates by orientation, so a real corten facade is a quilt of
+    // closely related browns; a single flat tone is the tell that a render was
+    // made from a spreadsheet. They stay a FIXED set of three shared instances,
+    // cycled across the module grid, because every distinct material is another
+    // instanced draw call — see `previewBatching`.
+    wallRainscreen: surface({ color: 0x8f5230, roughness: 0.82 }),
+    wallRainscreenWarm: surface({ color: 0xa66239, roughness: 0.79 }),
+    wallRainscreenDeep: surface({ color: 0x6d3d26, roughness: 0.85 }),
     wallFramingSteel: metal({ color: 0xb4bcc2, roughness: 0.42 }),
     wallFramingTimber: surface({ color: 0xb07740, roughness: 0.76 }),
     wallFastener: metal({ color: 0xa8adb1, roughness: 0.3 }),
@@ -232,6 +253,20 @@ export function createMaterialPalette() {
       transparent: true,
       opacity: 0.7,
     }),
+
+    /**
+     * Whether the edge overlay is worth building at all.
+     *
+     * Not a material, and it lives here because the palette is the only thing a
+     * scene build is handed that knows anything about the style on screen. The
+     * Realistic style draws no outlines, so building them is `EdgesGeometry` over
+     * the whole model plus a second Object3D hung off every mesh, for a drawing
+     * convention that is switched off — see `addOutline` and `ensureOutlines`.
+     *
+     * True by default, so a palette nobody has pointed at a style — a still, a
+     * test, an assembly editor's own pane — builds exactly what it always did.
+     */
+    outlinesEnabled: true,
   };
 
   Object.entries(DETAIL_ASSIGNMENTS).forEach(([key, family]) => {
@@ -249,10 +284,14 @@ export function createMaterialPalette() {
  */
 export function applyRenderStyleToPalette(materialPalette, styleConfig) {
   setDetailScale(materialPalette, styleConfig.detailStrength);
+  // Read by the next scene build to decide whether to cut edge geometry at all.
+  // Turning it back on does not retrofit the world that was built without it —
+  // `ensureOutlines` does, from the viewport, once the palette says yes.
+  materialPalette.outlinesEnabled = styleConfig.outlines !== false;
 }
 
 export function disposeMaterialPalette(materialPalette) {
   Object.values(materialPalette || {}).forEach((material) => {
-    material.dispose?.();
+    material?.dispose?.();
   });
 }

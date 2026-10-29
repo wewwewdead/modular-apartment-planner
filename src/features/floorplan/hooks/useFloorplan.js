@@ -387,10 +387,15 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
     ],
   );
 
-  return {
-    state,
-    dispatch,
-    actions,
-    selectors,
-  };
+  // Memoized so a re-render that changed nothing does not republish the store
+  // to every consumer of the raw context.
+  return useMemo(
+    () => ({
+      state,
+      dispatch,
+      actions,
+      selectors,
+    }),
+    [actions, selectors, state],
+  );
 }

@@ -231,12 +231,20 @@
   cursor: pointer;
 }
 
-.actionBtn:hover {
+.actionBtn:hover:not(:disabled) {
   background: var(--color-active-glow-subtle);
 }
 
-.actionBtn:active {
+.actionBtn:active:not(:disabled) {
   transform: scale(0.97);
+}
+
+/* A command the model has taken away, not one that is merely inactive: it stays
+   on screen so the affordance is still readable, and the caller owes it a Hint
+   saying why — the same bargain SelectField's `disabled` makes. */
+.actionBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* A schedule row that also offers an action — one cantilever run of several,

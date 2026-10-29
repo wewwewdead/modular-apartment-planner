@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { BUILDING_COMMANDS } from '@/domain/buildingCommands';
 import { formatBearing, isValidTraverseLine, traverseBoundary } from '@/domain/surveyTraverse';
 import styles from './ProjectLifecyclePanel.module.css';
@@ -111,6 +111,7 @@ const QUANTITY_RATE_FIELDS = Object.freeze([
   ['masonry', 'Masonry / m²'],
   ['fiberCementBoard', 'HardieFlex / fiber-cement board / m²'],
   ['plywoodBoard', 'Plywood wall board / m²'],
+  ['rainscreenBoard', 'Rainscreen panel / m²'],
   ['wallFraming', 'Wall framing / linear m'],
   ['formwork', 'Formwork / m²'],
   ['floorFinish', 'Floor finish / m²'],
@@ -5753,19 +5754,55 @@ function DocumentsStage({
   );
 }
 
-export default function ProjectLifecyclePanel({
-  project,
-  derived,
-  activeStage = 'brief',
-  onStageChange,
-  onExecuteCommand,
-}) {
+/*
+ * A short, stable name for an object — its position in the order the panel first
+ * saw it. Held weakly, so an object the store has replaced takes its name with
+ * it, and derived purely from identity, so asking twice always answers the same.
+ */
+const EMPTY_DERIVED = Object.freeze({});
+
+const identityNames = new WeakMap();
+let identityCount = 0;
+
+function identityToken(value) {
+  if (value === null || typeof value !== 'object') return String(value);
+
+  let name = identityNames.get(value);
+  if (name === undefined) {
+    identityCount += 1;
+    name = `#${identityCount}`;
+    identityNames.set(value, name);
+  }
+  return name;
+}
+
+/**
+ * A remount signal for one stage's forms.
+ *
+ * Each stage seeds its draft fields from the project once, at mount, so that
+ * typing into them is not fought by the store on every keystroke. That seed has
+ * to be re-taken when the data behind it moves for some *other* reason — an
+ * accepted command, an undo, a project load — and remounting on a changed key is
+ * how it is re-taken.
+ *
+ * The watched values are named by identity rather than serialized. The store is
+ * immutable, so an untouched slice is the same object and a changed beam
+ * produces a new floor; the whole-project `JSON.stringify` this replaces was
+ * walking every beam, slab, room and stair on every render of the sidebar,
+ * which was the panel's largest cost by a wide margin.
+ */
+function seedKey(parts) {
+  return parts.map(identityToken).join('|');
+}
+
+function ProjectLifecyclePanel({ project, derived, activeStage = 'brief', onStageChange, onExecuteCommand }) {
   const building = project.building || {};
   const brief = building.brief || {};
   const issues = derived?.validationIssues || [];
   const program = derived?.apartmentProgram || {};
   const ledger = derived?.siteFeasibility?.areaLedger || {};
-  const status = deriveLifecycleStatus(project, derived);
+  const derivedModels = derived || EMPTY_DERIVED;
+  const status = useMemo(() => deriveLifecycleStatus(project, derivedModels), [project, derivedModels]);
   const briefFormKey = [
     brief.targetStoreys,
     brief.targetUnitCount,
@@ -5776,50 +5813,57 @@ export default function ProjectLifecyclePanel({
     brief.accessibilityRequirements,
     brief.roofType,
   ].join('|');
-  const siteFormKey = JSON.stringify([
-    building.site?.lotSetup,
-    building.site?.edgeSetbacks,
-    building.site?.parkingPlan,
-  ]);
+  const siteFormKey = seedKey([building.site?.lotSetup, building.site?.edgeSetbacks, building.site?.parkingPlan]);
+  /*
+   * The per-floor arrays are watched one by one rather than through
+   * `project.floors`, because that array is replaced by any edit to any floor.
+   * Watching a wall would remount the structure forms while a wall was being
+   * drawn — the serialized key this replaces compared beams and slabs only, and
+   * this has to keep meaning exactly that.
+   */
+  const structuralFloorParts = useMemo(
+    () => (project.floors || []).flatMap((floor) => [floor.id, floor.beams, floor.slabs]),
+    [project.floors],
+  );
+  const systemsFloorParts = useMemo(
+    () => (project.floors || []).flatMap((floor) => [floor.id, floor.rooms, floor.stairs, floor.slabs]),
+    [project.floors],
+  );
   // Deliberately without gridSystems: the grid fields are live, and a remount
   // on every accepted edit would pull the focus out of the field being typed
   // in. Nothing else in the stage seeds a draft from the grids — the stack and
   // member sizes come from the realization profile, the slab opening from the
   // floors — so those still reseed on an external change, as they should.
-  const structuralFormKey = JSON.stringify([
-    building.systems?.structural?.coordinationProfile || {},
-    building.systems?.structural?.realizationProfile || {},
-    building.systems?.structural?.realization || {},
-    (project.floors || []).map((floor) => [floor.id, floor.beams || [], floor.slabs || []]),
+  const structuralFormKey = seedKey([
+    building.systems?.structural?.coordinationProfile,
+    building.systems?.structural?.realizationProfile,
+    building.systems?.structural?.realization,
+    ...structuralFloorParts,
   ]);
-  const systemsFormKey = JSON.stringify([
-    building.systems || {},
-    project.roofSystem || null,
-    (project.floors || []).map((floor) => [floor.id, floor.rooms || [], floor.stairs || [], floor.slabs || []]),
+  const systemsFormKey = seedKey([building.systems, project.roofSystem, ...systemsFloorParts]);
+  const spacesFormKey = seedKey([
+    building.unitTypes,
+    building.spaceProgram,
+    building.unitInstances,
+    building.testFitProfile,
+    building.testFitOptions,
+    building.selectedTestFitId,
+    building.acceptedTestFitId,
+    building.apartmentDesignProfile,
+    building.apartmentDesign,
   ]);
-  const spacesFormKey = JSON.stringify([
-    building.unitTypes || [],
-    building.spaceProgram || {},
-    building.unitInstances || [],
-    building.testFitProfile || {},
-    building.testFitOptions || [],
-    building.selectedTestFitId || null,
-    building.acceptedTestFitId || null,
-    building.apartmentDesignProfile || {},
-    building.apartmentDesign || {},
+  const quantityFormKey = seedKey([
+    building.quantityProfile,
+    building.costRealizationProfile,
+    building.costRealization,
   ]);
-  const quantityFormKey = JSON.stringify([
-    building.quantityProfile || {},
-    building.costRealizationProfile || {},
-    building.costRealization || {},
-  ]);
-  const documentsFormKey = JSON.stringify([
-    building.assumptions || [],
-    building.documentation || {},
-    building.documentationRealizationProfile || {},
-    building.documentationRealization || {},
-    building.professionalExchangeProfile || {},
-    building.professionalExchange || {},
+  const documentsFormKey = seedKey([
+    building.assumptions,
+    building.documentation,
+    building.documentationRealizationProfile,
+    building.documentationRealization,
+    building.professionalExchangeProfile,
+    building.professionalExchange,
   ]);
 
   return (
@@ -5950,3 +5994,5 @@ export default function ProjectLifecyclePanel({
     </section>
   );
 }
+
+export default memo(ProjectLifecyclePanel);

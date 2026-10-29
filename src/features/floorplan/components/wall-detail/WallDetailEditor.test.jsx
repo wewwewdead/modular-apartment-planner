@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/features/floorplan/context/FloorplanContext', () => ({
   useProject: () => ({ project: mocks.project, dispatch: mocks.dispatch }),
   useEditor: () => ({ ...mocks.editor, dispatch: mocks.editorDispatch }),
+  useEditorState: () => ({ ...mocks.editor, dispatch: mocks.editorDispatch }),
 }));
 
 describe('WallDetailEditor', () => {

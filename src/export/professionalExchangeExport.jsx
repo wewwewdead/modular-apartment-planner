@@ -10,6 +10,7 @@ import {
   deriveProfessionalExchange,
 } from '@/domain/professionalExchange';
 import { deriveDocumentationRealization } from '@/domain/documentationRealization';
+import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 
 export const PROFESSIONAL_EXCHANGE_ARCHIVE_MIME_TYPE = 'application/zip';
 
@@ -67,9 +68,19 @@ function supportPoint(floor, ref) {
   return column ? { x: column.x, y: column.y } : null;
 }
 
+// The single line this exchange draws a wall as is the line the wall is BUILT
+// on, not the one it was drawn on: a consultant setting out from this file has
+// to find the facade where it stands. Untrimmed, because a centreline runs the
+// wall's full length and the column faces are drawn separately anyway — and
+// identical to the drawn axis for every wall nobody has offset.
+function wallBodyAxis(floor, wall) {
+  return getWallRenderData(wall, floor?.columns || []).bodyWall;
+}
+
 function wallOpeningLine(floor, opening, layer) {
-  const wall = (floor.walls || []).find((entry) => entry.id === opening.wallId);
-  if (!wall) return '';
+  const host = (floor.walls || []).find((entry) => entry.id === opening.wallId);
+  if (!host) return '';
+  const wall = wallBodyAxis(floor, host);
   const dx = wall.end.x - wall.start.x;
   const dy = wall.end.y - wall.start.y;
   const length = Math.hypot(dx, dy) || 1;
@@ -97,7 +108,10 @@ function floorEntities(project, floor, mode) {
       const point = room.centroid || room.labelPoint || room.boundaryPoints?.[0];
       if (point) content += dxfText('A-ROOM-TEXT', point, room.name || room.use || room.id, 120);
     }
-    for (const wall of floor.walls || []) content += dxfLine('A-WALL', wall.start, wall.end);
+    for (const wall of floor.walls || []) {
+      const axis = wallBodyAxis(floor, wall);
+      content += dxfLine('A-WALL', axis.start, axis.end);
+    }
     for (const door of floor.doors || []) content += wallOpeningLine(floor, door, 'A-DOOR');
     for (const window of floor.windows || []) content += wallOpeningLine(floor, window, 'A-WINDOW');
   }

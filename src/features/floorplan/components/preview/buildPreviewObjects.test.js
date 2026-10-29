@@ -138,11 +138,16 @@ vi.mock('three', () => {
       this.children = [];
       this.isMesh = true;
       this.parent = null;
+      // A built world is frozen (see `staticMatrices`), so every node it holds
+      // has to answer the two calls that freezing is made of.
+      this.matrixAutoUpdate = true;
     }
     add(child) {
       this.children.push(child);
       child.parent = this;
     }
+    updateMatrix() {}
+    updateMatrixWorld() {}
     traverse(fn) {
       fn(this);
       this.children.forEach((c) => (c.traverse ? c.traverse(fn) : fn(c)));
@@ -160,11 +165,14 @@ vi.mock('three', () => {
       this.scale = { x: 1, y: 1, z: 1, copy() {} };
       this.quaternion = new MockQuaternion();
       this.renderOrder = 0;
+      this.matrixAutoUpdate = true;
     }
     add(child) {
       this.children.push(child);
       child.parent = this;
     }
+    updateMatrix() {}
+    updateMatrixWorld() {}
     traverse(fn) {
       fn(this);
       this.children.forEach((c) => (c.traverse ? c.traverse(fn) : fn(c)));
@@ -181,7 +189,11 @@ vi.mock('three', () => {
       // Box outlines are one shared unit geometry sized by the object's own
       // scale, so a line segment now has one.
       this.scale = { x: 1, y: 1, z: 1, set() {} };
+      this.matrixAutoUpdate = true;
+      this.children = [];
     }
+    updateMatrix() {}
+    updateMatrixWorld() {}
     traverse(fn) {
       fn(this);
     }
@@ -203,6 +215,7 @@ vi.mock('three', () => {
       this.children = [];
       this.parent = null;
       this.disposed = false;
+      this.matrixAutoUpdate = true;
       this.shadow = {
         mapSize: {
           x: 0,
@@ -223,6 +236,8 @@ vi.mock('three', () => {
       this.children.push(child);
       child.parent = this;
     }
+    updateMatrix() {}
+    updateMatrixWorld() {}
     traverse(fn) {
       fn(this);
       this.children.forEach((c) => (c.traverse ? c.traverse(fn) : fn(c)));
@@ -300,8 +315,10 @@ import {
   SELECTION_ACCENTS,
   buildPreviewObjectRoot,
   buildSelectionOverlay,
+  ensureOutlines,
   readAssemblyPart,
 } from './buildPreviewObjects';
+import { MAX_ACTIVE_FIXTURE_LIGHTS } from './previewPerf';
 import { disposeScene } from './disposeScene';
 import * as THREE from 'three';
 
@@ -900,9 +917,42 @@ describe('ceiling luminaires', () => {
     };
   }
 
+  function bounceDescriptor(id, overrides = {}) {
+    return {
+      id,
+      kind: 'ceiling',
+      geometry: 'ceilingLightSource',
+      role: 'bounce',
+      lightType: 'point',
+      position: { x: 2000, y: 2700, z: 2500 },
+      aim: { x: 0, y: -1, z: 0 },
+      color: { r: 1, g: 0.78, b: 0.55 },
+      intensity: 7e5,
+      angleRad: null,
+      penumbra: 0,
+      castShadow: false,
+      distanceMm: 0,
+      metadata: { sourceId: 'ceiling_1', ceilingId: 'ceiling_1', floorId: 'f1', ceilingDetailKind: 'bounce' },
+      ...overrides,
+    };
+  }
+
   function buildFloor(objects) {
+    return buildFloors([objects]);
+  }
+
+  /** One scene, several floors — which is the only scale the budgets are set at. */
+  function buildFloors(floorObjects, visibility = []) {
     return buildPreviewObjectRoot(
-      createSceneDescriptor([{ floorId: 'f1', name: 'Ground', elevation: 0, visible: true, objects }]),
+      createSceneDescriptor(
+        floorObjects.map((objects, index) => ({
+          floorId: `f${index + 1}`,
+          name: `Level ${index + 1}`,
+          elevation: index * 3000,
+          visible: visibility[index] ?? true,
+          objects,
+        })),
+      ),
       palette,
     );
   }
@@ -975,7 +1025,7 @@ describe('ceiling luminaires', () => {
     expect(light.shadow.autoUpdate).toBe(true);
   });
 
-  it('caps the shadow casters per floor, keeping the brightest', () => {
+  it('caps the shadow casters, keeping the brightest', () => {
     const count = MAX_FIXTURE_SHADOW_LIGHTS + 1;
     const objects = Array.from({ length: count }, (_, index) =>
       // Ascending brightness, so `lt_0` is the one that has to lose.
@@ -990,6 +1040,103 @@ describe('ceiling luminaires', () => {
     expect(findFixtureLight(meshMap.get('lt_0:light').object).castShadow).toBe(false);
     // The descriptor still says what the user asked for; only the light was demoted.
     expect(meshMap.get('lt_0:light').descriptor.castShadow).toBe(true);
+  });
+
+  /**
+   * The renderer charges for a shadow pass; it has never heard of a floor. A cap
+   * spent per floor is therefore a cap spent as many times as the building has
+   * storeys, which is what a two-storey lit project used to do — sixteen 1024²
+   * maps beside the sun's own, for a budget written as eight.
+   */
+  it('spends the shadow budget once for the whole building, not once per floor', () => {
+    const ground = Array.from({ length: MAX_FIXTURE_SHADOW_LIGHTS }, (_, index) =>
+      lightDescriptor(`lt_g${index}`, { intensity: (index + 1) * 1e6 }),
+    );
+    const upper = Array.from({ length: MAX_FIXTURE_SHADOW_LIGHTS }, (_, index) =>
+      lightDescriptor(`lt_u${index}`, { intensity: 100e6 + (index + 1) * 1e6 }),
+    );
+    const { meshMap } = buildFloors([ground, upper]);
+
+    const casting = [...ground, ...upper].filter(
+      (descriptor) => findFixtureLight(meshMap.get(descriptor.id).object).castShadow === true,
+    );
+    expect(casting).toHaveLength(MAX_FIXTURE_SHADOW_LIGHTS);
+    // Every lamp upstairs outshines every lamp downstairs, so the upper floor
+    // takes the whole budget rather than each floor helping itself to one.
+    expect(casting.every((descriptor) => descriptor.id.startsWith('lt_u'))).toBe(true);
+  });
+
+  it('gives no budget to a floor that is not on screen', () => {
+    // Brighter, and more of them than the budget holds — but hidden, so never in
+    // the render list and never charged for.
+    const hidden = Array.from({ length: MAX_FIXTURE_SHADOW_LIGHTS }, (_, index) =>
+      lightDescriptor(`lt_h${index}`, { intensity: 9e6 }),
+    );
+    const shown = [lightDescriptor('lt_shown', { intensity: 1e6 })];
+    const { meshMap } = buildFloors([shown, hidden], [true, false]);
+
+    expect(findFixtureLight(meshMap.get('lt_shown:light').object).castShadow).toBe(true);
+    expect(findFixtureLight(meshMap.get('lt_h0:light').object).castShadow).toBe(false);
+  });
+
+  it('keeps the brightest lamps alight and folds the rest into the room’s own fill', () => {
+    const overflow = 3;
+    const lamps = Array.from({ length: MAX_ACTIVE_FIXTURE_LIGHTS + overflow }, (_, index) =>
+      lightDescriptor(`lt_${String(index).padStart(2, '0')}`, {
+        intensity: (index + 1) * 1e6,
+        castShadow: false,
+        bounceLightId: 'ceiling_1:bounce:0.0',
+        fillIntensity: 2e5,
+      }),
+    );
+    const fill = bounceDescriptor('ceiling_1:bounce:0.0', { intensity: 7e5 });
+    const { meshMap } = buildFloor([...lamps, fill]);
+
+    const suppressed = lamps.filter((descriptor) => !findFixtureLight(meshMap.get(descriptor.id).object).visible);
+    expect(suppressed.map((descriptor) => descriptor.id)).toEqual(['lt_00:light', 'lt_01:light', 'lt_02:light']);
+    for (const descriptor of suppressed) {
+      expect(findFixtureLight(meshMap.get(descriptor.id).object).userData.budgetSuppressed).toBe(true);
+    }
+    // The dimmest lamps lost their light, not their lumens: the same flux is in
+    // the room, spread over the sphere instead of thrown through the beam.
+    const fillLight = findFixtureLight(meshMap.get(fill.id).object);
+    expect(fillLight.visible).toBe(true);
+    expect(fillLight.userData.budgetSuppressed).toBe(false);
+    expect(fillLight.userData.baseIntensity).toBeCloseTo(7e5 + overflow * 2e5, 6);
+    expect(fillLight.intensity).toBeCloseTo(fillLight.userData.baseIntensity, 6);
+  });
+
+  it('does not compound the fold when the same scene is built again', () => {
+    const lamps = Array.from({ length: MAX_ACTIVE_FIXTURE_LIGHTS + 1 }, (_, index) =>
+      lightDescriptor(`lt_${String(index).padStart(2, '0')}`, {
+        intensity: (index + 1) * 1e6,
+        castShadow: false,
+        bounceLightId: 'ceiling_1:bounce:0.0',
+        fillIntensity: 4e5,
+      }),
+    );
+    const fill = bounceDescriptor('ceiling_1:bounce:0.0', { intensity: 7e5 });
+
+    const first = buildFloor([...lamps, fill]);
+    const second = buildFloor([...lamps, fill]);
+    const intensityOf = (built) => findFixtureLight(built.meshMap.get(fill.id).object).userData.baseIntensity;
+
+    expect(intensityOf(first)).toBeCloseTo(7e5 + 4e5, 6);
+    expect(intensityOf(second)).toBeCloseTo(intensityOf(first), 6);
+  });
+
+  it('never lets a suppressed lamp keep a shadow map', () => {
+    const lamps = Array.from({ length: MAX_ACTIVE_FIXTURE_LIGHTS + 2 }, (_, index) =>
+      lightDescriptor(`lt_${String(index).padStart(2, '0')}`, { intensity: (index + 1) * 1e6 }),
+    );
+    const { meshMap } = buildFloor(lamps);
+
+    for (const descriptor of lamps) {
+      const light = findFixtureLight(meshMap.get(descriptor.id).object);
+      if (!light.visible) expect(light.castShadow).toBe(false);
+    }
+    const casting = lamps.filter((descriptor) => findFixtureLight(meshMap.get(descriptor.id).object).castShadow);
+    expect(casting).toHaveLength(MAX_FIXTURE_SHADOW_LIGHTS);
   });
 
   it('breaks a tie on intensity by id, so the same lamps are demoted every build', () => {
@@ -1155,5 +1302,188 @@ describe('disposeScene', () => {
     expect(light.disposed).toBe(true);
     expect(palette.ceilingOpeningTrim.disposed).toBe(false);
     expect(palette.ceilingOpeningHousing.disposed).toBe(false);
+  });
+});
+
+/**
+ * The edge overlay is a drawing convention the Realistic style does not draw,
+ * and it is the default — so a world built for it should not be cutting edges
+ * for every stud and hanging a second object off every mesh to hold them. What
+ * matters as much is that the switch back works: a style toggle that quietly
+ * left the model without its outlines would be the same bug as one that never
+ * built them.
+ */
+describe('edge overlay, built on demand', () => {
+  let palette;
+
+  beforeEach(() => {
+    palette = createMockPalette();
+  });
+
+  const countOutlines = (object) => {
+    let total = 0;
+    object.traverse((node) => {
+      if (node.isLineSegments) total += 1;
+    });
+    return total;
+  };
+
+  function buildBox(outlinesEnabled) {
+    palette.outlinesEnabled = outlinesEnabled;
+    const scene = createSceneDescriptor([
+      { floorId: 'f1', name: 'Ground', elevation: 0, visible: true, objects: [createDescriptor('w1', 'wall')] },
+    ]);
+    return buildPreviewObjectRoot(scene, palette);
+  }
+
+  it('cuts them for a style that draws them', () => {
+    const { meshMap } = buildBox(true);
+    expect(countOutlines(meshMap.get('w1').object)).toBe(1);
+    expect(meshMap.get('w1').object.userData.wantsOutline).toBeUndefined();
+  });
+
+  it('skips them for a style that does not, and leaves a note that it did', () => {
+    const { meshMap } = buildBox(false);
+    expect(countOutlines(meshMap.get('w1').object)).toBe(0);
+    expect(meshMap.get('w1').object.userData.wantsOutline).toBe(true);
+  });
+
+  it('cuts them later, from the same meshes, when the style switches back', () => {
+    const { root, meshMap } = buildBox(false);
+    palette.outlinesEnabled = true;
+
+    expect(ensureOutlines(root, palette)).toBe(true);
+    expect(countOutlines(meshMap.get('w1').object)).toBe(1);
+    // The note is spent, so a second switch does not hang a second line on the
+    // same mesh.
+    expect(meshMap.get('w1').object.userData.wantsOutline).toBeUndefined();
+    expect(ensureOutlines(root, palette)).toBe(false);
+    expect(countOutlines(meshMap.get('w1').object)).toBe(1);
+  });
+
+  /**
+   * The accent edge is part of the highlight rather than part of the drawing —
+   * green round a selected wall, orange round a selected board — and it is shown
+   * in both styles. So the overlay cuts its own lines whatever the palette says
+   * about the model's.
+   */
+  it('always gives the selection overlay its accent edge', () => {
+    const { meshMap } = buildBox(false);
+    const overlay = buildSelectionOverlay(meshMap, { selectedId: 'w1', selectedType: 'wall' }, palette, 'plan');
+
+    expect(overlay.children).toHaveLength(1);
+    expect(countOutlines(overlay.children[0])).toBe(1);
+  });
+});
+
+/**
+ * A built world does not move, so three should not be re-deriving its matrices
+ * sixty times a second — see `staticMatrices` for why the saving only exists if
+ * the flag is off on every node rather than most of them.
+ */
+describe('static matrices', () => {
+  it('freezes every node of the world it just built', () => {
+    const palette = createMockPalette();
+    const scene = createSceneDescriptor([
+      {
+        floorId: 'f1',
+        name: 'Ground',
+        elevation: 0,
+        visible: true,
+        objects: [createDescriptor('w1', 'wall'), createDescriptor('w2', 'wall')],
+      },
+    ]);
+
+    const { root } = buildPreviewObjectRoot(scene, palette);
+    const nodes = [];
+    root.traverse((node) => nodes.push(node));
+
+    expect(nodes.length).toBeGreaterThan(2);
+    expect(nodes.filter((node) => node.matrixAutoUpdate !== false)).toEqual([]);
+  });
+});
+
+/**
+ * A door in the preview is a leaf with hardware on it, not a bare slab — the
+ * knob is what makes it read as a door at all. The leaf keeps the door
+ * material; the hardware comes off the shared metal accent, without shadows,
+ * because doors are exempt from batching and every extra mesh is its own draw
+ * call.
+ */
+describe('door objects', () => {
+  let palette;
+
+  beforeEach(() => {
+    palette = createMockPalette();
+  });
+
+  function buildDoor(overrides = {}) {
+    const descriptor = {
+      id: 'door_1',
+      kind: 'door',
+      geometry: 'door',
+      doorType: 'swing',
+      openDirection: 'left',
+      materialKey: 'door',
+      metadata: { sourceId: 'door_1', floorId: 'f1' },
+      center: { x: 1000, y: 0 },
+      baseElevation: 0,
+      size: { x: 900, y: 2100, z: 44 },
+      rotation: 0,
+      ...overrides,
+    };
+    const scene = createSceneDescriptor([
+      { floorId: 'f1', name: 'Ground', elevation: 0, visible: true, objects: [descriptor] },
+    ]);
+    const { meshMap } = buildPreviewObjectRoot(scene, palette);
+    return meshMap.get('door_1').object;
+  }
+
+  const hardwareOf = (object) => object.children.filter((child) => child.material === palette.fixtureAccentMetal);
+
+  it('gives a swing door a knob on each face, at the latch edge, about a metre up', () => {
+    const object = buildDoor();
+    const hardware = hardwareOf(object);
+
+    // Stem and head per face.
+    expect(hardware).toHaveLength(4);
+    for (const part of hardware) {
+      expect(part.position.x).toBeCloseTo(450 - 75, 6);
+      expect(part.position.y).toBeCloseTo(1020 - 2100 / 2, 6);
+      expect(part.castShadow).toBe(false);
+    }
+    // Two on each side of the leaf.
+    expect(hardware.filter((part) => part.position.z > 22)).toHaveLength(2);
+    expect(hardware.filter((part) => part.position.z < -22)).toHaveLength(2);
+    // The leaf itself is still the door slab.
+    expect(object.children.some((child) => child.material === palette.door)).toBe(true);
+  });
+
+  it('pairs the knobs on the meeting stiles of a double door', () => {
+    const object = buildDoor({ doorType: 'double', size: { x: 1800, y: 2100, z: 44 } });
+    const hardware = hardwareOf(object);
+
+    expect(hardware).toHaveLength(8);
+    expect(hardware.filter((part) => part.position.x < 0)).toHaveLength(4);
+    expect(hardware.filter((part) => part.position.x > 0)).toHaveLength(4);
+    // And a seam where the leaves meet.
+    expect(object.children.some((child) => child.material === palette.fixtureAccentDark)).toBe(true);
+  });
+
+  it('gives a sliding door a pull bar per face instead of a knob', () => {
+    const object = buildDoor({ doorType: 'sliding' });
+    const hardware = hardwareOf(object);
+
+    expect(hardware).toHaveLength(2);
+    expect(new Set(hardware.map((part) => Math.sign(part.position.z)))).toEqual(new Set([1, -1]));
+  });
+
+  it('keeps walk-through and picking intact: every part answers as the door', () => {
+    const object = buildDoor();
+    const kinds = new Set();
+    object.traverse((node) => {
+      if (node.userData?.previewTarget) kinds.add(node.userData.previewTarget.kind);
+    });
+    expect(kinds).toEqual(new Set(['door']));
   });
 });

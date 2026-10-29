@@ -25,11 +25,14 @@ export const SIZE_TAG_LINE_STEP = 1.28;
 
 const FRAMING_KIND_LABELS = Object.freeze({
   stud: 'Stud',
+  king: 'King stud',
+  trimmer: 'Trimmer',
   noggin: 'Noggin',
   top_track: 'Top track',
   bottom_track: 'Bottom track',
   header: 'Header',
   sill: 'Sill',
+  ledger: 'Ledger',
 });
 
 /** Title case for member kinds the generator has not been taught to name yet. */
@@ -50,6 +53,7 @@ export function frameMaterialLabel(material) {
 export function boardMaterialLabel(material) {
   if (material === WALL_BOARD_MATERIALS.PLYWOOD) return 'Plywood';
   if (material === WALL_BOARD_MATERIALS.FIBER_CEMENT) return 'Fiber cement';
+  if (material === WALL_BOARD_MATERIALS.RAINSCREEN) return 'Rainscreen panel';
   return 'No board';
 }
 

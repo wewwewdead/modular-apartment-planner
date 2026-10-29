@@ -9,17 +9,30 @@ import {
   WALL_BOARD_MATERIALS,
   WALL_FRAME_MATERIALS,
   WALL_INTERIOR_SIDES,
+  boardDefaultThickness,
   createWallAssembly,
+  deriveWallAssemblyLayers,
   deriveWallFramingLayout,
   resolveWallAssembly,
+  wallAssemblyCoreDepth,
   wallAssemblyThickness,
 } from '@/domain/wallAssemblies';
-import { WALL_DETAIL_SIDES, createWallDetailing, resolveWallDetailing } from '@/domain/wallDetailing';
 import {
+  WALL_DETAIL_SIDES,
+  createWallDetailing,
+  resolveWallDetailFrame,
+  resolveWallDetailing,
+  wallFramingLayoutOptions,
+} from '@/domain/wallDetailing';
+import {
+  WALL_FRAMING_MODES,
   WALL_HEIGHT_MODES,
+  normalizeWallFramingMode,
   normalizeWallHeightMode,
   resolveWallClearRun,
   resolveWallStructureFit,
+  resolveWallVerticalSpan,
+  wallOutboardOffset,
 } from '@/domain/wallFit';
 import {
   formatSurveyorBearing,
@@ -40,6 +53,48 @@ function sameSides(a, b) {
 
 function clampLayers(value) {
   return Math.max(1, Math.min(4, Math.round(value)));
+}
+
+/* ── Which way "out" is ──────────────────────────────────────────────────
+ *
+ * The stored offset is signed along perpendicular(direction), which is a fact
+ * about vector algebra and not about a building. Nobody should have to work out
+ * the handedness of a perpendicular to push a facade out, so the panel asks for
+ * a magnitude and a side and keeps the sign to itself. Left/right are read
+ * looking from the wall's start point toward its end, the same way the assembly
+ * asks which face is inside.
+ */
+const OUTBOARD_SIDES = { LEFT: 'left', RIGHT: 'right' };
+
+// A wall on its axis has no side yet. It shows this until one is picked, rather
+// than a side it is not actually offset to.
+const OUTBOARD_SIDE_NONE = 'axis';
+
+function outboardSideOf(offset) {
+  if (offset > 0) return OUTBOARD_SIDES.RIGHT;
+  if (offset < 0) return OUTBOARD_SIDES.LEFT;
+  return OUTBOARD_SIDE_NONE;
+}
+
+function outboardSign(side) {
+  return side === OUTBOARD_SIDES.LEFT ? -1 : 1;
+}
+
+/**
+ * Whether the wall is holding anything up.
+ *
+ * Not a geometric property, and nothing here draws it — it is a declaration,
+ * and the coordination checks act on it: a load-bearing wall is asked for the
+ * support it stands on, and is offered to a slab as one of the members carrying
+ * it. Undeclared means non-structural, which is the honest reading of a wall
+ * nobody has said anything about.
+ */
+const STRUCTURAL_ROLES = { NONSTRUCTURAL: 'nonstructural', LOADBEARING: 'loadbearing' };
+
+function structuralRoleOf(wall) {
+  return wall?.structuralRole === STRUCTURAL_ROLES.LOADBEARING
+    ? STRUCTURAL_ROLES.LOADBEARING
+    : STRUCTURAL_ROLES.NONSTRUCTURAL;
 }
 
 const ASSEMBLY_SUMMARY = {
@@ -73,6 +128,7 @@ function describeStructureFit(fit, u) {
 function boardMaterialLabel(material) {
   if (material === WALL_BOARD_MATERIALS.PLYWOOD) return 'Plywood';
   if (material === WALL_BOARD_MATERIALS.FIBER_CEMENT) return 'Fiber cement';
+  if (material === WALL_BOARD_MATERIALS.RAINSCREEN) return 'Rainscreen panel';
   return 'No board';
 }
 
@@ -206,11 +262,19 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
   const hiddenSides = (hiddenWallBoards || {})[wall.id] || EMPTY_SIDES;
   const len = wallLength(wall);
   const isArc = Boolean(wall.controlPoint);
+  // Which side an offset would go to before there is an offset to read it off.
+  const [intendedSide, setIntendedSide] = useState(OUTBOARD_SIDE_NONE);
   const heightMode = normalizeWallHeightMode(wall.heightMode);
+  const framingMode = normalizeWallFramingMode(wall.framingMode);
+  const structuralRole = structuralRoleOf(wall);
+  const isBypass = framingMode === WALL_FRAMING_MODES.BYPASS;
   // Whole-building beams: the one capping this wall is often filed on the
   // storey above, and the panel has to report what the fit actually used.
   const structureFit = resolveWallStructureFit(wall, floor, floors || [floor]);
   const clearRun = resolveWallClearRun(wall, floor);
+  // What the views will actually draw. For a bypass wall this is the only place
+  // the panel can say where the wall runs — its stored height stopped answering.
+  const verticalSpan = resolveWallVerticalSpan(wall, floor);
   const assembly = resolveWallAssembly(wall);
   // Only offer to hide a face that actually carries a board — a wall boarded on
   // one side has no meaningful "Both".
@@ -228,17 +292,50 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
       .filter((windowItem) => windowItem.wallId === wall.id)
       .map((windowItem) => ({ ...windowItem, openingKind: 'window' })),
   ];
-  const framingLayout = deriveWallFramingLayout(wall, wallOpenings);
+  // Counted and measured over the run the wall is actually built to: a bypass
+  // wall frames its whole resolved span, so quoting its stored height here would
+  // put a different frame length on the panel than the one in the bill.
+  const framingLayout = deriveWallFramingLayout(
+    wall,
+    wallOpenings,
+    wallFramingLayoutOptions(resolveWallDetailFrame(wall, floor)),
+  );
 
   const updateWall = (updates) => {
     dispatch({ type: 'WALL_UPDATE', floorId, wall: { id: wall.id, ...updates } });
   };
 
+  const outboardOffset = wallOutboardOffset(wall);
+  const outboardMagnitude = Math.abs(outboardOffset);
+  const outboardSide = outboardOffset === 0 ? intendedSide : outboardSideOf(outboardOffset);
+  // Rounded in millimetres before it meets the display unit, so a metre-mode
+  // entry of 0.2 is 200 and not 199.99999999999997.
+  const setOutboardMagnitude = (displayValue) => {
+    const millimetres = Math.max(0, Math.round(u.fromDisplay(displayValue)));
+    updateWall({ outboardOffset: outboardSign(outboardSide) * millimetres });
+  };
+  const setOutboardSide = (side) => {
+    setIntendedSide(side);
+    // Putting a wall back on its axis is the same act as choosing no side.
+    if (side === OUTBOARD_SIDE_NONE) {
+      if (outboardOffset !== 0) updateWall({ outboardOffset: 0 });
+      return;
+    }
+    if (outboardMagnitude > 0) updateWall({ outboardOffset: outboardSign(side) * outboardMagnitude });
+  };
+
+  // Changing to a board assembly gives up any load-bearing declaration, and
+  // that stays true now that the declaration can be made deliberately. What this
+  // app generates for a framed wall is a partition — the Framing section says so
+  // in as many words — so letting "load-bearing" survive the switch would leave
+  // the checks asking a stud partition where its foundation is. Picking the role
+  // again afterwards is one control away, and is then a choice rather than a
+  // leftover.
   const applyAssembly = (nextAssembly) => {
     updateWall({
       assembly: nextAssembly,
       thickness: wallAssemblyThickness(nextAssembly),
-      structuralRole: nextAssembly.system === 'framed' ? 'nonstructural' : wall.structuralRole,
+      structuralRole: nextAssembly.system === 'framed' ? STRUCTURAL_ROLES.NONSTRUCTURAL : wall.structuralRole,
     });
   };
 
@@ -275,11 +372,44 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
     editorDispatch({ type: 'OPEN_WALL_DETAIL_EDITOR', floorId, wallId: wall.id, side });
   };
 
+  // Rounded in millimetres before it meets the display unit, the same rule the
+  // outboard offset follows, so a metre-mode 0.15 is 150 and not 149.99999.
+  const setBoardOverhang = (side, edge, displayValue) => {
+    updateBoardLayer(side, { [edge]: Math.round(u.fromDisplay(displayValue)) });
+  };
+
+  /**
+   * Where a board stops relative to the wall it is hung on.
+   *
+   * Two walls meeting at a corner each stop their cladding at their own end,
+   * which leaves the joint open and the neighbour's cut edge showing. Running
+   * one board past its wall end by the depth the other wall is built to closes
+   * it; pulling the other one back by the same amount keeps them from doubling
+   * up in the same few millimetres of air.
+   */
+  const boardOverhangFields = (side, label) => (
+    <>
+      <NumberField
+        label={`${label} overhang start`}
+        value={u.toDisplay(assembly[side].overhangStart)}
+        step={u.step(10)}
+        unit={u.suffix}
+        onChange={(v) => setBoardOverhang(side, 'overhangStart', v)}
+      />
+      <NumberField
+        label={`${label} overhang end`}
+        value={u.toDisplay(assembly[side].overhangEnd)}
+        step={u.step(10)}
+        unit={u.suffix}
+        onChange={(v) => setBoardOverhang(side, 'overhangEnd', v)}
+      />
+    </>
+  );
+
   const changeBoardMaterial = (side, material) => {
     updateBoardLayer(side, {
       material,
-      thickness:
-        material === WALL_BOARD_MATERIALS.PLYWOOD ? 12 : material === WALL_BOARD_MATERIALS.FIBER_CEMENT ? 6 : 0,
+      thickness: boardDefaultThickness(material),
       layerCount: material === WALL_BOARD_MATERIALS.NONE ? 0 : Math.max(1, assembly[side].layerCount || 1),
     });
   };
@@ -324,19 +454,31 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
           }
         />
         <InputField label="Arc Length" type="number" suffix={u.suffix} value={u.toDisplay(len)} readOnly />
+        <div className={styles.drawingHint}>
+          An arc wall cannot be built off its axis: offsetting a curve changes its radii and its end tangents, so
+          outboard facades are straight walls only.
+        </div>
       </div>
     );
   }
 
   const isMasonry = assembly.system === 'masonry';
   const fitMessage = describeStructureFit(structureFit, u);
+  // How far the outside of the wall finishes from the line it was drawn on: the
+  // offset, plus half the structural core, plus whatever is clad on the outside
+  // of it. That last term is what makes this different from the offset itself —
+  // the number a setback is actually checked against.
+  const exteriorBuildUp = deriveWallAssemblyLayers(assembly).find((layer) => layer.side === 'exterior')?.buildUp || 0;
+  const outboardFace = outboardMagnitude + wallAssemblyCoreDepth(assembly) / 2 + exteriorBuildUp;
 
   return (
     <div className={panelKitStyles.gutter}>
       <PhaseSelector phaseId={wall.phaseId} phases={phases} onChange={(v) => updateWall({ phaseId: v })} />
 
-      {/* What the model did to this wall, before any control it might explain. */}
-      {heightMode === WALL_HEIGHT_MODES.AUTO && fitMessage ? (
+      {/* What the model did to this wall, before any control it might explain.
+          A bypass wall was not fitted to anything, so there is nothing to
+          report — the Facade section says where it runs instead. */}
+      {heightMode === WALL_HEIGHT_MODES.AUTO && !isBypass && fitMessage ? (
         <Status tone={fitMessage.tone}>{fitMessage.text}</Status>
       ) : null}
 
@@ -357,10 +499,21 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
             updateWall({ height: Math.max(100, u.fromDisplay(v)), heightMode: WALL_HEIGHT_MODES.MANUAL })
           }
         />
-        <SelectField label="Top" value={heightMode} onChange={(value) => updateWall({ heightMode: value })}>
+        <SelectField
+          label="Top"
+          value={heightMode}
+          disabled={isBypass}
+          onChange={(value) => updateWall({ heightMode: value })}
+        >
           <option value={WALL_HEIGHT_MODES.AUTO}>Fit under beam</option>
           <option value={WALL_HEIGHT_MODES.MANUAL}>Fixed height</option>
         </SelectField>
+        {isBypass ? (
+          <Hint>
+            A bypass wall runs past the beams by definition, so neither the top fit nor the height above places it. See
+            Runs from / to under Facade.
+          </Hint>
+        ) : null}
         {clearRun?.trimmed ? (
           <>
             <Readout label="Clear run" value={u.toDisplay(clearRun.length)} unit={u.suffix} />
@@ -368,6 +521,74 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
           </>
         ) : null}
         <Readout label="Built thickness" value={u.toDisplay(wallAssemblyThickness(assembly))} unit={u.suffix} />
+      </Section>
+
+      {/* Where the wall is BUILT, as opposed to where it is drawn. The axis
+          stays on the grid line the structure is dimensioned to; the body can
+          stand off it. */}
+      <Section
+        id="wall.facade"
+        title="Facade"
+        // A wall on its axis and framed the ordinary way has nothing here worth
+        // unfolding; one that is offset or bypassing opens, because this section
+        // is then the reason its plan does not match its grid line or its
+        // elevation does not stop at the floor.
+        defaultOpen={outboardMagnitude > 0 || isBypass}
+        summary={outboardMagnitude ? `${u.toDisplay(outboardMagnitude)} ${u.suffix} ${outboardSide}` : 'On the axis'}
+      >
+        <NumberField
+          label="Offset from axis"
+          value={u.toDisplay(outboardMagnitude)}
+          step={u.step(25)}
+          unit={u.suffix}
+          min={0}
+          onChange={setOutboardMagnitude}
+        />
+        <SelectField label="Side" value={outboardSide} onChange={setOutboardSide}>
+          <option value={OUTBOARD_SIDE_NONE}>On the axis</option>
+          <option value={OUTBOARD_SIDES.LEFT}>Left of start → end</option>
+          <option value={OUTBOARD_SIDES.RIGHT}>Right of start → end</option>
+        </SelectField>
+        <Readout label="Outboard face" value={u.toDisplay(Math.round(outboardFace))} unit={u.suffix} />
+        <Hint>
+          Measured from the drawn axis to the outside of the exterior skin. Left and right are read looking from the
+          wall start point toward its end point; with no side picked, an offset goes to the right.
+        </Hint>
+
+        <SelectField label="Framing" value={framingMode} onChange={(value) => updateWall({ framingMode: value })}>
+          <option value={WALL_FRAMING_MODES.PLATFORM}>Platform (on the slab)</option>
+          <option value={WALL_FRAMING_MODES.BYPASS}>Bypass (past the slab)</option>
+        </SelectField>
+
+        {/* The other thing this wall's relationship to the structure turns on,
+            and the one nothing could set until now. */}
+        <SelectField
+          label="Structural role"
+          value={structuralRole}
+          onChange={(value) => updateWall({ structuralRole: value })}
+        >
+          <option value={STRUCTURAL_ROLES.NONSTRUCTURAL}>Non-structural</option>
+          <option value={STRUCTURAL_ROLES.LOADBEARING}>Load-bearing</option>
+        </SelectField>
+        <Hint>
+          {structuralRole === STRUCTURAL_ROLES.LOADBEARING
+            ? 'Load-bearing walls are asked for the member or foundation they stand on, and are offered to a slab as one of its supports. Choosing a board assembly resets this to non-structural.'
+            : 'Declare a wall load-bearing only if it carries something. Choosing a board assembly resets this to non-structural.'}
+        </Hint>
+        {isBypass ? (
+          <>
+            <Readout
+              label="Runs from / to"
+              value={`${u.toDisplay(Math.round(verticalSpan.base))} → ${u.toDisplay(Math.round(verticalSpan.top))}`}
+              unit={u.suffix}
+            />
+            <Hint>
+              Starts {u.toDisplay(Math.round(verticalSpan.drop))} {u.suffix} below this floor — the depth of the
+              structure it crosses — and finishes level with the floor above, so the storey below shows no line across
+              the facade.
+            </Hint>
+          </>
+        ) : null}
       </Section>
 
       <Section id="wall.assembly" title="Assembly" summary={ASSEMBLY_SUMMARY[assembly.preset] || assembly.preset}>
@@ -425,6 +646,7 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
               <option value={WALL_BOARD_MATERIALS.NONE}>None</option>
               <option value={WALL_BOARD_MATERIALS.FIBER_CEMENT}>HardieFlex / fiber cement</option>
               <option value={WALL_BOARD_MATERIALS.PLYWOOD}>Plywood</option>
+              <option value={WALL_BOARD_MATERIALS.RAINSCREEN}>Rainscreen panel</option>
             </SelectField>
             {assembly.interior.material !== WALL_BOARD_MATERIALS.NONE ? (
               <>
@@ -441,6 +663,7 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
                   step={1}
                   onChange={(v) => updateBoardLayer('interior', { layerCount: clampLayers(v) })}
                 />
+                {boardOverhangFields('interior', 'Inside')}
               </>
             ) : null}
             <SelectField
@@ -451,6 +674,7 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
               <option value={WALL_BOARD_MATERIALS.NONE}>None</option>
               <option value={WALL_BOARD_MATERIALS.FIBER_CEMENT}>HardieFlex / fiber cement</option>
               <option value={WALL_BOARD_MATERIALS.PLYWOOD}>Plywood</option>
+              <option value={WALL_BOARD_MATERIALS.RAINSCREEN}>Rainscreen panel</option>
             </SelectField>
             {assembly.exterior.material !== WALL_BOARD_MATERIALS.NONE ? (
               <>
@@ -467,7 +691,16 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
                   step={1}
                   onChange={(v) => updateBoardLayer('exterior', { layerCount: clampLayers(v) })}
                 />
+                {boardOverhangFields('exterior', 'Outside')}
               </>
+            ) : null}
+            {assembly.interior.material !== WALL_BOARD_MATERIALS.NONE ||
+            assembly.exterior.material !== WALL_BOARD_MATERIALS.NONE ? (
+              <Hint>
+                Overhang runs the board past the wall end — usually by the built depth of the wall it meets — so the
+                corner closes instead of showing the neighbour&apos;s cut edge. A negative value sets the board back
+                instead, which is what the wall being lapped wants. Framing never follows: this is cladding only.
+              </Hint>
             ) : null}
             <Stack>
               <button

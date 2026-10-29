@@ -1,4 +1,6 @@
-import { memo } from 'react';
+import { memo, useId } from 'react';
+import { getVisibleSectionDrawables } from '@/sections/visibility';
+import OpeningDetails from './OpeningDetails';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
 const SECTION_STYLE_MAP = {
@@ -100,29 +102,18 @@ const SECTION_STYLE_MAP = {
   },
 };
 
-function rectPoints(element) {
-  return [
-    `${element.left},${-element.top}`,
-    `${element.right},${-element.top}`,
-    `${element.right},${-element.bottom}`,
-    `${element.left},${-element.bottom}`,
-  ].join(' ');
+function outlinesPath(outlines) {
+  return outlines.map((ring) => `M${ring.map((p) => `${p.x},${p.y}`).join('L')}Z`).join(' ');
 }
 
-function stairPolylinePoints(element) {
-  return element.points.map((point) => `${point.x},${-point.z}`).join(' ');
-}
-
-function scenePolygonPoints(element) {
-  return element.points.map((point) => `${point.x},${-point.z}`).join(' ');
-}
-
-function sceneLinePoints(element) {
-  return element.points.map((point) => `${point.x},${-point.z}`).join(' ');
+function regionsPath(regions) {
+  return outlinesPath(regions.flatMap(({ outline, holes }) => [outline, ...holes]));
 }
 
 function SectionSceneLayer({ scene, showTitle = true }) {
+  const clipPrefix = useId();
   if (!scene) return null;
+  const drawables = getVisibleSectionDrawables(scene);
 
   const titleX = (scene.bounds.minX + scene.bounds.maxX) / 2;
   const titleY = -scene.bounds.maxZ - 500;
@@ -143,69 +134,50 @@ function SectionSceneLayer({ scene, showTitle = true }) {
           {scene.title}
         </text>
       )}
-      {scene.rectElements.map((element) => {
+      {drawables.map((element, index) => {
         const style =
-          SECTION_STYLE_MAP[`${element.category}_${element.renderMode}`] || SECTION_STYLE_MAP.wall_projection;
+          SECTION_STYLE_MAP[`${element.category}_${element.renderMode}`] ||
+          SECTION_STYLE_MAP[`wall_${element.renderMode}`];
+        if (element.shape === 'line') {
+          return (
+            <path
+              key={element.id}
+              d={element.segments.map(([a, b]) => `M${a.x},${a.y}L${b.x},${b.y}`).join(' ')}
+              fill="none"
+              stroke={style.stroke}
+              strokeWidth={style.strokeWidth}
+              vectorEffect="non-scaling-stroke"
+            />
+          );
+        }
+        const clipId = `${clipPrefix}-section-${index}`;
         return (
-          <polygon
-            key={element.id}
-            points={rectPoints(element)}
-            fill={style.fill}
-            stroke={style.stroke}
-            strokeWidth={style.strokeWidth}
-            vectorEffect="non-scaling-stroke"
-            opacity={style.opacity}
-          />
+          <g key={element.id} data-section-source={element.sourceId} data-section-mode={element.renderMode}>
+            <defs>
+              <clipPath id={clipId} clipPathUnits="userSpaceOnUse">
+                <path d={regionsPath(element.visibleRegions)} clipRule="evenodd" />
+              </clipPath>
+            </defs>
+            <g clipPath={`url(#${clipId})`}>
+              <path
+                d={regionsPath(element.visibleRegions)}
+                fillRule="evenodd"
+                fill={element.style === 'railingGlass' ? 'rgba(159, 196, 232, 0.22)' : style.fill}
+                stroke="none"
+              />
+              <path
+                d={outlinesPath(element.strokeOutlines || [element.outline])}
+                fill="none"
+                stroke={style.stroke}
+                strokeWidth={style.strokeWidth * 2}
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+              />
+              {element.renderMode === 'projection' && <OpeningDetails element={element} stroke={style.stroke} />}
+            </g>
+          </g>
         );
       })}
-      {(scene.polygonElements || []).map((element) => {
-        const style =
-          SECTION_STYLE_MAP[`${element.category}_${element.renderMode}`] || SECTION_STYLE_MAP.slab_projection;
-        return (
-          <polygon
-            key={element.id}
-            points={scenePolygonPoints(element)}
-            fill={style.fill}
-            stroke={style.stroke}
-            strokeWidth={style.strokeWidth}
-            vectorEffect="non-scaling-stroke"
-            opacity={style.opacity}
-          />
-        );
-      })}
-      {(scene.lineElements || []).map((element) => {
-        const style =
-          SECTION_STYLE_MAP[`${element.category}_${element.renderMode}`] || SECTION_STYLE_MAP.truss_projection;
-        return (
-          <polyline
-            key={element.id}
-            points={sceneLinePoints(element)}
-            fill="none"
-            stroke={style.stroke}
-            strokeWidth={style.strokeWidth}
-            vectorEffect="non-scaling-stroke"
-            opacity={style.opacity}
-          />
-        );
-      })}
-      {scene.stairElements.map((element) => (
-        <polyline
-          key={element.id}
-          points={stairPolylinePoints(element)}
-          fill="none"
-          stroke={
-            element.renderMode === 'cut'
-              ? DRAWING_GRAPHICS.section.cutStroke
-              : DRAWING_GRAPHICS.section.projectionStroke
-          }
-          strokeWidth={
-            element.renderMode === 'cut'
-              ? DRAWING_GRAPHICS.section.cutStrokeWidth
-              : DRAWING_GRAPHICS.section.projectionStrokeWidth
-          }
-          vectorEffect="non-scaling-stroke"
-        />
-      ))}
       <line
         x1={scene.bounds.minX - 500}
         y1={-scene.groundLevel}

@@ -94,6 +94,9 @@ export function createCanonicalBuilding(projectId, floors = [], overrides = {}) 
     strategy: 'reinforced_concrete_frame',
     gridSystems: [],
     columnStacks: [],
+    // The facade counterpart of columnStacks: which walls, across storeys, are
+    // one projecting bay. Derived on every sync from `wall.stackId`.
+    wallStacks: [],
     ...structuralOverrides,
     realizationProfile: createStructuralRealizationProfile(structuralOverrides?.realizationProfile),
     realization: createStructuralRealizationState(structuralOverrides?.realization),
@@ -189,7 +192,11 @@ function compareFloorOrder(floorOrder, a, b) {
 /**
  * Synchronize relationship indexes that are persisted for portability but
  * derived from authoritative entity references. A column's stackId is the
- * source of truth; columnStacks[*].columnRefs is the reverse index.
+ * source of truth; columnStacks[*].columnRefs is the reverse index. A wall's
+ * stackId works the same way, and wallStacks[*].wallRefs is its reverse index —
+ * with one difference the checks downstream have to know about: a storey
+ * contributes SEVERAL walls to a bay stack, where it contributes one column to a
+ * column stack.
  */
 export function syncCanonicalBuilding(project) {
   if (!project?.building) return project;
@@ -198,11 +205,26 @@ export function syncCanonicalBuilding(project) {
   const existingStacks = new Map(
     (project.building.systems?.structural?.columnStacks || []).map((stack) => [stack.id, stack]),
   );
+  const existingWallStacks = new Map(
+    (project.building.systems?.structural?.wallStacks || []).map((stack) => [stack.id, stack]),
+  );
   const refsByStack = new Map();
+  const wallRefsByStack = new Map();
   const roomIdsByUnitInstance = new Map();
   const fixtureRefsByShaft = new Map();
 
   for (const floor of project.floors || []) {
+    for (const wall of floor.walls || []) {
+      if (!wall.stackId) continue;
+      const refs = wallRefsByStack.get(wall.stackId) || [];
+      refs.push({ floorId: floor.id, wallId: wall.id });
+      wallRefsByStack.set(wall.stackId, refs);
+
+      // Seeded from the entity the same way a column stack is, so a stack the
+      // user has since named or annotated keeps whatever it was given while its
+      // membership is rebuilt from scratch.
+      if (!existingWallStacks.has(wall.stackId)) existingWallStacks.set(wall.stackId, { id: wall.stackId });
+    }
     for (const column of floor.columns || []) {
       if (!column.stackId) continue;
       const refs = refsByStack.get(column.stackId) || [];
@@ -233,6 +255,16 @@ export function syncCanonicalBuilding(project) {
       columnRefs: (refsByStack.get(stack.id) || []).sort((a, b) => compareFloorOrder(floorOrder, a, b)),
     }))
     .filter((stack) => stack.columnRefs.length > 0 || stack.intent === 'planned');
+
+  // Sorted by stacking order, like columnRefs: the reverse index is read from
+  // the ground up wherever it is read, and a stack whose membership is unchanged
+  // has to serialize identically or every save looks like an edit.
+  const wallStacks = [...existingWallStacks.values()]
+    .map((stack) => ({
+      ...stack,
+      wallRefs: (wallRefsByStack.get(stack.id) || []).sort((a, b) => compareFloorOrder(floorOrder, a, b)),
+    }))
+    .filter((stack) => stack.wallRefs.length > 0);
 
   const structural = project.building.systems?.structural || createSystem(project.id, 'structural');
   const plumbing = project.building.systems?.plumbing || createSystem(project.id, 'plumbing');
@@ -315,6 +347,7 @@ export function syncCanonicalBuilding(project) {
         structural: {
           ...structural,
           columnStacks,
+          wallStacks,
           realizationProfile: createStructuralRealizationProfile(structural.realizationProfile),
           realization: createStructuralRealizationState(structural.realization),
         },

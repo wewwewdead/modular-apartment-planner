@@ -24,10 +24,13 @@ describe('framingKindLabel', () => {
     expect(framingKindLabel('top_track')).toBe('Top track');
     expect(framingKindLabel('header')).toBe('Header');
     expect(framingKindLabel('sill')).toBe('Sill');
+    expect(framingKindLabel('king')).toBe('King stud');
+    expect(framingKindLabel('trimmer')).toBe('Trimmer');
+    expect(framingKindLabel('ledger')).toBe('Ledger');
   });
 
   it('falls back to readable words for an unknown kind instead of raw snake case', () => {
-    expect(framingKindLabel('king_stud')).toBe('King stud');
+    expect(framingKindLabel('blocking_row')).toBe('Blocking row');
     expect(framingKindLabel(undefined)).toBe('Frame member');
   });
 });

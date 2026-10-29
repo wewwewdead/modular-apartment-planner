@@ -1,7 +1,12 @@
 import { polygonArea } from '@/geometry/polygon';
 import { wallLength } from '@/geometry/wallGeometry';
-import { WALL_BOARD_MATERIALS, deriveWallFramingLayout, resolveWallAssembly } from './wallAssemblies';
-import { deriveWallDetailTakeoff, resolveWallDetailing } from './wallDetailing';
+import { WALL_BOARD_MATERIALS, boardLayerUSpan, deriveWallFramingLayout, resolveWallAssembly } from './wallAssemblies';
+import {
+  deriveWallDetailTakeoff,
+  resolveWallDetailFrame,
+  resolveWallDetailing,
+  wallFramingLayoutOptions,
+} from './wallDetailing';
 
 export const QUANTITY_PROVENANCE = Object.freeze({
   EXACT_GEOMETRY: 'exact_from_geometry',
@@ -16,6 +21,7 @@ export const QUANTITY_RATE_KEYS = Object.freeze([
   'masonry',
   'fiberCementBoard',
   'plywoodBoard',
+  'rainscreenBoard',
   'wallFraming',
   'wallFasteners',
   'wallJoints',
@@ -258,6 +264,7 @@ function deriveGeometry(project) {
   let wallNetAreaMm2 = 0;
   let fiberCementBoardAreaMm2 = 0;
   let plywoodBoardAreaMm2 = 0;
+  let rainscreenBoardAreaMm2 = 0;
   let wallFramingLinearMm = 0;
   let wallPanelCount = 0;
   let wallFastenerCount = 0;
@@ -331,10 +338,21 @@ function deriveGeometry(project) {
         for (const side of ['interior', 'exterior']) {
           const layer = assembly[side];
           const detailSide = detailTakeoff?.sides?.[side];
-          const faceArea = detailSide?.enabled ? detailSide.installedAreaMm2 : netFaceArea;
+          // A board run past the wall end to close a corner is board that has to
+          // be bought and cut, so it is billed. The overhang lands outside every
+          // opening on the wall, so the same deduction still applies to it — the
+          // holes did not move.
+          const boardRun = boardLayerUSpan(layer, wallLength(wall)).length;
+          const boardFaceArea = Math.max(0, boardRun * Math.max(0, Number(wall.height) || 0) - openingsArea);
+          const faceArea = detailSide?.enabled ? detailSide.installedAreaMm2 : boardFaceArea;
           const layeredArea = faceArea * (layer?.layerCount || 0);
           if (layer?.material === WALL_BOARD_MATERIALS.FIBER_CEMENT) fiberCementBoardAreaMm2 += layeredArea;
           if (layer?.material === WALL_BOARD_MATERIALS.PLYWOOD) plywoodBoardAreaMm2 += layeredArea;
+          // Cassettes bill by the square metre of face like every other board.
+          // The open joints between them are 10 mm on a 910 pitch — about 1% of
+          // the elevation, and a facade is ordered by the panel anyway, so
+          // deducting them would be false precision.
+          if (layer?.material === WALL_BOARD_MATERIALS.RAINSCREEN) rainscreenBoardAreaMm2 += layeredArea;
         }
         wallPaintAreaMm2 +=
           netFaceArea *
@@ -351,6 +369,10 @@ function deriveGeometry(project) {
                   ? 'window'
                   : 'door',
               })),
+              // A bypass wall is framed over its resolved span, not its stored
+              // height, so the bill has to be taken off the same run the wall is
+              // actually built to.
+              wallFramingLayoutOptions(resolveWallDetailFrame(wall, floor)),
             ).totalLinearLengthMm;
       }
     }
@@ -402,6 +424,7 @@ function deriveGeometry(project) {
     masonryWallAreaM2: squareMeters(wallNetAreaMm2),
     fiberCementBoardAreaM2: squareMeters(fiberCementBoardAreaMm2),
     plywoodBoardAreaM2: squareMeters(plywoodBoardAreaMm2),
+    rainscreenBoardAreaM2: squareMeters(rainscreenBoardAreaMm2),
     wallFramingLinearM: wallFramingLinearMm / 1000,
     wallPanelCount,
     wallFastenerCount,
@@ -500,6 +523,20 @@ export function deriveQuantityTakeoff(project, options = {}) {
         unit: 'm²',
         provenance: QUANTITY_PROVENANCE.CONFIGURED_ASSEMBLY,
         rateKey: 'plywoodBoard',
+        inputs: { openingsDeducted: true, boardLayersIncluded: true, framedWallCount: geometry.framedWallCount },
+      },
+      profile,
+      scenarioId,
+    ),
+    item(
+      {
+        id: 'rainscreen_board',
+        category: 'envelope',
+        label: 'Rainscreen panel cladding',
+        quantity: geometry.rainscreenBoardAreaM2,
+        unit: 'm²',
+        provenance: QUANTITY_PROVENANCE.CONFIGURED_ASSEMBLY,
+        rateKey: 'rainscreenBoard',
         inputs: { openingsDeducted: true, boardLayersIncluded: true, framedWallCount: geometry.framedWallCount },
       },
       profile,

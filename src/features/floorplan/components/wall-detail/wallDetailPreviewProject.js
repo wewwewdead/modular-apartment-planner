@@ -1,3 +1,5 @@
+import { resolveWallVerticalSpan, WALL_FRAMING_MODES } from '@/domain/wallFit';
+
 const NON_WALL_FLOOR_COLLECTIONS = ['beams', 'columns', 'fixtures', 'landings', 'railings', 'rooms', 'slabs', 'stairs'];
 
 /**
@@ -11,9 +13,17 @@ export function createWallDetailPreviewProject(project, floorId, wallId) {
   const wall = floor?.walls?.find((entry) => entry.id === wallId);
   if (!project || !floor || !wall) return null;
 
+  // Emptying the floor takes away the deck a bypass wall's drop is derived
+  // from, which would stand the preview wall back up on the storey line and
+  // disagree with the elevation next to it. Carrying the resolved drop across as
+  // an explicit override keeps the same span with none of the geometry.
+  const span = resolveWallVerticalSpan(wall, floor, project);
+  const previewWall =
+    span.mode === WALL_FRAMING_MODES.BYPASS && span.drop > 0 ? { ...wall, bypassDrop: span.drop } : wall;
+
   const previewFloor = {
     ...floor,
-    walls: [wall],
+    walls: [previewWall],
     doors: (floor.doors || []).filter((entry) => entry.wallId === wallId),
     windows: (floor.windows || []).filter((entry) => entry.wallId === wallId),
   };

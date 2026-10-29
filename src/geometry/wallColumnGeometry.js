@@ -2,6 +2,11 @@ import { add, subtract, scale, dot, normalize, perpendicular, distance } from '.
 import { nearestPointOnSegment } from './line';
 import { columnOutline, columnFaces, columnCenterlines, columnCenter, columnAxes } from './columnGeometry';
 import { arcWallOutline } from './filletGeometry';
+// The offset guard lives with the wall's other resolved dimensions. Both
+// modules reach each other (wallFit calls getWallRenderData to find the beams
+// crossing a wall), which is safe because both sides are hoisted function
+// declarations called at run time, never during module evaluation.
+import { wallOutboardOffset } from '@/domain/wallFit';
 
 const EPSILON = 1e-6;
 const CENTERLINE_ALIGNMENT_THRESHOLD = 0.92;
@@ -27,6 +32,13 @@ function makeOutline(start, end, thickness, controlPoint = null) {
 
 function findColumn(columns, columnId) {
   return (columns || []).find((column) => column.id === columnId) || null;
+}
+
+// How far and which way the built body sits off the drawn axis, as a vector.
+// Positive `offset` is the 'right' side looking from start to end — the sign
+// convention `wallSideOfPoint` reports.
+function acrossAxis(wall, offset) {
+  return scale(perpendicular(normalize(subtract(wall.end, wall.start))), offset);
 }
 
 function raySegmentIntersection(origin, direction, start, end) {
@@ -201,6 +213,9 @@ export function getWallRenderData(wall, columns = []) {
     const outline = makeOutline(syncedWall.start, syncedWall.end, syncedWall.thickness, syncedWall.controlPoint);
     return {
       wall: syncedWall,
+      // An arc refuses an offset outright (`wallOutboardOffset`), so its body is
+      // built on the line it was drawn on and the three axes are one and the same.
+      bodyWall: syncedWall,
       renderWall: syncedWall,
       outline,
       trimStart: syncedWall.start,
@@ -208,12 +223,42 @@ export function getWallRenderData(wall, columns = []) {
     };
   }
 
-  const trimStart = findTrimPoint(syncedWall.start, syncedWall.end, syncedWall.startAttachment, columns);
-  const trimEnd = findTrimPoint(syncedWall.end, syncedWall.start, syncedWall.endAttachment, columns);
+  // An outboard wall is BUILT off the line it is drawn on, so it is trimmed on
+  // the line it is built on: shift first, then trim. Run the other way round —
+  // trim on the axis and shift the result — and a facade pushed clear of its
+  // column would still be cut back to a face it no longer touches.
+  //
+  // Shifting the ray origins leaves the direction untouched, so a body still
+  // overlapping its column exits through the face along the offset line, while
+  // one that has cleared the column finds no intersection at all and
+  // `findTrimPoint` hands the origin straight back. A bypass wall does not die
+  // into the column, and its clear run is its full centreline length.
+  //
+  // The offset is zero for every wall nobody has offset, and the fast path
+  // below is then byte-for-byte the original: `beamsCrossingWall` calls this for
+  // every wall on every committed edit, inside a <100 ms budget.
+  const outboard = wallOutboardOffset(syncedWall);
+  const across = outboard ? acrossAxis(syncedWall, outboard) : null;
+  const bodyStart = across ? add(syncedWall.start, across) : syncedWall.start;
+  const bodyEnd = across ? add(syncedWall.end, across) : syncedWall.end;
+
+  const trimStart = findTrimPoint(bodyStart, bodyEnd, syncedWall.startAttachment, columns);
+  const trimEnd = findTrimPoint(bodyEnd, bodyStart, syncedWall.endAttachment, columns);
   const outline = makeOutline(trimStart, trimEnd, syncedWall.thickness);
 
   return {
+    // The drawn axis, as resolved against its attachments — what the wall is
+    // dimensioned and snapped by. `renderWall` is the body built off it.
     wall: syncedWall,
+    // The line the body is BUILT on: the drawn axis shifted across by the
+    // outboard offset, and not yet cut back to the columns. `renderWall` is
+    // this same line trimmed, which is what you want for anything that stops
+    // at a column face — but everything laid out along the wall's own length
+    // measures from the wall's start, not from the first column face, so studs,
+    // panels and fasteners have to be placed on this one. Identical by
+    // reference to `wall` for the walls nobody has offset, so a consumer that
+    // switches to it pays nothing and draws exactly what it drew before.
+    bodyWall: across ? { ...syncedWall, start: bodyStart, end: bodyEnd } : syncedWall,
     renderWall: {
       ...syncedWall,
       start: trimStart,

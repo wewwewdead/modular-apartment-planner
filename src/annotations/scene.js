@@ -12,7 +12,14 @@ export function resolveAnnotationSettings(floor) {
   return createAnnotationSettings(floor?.annotationSettings || {});
 }
 
-export function buildAnnotationScene(floor) {
+/**
+ * `settingsOverrides` lets a view opt out of annotation classes the floor's own
+ * settings would draw, without touching those settings: they are project data
+ * shared by every consumer of this scene — the sheets, the documentation
+ * counts — while what the working canvas suppresses is a property of that
+ * canvas, not of the floor.
+ */
+export function buildAnnotationScene(floor, settingsOverrides = null) {
   if (!floor) {
     return {
       dimensions: [],
@@ -21,7 +28,9 @@ export function buildAnnotationScene(floor) {
     };
   }
 
-  const settings = resolveAnnotationSettings(floor);
+  const settings = settingsOverrides
+    ? { ...resolveAnnotationSettings(floor), ...settingsOverrides }
+    : resolveAnnotationSettings(floor);
   const manualDimensions = buildManualDimensionFigures(floor.annotations || []);
   const derivedDimensions = [
     ...(settings.showWallDimensions ? buildWallDimensionFigures(floor.walls || [], floor.columns || []) : []),

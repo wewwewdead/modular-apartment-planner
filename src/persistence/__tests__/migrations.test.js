@@ -585,3 +585,110 @@ describe('migration_27_to_28 ceiling boundary source backfill', () => {
     expect(project.ceilings[0].boundarySource).toBe('auto');
   });
 });
+
+describe('migration_28_to_29 wall facade backfill', () => {
+  const migrate = async (project) => (await import('../migrations/migration_28_to_29.js')).migrateV28toV29(project);
+
+  it('puts every stored wall on its own axis, unstacked and platform-framed', async () => {
+    const result = await migrate({
+      id: 'p1',
+      version: 23,
+      floors: [
+        { id: 'floor_1', walls: [{ id: 'wall_a' }, { id: 'wall_b' }] },
+        { id: 'floor_2', walls: [{ id: 'wall_c' }] },
+      ],
+    });
+
+    for (const wall of result.floors.flatMap((floor) => floor.walls)) {
+      expect(wall).toMatchObject({
+        outboardOffset: 0,
+        framingMode: 'platform',
+        bypassDrop: null,
+        stackId: null,
+        // Read by the coordination checks all along, written by nothing until
+        // the panel got a control for it — so no saved wall carries one.
+        structuralRole: 'nonstructural',
+      });
+    }
+    expect(result.version).toBe(23);
+  });
+
+  it('does not overwrite a role a wall was already given', async () => {
+    const result = await migrate({
+      id: 'p1',
+      version: 23,
+      floors: [{ id: 'floor_1', walls: [{ id: 'wall_a', structuralRole: 'loadbearing' }] }],
+    });
+
+    expect(result.floors[0].walls[0].structuralRole).toBe('loadbearing');
+  });
+
+  it('keeps everything a wall already carried', async () => {
+    const result = await migrate({
+      id: 'p1',
+      version: 23,
+      floors: [{ id: 'floor_1', walls: [{ id: 'wall_a', thickness: 140, height: 2700, phaseId: 'phase_1' }] }],
+    });
+
+    expect(result.floors[0].walls[0]).toMatchObject({ thickness: 140, height: 2700, phaseId: 'phase_1' });
+  });
+
+  it('does not flatten values written by a newer build', async () => {
+    const result = await migrate({
+      id: 'p1',
+      version: 23,
+      floors: [
+        {
+          id: 'floor_1',
+          walls: [{ id: 'wall_a', outboardOffset: -200, framingMode: 'bypass', bypassDrop: 450, stackId: 'stack_1' }],
+        },
+      ],
+    });
+
+    expect(result.floors[0].walls[0]).toMatchObject({
+      outboardOffset: -200,
+      framingMode: 'bypass',
+      bypassDrop: 450,
+      stackId: 'stack_1',
+    });
+  });
+
+  it('treats an unreadable offset as no offset', async () => {
+    const result = await migrate({
+      id: 'p1',
+      version: 23,
+      floors: [{ id: 'floor_1', walls: [{ id: 'wall_a', outboardOffset: 'outward' }] }],
+    });
+
+    expect(result.floors[0].walls[0].outboardOffset).toBe(0);
+  });
+
+  it('leaves a project with no floors untouched', async () => {
+    const project = { id: 'p1', version: 23, floors: [] };
+    expect(await migrate(project)).toBe(project);
+  });
+
+  it('backfills through a full deserialize from schema 28', async () => {
+    const { deserializeProject } = await import('../deserialize.js');
+    const { createProject, createWall } = await import('@/domain/models');
+    const payload = createProject('Pre-facade save');
+    const wall = createWall({ x: 0, y: 0 }, { x: 4000, y: 0 });
+    delete wall.outboardOffset;
+    delete wall.framingMode;
+    delete wall.bypassDrop;
+    delete wall.stackId;
+    delete wall.structuralRole;
+    payload.floors[0].walls = [wall];
+
+    const { project } = deserializeProject({ schemaVersion: 28, version: payload.version, data: payload });
+
+    expect(project.floors[0].walls[0]).toMatchObject({
+      outboardOffset: 0,
+      framingMode: 'platform',
+      bypassDrop: null,
+      stackId: null,
+      structuralRole: 'nonstructural',
+    });
+    expect(project.version).toBe(23);
+  });
+});

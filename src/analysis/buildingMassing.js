@@ -12,9 +12,9 @@
  * absolute (measured from project datum), not per-floor.
  */
 
-import { wallOutline } from '@/geometry/wallGeometry';
-import { wallBaseOffset } from '@/domain/wallFit';
+import { resolveWallVerticalSpan } from '@/domain/wallFit';
 import { columnOutline } from '@/geometry/columnGeometry';
+import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { unionPolygons } from '@/geometry/polygonBoolean';
 import { buildRoofPlaneGeometry } from '@/geometry/roofPlaneGeometry';
 
@@ -34,12 +34,25 @@ function collectFloorPrisms(floor, options) {
   const defaultHeight = isFiniteNumber(floor.floorToFloorHeight) ? floor.floorToFloorHeight : 0;
 
   for (const wall of floor.walls || []) {
-    const height = isFiniteNumber(wall.height) ? wall.height : defaultHeight;
-    if (height < MIN_MASS_HEIGHT_MM) continue;
-    const outline = wallOutline(wall);
+    // A wall with no height of its own shades as a full storey — a shadow study
+    // that dropped it would report sunlight where a building stands. The span
+    // resolver is asked about the substituted wall so that it, and not this
+    // loop, still decides what the mode means.
+    const span = resolveWallVerticalSpan(
+      isFiniteNumber(wall.height) ? wall : { ...wall, height: defaultHeight },
+      floor,
+    );
+    if (span.top - span.base < MIN_MASS_HEIGHT_MM) continue;
+    // The BUILT body, not the drawn axis. A facade pushed outboard of its grid
+    // line shades from where it stands, and massing it on the line it was
+    // dimensioned from moved the whole elevation inboard — a study would then
+    // report sun on ground the building covers. Going through the render data
+    // rather than re-deriving the offset keeps one definition of where a wall
+    // is; it also trims the body back to the column faces, which is the same
+    // body every other view draws.
+    const outline = getWallRenderData(wall, floor.columns || [])?.outline || [];
     if (outline.length < 3) continue;
-    const base = floorElevation + wallBaseOffset(wall);
-    prisms.push({ outline, base, top: base + height });
+    prisms.push({ outline, base: span.base, top: span.top });
   }
 
   if (options.includeColumns) {

@@ -159,6 +159,7 @@ function TopBar({
           <input
             type="text"
             className="sketchStudioBadge sketchStudioBadgeInput"
+            aria-label="Sketch document name"
             defaultValue={document.name}
             key={document.name}
             onBlur={(e) => onDocumentNameCommit(e.target.value)}
@@ -171,7 +172,9 @@ function TopBar({
           <span className="sketchStudioBadge sketchStudioBadgeAccent">{getToolLabel(activeTool, tools)}</span>
           <span className="sketchStudioBadge">{getDocumentStatusLabel(documentPersistence)}</span>
         </div>
-        {children}
+        <nav className="sketchStudioWorkspaceActions" aria-label="Sketch workspaces">
+          {children}
+        </nav>
       </div>
 
       <div className="sketchStudioTopBarSecondary">

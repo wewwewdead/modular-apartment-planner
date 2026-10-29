@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createFloor, createProject, createSlab, createWall } from '@/domain/models';
 import { createWallDetailing } from '@/domain/wallDetailing';
+import { resolveWallVerticalSpan } from '@/domain/wallFit';
 import { createWallDetailPreviewProject } from './wallDetailPreviewProject';
 
 describe('createWallDetailPreviewProject', () => {
@@ -31,6 +32,38 @@ describe('createWallDetailPreviewProject', () => {
     expect(preview.roofSystem).toBeNull();
     expect(preview.trussSystems).toEqual([]);
     expect(preview.ceilings).toEqual([]);
+  });
+
+  // Emptying the floor takes away the deck the drop is derived from, which would
+  // stand the preview wall back up on the storey line while the elevation beside
+  // it still shows the wall running past.
+  it('pins a bypass wall’s drop so the stripped preview keeps the same span', () => {
+    const floor = createFloor('First', 1);
+    floor.elevation = 3000;
+    floor.floorToFloorHeight = 3000;
+    const wall = { ...createWall({ x: 0, y: 0 }, { x: 3000, y: 0 }, 100), framingMode: 'bypass' };
+    floor.walls = [wall];
+    floor.slabs = [
+      createSlab(
+        floor.id,
+        [
+          { x: -500, y: -500 },
+          { x: 3500, y: -500 },
+          { x: 3500, y: 500 },
+          { x: -500, y: 500 },
+        ],
+        250,
+        3000,
+      ),
+    ];
+    const project = { id: 'project', floors: [floor] };
+
+    const preview = createWallDetailPreviewProject(project, floor.id, wall.id);
+    const previewWall = preview.floors[0].walls[0];
+
+    expect(preview.floors[0].slabs).toEqual([]);
+    expect(previewWall.bypassDrop).toBe(250);
+    expect(resolveWallVerticalSpan(previewWall, preview.floors[0])).toMatchObject(resolveWallVerticalSpan(wall, floor));
   });
 
   it('carries an immutable detailing edit into a fresh preview floor', () => {

@@ -13,7 +13,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['fonts/*.woff2', 'favicon.svg', 'icons/*.png'],
       workbox: {
-        globPatterns: ['**/*.{js,css,html,woff2,png,svg}'],
+        globPatterns: ['**/*.{js,css,html,woff2,png,svg,wasm,txt}'],
+        maximumFileSizeToCacheInBytes: 30 * 1024 * 1024,
         navigateFallback: '/index.html',
         runtimeCaching: [
           {
@@ -50,6 +51,7 @@ export default defineConfig({
     environment: 'node',
     exclude: ['**/node_modules/**', '**/.claude/**'],
   },
+  worker: { format: 'es' },
   build: {
     rollupOptions: {
       output: {

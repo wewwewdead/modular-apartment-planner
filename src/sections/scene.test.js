@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildSectionScene } from './scene';
 import { createDoor, createFloor, createSectionCut, createSlab, createWall, createWindow } from '@/domain/models';
 import { sectionCutLength } from '@/geometry/sectionCutGeometry';
+import { getVisibleSectionDrawables } from './visibility';
 
 // Plan space is y-down. A single 6000 long wall runs west -> east along y = 0, 200 thick,
 // so the wall band covers y -100..100. The opening sits off-centre so that a mirrored view
@@ -79,7 +80,9 @@ describe('buildSectionScene openings', () => {
     const floor = createFloor('Ground', 0, { elevation: 0 });
     const wall = createWall({ x: -3000, y: -500 }, { x: 3000, y: 3000 }, 200, { height: 3000 });
     floor.walls = [wall];
-    floor.doors = [createDoor(wall.id, 579, 900)];
+    // Keep the broad face within the section's finite width; a face beyond
+    // the end of the cut must be clipped even if its thickness overlaps it.
+    floor.doors = [createDoor(wall.id, 1500, 900)];
 
     const cut = createSectionCut({ x: 0, y: 0 }, { x: 0, y: 1000 }, { direction: 1, depth: 4000 });
     const scene = buildSectionScene(floor, cut);
@@ -89,7 +92,9 @@ describe('buildSectionScene openings', () => {
 
     expect(wallElement?.renderMode).toBe('projection');
     expect(doorElement?.renderMode).toBe('projection');
-    expect(indexOfElement(scene, 'door')).toBeGreaterThan(indexOfElement(scene, 'wall'));
+    // Angled faces are clipped by local depth; an average-depth sort alone is
+    // no longer the visibility contract.
+    expect(getVisibleSectionDrawables(scene).some((element) => element.category === 'door')).toBe(true);
   });
 });
 
@@ -161,5 +166,46 @@ describe('buildSectionScene cut intervals with an endpoint inside a footprint', 
     const reversedSlab = findElement(buildSectionScene(floor, reversed), 'slab');
     expect(reversedSlab.left).toBeCloseTo(0, 6);
     expect(reversedSlab.right).toBeCloseTo(3000, 6);
+  });
+});
+
+describe('buildSectionScene bypass walls', () => {
+  // The wall band covers y -100..100, so a plate over the whole strip is under it.
+  const PLATE = [
+    { x: -1000, y: -2000 },
+    { x: 7000, y: -2000 },
+    { x: 7000, y: 2000 },
+    { x: -1000, y: 2000 },
+  ];
+
+  function makeBypassFloor() {
+    const floor = createFloor('First', 1, { elevation: 3000 });
+    const wall = { ...createWall(WALL_START, WALL_END, 200, { height: 2400 }), framingMode: 'bypass' };
+    const door = createDoor(wall.id, 3000, 900);
+    floor.walls = [wall];
+    floor.doors = [door];
+    floor.slabs = [createSlab(floor.id, PLATE, 250, 3000)];
+    return { floor, wall, door };
+  }
+
+  it('draws it from below its own deck to the floor above, past its stored height', () => {
+    const { floor } = makeBypassFloor();
+    const cut = createSectionCut({ x: 3000, y: -1500 }, { x: 3000, y: 1500 }, { direction: 1 });
+
+    const wallElement = findElement(buildSectionScene(floor, cut), 'wall');
+
+    // 250 below 3000, up to the floor above — not 3000..5400.
+    expect(wallElement.bottom).toBeCloseTo(2750, 6);
+    expect(wallElement.top).toBeCloseTo(6000, 6);
+  });
+
+  it('leaves its door standing on the floor rather than on the wall underside', () => {
+    const { floor, door } = makeBypassFloor();
+    const cut = createSectionCut({ x: 3000, y: -1500 }, { x: 3000, y: 1500 }, { direction: 1 });
+
+    const doorElement = findElement(buildSectionScene(floor, cut), 'door');
+
+    expect(doorElement.bottom).toBeCloseTo(3000 + door.sillHeight, 6);
+    expect(doorElement.top).toBeCloseTo(3000 + door.sillHeight + door.height, 6);
   });
 });

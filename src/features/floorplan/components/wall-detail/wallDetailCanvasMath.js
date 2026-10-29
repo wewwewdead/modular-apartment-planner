@@ -12,11 +12,28 @@ const RULER_STEP_CANDIDATES = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000
  * matches the drawing aspect exactly. Keeping the box aspect-true is what makes
  * pointer math, rulers, and "Fit wall" all agree.
  */
-export function computeCanvasFit({ frameWidth, frameHeight, length, height, margin = 56, mirrorU = false }) {
+export function computeCanvasFit({
+  frameWidth,
+  frameHeight,
+  length,
+  height,
+  margin = 56,
+  mirrorU = false,
+  originU = 0,
+}) {
   const availableWidth = Math.max(0, (Number(frameWidth) || 0) - margin * 2);
   const availableHeight = Math.max(0, (Number(frameHeight) || 0) - margin * 2);
   if (!(length > 0) || !(height > 0) || availableWidth < 40 || availableHeight < 40) {
-    return { ready: false, frameWidth: 0, frameHeight: 0, fitWidth: 0, fitHeight: 0, pxPerMm: 0, mirrorU: false };
+    return {
+      ready: false,
+      frameWidth: 0,
+      frameHeight: 0,
+      fitWidth: 0,
+      fitHeight: 0,
+      pxPerMm: 0,
+      mirrorU: false,
+      originU: 0,
+    };
   }
   const pxPerMm = Math.min(availableWidth / length, availableHeight / height);
   return {
@@ -27,6 +44,10 @@ export function computeCanvasFit({ frameWidth, frameHeight, length, height, marg
     fitHeight: height * pxPerMm,
     pxPerMm,
     mirrorU: Boolean(mirrorU),
+    // Where the fitted box starts along U. Zero for a drawing that begins at the
+    // wall's own start, and negative once a board runs back past it — the fitted
+    // width is then the BOARD's run, not the wall's, and the wall sits inside it.
+    originU: Number(originU) || 0,
   };
 }
 
@@ -48,7 +69,7 @@ export function wallPointToFrame(point, metrics, viewport) {
   const zoom = Math.max(0.001, Number(viewport?.zoom) || 1);
   const panU = Number(viewport?.panU) || 0;
   const panV = Number(viewport?.panV) || 0;
-  const uPx = (Number(point?.u) || 0) * metrics.pxPerMm;
+  const uPx = ((Number(point?.u) || 0) - (Number(metrics?.originU) || 0)) * metrics.pxPerMm;
   const displayUPx = metrics.mirrorU ? metrics.fitWidth - uPx : uPx;
   return {
     x: metrics.frameWidth / 2 + panU + zoom * (displayUPx - metrics.fitWidth / 2),

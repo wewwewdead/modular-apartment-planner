@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useConfirmDialog } from '@/ui/ConfirmDialog';
 import DraftingCanvas from './DraftingCanvas';
 import LeftToolbar from './LeftToolbar';
@@ -16,6 +16,7 @@ import useSketchBOM from '../craftsman/hooks/useSketchBOM';
 import { buildBomEntityList } from '../craftsman/utils/entityBomAdapter';
 
 const NO_BOM_ENTITIES = [];
+const CadWorkspace = lazy(() => import('../cad/CadWorkspace'));
 
 export default function SketchStudioLayout(props) {
   const importInputRef = useRef(null);
@@ -101,6 +102,7 @@ export default function SketchStudioLayout(props) {
 
   const confirm = useConfirmDialog();
   const [showGallery, setShowGallery] = useState(false);
+  const [importProfileIds, setImportProfileIds] = useState(null);
 
   useEffect(() => {
     if (ui.focusedJointId) clearFocusedJoint();
@@ -148,6 +150,31 @@ export default function SketchStudioLayout(props) {
     await importSketchFile(file);
   };
 
+  if (ui.workspaceMode === 'model')
+    return (
+      <main className="sketchStudioPage">
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".json,application/json"
+          onChange={handleImportSketchChange}
+          style={{ display: 'none' }}
+        />
+        <Suspense fallback={<p style={{ padding: 24 }}>Loading solid modeling workspace…</p>}>
+          <CadWorkspace
+            {...props}
+            openSketch={handleOpenSketch}
+            importProfileIds={importProfileIds}
+            onImportComplete={() => setImportProfileIds(null)}
+            onDrafting={() => {
+              setImportProfileIds(null);
+              props.setWorkspaceMode('draft');
+            }}
+          />
+        </Suspense>
+      </main>
+    );
+
   return (
     <main className="sketchStudioPage">
       <input
@@ -157,7 +184,7 @@ export default function SketchStudioLayout(props) {
         onChange={handleImportSketchChange}
         style={{ display: 'none' }}
       />
-      <section className="sketchStudioShell">
+      <section className={`sketchStudioShell${ui.craftsmanMode ? ' has-craftsman' : ''}`}>
         <TopBar
           document={document}
           activeTool={activeTool}
@@ -184,6 +211,19 @@ export default function SketchStudioLayout(props) {
           onDocumentNameCommit={commitDocumentName}
         >
           <CraftsmanToggle isActive={ui.craftsmanMode} onToggle={toggleCraftsmanMode} />
+          <button className="sketchStudioToolbarButton" onClick={() => props.setWorkspaceMode('model')}>
+            3D Model & workshop
+          </button>
+          <button
+            className="sketchStudioToolbarButton"
+            title="Copy closed 2D profiles into extruded 3D parts"
+            onClick={() => {
+              setImportProfileIds((selectedEntities || []).map((entity) => entity.id));
+              props.setWorkspaceMode('model');
+            }}
+          >
+            {selectedEntities?.length ? 'Send selection to 3D' : 'Import drawing into 3D'}
+          </button>
         </TopBar>
         <div className="sketchStudioWorkspace">
           <LeftToolbar tools={tools} activeTool={activeTool} onToolChange={setActiveTool} />

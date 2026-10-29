@@ -1,6 +1,6 @@
 import { generateId } from './ids';
 import { CURRENT_PROJECT_VERSION } from './projectVersion';
-import { normalizeWallHeightMode } from './wallFit';
+import { normalizeWallFramingMode, normalizeWallHeightMode } from './wallFit';
 import {
   WALL_THICKNESS,
   WALL_HEIGHT,
@@ -142,6 +142,26 @@ export function createWall(start, end, thickness = WALL_THICKNESS, options = {})
     // How far the underside sits above the floor's elevation — non-zero only
     // where a beam underfoot holds the wall up off the slab.
     baseOffset: options.baseOffset ?? 0,
+    // Signed lateral distance from the DRAWN axis to the centre of the body
+    // that actually gets built, measured along perpendicular(direction) —
+    // positive is the 'right' side looking from start to end, the same sense
+    // `wallSideOfPoint` reports. An outboard facade is drawn on the grid line
+    // and built past it; the axis stays where the structure is dimensioned.
+    outboardOffset: options.outboardOffset ?? 0,
+    // Which facade this wall belongs to across storeys, mirroring
+    // `column.stackId`. Purely a relationship key — no geometry reads it.
+    stackId: options.stackId ?? null,
+    // How the wall meets the floor structure: 'platform' sits on the plate at
+    // each level, 'bypass' runs past it — see `resolveWallVerticalSpan`.
+    framingMode: normalizeWallFramingMode(options.framingMode),
+    // How far a bypass wall drops below its floor, when the user pins it rather
+    // than letting the deck it crosses say.
+    bypassDrop: options.bypassDrop ?? null,
+    // Whether this wall carries anything. 'nonstructural' by default because
+    // that is what an undeclared wall is — the coordination checks that ask for
+    // a support relationship only have standing once someone has said the wall
+    // is holding something up.
+    structuralRole: options.structuralRole ?? 'nonstructural',
     startAttachment: options.startAttachment ?? null,
     endAttachment: options.endAttachment ?? null,
     controlPoint: options.controlPoint ?? null,
@@ -319,6 +339,12 @@ export function createSectionCut(startPoint, endPoint, options = {}) {
     startPoint: { x: startPoint.x, y: startPoint.y },
     endPoint: { x: endPoint.x, y: endPoint.y },
     depth: options.depth ?? SECTION_DEPTH,
+    depthMode:
+      options.depthMode === 'full' || options.depthMode === 'limited'
+        ? options.depthMode
+        : options.depth == null
+          ? 'full'
+          : 'limited',
     label: options.label ?? 'Section A-A',
     direction: options.direction ?? 1,
   };

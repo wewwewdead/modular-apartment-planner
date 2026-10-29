@@ -132,6 +132,25 @@ export const TOOL_DEFINITIONS = [
 
 export const TOOL_SHORTCUT_MAP = new Map(TOOL_DEFINITIONS.map((tool) => [tool.shortcut.toLowerCase(), tool.id]));
 
+// Object snap overrides Ortho (the standard CAD rule). A snap that lands on a
+// definite point of an entity -- endpoint, vertex, midpoint, corner, centre,
+// intersection, control or arc point -- is used exactly, because forcing it
+// onto the ortho axis would move it a fraction of a millimetre off the point
+// the snap marker showed, and that invisible gap is what made closed line
+// loops fail to import into 3D. Segment-derived snaps ('nearest',
+// 'perpendicular') and grid snaps only pick a point *somewhere* along a
+// curve or lattice, so the ortho lock still applies to them.
+export const ORTHO_PRESERVING_SNAP_TYPES = Object.freeze(['nearest', 'perpendicular', 'grid']);
+
+export function shouldSnapOverrideOrtho(snap) {
+  if (!snap?.point) {
+    return false;
+  }
+
+  const snapType = snap.snapType ?? snap.sourceType;
+  return Boolean(snapType) && !ORTHO_PRESERVING_SNAP_TYPES.includes(snapType);
+}
+
 export function getEmptySnapState() {
   return {
     point: null,

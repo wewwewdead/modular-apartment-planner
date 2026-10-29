@@ -245,12 +245,21 @@ export function useEditorTool({
   ]);
   /* eslint-enable react-hooks/refs, react-hooks/exhaustive-deps */
 
-  return {
-    onMouseDown: (modelPos, e) => handler?.onMouseDown?.(modelPos, e, toolState),
-    onMouseMove: (modelPos, e) => handler?.onMouseMove?.(modelPos, e, toolState, selectedId, selectedType),
-    onMouseUp: (modelPos, e) => handler?.onMouseUp?.(modelPos, e, toolState),
-    onDoubleClick: (modelPos, e) => handler?.onDoubleClick?.(modelPos, e, toolState),
-    onKeyDown: (e) => handler?.onKeyDown?.(e, toolState, selectedId, selectedType),
-    getCursor: () => handler?.getCursor?.(toolState) || 'default',
-  };
+  /*
+   * Memoized because the canvas keys work off this object: its mouse callbacks
+   * are dependencies of every pointer handler, and `onKeyDown` is a dependency
+   * of the window keydown effect. Returning a fresh object per render
+   * re-subscribed those listeners on every frame of a pan.
+   */
+  return useMemo(
+    () => ({
+      onMouseDown: (modelPos, e) => handler?.onMouseDown?.(modelPos, e, toolState),
+      onMouseMove: (modelPos, e) => handler?.onMouseMove?.(modelPos, e, toolState, selectedId, selectedType),
+      onMouseUp: (modelPos, e) => handler?.onMouseUp?.(modelPos, e, toolState),
+      onDoubleClick: (modelPos, e) => handler?.onDoubleClick?.(modelPos, e, toolState),
+      onKeyDown: (e) => handler?.onKeyDown?.(e, toolState, selectedId, selectedType),
+      getCursor: () => handler?.getCursor?.(toolState) || 'default',
+    }),
+    [handler, toolState, selectedId, selectedType],
+  );
 }

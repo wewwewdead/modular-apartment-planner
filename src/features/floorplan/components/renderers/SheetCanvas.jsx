@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useEditor } from '@/features/floorplan/context/FloorplanContext';
+import { useEditorState, useViewport } from '@/features/floorplan/context/FloorplanContext';
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
 import { useDragGestureRelease } from '@/features/floorplan/hooks/useDragGestureRelease';
 import { MAX_ZOOM, MIN_ZOOM, ZOOM_FACTOR } from '@/domain/defaults';
@@ -24,7 +24,8 @@ export default function SheetCanvas() {
   const lastPanPos = useRef({ x: 0, y: 0 });
 
   const { project, dispatch } = useProject();
-  const { activeSheetId, selectedId, selectedType, viewport, dispatch: editorDispatch } = useEditor();
+  const { activeSheetId, selectedId, selectedType, dispatch: editorDispatch } = useEditorState();
+  const viewport = useViewport();
 
   useDragGestureRelease(dispatch);
 

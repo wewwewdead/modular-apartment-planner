@@ -1,6 +1,6 @@
 import { createContext, useContext, useDeferredValue, useMemo } from 'react';
 import { computeDaylightStudy } from '@/analysis/daylightRunner';
-import { useFloorplanContext } from './FloorplanContext';
+import { useEditorState, useFloorplanSelectors, useProject } from './FloorplanContext';
 import { useDaylightGrid } from '../hooks/useDaylightGrid';
 import { useSolarAccess } from '../hooks/useSolarAccess';
 import { useSunDayStudy } from '../hooks/useSunDayStudy';
@@ -24,12 +24,15 @@ import { computeInstantShadow } from '@/analysis/sunStudyRunner';
 const DaylightStudyContext = createContext(null);
 
 export function DaylightStudyProvider({ children }) {
-  const { state, selectors } = useFloorplanContext();
-  const daylight = state.editor.daylight;
-  const floorId = state.editor.activeFloorId;
+  // Read through the narrow windows onto the store rather than the store itself:
+  // none of these studies has anything to say about a pan, and this provider
+  // sits above the whole workspace.
+  const { changeVersion } = useProject();
+  const { activeFloorId, activePhaseId, phaseViewMode, daylight, sunStudy, solarAccess } = useEditorState();
+  const selectors = useFloorplanSelectors();
+  const floorId = activeFloorId;
   const project = selectors.filteredProject;
-  const projectRevision = `${state.changeVersion}|${state.editor.activePhaseId || ''}|${state.editor.phaseViewMode || ''}`;
-  const sunStudy = state.editor.sunStudy;
+  const projectRevision = `${changeVersion}|${activePhaseId || ''}|${phaseViewMode || ''}`;
 
   // The day-scale half runs on a worker (with a synchronous fallback inside the
   // hook); only the per-minute instant shadow is computed here, because it is
@@ -64,7 +67,7 @@ export function DaylightStudyProvider({ children }) {
    * and the same reason for not being computed twice: its worker run costs
    * seconds, and two of them would race.
    */
-  const solar = useSolarAccess({ project, solarAccess: state.editor.solarAccess, projectRevision });
+  const solar = useSolarAccess({ project, solarAccess, projectRevision });
 
   const value = useMemo(() => {
     const inGridMode = daylight?.enabled && daylight.mode === 'grid';
@@ -80,7 +83,7 @@ export function DaylightStudyProvider({ children }) {
       gridStale: grid.stale,
       recomputing: deferredInput !== input,
 
-      solarAccess: state.editor.solarAccess,
+      solarAccess,
       solarStudy: solar.study,
       solarStatus: solar.status,
       solarProgress: solar.progress,
@@ -108,7 +111,7 @@ export function DaylightStudyProvider({ children }) {
     solar.stale,
     solar.status,
     solar.study,
-    state.editor.solarAccess,
+    solarAccess,
   ]);
 
   return <DaylightStudyContext.Provider value={value}>{children}</DaylightStudyContext.Provider>;

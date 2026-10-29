@@ -320,6 +320,339 @@ describe('slab overhang coordination', () => {
   });
 });
 
+/* ── Walls on and off the plate ───────────────────────────────────────── */
+
+function wallFloorProject({ walls = [], slabs = [] } = {}) {
+  return {
+    floors: [
+      {
+        ...createFloor('Ground', 0, { elevation: 0, floorToFloorHeight: 3000 }),
+        id: 'ground',
+        slabs,
+        walls,
+      },
+    ],
+  };
+}
+
+/** The plate every wall case below is measured against: 6 m square at the origin. */
+function groundPlate() {
+  return { ...createSlab('ground', rectangle(0, 0, 6000, 6000), 200, 0), id: 'slab_ground' };
+}
+
+function ruleIds(issues, ruleId) {
+  return issues.filter((entry) => entry.ruleId === ruleId);
+}
+
+describe('bypass walls with nothing underneath', () => {
+  it('reports a bypass wall standing clear of every slab and beam on its floor', () => {
+    const wall = {
+      ...createWall({ x: 0, y: 10000 }, { x: 6000, y: 10000 }, 200, { framingMode: 'bypass' }),
+      id: 'wall_hanging',
+    };
+    const [reported] = ruleIds(
+      validateStructuralCoordination(wallFloorProject({ walls: [wall], slabs: [groundPlate()] })),
+      'STRUCT.BYPASS_WALL_UNSUPPORTED',
+    );
+
+    expect(reported).toMatchObject({
+      severity: 'warning',
+      professionalReviewRequired: true,
+      entityRefs: [{ type: 'wall', id: 'wall_hanging' }],
+    });
+    expect(reported.evidence.inputs).toMatchObject({ floorId: 'ground', unsupportedRatio: 1 });
+    expect(reported.evidence.inputs.unsupportedRun).toBeCloseTo(6000, 6);
+  });
+
+  it('stays quiet about a bypass wall standing on the plate, edge included', () => {
+    // Drawn ON the plate boundary, which is where the bay macro puts one: half
+    // the body is over the plate and that is bearing, not a wall in the air.
+    const walls = [
+      { ...createWall({ x: 1000, y: 3000 }, { x: 5000, y: 3000 }, 200, { framingMode: 'bypass' }), id: 'wall_inside' },
+      { ...createWall({ x: 0, y: 6000 }, { x: 6000, y: 6000 }, 200, { framingMode: 'bypass' }), id: 'wall_on_edge' },
+    ];
+
+    expect(
+      ruleIds(
+        validateStructuralCoordination(wallFloorProject({ walls, slabs: [groundPlate()] })),
+        'STRUCT.BYPASS_WALL_UNSUPPORTED',
+      ),
+    ).toEqual([]);
+  });
+
+  it('says nothing about a platform wall in mid-air — that is a different question', () => {
+    const wall = { ...createWall({ x: 0, y: 10000 }, { x: 6000, y: 10000 }, 200), id: 'wall_platform' };
+
+    expect(
+      ruleIds(
+        validateStructuralCoordination(wallFloorProject({ walls: [wall], slabs: [groundPlate()] })),
+        'STRUCT.BYPASS_WALL_UNSUPPORTED',
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe('walls that slide off the plate they bear on', () => {
+  it('measures how far the built body reaches past the slab edge', () => {
+    // Drawn 1050 inboard of the plate edge and built past it: the body's centre
+    // sits 50 beyond y = 6000, so the bearing line itself has left the slab and
+    // the outer face reaches 150 past — more than the half-thickness-plus-
+    // tolerance allowance of 125.
+    const wall = {
+      ...createWall({ x: 0, y: 5000 }, { x: 6000, y: 5000 }, 200, { outboardOffset: 1050 }),
+      id: 'wall_slid',
+    };
+    const [reported] = ruleIds(
+      validateStructuralCoordination(wallFloorProject({ walls: [wall], slabs: [groundPlate()] })),
+      'STRUCT.WALL_OFF_SLAB_EDGE',
+    );
+
+    expect(reported).toMatchObject({
+      severity: 'warning',
+      entityRefs: [{ type: 'wall', id: 'wall_slid' }],
+      evidence: { resultKind: 'verified_geometry' },
+    });
+    expect(reported.evidence.inputs).toMatchObject({ tolerance: 25, allowance: 125, outboardOffset: 1050 });
+    expect(reported.evidence.inputs.overrun).toBeCloseTo(150, 6);
+  });
+
+  it('tolerates the half body that hangs past a slab traced to the centreline', () => {
+    // The test-fit generator (and plenty of hand drawing) puts the slab edge on
+    // the wall axis, so half the thickness legitimately oversails on every
+    // perimeter wall. The bearing line is still on the plate — no warning.
+    const wall = { ...createWall({ x: 0, y: 6000 }, { x: 6000, y: 6000 }, 200), id: 'wall_centreline' };
+
+    expect(
+      ruleIds(
+        validateStructuralCoordination(wallFloorProject({ walls: [wall], slabs: [groundPlate()] })),
+        'STRUCT.WALL_OFF_SLAB_EDGE',
+      ),
+    ).toEqual([]);
+  });
+
+  it('leaves a wall sitting squarely on its plate alone', () => {
+    const wall = { ...createWall({ x: 0, y: 5000 }, { x: 6000, y: 5000 }, 200), id: 'wall_on_plate' };
+
+    expect(
+      ruleIds(
+        validateStructuralCoordination(wallFloorProject({ walls: [wall], slabs: [groundPlate()] })),
+        'STRUCT.WALL_OFF_SLAB_EDGE',
+      ),
+    ).toEqual([]);
+  });
+
+  it('says nothing about a wall that never reached a plate in the first place', () => {
+    // Nothing of it is on the slab, so it did not slide off one. Silence here is
+    // what keeps a garden wall out of the structural report.
+    const wall = { ...createWall({ x: 0, y: 12000 }, { x: 6000, y: 12000 }, 200), id: 'wall_elsewhere' };
+
+    expect(
+      ruleIds(
+        validateStructuralCoordination(wallFloorProject({ walls: [wall], slabs: [groundPlate()] })),
+        'STRUCT.WALL_OFF_SLAB_EDGE',
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe('a cantilever carrying a wall', () => {
+  function bayProject(walls) {
+    const project = stackedProject();
+    project.floors[1].walls = walls;
+    return project;
+  }
+
+  it('reports the load condition when a wall stands on the projecting edge', () => {
+    const wall = { ...createWall({ x: 0, y: 8000 }, { x: 6000, y: 8000 }, 200), id: 'wall_face' };
+    const [reported] = ruleIds(validateStructuralCoordination(bayProject([wall])), 'STRUCT.CANTILEVER_CARRIES_WALL');
+
+    expect(reported).toMatchObject({
+      // Informational: a bay is MEANT to carry its own facade. It still has to
+      // appear, because the load case it implies is not the bare-plate one.
+      severity: 'info',
+      professionalReviewRequired: true,
+      entityRefs: [
+        { type: 'slab', id: 'slab_upper' },
+        { type: 'wall', id: 'wall_face' },
+      ],
+    });
+    expect(reported.evidence.inputs).toMatchObject({ wallIds: ['wall_face'], floorId: 'first' });
+  });
+
+  it('does not report a wall standing on the back-span', () => {
+    const wall = { ...createWall({ x: 0, y: 3000 }, { x: 6000, y: 3000 }, 200), id: 'wall_inboard' };
+
+    expect(ruleIds(validateStructuralCoordination(bayProject([wall])), 'STRUCT.CANTILEVER_CARRIES_WALL')).toEqual([]);
+    expect(ruleIds(validateStructuralCoordination(stackedProject()), 'STRUCT.CANTILEVER_CARRIES_WALL')).toEqual([]);
+  });
+});
+
+/* ── Bays across storeys ──────────────────────────────────────────────── */
+
+function bayWall(id, start, end, overrides = {}) {
+  return { ...createWall(start, end, 200, { stackId: 'bay_1', ...overrides }), id };
+}
+
+function stackedBayProject(wallsByFloor) {
+  return {
+    floors: wallsByFloor.map((walls, index) => ({
+      ...createFloor(`Level ${index}`, index, { elevation: index * 3000, floorToFloorHeight: 3000 }),
+      id: `level_${index}`,
+      walls,
+    })),
+  };
+}
+
+describe('bay stacks across storeys', () => {
+  const face = (id, overrides) => bayWall(id, { x: 0, y: 6000 }, { x: 3000, y: 6000 }, overrides);
+
+  it('says nothing about bays that line up storey to storey', () => {
+    const issues = validateStructuralCoordination(stackedBayProject([[face('wall_lower')], [face('wall_upper')]]));
+
+    expect(ruleIds(issues, 'STRUCT.BAY_STACK_MISALIGNED')).toEqual([]);
+    expect(ruleIds(issues, 'STRUCT.BAY_STACK_DISCONTINUITY')).toEqual([]);
+  });
+
+  it('accepts a bay traced the other way round on the storey above', () => {
+    const reversed = bayWall('wall_upper', { x: 3000, y: 6000 }, { x: 0, y: 6000 });
+    const issues = validateStructuralCoordination(stackedBayProject([[face('wall_lower')], [reversed]]));
+
+    expect(ruleIds(issues, 'STRUCT.BAY_STACK_MISALIGNED')).toEqual([]);
+  });
+
+  it('reports a bay whose axis has drifted off the one below it', () => {
+    const drifted = bayWall('wall_upper', { x: 0, y: 6200 }, { x: 3000, y: 6200 });
+    const [reported] = ruleIds(
+      validateStructuralCoordination(stackedBayProject([[face('wall_lower')], [drifted]])),
+      'STRUCT.BAY_STACK_MISALIGNED',
+    );
+
+    expect(reported).toMatchObject({
+      severity: 'warning',
+      entityRefs: [
+        { type: 'wallStack', id: 'bay_1' },
+        { type: 'wall', id: 'wall_upper' },
+      ],
+    });
+    expect(reported.message).toBe('Wall is 200 mm from the bay stack axis below it.');
+    expect(reported.evidence.inputs).toMatchObject({
+      tolerance: 25,
+      referenceWallId: 'wall_lower',
+      referenceFloorId: 'level_0',
+    });
+    expect(reported.evidence.inputs.axisOffset).toBeCloseTo(200, 6);
+  });
+
+  it('reports a bay built the same distance out on one storey and further on the next', () => {
+    // Same drawn axis, different built body: a facade 300 further out is as out
+    // of line as one drawn 300 further out, and only the offset says so.
+    const pushed = face('wall_upper', { outboardOffset: 300 });
+    const [reported] = ruleIds(
+      validateStructuralCoordination(stackedBayProject([[face('wall_lower')], [pushed]])),
+      'STRUCT.BAY_STACK_MISALIGNED',
+    );
+
+    expect(reported.evidence.inputs).toMatchObject({ axisOffset: 0, outboardOffsetDelta: 300, offset: 300 });
+  });
+
+  it('reports a stack that skips a storey', () => {
+    const [reported] = ruleIds(
+      validateStructuralCoordination(stackedBayProject([[face('wall_lower')], [], [face('wall_top')]])),
+      'STRUCT.BAY_STACK_DISCONTINUITY',
+    );
+
+    expect(reported).toMatchObject({
+      severity: 'warning',
+      entityRefs: [
+        { type: 'wallStack', id: 'bay_1' },
+        { type: 'floor', id: 'level_1' },
+      ],
+    });
+    expect(reported.evidence.inputs).toMatchObject({ missingFloorId: 'level_1' });
+  });
+
+  it('never calls a single-storey bay a discontinuity', () => {
+    // Bays are legitimately one storey tall, and deleting the floor above one
+    // must not turn the survivor into a finding.
+    const oneStorey = validateStructuralCoordination(stackedBayProject([[face('wall_only')], [], []]));
+
+    expect(ruleIds(oneStorey, 'STRUCT.BAY_STACK_DISCONTINUITY')).toEqual([]);
+    expect(ruleIds(oneStorey, 'STRUCT.BAY_STACK_MISALIGNED')).toEqual([]);
+  });
+
+  it('pairs up the three walls of a bay rather than comparing a face to a return', () => {
+    // The macro gives a face and two returns one stackId, so a storey brings
+    // three walls to the stack, not one.
+    const storey = (suffix) => [
+      bayWall(`face_${suffix}`, { x: 0, y: 6000 }, { x: 3000, y: 6000 }),
+      bayWall(`left_${suffix}`, { x: 0, y: 5000 }, { x: 0, y: 6000 }),
+      bayWall(`right_${suffix}`, { x: 3000, y: 5000 }, { x: 3000, y: 6000 }),
+    ];
+    const issues = validateStructuralCoordination(stackedBayProject([storey('a'), storey('b')]));
+
+    expect(ruleIds(issues, 'STRUCT.BAY_STACK_MISALIGNED')).toEqual([]);
+  });
+
+  it('ignores walls that belong to no stack at all', () => {
+    const loose = { ...createWall({ x: 0, y: 0 }, { x: 3000, y: 0 }, 200), id: 'wall_loose' };
+    const issues = validateStructuralCoordination(stackedBayProject([[loose], [loose]]));
+
+    expect(ruleIds(issues, 'STRUCT.BAY_STACK_MISALIGNED')).toEqual([]);
+    expect(ruleIds(issues, 'STRUCT.BAY_STACK_DISCONTINUITY')).toEqual([]);
+  });
+});
+
+describe('the structural role a wall can now be given', () => {
+  it('asks a load-bearing wall what it stands on, and asks nothing of a partition', () => {
+    const project = createProject();
+    const floor = project.floors[0];
+    floor.walls = [
+      { ...createWall({ x: 0, y: 0 }, { x: 4000, y: 0 }), id: 'wall_bearing', structuralRole: 'loadbearing' },
+      { ...createWall({ x: 0, y: 2000 }, { x: 4000, y: 2000 }), id: 'wall_partition' },
+    ];
+
+    const reported = ruleIds(validateStructuralCoordination(project), 'STRUCT.LOADBEARING_WALL_SUPPORT_MISSING');
+
+    expect(reported).toHaveLength(1);
+    expect(reported[0]).toMatchObject({
+      severity: 'warning',
+      entityRefs: [{ type: 'wall', id: 'wall_bearing' }],
+      evidence: { inputs: { structuralRole: 'loadbearing' } },
+    });
+  });
+
+  it('stops asking once the wall names what carries it', () => {
+    const project = createProject();
+    project.floors[0].walls = [
+      {
+        ...createWall({ x: 0, y: 0 }, { x: 4000, y: 0 }),
+        id: 'wall_bearing',
+        structuralRole: 'loadbearing',
+        supportRef: { kind: 'foundation', id: 'future_foundation' },
+      },
+    ];
+
+    expect(ruleIds(validateStructuralCoordination(project), 'STRUCT.LOADBEARING_WALL_SUPPORT_MISSING')).toEqual([]);
+  });
+
+  it('offers a load-bearing wall to a slab as one of the members carrying it', () => {
+    const project = createProject();
+    const floor = project.floors[0];
+    const bearing = { ...createWall({ x: 0, y: 2000 }, { x: 4000, y: 2000 }), id: 'wall_bearing' };
+    const partition = { ...createWall({ x: 0, y: 1000 }, { x: 4000, y: 1000 }), id: 'wall_partition' };
+    floor.walls = [bearing, partition];
+    const slab = { ...createSlab(floor.id, rectangle(0, 0, 4000, 4000), 150, 0), id: 'slab_1' };
+
+    // A wall created today is non-structural, so neither is a candidate.
+    expect(inferSlabSupportRefs(floor, slab)).toEqual([]);
+
+    bearing.structuralRole = 'loadbearing';
+    expect(inferSlabSupportRefs(floor, slab)).toEqual([
+      expect.objectContaining({ kind: 'wall', id: 'wall_bearing', role: 'loadbearing' }),
+    ]);
+  });
+});
+
 describe('cross-floor slab support', () => {
   const project = stackedProject({
     beams: [edgeBeam('beam_edge', 7950, 2800)],

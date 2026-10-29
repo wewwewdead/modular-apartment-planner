@@ -5,6 +5,8 @@ import {
   taggedCylinderGeometry,
   unitOutlineGeometry,
 } from './previewBatching';
+import { MAX_ACTIVE_FIXTURE_LIGHTS } from './previewPerf';
+import { freezeStaticMatrices } from './staticMatrices';
 
 /**
  * Two selection accents, because the two previews answer different questions.
@@ -109,9 +111,29 @@ function createMesh(geometry, material) {
   return mesh;
 }
 
-function addOutline(object3d, materialPalette) {
+/**
+ * Hang the edge overlay off a mesh — or note that it wants one, if the style on
+ * screen does not draw them.
+ *
+ * The Realistic style has no outlines at all, and it is the default, so building
+ * them was the whole model measuring its own edges and then hanging a second
+ * Object3D off every mesh for a drawing convention nobody had asked for. That is
+ * paid twice: once in `EdgesGeometry`, the most expensive thing a rebuild does
+ * per mesh, and once every frame in the matrix walk over a graph it doubles.
+ *
+ * The mark left behind is what makes the toggle work in both directions:
+ * `ensureOutlines` can come back later, find the meshes that wanted one, and
+ * build it then — off a geometry that is still sitting there, so the lazy result
+ * is the same object the eager path would have made.
+ */
+function addOutline(object3d, materialPalette, { force = false } = {}) {
   const geometry = object3d.geometry;
   if (!geometry) return;
+
+  if (!force && materialPalette.outlinesEnabled === false) {
+    object3d.userData = { ...object3d.userData, wantsOutline: true };
+    return;
+  }
 
   // A box's twelve edges are the unit box's twelve edges scaled, so the whole
   // model draws one set of them rather than measuring its own for every stud.
@@ -129,6 +151,39 @@ function addOutline(object3d, materialPalette) {
   const edges = new THREE.EdgesGeometry(geometry, 20);
   const outline = new THREE.LineSegments(edges, materialPalette.outline);
   object3d.add(outline);
+}
+
+/**
+ * Build the outlines a world was allowed to skip, for a style that draws them.
+ *
+ * Called when the render style switches to one with outlines, against a world
+ * that was built under one without. Only the meshes that asked for an outline
+ * get one — glass, ceiling screw heads and luminaire lenses were never marked,
+ * so they stay bare exactly as they would have on the eager path.
+ *
+ * The lines this makes are drawn individually rather than folded into the
+ * floor's merged outline: the batch was made when there was nothing to merge, and
+ * re-cutting it here would mean disposing instance buffers the cache still holds
+ * a reference to. The next rebuild of a floor merges them properly. That is the
+ * one cost of the lazy path, it lands on a deliberate view switch rather than on
+ * every frame of every drag, and it heals itself the first time anything moves.
+ */
+export function ensureOutlines(root, materialPalette) {
+  if (!root) return false;
+
+  const pending = [];
+  root.traverse((node) => {
+    if (node.userData?.wantsOutline) pending.push(node);
+  });
+
+  for (const node of pending) {
+    delete node.userData.wantsOutline;
+    // Forced: the caller has already decided these lines are wanted, and the
+    // selection overlay wants them in every style.
+    addOutline(node, materialPalette, { force: true });
+  }
+
+  return pending.length > 0;
 }
 
 function createPrismObject(descriptor, materialPalette) {
@@ -421,6 +476,72 @@ function createWindowObject(descriptor, materialPalette) {
   group.position.copy(center);
   group.rotation.y = planAngleToWorldRotation(descriptor.rotation);
 
+  return group;
+}
+
+function createDoorObject(descriptor, materialPalette) {
+  const group = new THREE.Group();
+  const { x: width, y: height, z: depth } = descriptor.size;
+  const doorType = descriptor.doorType || 'swing';
+
+  const leaf = createMesh(
+    taggedBoxGeometry(Math.max(width, 1), Math.max(height, 1), Math.max(depth, 1)),
+    materialPalette[descriptor.materialKey],
+  );
+  addOutline(leaf, materialPalette);
+  group.add(leaf);
+
+  const hardwareMaterial = materialPalette.fixtureAccentMetal;
+
+  // Hardware centre sits ~1m off the leaf base like real knobs; the clamp keeps
+  // it on the leaf when a wall span clips the visible height short.
+  const hardwareY = Math.min(1020 - height / 2, height / 2 - 120);
+
+  // No outlines and no shadows on hardware: a 30mm knob's shadow is invisible,
+  // and doors are exempt from batching so every mesh here is its own draw call.
+  const addHardware = (geometry, px, pz) => {
+    const mesh = createMesh(geometry, hardwareMaterial);
+    mesh.rotation.x = Math.PI / 2;
+    mesh.position.set(px, hardwareY, pz);
+    mesh.castShadow = false;
+    group.add(mesh);
+  };
+
+  // Stem plus a fat disc for the head, one of each per face.
+  const addKnob = (px) => {
+    for (const side of [1, -1]) {
+      addHardware(taggedCylinderGeometry(11, 11, 48, 12), px, side * (depth / 2 + 24));
+      addHardware(taggedCylinderGeometry(30, 30, 30, 12), px, side * (depth / 2 + 63));
+    }
+  };
+
+  if (doorType === 'double') {
+    // Two leaves meet in the middle, so the knobs pair up on the meeting stiles.
+    addKnob(-64);
+    addKnob(64);
+    const seam = createMesh(
+      taggedBoxGeometry(6, Math.max(height - 2, 1), Math.max(depth + 2, 1)),
+      materialPalette.fixtureAccentDark,
+    );
+    seam.castShadow = false;
+    group.add(seam);
+  } else if (doorType === 'sliding') {
+    // A vertical pull bar at the leading edge instead of a knob.
+    const barHeight = Math.min(350, Math.max(height * 0.2, 120));
+    for (const side of [1, -1]) {
+      const bar = createMesh(taggedBoxGeometry(34, barHeight, 22), hardwareMaterial);
+      bar.position.set(width / 2 - 90, hardwareY, side * (depth / 2 + 11));
+      bar.castShadow = false;
+      group.add(bar);
+    }
+  } else {
+    // The hinge lives at the start end of the opening (-x), so the knob takes
+    // the latch edge on the other.
+    addKnob(width / 2 - Math.min(75, width * 0.15));
+  }
+
+  group.position.copy(planPointToWorld(descriptor.center, descriptor.baseElevation + height / 2));
+  group.rotation.y = planAngleToWorldRotation(descriptor.rotation);
   return group;
 }
 
@@ -732,12 +853,17 @@ export const UNLIT_LENS_EMISSIVE_INTENSITY = 0.06;
 const FIXTURE_SHADOW_MAP_SIZE = 1024;
 
 /**
- * At most this many luminaires cast shadows per floor.
+ * At most this many luminaires cast shadows in the whole scene.
  *
  * A shadow-casting light is a full extra render pass over the scene (six, for a
  * point light's cube map), and a flat can easily hold thirty downlights. The
  * brightest are the ones whose shadows are legible, so they are the ones that
  * keep the budget; the rest still light the room, they just do not occlude.
+ *
+ * Per scene rather than per floor, and that distinction is the whole reason the
+ * cap moved out of the floor builder: a shadow pass is charged by the renderer,
+ * which has never heard of a floor, so a two-storey project used to run sixteen
+ * 1024² maps beside the sun's own 4096² one for a budget written as eight.
  */
 export const MAX_FIXTURE_SHADOW_LIGHTS = 8;
 
@@ -1121,38 +1247,130 @@ function createCeilingLightSourceObject(descriptor) {
 }
 
 /**
- * Hold the floor to `MAX_FIXTURE_SHADOW_LIGHTS` shadow casters, brightest first.
+ * Which lamp outranks which, when there is not enough of the budget to go round.
+ *
+ * Intensity descending with the id breaking ties, so the same scene always
+ * demotes the same lamps — an unstable choice would flicker the shadows and the
+ * light count on every rebuild, and a changing light count recompiles every
+ * shader in the building.
+ *
+ * Floor visibility sorts ahead of both, so the lamps that are actually on screen
+ * come first and the budget is spent in one pass. The rule that a hidden floor
+ * cannot take a slot is enforced in the loop rather than here — it is not a
+ * question of rank, it is that a light nothing will render is not competing.
+ */
+function compareLightPriority(a, b) {
+  const visibility = Number(b.floorVisible !== false) - Number(a.floorVisible !== false);
+  if (visibility) return visibility;
+  const intensity = (b.descriptor.intensity || 0) - (a.descriptor.intensity || 0);
+  if (intensity) return intensity;
+  return String(a.descriptor.id).localeCompare(String(b.descriptor.id));
+}
+
+/**
+ * Write a budget decision onto the THREE light inside a built luminaire.
+ *
+ * `lit` is the light's own say in whether it is drawn; the interior-lights
+ * switch has the other say, and `applyInteriorLighting` reads `budgetSuppressed`
+ * so that flipping the lamps back on does not resurrect one the budget dropped.
+ */
+function setFixtureLightState(object, { lit, casting, baseIntensity }) {
+  object.traverse((node) => {
+    if (!node.userData?.isFixtureLight) return;
+
+    if (baseIntensity !== undefined && node.userData.baseIntensity !== baseIntensity) {
+      node.userData.baseIntensity = baseIntensity;
+      // The unscaled figure, which is what the light carried when it was built.
+      // `applyInteriorLighting` overwrites it with the rig's adaptation the
+      // moment there is a viewport; without one — a still, a test — this is the
+      // right answer on its own.
+      node.intensity = baseIntensity;
+    }
+
+    node.userData.budgetSuppressed = !lit;
+    if (node.visible !== lit) node.visible = lit;
+
+    if (node.castShadow !== casting) {
+      node.castShadow = casting;
+      // A map that was never rendered, or was rendered before the light was
+      // demoted, has to be asked for again.
+      if (casting && node.shadow) node.shadow.needsUpdate = true;
+    }
+  });
+}
+
+/**
+ * Hold the whole scene to what the renderer can afford in lights, once every
+ * floor is built.
  *
  * A post-pass rather than a decision in the descriptor: the descriptor records
  * what the user asked for, and a fixture that loses the budget on a crowded
- * ceiling has to win it back on its own when the neighbours are deleted. Sorted
- * by intensity and broken by id so the same floor always demotes the same lamps
- * — an unstable choice would flicker the shadows on every rebuild.
+ * ceiling has to win it back on its own when the neighbours are deleted. It runs
+ * over the finished mesh map — every floor, the roof pseudo-floor, and the ones
+ * the cache handed back untouched — because both budgets are statements about
+ * the *scene*: the renderer charges for a shadow pass and for a light in the
+ * fragment loop without ever asking which storey it came from.
+ *
+ * Two budgets, in the order they have to be applied:
+ *
+ *  1. **Active lights.** The brightest `MAX_ACTIVE_FIXTURE_LIGHTS` lamps stay
+ *     real lights. The rest are switched off and their flux is folded into the
+ *     aggregated bounce fill for their patch of ceiling
+ *     (`descriptor.bounceLightId`), spread over the sphere instead of thrown
+ *     through the beam. The room keeps its lumens and loses the pool under the
+ *     fitting — the honest trade, and the only one available: three has no way
+ *     to light a fragment from a light that is not in the list.
+ *  2. **Shadow casters.** Only among the lamps that survived the first budget,
+ *     since a light that is not lighting anything has no shadow to cast.
+ *
+ * Bounce fills are never suppressed. There are only a handful of them after
+ * aggregation, they are where the suppressed lamps go, and they are the term
+ * that keeps a room from reading as a black box.
  */
-function applyFixtureShadowCap(entries) {
-  const lights = [];
-  for (const entry of entries.values()) {
-    if (entry.descriptor.geometry === 'ceilingLightSource') lights.push(entry);
+export function applySceneLightBudgets(meshMap) {
+  const lamps = [];
+  const bounces = [];
+  for (const entry of meshMap.values()) {
+    if (entry.descriptor.geometry !== 'ceilingLightSource') continue;
+    if (entry.descriptor.role === 'bounce') bounces.push(entry);
+    else lamps.push(entry);
   }
-  if (!lights.length) return;
+  if (!lamps.length && !bounces.length) return;
 
-  lights.sort(
-    (a, b) =>
-      (b.descriptor.intensity || 0) - (a.descriptor.intensity || 0) ||
-      String(a.descriptor.id).localeCompare(String(b.descriptor.id)),
-  );
+  lamps.sort(compareLightPriority);
 
-  let granted = 0;
-  for (const entry of lights) {
-    const allowed = Boolean(entry.descriptor.castShadow) && granted < MAX_FIXTURE_SHADOW_LIGHTS;
-    if (allowed) granted += 1;
-    entry.object.traverse((node) => {
-      if (!node.userData?.isFixtureLight || node.castShadow === allowed) return;
-      node.castShadow = allowed;
-      // A map that was never rendered, or was rendered before the light was
-      // demoted, has to be asked for again.
-      if (allowed && node.shadow) node.shadow.needsUpdate = true;
-    });
+  const foldedFill = new Map();
+  let active = 0;
+  let casters = 0;
+
+  for (const entry of lamps) {
+    // A lamp under a hidden floor group is never reached by `projectObject`, so
+    // it is not in the render list, not in the fragment loop and not rendering a
+    // shadow map. It neither costs a budget nor spends one — but its state is
+    // written all the same, so the graph never carries a decision left over from
+    // a build where its floor was on screen.
+    const onScreen = entry.floorVisible !== false;
+    const lit = !onScreen || active < MAX_ACTIVE_FIXTURE_LIGHTS;
+    if (onScreen && lit) {
+      active += 1;
+    } else if (!lit) {
+      const target = entry.descriptor.bounceLightId;
+      const fill = entry.descriptor.fillIntensity || 0;
+      if (target && fill > 0) foldedFill.set(target, (foldedFill.get(target) || 0) + fill);
+    }
+
+    const casting = onScreen && lit && Boolean(entry.descriptor.castShadow) && casters < MAX_FIXTURE_SHADOW_LIGHTS;
+    if (casting) casters += 1;
+    setFixtureLightState(entry.object, { lit, casting });
+  }
+
+  for (const entry of bounces) {
+    // Always recomputed from the descriptor rather than added to what the light
+    // is carrying: this pass runs on every rebuild, over lights that survived
+    // the last one, and an accumulating fold would brighten the room a little
+    // more every time a wall was dragged.
+    const intensity = (entry.descriptor.intensity || 0) + (foldedFill.get(entry.descriptor.id) || 0);
+    setFixtureLightState(entry.object, { lit: true, casting: false, baseIntensity: intensity });
   }
 }
 
@@ -1266,6 +1484,7 @@ function createObjectForDescriptor(descriptor, materialPalette) {
   if (descriptor.geometry === 'stair') return createStairObject(descriptor, materialPalette);
   if (descriptor.geometry === 'segment3d') return createSegment3DObject(descriptor, materialPalette);
   if (descriptor.geometry === 'window') return createWindowObject(descriptor, materialPalette);
+  if (descriptor.geometry === 'door') return createDoorObject(descriptor, materialPalette);
   if (descriptor.geometry === 'railing') return createRailingObject(descriptor, materialPalette);
   if (descriptor.geometry === 'fixture') return createFixtureObject(descriptor, materialPalette);
   if (descriptor.geometry === 'electricalDevice') return createElectricalDeviceObject(descriptor, materialPalette);
@@ -1409,6 +1628,10 @@ export function buildFloorObjectGroup(floor, materialPalette, previousEntries = 
     if (!carriedOver) {
       object.name = descriptor.id;
       object.userData = {
+        // Spread rather than replaced: a mesh that is its own descriptor's root
+        // may already be carrying the note that it wants an outline, and that
+        // note is the only record that the style skipped one.
+        ...object.userData,
         id: descriptor.id,
         kind: descriptor.kind,
         metadata: descriptor.metadata,
@@ -1425,12 +1648,12 @@ export function buildFloorObjectGroup(floor, materialPalette, previousEntries = 
     });
   }
 
-  // After the whole floor is known: which lamps get shadows is a decision about
-  // the set of them, and carried-over lights have to be re-judged against the
-  // ones that were just rebuilt beside them.
-  applyFixtureShadowCap(entries);
+  // The light budgets are deliberately NOT applied here. Which lamps are lit and
+  // which cast shadows is a decision about the whole scene — see
+  // `applySceneLightBudgets`, which the callers run once every floor, including
+  // every floor the cache handed back untouched, is in place.
 
-  // Also after the whole floor is known, and for the same reason: a batch is a
+  // After the whole floor is known: a batch is a
   // statement about a set of meshes, so it can only be made once they are all
   // in place — carried-over ones included. `previousBatchGroup` may come back
   // as the returned one, refilled rather than rebuilt; the caller compares
@@ -1454,6 +1677,11 @@ export function buildPreviewObjectRoot(sceneDescriptor, materialPalette) {
     }
     root.add(floorGroup);
   }
+
+  // Both after the last floor, and both for the same reason: they are statements
+  // about the finished scene rather than about any floor in it.
+  applySceneLightBudgets(meshMap);
+  freezeStaticMatrices(root);
 
   return { root, meshMap };
 }
@@ -1480,6 +1708,11 @@ export function buildSelectionOverlay(meshMap, selection, materialPalette, accen
     if (!matchesSelection(entry.descriptor, selection)) continue;
 
     const overlayObject = createObjectForDescriptor(entry.descriptor, materialPalette);
+    // The accent outline is part of the highlight — the green edge on a selected
+    // wall, the orange one on a selected board — and it is drawn in every style,
+    // unlike the model's own edge overlay. So the overlay always cuts its lines,
+    // whatever the palette says about the drawing convention behind it.
+    ensureOutlines(overlayObject, materialPalette);
 
     // Apply highlight style: clone materials and tint them
     overlayObject.traverse((node) => {

@@ -68,6 +68,39 @@ describe('the light finishes stay distinguishable from each other', () => {
   });
 });
 
+describe('the corten rainscreen tones', () => {
+  const tones = ['wallRainscreen', 'wallRainscreenWarm', 'wallRainscreenDeep'];
+
+  it('is a small fixed set of shared instances', () => {
+    // The facade cycles these across every cassette in the scene. Each one is
+    // another instanced draw call, so the count is the budget — three, not one
+    // per panel and not one per wall.
+    expect(new Set(tones.map((key) => palette[key].uuid)).size).toBe(3);
+    expect(Object.keys(palette).filter((key) => key.startsWith('wallRainscreen'))).toEqual(tones);
+  });
+
+  it('reads as weathered oxide rather than as bare steel', () => {
+    for (const key of tones) {
+      // The patina is a mineral crust, not a mirror: give it metalness and it
+      // starts reflecting the sky, which is the one thing corten stops doing.
+      expect(palette[key].metalness, key).toBe(0);
+      expect(palette[key].roughness, key).toBeGreaterThan(0.7);
+      // Warm and dark enough to be obviously not a painted board.
+      expect(palette[key].color.r, key).toBeGreaterThan(palette[key].color.b * 2);
+      expect(reflectance(palette[key]), key).toBeLessThan(reflectance(palette.wallFiberCement));
+    }
+  });
+
+  it('separates the three tones enough to see, without turning into three materials', () => {
+    const values = tones.map((key) => reflectance(palette[key])).sort((a, b) => a - b);
+    // Visibly stepped — a quilt of related browns is what a cassette facade is.
+    expect(values[1] / values[0]).toBeGreaterThan(1.15);
+    expect(values[2] / values[1]).toBeGreaterThan(1.15);
+    // But still one family: the darkest is not a different substance.
+    expect(values[2] / values[0]).toBeLessThan(4);
+  });
+});
+
 describe('metalness', () => {
   it('is only ever fully metal or not metal at all', () => {
     for (const [key, material] of Object.entries(palette)) {

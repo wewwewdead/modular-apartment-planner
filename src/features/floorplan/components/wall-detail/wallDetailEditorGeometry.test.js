@@ -20,6 +20,8 @@ import {
   snapWallLocalPoint,
   zoomWallViewport,
 } from './wallDetailEditorGeometry';
+import { createFloor, createWall } from '@/domain/models';
+import { deriveRainscreenPanels } from '@/domain/wallDetailing';
 
 const bounds = { length: 3000, height: 2400 };
 
@@ -466,5 +468,109 @@ describe('wall detail editor geometry', () => {
     expect(added.map((member) => (member.u0 + member.u1) / 2)).toEqual([1203, 2406]);
     expect(1200 - added[0].u0).toBe(22);
     expect(added[0].u1 - 1206).toBe(22);
+  });
+
+  it('backs the joints of a rainscreen module grid with the same generator', () => {
+    const floor = createFloor('Ground Floor', 0);
+    const wall = createWall({ x: 0, y: 0 }, { x: 6000, y: 0 }, 100, {
+      height: 5400,
+      assembly: { preset: 'fiber_cement', exterior: { material: 'rainscreen' } },
+    });
+    floor.walls = [wall];
+    const panels = deriveRainscreenPanels(wall, floor, 'exterior');
+
+    const added = buildPanelJointBackingMembers(
+      panels,
+      [],
+      { studWidth: 50, studDepth: 75, material: 'light_gauge_steel' },
+      { length: 6000, height: 5400 },
+    );
+    const centre = (member) => (member.u0 + member.u1) / 2;
+    const uprights = added.filter((member) => member.orientation === 'vertical');
+    const centres = [...new Set(uprights.map(centre))].sort((left, right) => left - right);
+
+    // A stud centred in each 10 mm open joint, which is where a cassette's two
+    // edges have to land — no new machinery, the module grid just feeds the
+    // generator the editor already had. The two outliers are the wall's own
+    // ends, pushed inside the frame; the generator does not know an end from a
+    // joint and does not need to.
+    expect(centres).toEqual([12.5, 905, 1815, 2725, 3635, 4545, 5455, 5987.5]);
+    // One per course, because a cassette edge is backed where it actually lands
+    // rather than by a stud run past three storeys of joints.
+    expect(uprights.filter((member) => centre(member) === 905)).toHaveLength(3);
+    expect(uprights.every((member) => member.kind === 'joint_stud' && member.depth === 75)).toBe(true);
+  });
+});
+
+/**
+ * Working in the strip a lapped board occupies past the end of its wall.
+ *
+ * The drawing already shows that strip — the canvas widens over it and the wall
+ * end is marked on it — and a strip you can see but cannot draw, drag or trace
+ * into is a drawing you cannot edit. Boards go there; framing does not, because
+ * a stud past its own plate is a framing error rather than a facade decision.
+ */
+describe('drawing in the board overhang', () => {
+  // 150 lapped at the start, 200 at the end — what the editor hands its gesture
+  // helpers once a face has been given a corner detail.
+  const lapped = { length: 3000, height: 2400, u0: -150, u1: 3200, spanU: 3350 };
+
+  it('draws a board out past the wall end and back behind its start', () => {
+    expect(createDrawnPanel({ u: -400, v: 0 }, { u: 3400, v: 2400 }, lapped)).toMatchObject({
+      u0: -150,
+      u1: 3200,
+    });
+  });
+
+  it('drags a board into the lap instead of stopping it at the wall end', () => {
+    expect(movePanelWithinBounds({ u0: 1800, u1: 3000, v0: 0, v1: 1200 }, { u: 500, v: 0 }, lapped)).toMatchObject({
+      u0: 2000,
+      u1: 3200,
+    });
+    // Its own width is still its own width — the clamp moves the board, it does
+    // not stretch it to fill what is left.
+    expect(movePanelWithinBounds({ u0: 0, u1: 1200, v0: 0, v1: 1200 }, { u: -900, v: 0 }, lapped)).toMatchObject({
+      u0: -150,
+      u1: 1050,
+    });
+  });
+
+  it('traces a cut board with corners in the lap', () => {
+    const traced = createTracedPanel(
+      [
+        { u: 2000, v: 0 },
+        { u: 3400, v: 0 },
+        { u: 3400, v: 1200 },
+        { u: 2000, v: 1200 },
+      ],
+      lapped,
+    );
+
+    expect(traced).toMatchObject({ u0: 2000, u1: 3200 });
+    expect(traced.outlinePoints.map((point) => point.u)).toEqual([2000, 3200, 3200, 2000]);
+  });
+
+  it('still holds framing to the wall’s own run', () => {
+    expect(
+      createDrawnFramingMember(
+        'draw_stud',
+        { u: 3400, v: 800 },
+        { u: 3400, v: 800 },
+        { studWidth: 50, studDepth: 75, material: 'timber' },
+        lapped,
+      ),
+    ).toMatchObject({ u0: 2975, u1: 3000, orientation: 'vertical' });
+  });
+
+  it('leaves a flush wall clamping exactly where it always did', () => {
+    const flush = { length: 3000, height: 2400, u0: 0, u1: 3000, spanU: 3000 };
+
+    expect(createDrawnPanel({ u: -400, v: 0 }, { u: 3400, v: 2400 }, flush)).toEqual(
+      createDrawnPanel({ u: -400, v: 0 }, { u: 3400, v: 2400 }, bounds),
+    );
+    expect(movePanelWithinBounds({ u0: 0, u1: 1200, v0: 0, v1: 1200 }, { u: 2500, v: 0 }, flush)).toMatchObject({
+      u0: 1800,
+      u1: 3000,
+    });
   });
 });

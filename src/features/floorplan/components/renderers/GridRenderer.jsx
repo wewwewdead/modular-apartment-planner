@@ -1,6 +1,16 @@
 import { memo } from 'react';
 import { GRID_MINOR, GRID_MAJOR } from '@/domain/defaults';
 
+/*
+ * Two sibling patterns, not one nested inside the other.
+ *
+ * The major pattern used to fill each of its 1 m tiles with the 50 mm minor
+ * pattern, which asks the browser to resolve a pattern inside a pattern for
+ * every tile it paints — and it repaints all of them whenever the rect they
+ * cover moves, which during a pan is every frame. Drawn as two flat layers
+ * instead, each is tiled once and the result on screen is identical: both are
+ * anchored in user space, so the minor lines still land under the major ones.
+ */
 function GridRenderer() {
   return (
     <defs>
@@ -14,7 +24,6 @@ function GridRenderer() {
         />
       </pattern>
       <pattern id="grid-major" width={GRID_MAJOR} height={GRID_MAJOR} patternUnits="userSpaceOnUse">
-        <rect width={GRID_MAJOR} height={GRID_MAJOR} fill="url(#grid-minor)" />
         <path
           d={`M ${GRID_MAJOR} 0 L 0 0 0 ${GRID_MAJOR}`}
           fill="none"

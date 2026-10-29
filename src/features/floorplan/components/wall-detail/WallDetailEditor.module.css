@@ -1139,7 +1139,9 @@
   stroke: #57b6dd;
   cursor: pointer;
 }
-/* Framing that straddles an opening edge the way a trimmer stud does. */
+/* Framing lapping an opening edge. The generated frame never does this any
+   more — its trimmers land flush on the jamb — so what this colours is a member
+   somebody moved or drew across the hole. */
 .frameShape[data-contact='jamb'] {
   fill: rgba(214, 158, 74, 0.4);
   stroke: #d69e4a;
@@ -1163,6 +1165,60 @@
   stroke: #0d1116;
   stroke-width: var(--cad-profile-line);
 }
+/* ---------- Slab bands ----------
+   Where the deck crosses a bypass wall's plane. Annotation, not construction:
+   a wash you can read the framing through, a dashed datum on the storey line,
+   and hairline weight so it can never be mistaken for a member. */
+.slabBand {
+  pointer-events: none;
+}
+.slabBandFill {
+  fill: rgba(126, 148, 168, 0.16);
+  stroke: rgba(158, 182, 202, 0.6);
+  stroke-width: 1px;
+}
+.slabBandDatum {
+  stroke: #9eb6ca;
+  stroke-width: 1.25px;
+}
+.slabBandLabel {
+  fill: #9eb6ca;
+  stroke: #202830;
+  stroke-width: 3px;
+  paint-order: stroke fill;
+  font: 600 11px var(--font-blueprint);
+  letter-spacing: 0.02em;
+}
+
+/* ---------- Board overhang past the wall end ---------- */
+.boardOverhang {
+  pointer-events: none;
+}
+/* The strip of board that is out beyond the wall — warm, so it reads as
+   material that is there rather than as a void. */
+.boardOverhangFill {
+  fill: rgba(224, 168, 96, 0.15);
+  stroke: rgba(224, 168, 96, 0.5);
+  stroke-width: 1px;
+  stroke-dasharray: 10 6;
+}
+/* Wall with no board on it, because the board was set back to let the
+   neighbour's lap over — cool and empty, the opposite reading. */
+.boardSetbackFill {
+  fill: rgba(126, 148, 168, 0.1);
+  stroke: rgba(158, 182, 202, 0.45);
+  stroke-width: 1px;
+  stroke-dasharray: 4 6;
+}
+/* Where the wall itself stops. Hidden-line weight, the drafting convention for
+   something that is really there but not in section — without it the overhang
+   would just look like a longer wall. */
+.boardOverhangWallEnd {
+  stroke: #e0a860;
+  stroke-width: 1.5px;
+  stroke-dasharray: 14 7;
+}
+
 /* An opening is a cut, so there is nothing of it to colour but the void it
    leaves; the wash fills that, over whatever shows through. */
 .openingProfile[data-selected='true'] {

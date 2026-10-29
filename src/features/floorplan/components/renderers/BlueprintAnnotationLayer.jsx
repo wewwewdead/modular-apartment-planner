@@ -47,7 +47,11 @@ function DimensionFigure({ figure, textScale = 1 }) {
   const fontSize = DRAWING_GRAPHICS.annotation.textSize * textScale;
 
   return (
-    <g key={figure.id}>
+    <g
+      key={figure.id}
+      data-dimension-source={figure.source}
+      data-dimension-source-type={figure.sourceType || undefined}
+    >
       {figure.extensionLines.map((line, index) => (
         <line
           key={`${figure.id}-ext-${index}`}

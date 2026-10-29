@@ -72,6 +72,36 @@ describe('quantity takeoff', () => {
     );
   });
 
+  it('bills wall framing off the frame the generator actually draws', () => {
+    const project = createProject('Framed wall');
+    const floor = project.floors[0];
+    const wall = {
+      ...createWall({ x: 0, y: 0 }, { x: 6000, y: 0 }, 100, {
+        height: 2700,
+        assembly: { preset: 'plywood', framing: { spacing: 400, studWidth: 50, studDepth: 75, nogginRows: 1 } },
+      }),
+      id: 'wall_framed',
+    };
+    const door = { ...createDoor(wall.id, 1500, 900), id: 'door_1', height: 2100 };
+    const windowItem = { ...createWindow(wall.id, 4200, 1200), id: 'window_1', sillHeight: 900, height: 1200 };
+    floor.walls = [wall];
+    floor.doors = [door];
+    floor.windows = [windowItem];
+
+    const item = deriveQuantityTakeoff(project).items.find((entry) => entry.id === 'wall_framing');
+
+    // 62.00 m for this 6000 × 2700 wall: studs 43.50 (kings and trimmers now
+    // among them), plates 11.10 — 6000 × 2 LESS the 900 doorway the bottom plate
+    // is broken at — noggins 3.90, headers 2.30, window sill 1.20.
+    //
+    // The same wall used to bill 59.30 m here, from a formula that ran both
+    // plates the full length and framed openings with studs standing half inside
+    // them; with detailing switched on the very same wall billed 57.00 m off the
+    // drawn members. Both numbers are gone: quantities are now summed from the
+    // rectangles the generator emits, so there is only one answer to have.
+    expect(item.quantity).toBeCloseTo(62.0, 6);
+  });
+
   it('deducts modeled slab openings from concrete, soffit formwork, and slab-based finishes', () => {
     const project = makeMeasuredProject();
     project.floors[0].rooms = [];
@@ -97,6 +127,34 @@ describe('quantity takeoff', () => {
     expect(byId.get('floor_finish')).toMatchObject({
       quantity: 19,
       provenance: QUANTITY_PROVENANCE.CONFIGURED_ASSEMBLY,
+    });
+  });
+
+  it('bills a rainscreen facade by the square metre like any other board, net of openings', () => {
+    const project = makeMeasuredProject();
+    project.floors[0].walls[0].assembly = {
+      preset: 'fiber_cement',
+      system: 'framed',
+      interior: { material: 'fiber_cement', thickness: 6, layerCount: 1 },
+      exterior: { material: 'rainscreen', thickness: 8, layerCount: 1 },
+      framing: { material: 'light_gauge_steel', studWidth: 50, studDepth: 75, spacing: 400, nogginRows: 1 },
+    };
+
+    const byId = new Map(deriveQuantityTakeoff(project).items.map((entry) => [entry.id, entry]));
+
+    // The same face area the lining bills: a cassette facade is ordered by the
+    // panel, and the 10 mm open joints between them are about 1% of the
+    // elevation — deducting them would be false precision, not accuracy.
+    expect(byId.get('rainscreen_board').quantity).toBeCloseTo(11.67);
+    expect(byId.get('fiber_cement_board').quantity).toBeCloseTo(11.67);
+    // And a board nobody specified stays off the bill, the way it always has —
+    // so a project with no rainscreen on it does not grow an empty new line.
+    expect(byId.has('plywood_board')).toBe(false);
+    expect(byId.get('rainscreen_board')).toMatchObject({
+      rateKey: 'rainscreenBoard',
+      unit: 'm²',
+      provenance: QUANTITY_PROVENANCE.CONFIGURED_ASSEMBLY,
+      inputs: { openingsDeducted: true, boardLayersIncluded: true, framedWallCount: 1 },
     });
   });
 
@@ -207,5 +265,53 @@ describe('quantity takeoff', () => {
       unitRates: { concrete: -1 },
     });
     expect(rate).toMatchObject({ ok: false, error: { code: 'invalid-quantity-rate' } });
+  });
+});
+
+describe('board overhang in the bill', () => {
+  /** The reference wall boarded both faces, optionally lapping a corner. */
+  function boardedProject(overhang = {}) {
+    const project = makeMeasuredProject();
+    project.floors[0].walls[0].assembly = {
+      preset: 'mixed_board',
+      system: 'framed',
+      interior: { material: 'fiber_cement', thickness: 6, layerCount: 1 },
+      exterior: { material: 'plywood', thickness: 12, layerCount: 2, ...overhang },
+      framing: { material: 'light_gauge_steel', studWidth: 50, studDepth: 75, spacing: 400, nogginRows: 1 },
+    };
+    return project;
+  }
+
+  it('bills the board that runs past the wall end, because it is real material', () => {
+    const flush = new Map(deriveQuantityTakeoff(boardedProject()).items.map((entry) => [entry.id, entry]));
+    const lapped = new Map(
+      deriveQuantityTakeoff(boardedProject({ overhangStart: 100, overhangEnd: 200 })).items.map((entry) => [
+        entry.id,
+        entry,
+      ]),
+    );
+    const height = makeMeasuredProject().floors[0].walls[0].height;
+
+    // 300 mm of extra board run, over the wall's full height, twice over
+    // because the face is two layers deep. Nothing else on the bill moves — the
+    // lining on the other face and the frame behind both boards are untouched.
+    const expected = flush.get('plywood_board').quantity + (300 * height * 2) / 1_000_000;
+    expect(lapped.get('plywood_board').quantity).toBeCloseTo(expected, 6);
+    expect(lapped.get('fiber_cement_board').quantity).toBeCloseTo(flush.get('fiber_cement_board').quantity, 6);
+    expect(lapped.get('wall_framing').quantity).toBeCloseTo(flush.get('wall_framing').quantity, 6);
+  });
+
+  it('bills a setback short, and still deducts the openings from either', () => {
+    const flush = new Map(deriveQuantityTakeoff(boardedProject()).items.map((entry) => [entry.id, entry]));
+    const setback = new Map(
+      deriveQuantityTakeoff(boardedProject({ overhangEnd: -250 })).items.map((entry) => [entry.id, entry]),
+    );
+    const height = makeMeasuredProject().floors[0].walls[0].height;
+
+    expect(setback.get('plywood_board').quantity).toBeCloseTo(
+      flush.get('plywood_board').quantity - (250 * height * 2) / 1_000_000,
+      6,
+    );
+    expect(setback.get('plywood_board')).toMatchObject({ inputs: { openingsDeducted: true } });
   });
 });

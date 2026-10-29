@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useClipboard } from '@/app/ClipboardProvider';
-import { useEditor } from '@/features/floorplan/context/FloorplanContext';
+import { useEditorState } from '@/features/floorplan/context/FloorplanContext';
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
 import {
   buildPlanClipboardPayload,
@@ -16,7 +16,7 @@ function pluralize(count, noun) {
 
 export function usePlanClipboardController() {
   const { project, dispatch, getFloor } = useProject();
-  const editor = useEditor();
+  const editor = useEditorState();
   const { clipboard, hasClipboard, setClipboard } = useClipboard();
   const { activeFloorId, workspaceMode, viewMode, regionSelection, pastePreview, dispatch: editorDispatch } = editor;
 

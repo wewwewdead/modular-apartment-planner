@@ -66,11 +66,17 @@ export function panWallViewport(viewport, delta) {
 export function screenPointToWallLocal(event, rect, bounds) {
   const width = Math.max(1, rect.width);
   const height = Math.max(1, rect.height);
-  const u = clamp(((event.clientX - rect.left) / width) * bounds.length, 0, bounds.length);
+  // The canvas is as wide as what is DRAWN, which is the wall itself until a
+  // board is run past its end. Reading the pointer against the wall's length
+  // when the drawing is wider than the wall would put every click short.
+  const u0 = Number(bounds.u0) || 0;
+  const span = Number(bounds.spanU) || bounds.length;
+  const u1 = u0 + span;
+  const along = clamp(u0 + ((event.clientX - rect.left) / width) * span, u0, u1);
   return {
     // A mirrored face elevation (bounds.mirrorU) draws U right-to-left, so the
     // pointer's screen X maps back to wall U through the same reflection.
-    u: bounds.mirrorU ? bounds.length - u : u,
+    u: bounds.mirrorU ? u0 + u1 - along : along,
     v: clamp(bounds.height - ((event.clientY - rect.top) / height) * bounds.height, 0, bounds.height),
   };
 }
@@ -132,7 +138,12 @@ export function snapWallLocalPoint(point, candidates, options = {}) {
   };
 }
 
-function rectSnapTargets(entityType, entityId, rect) {
+/**
+ * Every exact point and edge a rectangle offers a measurement, tagged with the
+ * anchor `rectAnchorPoint` resolves it back through. Exported because the RCP
+ * editor measures the same kinds of rectangle in the same kind of UV frame.
+ */
+export function rectSnapTargets(entityType, entityId, rect) {
   const centerU = (rect.u0 + rect.u1) / 2;
   const centerV = (rect.v0 + rect.v1) / 2;
   const points = [
@@ -165,7 +176,7 @@ function rectSnapTargets(entityType, entityId, rect) {
   return [...points, ...segments];
 }
 
-function polygonSnapTargets(entityType, entityId, points) {
+export function polygonSnapTargets(entityType, entityId, points) {
   return points.flatMap((point, index) => {
     const end = points[(index + 1) % points.length];
     return [
@@ -375,9 +386,28 @@ export function quantizeWallLocalPoint(point, precision = 0.01) {
   return { u: quantize(point?.u), v: quantize(point?.v) };
 }
 
+/**
+ * The stretch of U a BOARD may be drawn or dragged through: the wall's own run
+ * until a face is given an overhang, and the whole board span once it is.
+ *
+ * A drawing that shows a lapped corner has to let you work in it — the strip
+ * past the wall end is cladding like any other, and a board that could be seen
+ * there but never placed or nudged there is a drawing you cannot edit. Framing
+ * keeps the wall's own run: a stud running past its own plate is a framing
+ * error, not a facade decision.
+ */
+function panelURange(bounds) {
+  const length = Number(bounds?.length) || 0;
+  return {
+    u0: Math.min(0, Number(bounds?.u0) || 0),
+    u1: Math.max(length, Number.isFinite(Number(bounds?.u1)) ? Number(bounds.u1) : length),
+  };
+}
+
 export function createDrawnPanel(start, end, bounds, minimumSize = 25) {
-  const u0 = clamp(Math.min(start.u, end.u), 0, bounds.length);
-  const u1 = clamp(Math.max(start.u, end.u), 0, bounds.length);
+  const range = panelURange(bounds);
+  const u0 = clamp(Math.min(start.u, end.u), range.u0, range.u1);
+  const u1 = clamp(Math.max(start.u, end.u), range.u0, range.u1);
   const v0 = clamp(Math.min(start.v, end.v), 0, bounds.height);
   const v1 = clamp(Math.max(start.v, end.v), 0, bounds.height);
   if (u1 - u0 < minimumSize || v1 - v0 < minimumSize) return null;
@@ -385,9 +415,10 @@ export function createDrawnPanel(start, end, bounds, minimumSize = 25) {
 }
 
 export function createTracedPanel(points, bounds, minimumArea = 625) {
+  const range = panelURange(bounds);
   const normalized = (points || []).reduce((result, point) => {
     const next = {
-      u: clamp(Number(point?.u) || 0, 0, bounds.length),
+      u: clamp(Number(point?.u) || 0, range.u0, range.u1),
       v: clamp(Number(point?.v) || 0, 0, bounds.height),
     };
     const previous = result[result.length - 1];
@@ -443,6 +474,7 @@ export function snapPanelToAdjacentReveal(panel, panels, revealGap, bounds, opti
   const gapU = Math.max(0, Number(revealGap?.u) || 0);
   const gapV = Math.max(0, Number(revealGap?.v) || 0);
   const original = { u0: panel.u0, u1: panel.u1, v0: panel.v0, v1: panel.v1 };
+  const range = panelURange(bounds);
   const revealSnaps = [];
   const matches = {};
 
@@ -468,9 +500,10 @@ export function snapPanelToAdjacentReveal(panel, panels, revealGap, bounds, opti
         continue;
       }
       const target = existing[definition.edge] + definition.direction * definition.gap;
-      const axisLimit = definition.axis === 'u' ? bounds.length : bounds.height;
+      const axisFloor = definition.axis === 'u' ? range.u0 : 0;
+      const axisLimit = definition.axis === 'u' ? range.u1 : bounds.height;
       const distance = Math.abs(original[definition.key] - target);
-      if (target < 0 || target > axisLimit || distance > threshold || distance >= nearestDistance) continue;
+      if (target < axisFloor || target > axisLimit || distance > threshold || distance >= nearestDistance) continue;
       nearest = { existing, target };
       nearestDistance = distance;
     }
@@ -607,9 +640,10 @@ export function createDrawnFramingMember(tool, start, end, framing, bounds) {
 }
 
 export function movePanelWithinBounds(panel, delta, bounds) {
+  const range = panelURange(bounds);
   const width = panel.u1 - panel.u0;
   const height = panel.v1 - panel.v0;
-  const u0 = clamp(panel.u0 + delta.u, 0, Math.max(0, bounds.length - width));
+  const u0 = clamp(panel.u0 + delta.u, range.u0, Math.max(range.u0, range.u1 - width));
   const v0 = clamp(panel.v0 + delta.v, 0, Math.max(0, bounds.height - height));
   const moved = { ...panel, u0, u1: u0 + width, v0, v1: v0 + height, u: u0, v: v0, width, height };
   if (panel.polygonal && panel.outlinePoints?.length) {
@@ -774,7 +808,10 @@ export function rectSeparation(a, b) {
  *   flush     — lands exactly on the jamb, head, or sill line (headers and
  *               sills sit here, which is why flush is never a clash)
  *   jamb      — straddles an opening edge, so `overlap` mm of the member sits
- *               inside the opening; this is how generated trimmer studs sit
+ *               inside the opening. The generator no longer produces this: its
+ *               trimmers land flush on the jamb line and read as `flush`. What
+ *               is left here is a hand-placed or dragged member lapping the
+ *               hole, which is exactly the thing worth flagging
  *   intrusion — the member's centreline is inside the opening, so on a real
  *               wall it is in the way and has to move or be cut
  */

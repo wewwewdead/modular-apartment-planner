@@ -104,6 +104,21 @@ function normalizeViewMode(viewMode) {
   return viewMode;
 }
 
+/*
+ * Coordination results, keyed on the project object and held weakly.
+ *
+ * A settled edit normally arrives with a project nobody has derived from
+ * before, so this does nothing for the ordinary path — it is here for the paths
+ * that hand back a project that was already current once. Undo and redo restore
+ * an earlier project object verbatim, and END_DRAG_GESTURE settles against a
+ * project the drag may already have settled against; both used to pay the full
+ * coordination pass again for an answer that cannot have changed.
+ *
+ * Everything that reads `derived` spreads it and never writes into it, which is
+ * what makes handing the same object to two states safe.
+ */
+const derivedModelsByProject = new WeakMap();
+
 /**
  * The whole-project coordination models. Every one of them walks the entire
  * project, and together they cost tens of milliseconds on a modest plan
@@ -112,6 +127,21 @@ function normalizeViewMode(viewMode) {
  * `createDragGesture` for how a pointer drag defers them to the mouse-up.
  */
 function computeDerivedModels(project, validationIssues = null) {
+  // A caller with issues in hand has already validated this project against
+  // something the cache does not know about, so it never reads or writes it.
+  if (!validationIssues && project) {
+    const cached = derivedModelsByProject.get(project);
+    if (cached) return cached;
+  }
+
+  const models = buildDerivedModels(project, validationIssues);
+  if (!validationIssues && project) {
+    derivedModelsByProject.set(project, models);
+  }
+  return models;
+}
+
+function buildDerivedModels(project, validationIssues) {
   return {
     validationIssues: validationIssues || validateBuildingCoordination(project),
     siteFeasibility: deriveSiteFeasibility(project),
@@ -310,25 +340,61 @@ function buildEntityCollections(project, activeFloorId) {
   };
 }
 
+/**
+ * Republishes the read slices the app selects from.
+ *
+ * Every action lands here, including the editor-only ones a pan fires once per
+ * frame, and these slices are what the memoized consumers key on. So each one is
+ * only rebuilt when the thing it is a view of actually moved, and otherwise the
+ * previously published object is handed straight back. The store is immutable,
+ * which makes identity a complete test: an untouched project is the same object,
+ * so `entities` may be reused wholesale rather than compared field by field.
+ *
+ * Without this a pan hands the whole application a fresh `entities` every frame
+ * and defeats every memo downstream of it — the panels, the 3D preview, the
+ * canvas scene — for a change that moved nothing but the viewport.
+ *
+ * `entitiesSource` records what the collections were built from. It is
+ * bookkeeping, not state anybody reads; a state object arriving without one
+ * (a hand-built fixture, the initial state) simply rebuilds.
+ */
 function syncFloorplanState(state) {
-  const floors = state.project?.floors || [];
-  const phases = state.project?.phases || [];
-  const entities = buildEntityCollections(state.project, state.editor?.activeFloorId || null);
+  const project = state.project || null;
+  const activeFloorId = state.editor?.activeFloorId || null;
+  const source = state.entitiesSource;
+  const entitiesCurrent =
+    Boolean(state.entities) && source?.project === project && source?.activeFloorId === activeFloorId;
+
+  const entities = entitiesCurrent ? state.entities : buildEntityCollections(project, activeFloorId);
+
+  const previousSelection = state.selection;
+  const selectionCurrent =
+    Boolean(previousSelection) &&
+    previousSelection.selectedId === state.editor.selectedId &&
+    previousSelection.selectedType === state.editor.selectedType &&
+    previousSelection.regionSelection === state.editor.regionSelection &&
+    previousSelection.pastePreview === state.editor.pastePreview;
 
   return {
     ...state,
-    floors,
+    entitiesSource: entitiesCurrent ? source : { project, activeFloorId },
+    // Every one of these is the same expression `buildEntityCollections` already
+    // evaluated, so reading them back off `entities` keeps their identity tied to
+    // it instead of minting a new empty array on each pass.
+    floors: entities.floors,
     rooms: entities.rooms,
     walls: entities.walls,
-    phases,
+    phases: entities.phases,
     entities,
     viewport: state.editor.viewport,
-    selection: {
-      selectedId: state.editor.selectedId,
-      selectedType: state.editor.selectedType,
-      regionSelection: state.editor.regionSelection,
-      pastePreview: state.editor.pastePreview,
-    },
+    selection: selectionCurrent
+      ? previousSelection
+      : {
+          selectedId: state.editor.selectedId,
+          selectedType: state.editor.selectedType,
+          regionSelection: state.editor.regionSelection,
+          pastePreview: state.editor.pastePreview,
+        },
   };
 }
 
@@ -1198,6 +1264,27 @@ function reduceProjectState(state, action) {
       // Only a boundary edit invalidates a run: renaming the plate or changing
       // its thickness leaves every overhang exactly where it was.
       return action.slab?.boundaryPoints ? withoutOverhangEdgeSelection(nextState, action.slab.id) : nextState;
+    }
+
+    /**
+     * A projecting bay is one act, not three: the plate grows a protrusion and
+     * the walls that enclose it appear on the edges that protrusion just made.
+     * Committing the boundary and the walls separately would put two entries on
+     * the undo stack and leave a bay with no walls standing between them, so
+     * both land in a single `updateFloor` pass — one history entry, one undo.
+     */
+    case 'SLAB_PROJECT_BAY': {
+      const nextState = updateFloor(state, action.floorId, (floor) => {
+        const slabs = (floor.slabs || []).map((slab) =>
+          slab.id === action.slabId ? { ...slab, boundaryPoints: action.boundaryPoints } : slab,
+        );
+        const added = (action.walls || []).map((wall) => syncWallAttachmentPoints(wall, floor.columns || []));
+        return reconcileFloorRooms(
+          { ...floor, slabs, walls: [...floor.walls, ...added] },
+          { changedWalls: wallSegments(...added), phaseId: action.phaseId ?? null },
+        );
+      });
+      return withoutOverhangEdgeSelection(nextState, action.slabId);
     }
 
     case 'SLAB_DELETE': {

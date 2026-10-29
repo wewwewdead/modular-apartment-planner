@@ -1,23 +1,13 @@
 import { buildProjectElevationScene } from '@/elevations/scene';
 import { getElevationView, projectElevationHorizontal } from '@/elevations/projection';
-import { getFloorElevation } from '@/domain/floorModels';
-import { wallBaseOffset } from '@/domain/wallFit';
-import { pointInPolygon } from '@/geometry/polygon';
+import { resolveWallVerticalSpan } from '@/domain/wallFit';
+import { elevationRegionContainsPoint, getVisibleElevationDrawables } from '@/elevations/visibility';
 import { clampWallOpeningOffset, wallLength } from '@/geometry/wallGeometry';
 
 const EPSILON = 1e-6;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
-}
-
-function rectPolygon(element) {
-  return [
-    { x: element.left, y: -element.top },
-    { x: element.right, y: -element.top },
-    { x: element.right, y: -element.bottom },
-    { x: element.left, y: -element.bottom },
-  ];
 }
 
 function findWindowOwner(project, windowId) {
@@ -36,9 +26,9 @@ function hitTestElevationWindow(modelPos, project, sourceFloorId, viewMode) {
   if (!scene?.elements?.length) return null;
 
   let hit = null;
-  for (const element of scene.elements) {
+  for (const element of getVisibleElevationDrawables(scene)) {
     if (element.category !== 'window' || !element.sourceId) continue;
-    if (pointInPolygon(modelPos, rectPolygon(element))) {
+    if (elevationRegionContainsPoint(element, modelPos)) {
       const { floor } = findWindowOwner(project, element.sourceId);
       hit = { id: element.sourceId, type: 'window', floorId: floor?.id ?? null };
     }
@@ -96,11 +86,14 @@ export function createElevationSelectHandler({ dispatch, editorDispatch, project
         nextOffset = clampWallOpeningOffset(wallLen, windowItem.width, t * wallLen);
       }
 
-      const wallBase = getFloorElevation(floor) + wallBaseOffset(wall);
-      const wallHeight = wall.height ?? 0;
-      const maxSillHeight = Math.max(0, wallHeight - (windowItem.height ?? 0));
+      // Dragged against the span the elevation actually drew, not the wall's
+      // stored height: a bypass wall is taller than the number on it, and a
+      // sill clamped to that number would stop short of the glass on screen.
+      // The sill is still measured from the floor, which is where it is typed.
+      const span = resolveWallVerticalSpan(wall, floor, project);
+      const maxSillHeight = Math.max(0, span.top - span.datum - (windowItem.height ?? 0));
       const sceneHeight = -modelPos.y;
-      const nextSillHeight = clamp(sceneHeight - wallBase, 0, maxSillHeight);
+      const nextSillHeight = clamp(sceneHeight - span.datum, 0, maxSillHeight);
 
       dispatch({
         type: 'WINDOW_UPDATE',

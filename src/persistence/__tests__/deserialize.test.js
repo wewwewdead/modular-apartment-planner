@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
+import { createBeam, createColumn, createProject, createWall } from '@/domain/models';
+import {
+  WALL_ASSEMBLY_PRESETS,
+  WALL_BOARD_MATERIALS,
+  createWallAssembly,
+  resolveWallAssembly,
+  wallAssemblyThickness,
+} from '@/domain/wallAssemblies';
 import { deserializeProject } from '../deserialize';
+import { serializeProject } from '../serialize';
 
 function makeEnvelope(data, overrides = {}) {
   return {
@@ -136,7 +145,7 @@ describe('deserializeProject', () => {
 
     it('migrates a v24 envelope with no ceilings up to the current schema', async () => {
       const { CURRENT_SCHEMA_VERSION } = await import('@/domain/projectVersion');
-      expect(CURRENT_SCHEMA_VERSION).toBe(28);
+      expect(CURRENT_SCHEMA_VERSION).toBe(29);
 
       const { createProject } = await import('@/domain/models');
       const payload = createProject('Pre-ceiling save');
@@ -327,5 +336,111 @@ describe('deserializeProject', () => {
       expect(floor.sectionCuts).toHaveLength(1);
       expect(floor.sectionCuts[0].id).toBe('sc_1');
     });
+  });
+});
+
+describe('rainscreen board layers survive a save and reload', () => {
+  it('round-trips the material and rebuilds the same wall thickness', () => {
+    const project = createProject('Rainscreen test');
+    const wall = createWall({ x: 0, y: 0 }, { x: 6000, y: 0 }, 100, {
+      height: 5400,
+      assembly: createWallAssembly(WALL_ASSEMBLY_PRESETS.FIBER_CEMENT, {
+        exterior: { material: WALL_BOARD_MATERIALS.RAINSCREEN },
+      }),
+    });
+    project.floors[0].walls = [wall];
+
+    // Through the real file shape — JSON, not a structuredClone — because the
+    // point is that a new material string needs no schema of its own.
+    const reloaded = deserializeProject(JSON.parse(JSON.stringify(serializeProject(project)))).project;
+    const assembly = resolveWallAssembly(reloaded.floors[0].walls[0]);
+
+    expect(assembly.exterior).toEqual({
+      material: 'rainscreen',
+      thickness: 8,
+      layerCount: 1,
+      overhangStart: 0,
+      overhangEnd: 0,
+    });
+    expect(assembly.interior).toEqual({
+      material: 'fiber_cement',
+      thickness: 6,
+      layerCount: 1,
+      overhangStart: 0,
+      overhangEnd: 0,
+    });
+    // 75 of stud + 6 of lining + 8 of cassette.
+    expect(wallAssemblyThickness(assembly)).toBe(89);
+    expect(wallAssemblyThickness(assembly)).toBe(wallAssemblyThickness(resolveWallAssembly(wall)));
+  });
+});
+
+describe('board overhangs survive a save and reload', () => {
+  it('round-trips both edges of both faces with no schema of their own', () => {
+    const project = createProject('Corner lap test');
+    const wall = createWall({ x: 0, y: 0 }, { x: 6000, y: 0 }, 100, {
+      height: 3000,
+      assembly: createWallAssembly(WALL_ASSEMBLY_PRESETS.MIXED_BOARD, {
+        interior: { overhangStart: 15 },
+        // The corner detail as a builder sets it: this board laps the wall it
+        // meets at one end and is lapped by it at the other.
+        exterior: { overhangStart: 137, overhangEnd: -137 },
+      }),
+    });
+    project.floors[0].walls = [wall];
+
+    // Same reasoning as the rainscreen case above: two more numbers on a layer
+    // that is already stored need no schema bump, and the proof is the file.
+    const reloaded = deserializeProject(JSON.parse(JSON.stringify(serializeProject(project)))).project;
+    const assembly = resolveWallAssembly(reloaded.floors[0].walls[0]);
+
+    expect(assembly.exterior.overhangStart).toBe(137);
+    expect(assembly.exterior.overhangEnd).toBe(-137);
+    expect(assembly.interior.overhangStart).toBe(15);
+    expect(assembly.interior.overhangEnd).toBe(0);
+    // Cladding runs past the end; it never gets any thicker for doing it.
+    expect(wallAssemblyThickness(assembly)).toBe(wallAssemblyThickness(resolveWallAssembly(wall)));
+  });
+});
+
+describe('a ceiling saved on the storey datum heals on load', () => {
+  it('comes back hanging from the beams that were under it all along', () => {
+    const project = createProject('Stranded ceiling test');
+    const floor = project.floors[0];
+    floor.floorToFloorHeight = 3000;
+    const column = (id, x, y) => ({ ...createColumn(x, y, 300, 300, { height: 2700 }), id });
+    const beam = (id, startId, endId) => ({
+      ...createBeam({ kind: 'column', id: startId }, { kind: 'column', id: endId }, 250, 450, 2700),
+      id,
+    });
+    floor.columns = [column('col_sw', 0, 0), column('col_se', 9000, 0), column('col_nw', 0, 6000)];
+    floor.beams = [beam('beam_s', 'col_sw', 'col_se'), beam('beam_w', 'col_sw', 'col_nw')];
+    // What the creation bug wrote to disk: manual, on the storey top, with beams
+    // sitting 300 mm below it.
+    project.ceilings = [
+      {
+        id: 'ceiling_1',
+        name: 'Ceiling',
+        floorId: floor.id,
+        phaseId: null,
+        attachment: { mode: 'manual', beamIds: [] },
+        boundarySource: 'auto',
+        boundaryPolygon: [
+          { x: 0, y: 0 },
+          { x: 9000, y: 0 },
+          { x: 9000, y: 6000 },
+          { x: 0, y: 6000 },
+        ],
+        baseElevation: 3000,
+        detailing: { enabled: true },
+      },
+    ];
+
+    // Through the real file shape, because the claim is about what a project
+    // already saved does when it is opened again — no schema bump involved.
+    const reloaded = deserializeProject(JSON.parse(JSON.stringify(serializeProject(project)))).project;
+
+    expect(reloaded.ceilings[0].attachment).toEqual({ mode: 'beam', beamIds: ['beam_s', 'beam_w'] });
+    expect(reloaded.ceilings[0].baseElevation).toBe(2700);
   });
 });

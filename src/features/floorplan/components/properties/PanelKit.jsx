@@ -159,11 +159,21 @@ export function TextField({ label, value, onChange, placeholder }) {
 /**
  * Replaces the ~25 hand-inlined `<select>` rows that had drifted into three
  * different label widths and two different backgrounds.
+ *
+ * `disabled` is for a choice the model has taken away rather than one that is
+ * merely inactive: the control stays on screen showing what it would say, so
+ * the answer is still readable, and the caller owes it a `Hint` saying why. It
+ * is never a substitute for hiding a control that does not apply at all.
  */
-export function SelectField({ label, value, onChange, children }) {
+export function SelectField({ label, value, onChange, disabled = false, children }) {
   return (
     <Field label={label}>
-      <select className={styles.select} value={value} onChange={(event) => onChange(event.target.value)}>
+      <select
+        className={styles.select}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      >
         {children}
       </select>
     </Field>

@@ -1,7 +1,10 @@
 import { SNAP_DISTANCE_PX } from '@/domain/defaults';
+import { generateId } from '@/domain/ids';
+import { createWall } from '@/domain/models';
+import { WALL_FRAMING_MODES } from '@/domain/wallFit';
 import { TOOLS } from '@/editor/tools';
 import { MIN_REPORTED_OVERHANG_MM, overhangRunRetractionMm } from '@/geometry/floorOverhang';
-import { distanceToSegment } from '@/geometry/line';
+import { distanceToSegment, nearestPointOnSegment } from '@/geometry/line';
 import { distance } from '@/geometry/point';
 import { polygonSelfIntersects, signedPolygonArea } from '@/geometry/polygon';
 import { offsetSlabEdge, slabEdgeOutwardNormal } from '@/geometry/slabGeometry';
@@ -39,6 +42,14 @@ export const CANTILEVER_DEFAULT_DISTANCE_MM = 600;
 export const CANTILEVER_MIN_DISTANCE_MM = 1;
 
 const EMPTY_CANTILEVER_STATE = Object.freeze({ cantileverHoverEdge: null, cantileverPick: null });
+
+/**
+ * Which of the two things the tool is being asked for. Set by the panel before
+ * the first click and left alone by Escape, so backing out of a mis-picked edge
+ * returns you to picking an edge for the SAME operation; leaving the tool is
+ * what forgets it, because SET_TOOL drops the tool state with the tool.
+ */
+export const CANTILEVER_MODES = Object.freeze({ CANTILEVER: 'cantilever', BAY: 'bay' });
 
 export function resetCantileverToolState(editorDispatch) {
   editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { ...EMPTY_CANTILEVER_STATE } });
@@ -311,6 +322,210 @@ export function removeCantilever({ slab, floorId, run, belowPolygons = [], dispa
   return true;
 }
 
+/* ── Projecting bay ──────────────────────────────────────────────────────
+ *
+ * A cantilever pushes a whole edge out. A bay pushes a STRETCH of one out, and
+ * brings its walls with it — the same two questions (which side, how far) plus
+ * a third, how wide, and the three walls that enclose what the answer makes.
+ *
+ * It rides the cantilever tool rather than a tool of its own: the gesture is
+ * identical (point at a side, type the numbers, Apply) and the difference is
+ * entirely in what Apply builds. `cantileverMode` on the tool state is what the
+ * panel sets to say which of the two it is asking for.
+ *
+ * The projection is measured from the clicked edge, not from a support line
+ * below. A bay is a shape added to a plan, not a plate reaching past the storey
+ * under it, so "600 out" means 600 out from the wall line it grows from.
+ */
+
+/** How wide a bay is if you do not say otherwise — a two-seat window bay. */
+export const PROJECTING_BAY_DEFAULT_WIDTH_MM = 2400;
+
+/** Narrower than this is a nib, not a bay, and its two returns would collide. */
+export const PROJECTING_BAY_MIN_WIDTH_MM = 300;
+
+/**
+ * The boundary a bay would produce, plus the three edges it adds.
+ *
+ * The bay is centred on `alongMm` — where the edge was clicked, measured from
+ * its start — and clamped so it stays on the edge. A bay as wide as the edge it
+ * grows from has no shoulder left at that end, so the coincident vertex is
+ * dropped rather than duplicated; taken to its limit that is simply the whole
+ * edge cantilevered, which is the right answer to the question that was asked.
+ *
+ * @returns {{boundaryPoints: Array<{x: number, y: number}>,
+ *   edges: Array<{start: {x: number, y: number}, end: {x: number, y: number}}>}
+ *   | null} null when the edge has no outward direction or no length
+ */
+export function projectingBayBoundary(boundaryPoints = [], edgeIndex = 0, { alongMm, widthMm, projectionMm } = {}) {
+  const normal = slabEdgeOutwardNormal(boundaryPoints, edgeIndex);
+  if (!normal) return null;
+  if (!Number.isFinite(projectionMm) || projectionMm <= 0) return null;
+  if (!Number.isFinite(widthMm) || widthMm <= 0) return null;
+
+  const count = boundaryPoints.length;
+  const start = boundaryPoints[edgeIndex];
+  const end = boundaryPoints[(edgeIndex + 1) % count];
+  const length = distance(start, end);
+  if (!(length > 0)) return null;
+
+  const direction = { x: (end.x - start.x) / length, y: (end.y - start.y) / length };
+  const width = Math.min(widthMm, length);
+  const half = width / 2;
+  const centre = Math.max(half, Math.min(length - half, Number.isFinite(alongMm) ? alongMm : length / 2));
+
+  const along = (t) => ({ x: start.x + direction.x * t, y: start.y + direction.y * t });
+  const outward = (point) => ({ x: point.x + normal.x * projectionMm, y: point.y + normal.y * projectionMm });
+
+  const rootA = along(centre - half);
+  const rootB = along(centre + half);
+  const tipA = outward(rootA);
+  const tipB = outward(rootB);
+
+  const inserted = [];
+  if (distance(rootA, start) > COINCIDENT_VERTEX_MM) inserted.push(rootA);
+  inserted.push(tipA, tipB);
+  if (distance(rootB, end) > COINCIDENT_VERTEX_MM) inserted.push(rootB);
+
+  const nextBoundary = [];
+  for (let index = 0; index < count; index += 1) {
+    nextBoundary.push({ x: boundaryPoints[index].x, y: boundaryPoints[index].y });
+    if (index === edgeIndex) nextBoundary.push(...inserted);
+  }
+
+  return {
+    boundaryPoints: nextBoundary,
+    // In ring order: out along one return, across the face, back along the
+    // other. The walls are built on these, one each.
+    edges: [
+      { start: rootA, end: tipA },
+      { start: tipA, end: tipB },
+      { start: tipB, end: rootB },
+    ],
+  };
+}
+
+/**
+ * Whichever wall on this floor already stands nearest the bay. A bay is an
+ * extension of the elevation it grows out of, so it is built the way that
+ * elevation is built; with nothing on the floor to copy it takes the defaults.
+ */
+function nearestWall(walls, point) {
+  let best = null;
+  for (const wall of walls || []) {
+    if (!wall?.start || !wall?.end) continue;
+    const gap = distanceToSegment(point, wall.start, wall.end);
+    if (!best || gap < best.gap) best = { gap, wall };
+  }
+  return best?.wall || null;
+}
+
+/**
+ * The three walls that enclose a bay: two returns and the face between them.
+ *
+ * They share one `stackId` because they are one facade — the thing a later
+ * storey's bay lines up with, and the thing an elevation names. Their axes sit
+ * on the new slab edges with no outboard offset: the bay's geometry is in the
+ * plate, so there is nothing for the walls to stand off from.
+ *
+ * They bypass rather than sit on that plate. A bay is read from outside as one
+ * hung box, and the plate it grows from is an edge the eye should never find:
+ * running the walls past it puts the deck behind the facade instead of showing
+ * its thickness as a line across the front.
+ */
+export function projectingBayWalls(edges, floor, phaseId = null) {
+  const face = edges[1];
+  const middle = { x: (face.start.x + face.end.x) / 2, y: (face.start.y + face.end.y) / 2 };
+  const template = nearestWall(floor?.walls, middle);
+  const stackId = generateId('wallstack');
+
+  return edges.map((edge) => {
+    const wall = createWall(edge.start, edge.end, template?.thickness, {
+      assembly: template?.assembly,
+      outboardOffset: 0,
+      stackId,
+      framingMode: WALL_FRAMING_MODES.BYPASS,
+    });
+    wall.phaseId = phaseId || null;
+    return wall;
+  });
+}
+
+/**
+ * Commit the bay the panel is holding: the plate grows the protrusion and the
+ * three walls appear on it, in ONE action — see `SLAB_PROJECT_BAY`, which is a
+ * single history entry and therefore a single undo.
+ *
+ * A refusal leaves everything standing, exactly as the cantilever does, because
+ * the fix is to change one of the numbers still on screen.
+ *
+ * @returns {boolean} whether the plate was updated
+ */
+export function applyProjectingBay({
+  slab,
+  floor,
+  floorId,
+  pick,
+  projectionMm,
+  widthMm,
+  phaseId = null,
+  dispatch,
+  editorDispatch,
+}) {
+  if (!slab || !pick || pick.slabId !== slab.id) return false;
+
+  const requestedReach = Number(projectionMm);
+  const requestedWidth = Number(widthMm);
+  if (!Number.isFinite(requestedReach) || !Number.isFinite(requestedWidth)) return false;
+  const reach = Math.max(CANTILEVER_MIN_DISTANCE_MM, requestedReach);
+  const width = Math.max(PROJECTING_BAY_MIN_WIDTH_MM, requestedWidth);
+
+  const bay = projectingBayBoundary(slab.boundaryPoints, pick.edgeIndex, {
+    alongMm: pick.alongMm,
+    widthMm: width,
+    projectionMm: reach,
+  });
+  if (!bay) {
+    editorDispatch({
+      type: 'SET_STATUS_MESSAGE',
+      message: 'That edge has no outward direction to project from.',
+    });
+    return false;
+  }
+
+  // A plate folded through itself is not a floor. Same rule the edge drag
+  // enforces frame by frame — it just has somewhere to say so here.
+  if (polygonSelfIntersects(bay.boundaryPoints)) {
+    editorDispatch({
+      type: 'SET_STATUS_MESSAGE',
+      message: `A ${Math.round(width)} × ${Math.round(reach)} mm bay folds this plate through itself — try a smaller bay or another edge.`,
+    });
+    return false;
+  }
+
+  dispatch({
+    type: 'SLAB_PROJECT_BAY',
+    floorId,
+    slabId: slab.id,
+    boundaryPoints: bay.boundaryPoints,
+    walls: projectingBayWalls(bay.edges, floor, phaseId),
+    phaseId,
+  });
+
+  resetCantileverToolState(editorDispatch);
+  // Same landing as the cantilever: back on the plate, looking at what was just
+  // made. Both SET_TOOL and the reselect wipe the status line, so the report of
+  // what happened is said last.
+  editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SELECT });
+  editorDispatch({ type: 'SELECT_OBJECT', id: slab.id, objectType: 'slab' });
+  editorDispatch({
+    type: 'SET_STATUS_MESSAGE',
+    message: `Bay added — ${Math.round(width)} mm wide, projecting ${Math.round(reach)} mm, with three walls.`,
+  });
+
+  return true;
+}
+
 export function createCantileverHandler({
   dispatch,
   editorDispatch,
@@ -319,6 +534,7 @@ export function createCantileverHandler({
   viewport,
   selectedId,
   selectedType,
+  activePhaseId = null,
   floorBelow = null,
 }) {
   const hitTolerance = () => SNAP_DISTANCE_PX / Math.max(viewport.zoom, 0.001);
@@ -378,7 +594,10 @@ export function createCantileverHandler({
       if (edgeIndex === null) {
         editorDispatch({
           type: 'SET_STATUS_MESSAGE',
-          message: 'Click an edge of the slab to cantilever that side.',
+          message:
+            toolState.cantileverMode === CANTILEVER_MODES.BAY
+              ? 'Click an edge of the slab where the bay should project.'
+              : 'Click an edge of the slab to cantilever that side.',
         });
         return;
       }
@@ -392,17 +611,46 @@ export function createCantileverHandler({
         return;
       }
 
-      const support = findParallelSupportLine(
-        { start: boundaryPoints[edgeIndex], end: boundaryPoints[(edgeIndex + 1) % boundaryPoints.length] },
-        normal,
-        floorBelow,
-      );
+      const edgeStart = boundaryPoints[edgeIndex];
+      const edgeEnd = boundaryPoints[(edgeIndex + 1) % boundaryPoints.length];
+
+      // A bay grows from the stretch of edge that was pointed at, so where the
+      // click landed along it is part of the pick. A cantilever moves the whole
+      // edge and has no use for it.
+      if (toolState.cantileverMode === CANTILEVER_MODES.BAY) {
+        const { t } = nearestPointOnSegment(modelPos, edgeStart, edgeEnd);
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: {
+            cantileverHoverEdge: edgeIndex,
+            cantileverPick: {
+              kind: CANTILEVER_MODES.BAY,
+              slabId: slab.id,
+              edgeIndex,
+              support: null,
+              alongMm: t * distance(edgeStart, edgeEnd),
+              defaultDistanceMm: CANTILEVER_DEFAULT_DISTANCE_MM,
+              distanceMm: CANTILEVER_DEFAULT_DISTANCE_MM,
+              defaultWidthMm: PROJECTING_BAY_DEFAULT_WIDTH_MM,
+              widthMm: PROJECTING_BAY_DEFAULT_WIDTH_MM,
+            },
+          },
+        });
+        editorDispatch({
+          type: 'SET_STATUS_MESSAGE',
+          message: 'Edge picked — set how far the bay projects and how wide it is, then Enter to apply.',
+        });
+        return;
+      }
+
+      const support = findParallelSupportLine({ start: edgeStart, end: edgeEnd }, normal, floorBelow);
 
       editorDispatch({
         type: 'UPDATE_TOOL_STATE',
         payload: {
           cantileverHoverEdge: edgeIndex,
           cantileverPick: {
+            kind: CANTILEVER_MODES.CANTILEVER,
             slabId: slab.id,
             edgeIndex,
             support,
@@ -426,11 +674,26 @@ export function createCantileverHandler({
       // act; so is Enter with the canvas focused, which is where the pointer
       // already is when the edge has just been clicked.
       if (e.key === 'Enter' && pick) {
+        const distanceMm = pick.distanceMm ?? pick.defaultDistanceMm ?? CANTILEVER_DEFAULT_DISTANCE_MM;
+        if (pick.kind === CANTILEVER_MODES.BAY) {
+          applyProjectingBay({
+            slab: targetSlab(),
+            floor: getFloor(activeFloorId),
+            floorId: activeFloorId,
+            pick,
+            projectionMm: distanceMm,
+            widthMm: pick.widthMm ?? pick.defaultWidthMm ?? PROJECTING_BAY_DEFAULT_WIDTH_MM,
+            phaseId: activePhaseId,
+            dispatch,
+            editorDispatch,
+          });
+          return;
+        }
         applyCantilever({
           slab: targetSlab(),
           floorId: activeFloorId,
           pick,
-          distanceMm: pick.distanceMm ?? pick.defaultDistanceMm ?? CANTILEVER_DEFAULT_DISTANCE_MM,
+          distanceMm,
           dispatch,
           editorDispatch,
         });

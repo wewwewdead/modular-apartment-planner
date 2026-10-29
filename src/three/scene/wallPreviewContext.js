@@ -8,7 +8,7 @@ import {
   windowOutlineOnWall,
 } from '@/geometry/wallGeometry';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
-import { wallBaseOffset } from '@/domain/wallFit';
+import { resolveWallVerticalSpan } from '@/domain/wallFit';
 
 const EPSILON = 1e-6;
 
@@ -27,7 +27,9 @@ function buildOpeningDescriptor(kind, source, context) {
   const clippedSourceEndAlong = clamp(sourceEndAlong, context.trimStartAlong, context.trimEndAlong);
   const visibleWidth = clippedSourceEndAlong - clippedSourceStartAlong;
 
-  const baseElevation = context.wallBase + (source.sillHeight ?? 0);
+  // Off the floor, not off the bottom of the wall: a bypass wall starts below
+  // its own storey, and a door on it still opens onto the deck you stand on.
+  const baseElevation = context.wallDatum + (source.sillHeight ?? 0);
   const topElevation = baseElevation + (source.height ?? 0);
   const visibleBaseElevation = clamp(baseElevation, context.wallBase, context.wallTop);
   const visibleTopElevation = clamp(topElevation, context.wallBase, context.wallTop);
@@ -82,24 +84,36 @@ function buildOpeningDescriptor(kind, source, context) {
   };
 }
 
-export function buildWallPreviewContext(floor, wall, floorLevel) {
+// The floor answers for its own elevation through the span resolver, so no
+// caller has to hand one in — and none can hand in one that disagrees.
+export function buildWallPreviewContext(floor, wall) {
   const wallRenderData = getWallRenderData(wall, floor.columns || []);
   const sourceWall = wallRenderData.wall;
+  const bodyWall = wallRenderData.bodyWall;
   const renderWall = wallRenderData.renderWall;
+  // The shift is purely across the axis, so projecting a trim point back onto
+  // the drawn line still reports the same distance along it: an offset moves
+  // where the wall is built, never where along it anything sits.
   const trimStartAlong = projectPointOnWall(sourceWall, renderWall.start);
   const trimEndAlong = projectPointOnWall(sourceWall, renderWall.end);
+  const span = resolveWallVerticalSpan(wall, floor);
   const context = {
     floor,
     floorId: floor.id,
     wall,
     sourceWall,
+    // The untrimmed line the body stands on. Anything measured in the wall's
+    // own u/v — framing, panels, fasteners — is placed against this, because
+    // its u = 0 is the wall's start rather than the first column face.
+    bodyWall,
     renderWall,
     wallRenderData,
     trimStartAlong,
     trimEndAlong,
     renderLength: wallLength(renderWall),
-    wallBase: floorLevel + wallBaseOffset(wall),
-    wallTop: floorLevel + wallBaseOffset(wall) + (wall.height ?? 0),
+    wallBase: span.base,
+    wallTop: span.top,
+    wallDatum: span.datum,
   };
 
   const openings = [
@@ -119,8 +133,8 @@ export function buildWallPreviewContext(floor, wall, floorLevel) {
   };
 }
 
-export function buildWallPreviewContexts(floor, floorLevel) {
-  return (floor.walls || []).map((wall) => buildWallPreviewContext(floor, wall, floorLevel));
+export function buildWallPreviewContexts(floor) {
+  return (floor.walls || []).map((wall) => buildWallPreviewContext(floor, wall));
 }
 
 export function buildWallSolidSegments(context) {

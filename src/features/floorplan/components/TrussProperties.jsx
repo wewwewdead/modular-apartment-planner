@@ -1,6 +1,6 @@
 import InputField from './InputField';
 import styles from './PropertiesPanel.module.css';
-import { useEditor } from '@/features/floorplan/context/FloorplanContext';
+import { useEditorState, useToolSettings } from '@/features/floorplan/context/FloorplanContext';
 import PhaseSelector from './PhaseSelector';
 import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { buildTrussSystemGeometry, getTrussSystemPurlinTotalLength } from '@/geometry/trussGeometry';
@@ -76,7 +76,9 @@ function offsetsDiffer(a, b) {
 }
 
 export function TrussEmptyState({ project, activeFloorId, editorDispatch }) {
-  const { toolState } = useEditor();
+  // The armed truss type, not the live draw preview: nothing here follows the
+  // pointer.
+  const toolState = useToolSettings();
   const floors = getOrderedFloors(project);
   const trussTypes = getDefaultTrussTypes();
   const activeTrussTypeId = toolState.trussTypeId || trussTypes[0]?.id || '';
@@ -176,7 +178,8 @@ export function TrussSystemProperties({
   activePhaseName = null,
   phaseViewMode = 'all',
 }) {
-  const { activeTool, toolState } = useEditor();
+  const { activeTool } = useEditorState();
+  const toolState = useToolSettings();
   const floors = getOrderedFloors(project);
   const roofSystem = project.roofSystem || null;
   const attachedRoofId = roofSystem?.trussAttachmentId === trussSystem.id ? roofSystem.id : null;

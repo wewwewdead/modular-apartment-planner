@@ -19,6 +19,7 @@ import {
 } from '@/domain/wallAssemblies';
 import {
   FASTENER_APPEARANCE_MODES,
+  deriveRainscreenPanels,
   deriveWallFasteners,
   deriveWallFramingMembers,
   deriveWallPanels,
@@ -200,8 +201,43 @@ function createStairDescriptor(stair, floorLevel, floorId, landings, landingElev
   };
 }
 
+/**
+ * The three shared corten tones, in cycling order. Three instances for the whole
+ * scene, not three per wall and certainly not one per cassette: the batcher
+ * buckets on material identity, so a facade of a hundred panels drawn in a
+ * hundred tones would be a hundred draw calls.
+ */
+const RAINSCREEN_TONE_KEYS = Object.freeze(['wallRainscreen', 'wallRainscreenWarm', 'wallRainscreenDeep']);
+
+/**
+ * Which tone a cassette wears, from where it sits on the module grid.
+ *
+ * Deterministic on purpose. A random shuffle would look right once and then
+ * re-roll on the next rebuild, which both flickers the facade mid-drag and
+ * defeats the descriptor carry-over that makes dragging cheap — the descriptor
+ * would differ from the one before it every single frame. `column + 2·row` walks
+ * the three tones one step along a course and two steps up a course, so no two
+ * cassettes that share an edge share a tone.
+ */
+function rainscreenToneKey(panel) {
+  const column = Number.isFinite(panel?.moduleColumn) ? panel.moduleColumn : (panel?.index ?? 1) - 1;
+  const row = Number.isFinite(panel?.moduleRow) ? panel.moduleRow : 0;
+  return RAINSCREEN_TONE_KEYS[(((column + 2 * row) % 3) + 3) % 3];
+}
+
 function boardMaterialKey(material) {
-  return material === WALL_BOARD_MATERIALS.PLYWOOD ? 'wallPlywood' : 'wallFiberCement';
+  if (material === WALL_BOARD_MATERIALS.PLYWOOD) return 'wallPlywood';
+  if (material === WALL_BOARD_MATERIALS.RAINSCREEN) return RAINSCREEN_TONE_KEYS[0];
+  return 'wallFiberCement';
+}
+
+/** A board's material key, tone-cycled when the board is a rainscreen cassette. */
+function panelMaterialKey(material, panel) {
+  return material === WALL_BOARD_MATERIALS.RAINSCREEN ? rainscreenToneKey(panel) : boardMaterialKey(material);
+}
+
+function isRainscreenLayer(layer) {
+  return layer.material === WALL_BOARD_MATERIALS.RAINSCREEN;
 }
 
 function fastenerMaterialKey(appearance, boardMaterial) {
@@ -222,15 +258,20 @@ function detailedWallMetadata(context, assembly, extra = {}) {
   };
 }
 
+// Where a point of the wall's own u/v drawing lands in plan. `wall` here is
+// always the body's axis, never the drawn one: a facade pushed clear of its
+// columns carries its studs, boards and screws with it, and reading them off
+// the line the wall was drawn on would leave the frame standing beside the
+// wall it is inside.
 function shiftedWallPoint(wall, position, normal, offset) {
   return add(positionOnWall(wall, position), scale(normal, offset));
 }
 
 function createWallPanelDescriptor(id, context, region, normal, layer, metadata) {
   const direction = wallDirection(context.sourceWall);
-  const origin = shiftedWallPoint(context.sourceWall, 0, normal, layer.centerOffset);
+  const origin = shiftedWallPoint(context.bodyWall, 0, normal, layer.centerOffset);
   const planOutline = region.outline.map((point) =>
-    shiftedWallPoint(context.sourceWall, point.u, normal, layer.centerOffset),
+    shiftedWallPoint(context.bodyWall, point.u, normal, layer.centerOffset),
   );
   const minV = Math.min(...region.outline.map((point) => point.v));
   const maxV = Math.max(...region.outline.map((point) => point.v));
@@ -252,16 +293,45 @@ function createWallPanelDescriptor(id, context, region, normal, layer, metadata)
 
 const EMPTY_HIDDEN_BOARDS = new Map();
 
+/**
+ * Which segments of a wall's run are its first and last, and which way the wall
+ * points — everything an overhanging board needs to know to run on past the end
+ * of the wall without touching anything in between.
+ *
+ * A wall broken into three by two windows still has exactly two outer ends, and
+ * only those two move. The openings in the middle are holes in the cladding, not
+ * ends of it.
+ */
+function boardRunOf(segments, direction) {
+  return {
+    direction,
+    firstId: segments[0]?.id ?? null,
+    lastId: segments[segments.length - 1]?.id ?? null,
+  };
+}
+
+function skinStartPoint(segment, layer, run) {
+  return run && segment.id === run.firstId && layer.overhangStart
+    ? add(segment.startPoint, scale(run.direction, -layer.overhangStart))
+    : segment.startPoint;
+}
+
+function skinEndPoint(segment, layer, run) {
+  return run && segment.id === run.lastId && layer.overhangEnd
+    ? add(segment.endPoint, scale(run.direction, layer.overhangEnd))
+    : segment.endPoint;
+}
+
 /** Board skins for the given faces, one box per wall segment per face. */
-function buildSkinDescriptors(segments, layers, normal, assembly) {
+function buildSkinDescriptors(segments, layers, normal, assembly, run = null) {
   return segments.flatMap((segment) =>
     layers.map((layer) => {
       const delta = scale(normal, layer.centerOffset);
       return createLinearBoxDescriptor(
         `${segment.id}:${layer.side}`,
         'wall',
-        add(segment.startPoint, delta),
-        add(segment.endPoint, delta),
+        add(skinStartPoint(segment, layer, run), delta),
+        add(skinEndPoint(segment, layer, run), delta),
         layer.buildUp,
         segment.baseElevation,
         segment.topElevation - segment.baseElevation,
@@ -279,6 +349,49 @@ function buildSkinDescriptors(segments, layers, normal, assembly) {
   );
 }
 
+/**
+ * A rainscreen face as separate cassettes with open joints between them.
+ *
+ * The gaps are the finish, so the skin cannot be one box: what makes a corten
+ * facade read as a facade rather than as a brown wall is the shadow line every
+ * 900 mm. The layout comes from the same panel generator the wall detail editor
+ * draws, so what you see here is what an elevation of the wall shows and what
+ * the bill counts.
+ *
+ * Openings need no handling of their own. Each cassette arrives already cut
+ * against the doors and windows on the wall — a panel lapping a jamb comes back
+ * as the fragments left over, and one that lands wholly inside an opening comes
+ * back not at all.
+ */
+function buildRainscreenDescriptors(context, assembly, layer) {
+  const normal = perpendicular(wallDirection(context.sourceWall));
+  return deriveRainscreenPanels(context.wall, context.floor, layer.side).flatMap((panel) => {
+    const materialKey = rainscreenToneKey(panel);
+    return panel.fragments.map((fragment, fragmentIndex) =>
+      createLinearBoxDescriptor(
+        `${panel.id}:cassette:${fragmentIndex + 1}:3d`,
+        'wall',
+        shiftedWallPoint(context.bodyWall, fragment.u0, normal, layer.centerOffset),
+        shiftedWallPoint(context.bodyWall, fragment.u1, normal, layer.centerOffset),
+        layer.buildUp,
+        context.wallBase + fragment.v0,
+        fragment.v1 - fragment.v0,
+        {
+          sourceId: context.wall.id,
+          floorId: context.floorId,
+          wallId: context.wall.id,
+          wallAssembly: assembly,
+          materialKey,
+          assemblySide: layer.side,
+          boardMaterial: layer.material,
+          panelLabel: panel.label,
+          panelFragmentIndex: fragmentIndex,
+        },
+      ),
+    );
+  });
+}
+
 function buildFramingMemberDescriptors(context, assembly, options = {}) {
   const normal = perpendicular(wallDirection(context.sourceWall));
   const coreMaterialKey =
@@ -287,8 +400,8 @@ function buildFramingMemberDescriptors(context, assembly, options = {}) {
     createLinearBoxDescriptor(
       `${member.id}:3d`,
       'wall',
-      shiftedWallPoint(context.sourceWall, member.u0, normal, member.frameOffset || 0),
-      shiftedWallPoint(context.sourceWall, member.u1, normal, member.frameOffset || 0),
+      shiftedWallPoint(context.bodyWall, member.u0, normal, member.frameOffset || 0),
+      shiftedWallPoint(context.bodyWall, member.u1, normal, member.frameOffset || 0),
       member.depth,
       context.wallBase + member.v0,
       member.v1 - member.v0,
@@ -323,7 +436,7 @@ function buildDetailedWallObjects(context, assembly, layers) {
               normal,
               layer,
               detailedWallMetadata(context, assembly, {
-                materialKey: boardMaterialKey(layer.material),
+                materialKey: panelMaterialKey(layer.material, panel),
                 assemblySide: layer.side,
                 boardMaterial: layer.material,
                 wallDetailKind: 'panel',
@@ -343,13 +456,13 @@ function buildDetailedWallObjects(context, assembly, layers) {
           createLinearBoxDescriptor(
             `${panel.id}:fragment:${fragmentIndex + 1}:3d`,
             'wall',
-            shiftedWallPoint(context.sourceWall, fragment.u0, normal, layer.centerOffset),
-            shiftedWallPoint(context.sourceWall, fragment.u1, normal, layer.centerOffset),
+            shiftedWallPoint(context.bodyWall, fragment.u0, normal, layer.centerOffset),
+            shiftedWallPoint(context.bodyWall, fragment.u1, normal, layer.centerOffset),
             layer.buildUp,
             context.wallBase + fragment.v0,
             fragment.v1 - fragment.v0,
             detailedWallMetadata(context, assembly, {
-              materialKey: boardMaterialKey(layer.material),
+              materialKey: panelMaterialKey(layer.material, panel),
               assemblySide: layer.side,
               boardMaterial: layer.material,
               wallDetailKind: 'panel',
@@ -370,7 +483,7 @@ function buildDetailedWallObjects(context, assembly, layers) {
       const descriptor = createBoxDescriptor(
         `${fastener.id}:3d`,
         'wall',
-        shiftedWallPoint(context.sourceWall, fastener.u, normal, surfaceOffset),
+        shiftedWallPoint(context.bodyWall, fastener.u, normal, surfaceOffset),
         { x: fastenerRadius * 2, y: fastenerRadius * 2, z: fastenerDepth },
         context.wallBase + fastener.v - fastenerRadius,
         Math.atan2(wallDirection(context.sourceWall).y, wallDirection(context.sourceWall).x),
@@ -390,9 +503,17 @@ function buildDetailedWallObjects(context, assembly, layers) {
   }
 
   // A face that has not opted into explicit panelization keeps the existing
-  // opening-aware schematic skin while the opposite detailed face remains real.
-  const fallbackLayers = layers.filter((layer) => !detailing.sides[layer.side]?.enabled);
-  for (const segment of buildWallSolidSegments(context)) {
+  // opening-aware schematic skin while the opposite detailed face remains real —
+  // unless it is a rainscreen, whose cassettes are the finish rather than a
+  // documentation option and are laid out whether or not anyone detailed them.
+  const undetailedLayers = layers.filter((layer) => !detailing.sides[layer.side]?.enabled);
+  for (const layer of undetailedLayers.filter(isRainscreenLayer)) {
+    descriptors.push(...buildRainscreenDescriptors(context, assembly, layer));
+  }
+  const fallbackLayers = undetailedLayers.filter((layer) => !isRainscreenLayer(layer));
+  const fallbackSegments = buildWallSolidSegments(context);
+  const fallbackRun = boardRunOf(fallbackSegments, wallDirection(context.bodyWall));
+  for (const segment of fallbackSegments) {
     const height = segment.topElevation - segment.baseElevation;
     fallbackLayers.forEach((layer) => {
       const delta = scale(normal, layer.centerOffset);
@@ -400,8 +521,8 @@ function buildDetailedWallObjects(context, assembly, layers) {
         createLinearBoxDescriptor(
           `${segment.id}:${layer.side}`,
           'wall',
-          add(segment.startPoint, delta),
-          add(segment.endPoint, delta),
+          add(skinStartPoint(segment, layer, fallbackRun), delta),
+          add(skinEndPoint(segment, layer, fallbackRun), delta),
           layer.buildUp,
           segment.baseElevation,
           height,
@@ -463,7 +584,11 @@ function buildWallObjects(wallContexts, hiddenBoardSides = EMPTY_HIDDEN_BOARDS) 
     }
 
     const normal = perpendicular(wallDirection(context.renderWall));
-    const layers = deriveWallAssemblyLayers(assembly).filter(
+    // Measured on the body's own untrimmed axis: a board's overhang is the
+    // corner detail at the end of the WALL, and a wall cut back to a column face
+    // is still the same length of wall.
+    const boardRun = boardRunOf(segments, wallDirection(context.bodyWall));
+    const layers = deriveWallAssemblyLayers(assembly, wallLength(context.bodyWall)).filter(
       (layer) => layer.material !== WALL_BOARD_MATERIALS.NONE && layer.buildUp > 0,
     );
     const coreMaterialKey =
@@ -479,6 +604,17 @@ function buildWallObjects(wallContexts, hiddenBoardSides = EMPTY_HIDDEN_BOARDS) 
       return buildDetailedWallObjects(context, assembly, visibleLayers);
     }
 
+    // A rainscreen leaves the segment loop entirely: its skin is a grid of
+    // cassettes over the wall's whole resolved span, not one box per gap
+    // between openings. Every other board keeps the schematic skin exactly as
+    // it was — a wall with no rainscreen on it takes the same path, in the same
+    // order, and builds the same descriptors it always did.
+    const rainscreenLayers = visibleLayers.filter(isRainscreenLayer);
+    const skinLayers = rainscreenLayers.length
+      ? visibleLayers.filter((layer) => !isRainscreenLayer(layer))
+      : visibleLayers;
+    const rainscreen = rainscreenLayers.flatMap((layer) => buildRainscreenDescriptors(context, assembly, layer));
+
     // With a face stripped, show the studs, tracks and noggins the wall is
     // actually built from rather than the slab that stands in for them. The
     // layout derives even when detailing is off — that flag governs drawing the
@@ -487,30 +623,33 @@ function buildWallObjects(wallContexts, hiddenBoardSides = EMPTY_HIDDEN_BOARDS) 
     if (visibleLayers.length < layers.length) {
       const members = buildFramingMemberDescriptors(context, assembly, { includeWhenDisabled: true });
       if (members.length) {
-        return [...members, ...buildSkinDescriptors(segments, visibleLayers, normal, assembly)];
+        return [...members, ...buildSkinDescriptors(segments, skinLayers, normal, assembly, boardRun), ...rainscreen];
       }
     }
 
-    return segments.flatMap((segment) => {
-      const metadata = {
-        sourceId: segment.wallId,
-        floorId: segment.floorId,
-        wallId: segment.wallId,
-        wallAssembly: assembly,
-      };
-      const height = segment.topElevation - segment.baseElevation;
-      const core = createLinearBoxDescriptor(
-        `${segment.id}:core`,
-        'wall',
-        segment.startPoint,
-        segment.endPoint,
-        wallAssemblyCoreDepth(assembly),
-        segment.baseElevation,
-        height,
-        { ...metadata, materialKey: coreMaterialKey, assemblySide: 'core' },
-      );
-      return [core, ...buildSkinDescriptors([segment], visibleLayers, normal, assembly)];
-    });
+    return [
+      ...segments.flatMap((segment) => {
+        const metadata = {
+          sourceId: segment.wallId,
+          floorId: segment.floorId,
+          wallId: segment.wallId,
+          wallAssembly: assembly,
+        };
+        const height = segment.topElevation - segment.baseElevation;
+        const core = createLinearBoxDescriptor(
+          `${segment.id}:core`,
+          'wall',
+          segment.startPoint,
+          segment.endPoint,
+          wallAssemblyCoreDepth(assembly),
+          segment.baseElevation,
+          height,
+          { ...metadata, materialKey: coreMaterialKey, assemblySide: 'core' },
+        );
+        return [core, ...buildSkinDescriptors([segment], skinLayers, normal, assembly, boardRun)];
+      }),
+      ...rainscreen,
+    ];
   });
 }
 
@@ -603,7 +742,13 @@ function buildDoorObjects(wallContexts) {
   return wallContexts
     .flatMap((context) => context.openings)
     .filter((opening) => opening.kind === 'door')
-    .map((opening) => createOpeningInsertDescriptor(opening));
+    .map((opening) => {
+      const desc = createOpeningInsertDescriptor(opening);
+      desc.geometry = 'door';
+      desc.doorType = opening.type || 'swing';
+      desc.openDirection = opening.openDirection || 'left';
+      return desc;
+    });
 }
 
 function buildWindowObjects(wallContexts) {
@@ -771,7 +916,7 @@ export function buildFloorPreviewObjects(floor, options = {}) {
   const landingElevationMap = new Map(landings.map((l) => [l.id, resolveLandingElevation(l, stairs, floorLevel)]));
   const crossFloorStairContexts = (options.stairContexts || []).filter((context) => context.floorId !== floor.id);
 
-  const wallContexts = buildWallPreviewContexts(floor, floorLevel);
+  const wallContexts = buildWallPreviewContexts(floor);
 
   return [
     ...buildSlabObjects(floor),

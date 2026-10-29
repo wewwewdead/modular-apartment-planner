@@ -8,6 +8,7 @@ import {
   syncWallAttachmentPoints,
 } from './wallColumnGeometry';
 import { createColumn, createWall } from '@/domain/models';
+import { resolveWallClearRun } from '@/domain/wallFit';
 
 // Column centered at (1000,1000), 400 wide x 300 deep, no rotation.
 // Corners (CW in y-down space): (800,850) (1200,850) (1200,1150) (800,1150).
@@ -296,6 +297,68 @@ describe('getWallRenderData', () => {
     expect(data.trimEnd).toEqual({ x: 5000, y: 1000 });
   });
 
+  it('builds the body off the drawn axis when the wall is offset', () => {
+    const wall = createWall({ x: 0, y: 0 }, { x: 1000, y: 0 }, 200, { outboardOffset: 300 });
+    const data = getWallRenderData(wall, []);
+
+    // Direction (1,0) puts the +perpendicular on +y, so a positive offset is a
+    // body centred on y=300 and skinned 100 either side of it.
+    expect(data.renderWall.start).toEqual({ x: 0, y: 300 });
+    expect(data.renderWall.end).toEqual({ x: 1000, y: 300 });
+    const ys = data.outline.map((point) => point.y).sort((a, b) => a - b);
+    expect(ys[0]).toBeCloseTo(200, 6);
+    expect(ys[ys.length - 1]).toBeCloseTo(400, 6);
+
+    // The drawn axis is untouched — it is what the wall is dimensioned by.
+    expect(data.wall.start).toEqual({ x: 0, y: 0 });
+    expect(data.wall.end).toEqual({ x: 1000, y: 0 });
+  });
+
+  it('puts a negative offset on the other side', () => {
+    const wall = createWall({ x: 0, y: 0 }, { x: 1000, y: 0 }, 200, { outboardOffset: -300 });
+    expect(getWallRenderData(wall, []).renderWall.start).toEqual({ x: 0, y: -300 });
+  });
+
+  it('leaves an arc wall on its axis whatever offset is stored', () => {
+    const wall = createWall({ x: 0, y: 0 }, { x: 1000, y: 0 }, 200, {
+      controlPoint: { x: 500, y: 400 },
+      outboardOffset: 300,
+    });
+    const data = getWallRenderData(wall, []);
+    expect(data.trimStart).toEqual({ x: 0, y: 0 });
+    expect(data.trimEnd).toEqual({ x: 1000, y: 0 });
+  });
+
+  it('gives byte-for-byte the legacy result when nothing is offset', () => {
+    const column = makeColumn();
+    const legacy = createWall({ x: 1000, y: 1000 }, { x: 5000, y: 1000 }, 150, {
+      startAttachment: cornerAttachment(column.id, 0),
+    });
+    // A wall saved before the field existed, and one explicitly on its axis.
+    delete legacy.outboardOffset;
+    const zeroed = { ...legacy, outboardOffset: 0 };
+    const nonsense = { ...legacy, outboardOffset: Number.NaN };
+
+    const before = getWallRenderData(legacy, [column]);
+    for (const variant of [zeroed, nonsense]) {
+      const after = getWallRenderData(variant, [column]);
+      expect(after.outline).toEqual(before.outline);
+      expect(after.trimStart).toEqual(before.trimStart);
+      expect(after.trimEnd).toEqual(before.trimEnd);
+    }
+  });
+
+  it('hands back the drawn axis itself for a wall nobody has offset', () => {
+    const wall = createWall({ x: 0, y: 0 }, { x: 1000, y: 0 }, 200);
+    const data = getWallRenderData(wall, []);
+    // Reference-identical, not merely equal — a consumer switching to the built
+    // axis must cost an unoffset wall nothing at all.
+    expect(data.bodyWall).toBe(data.wall);
+    expect(getWallRenderData({ ...wall, controlPoint: { x: 500, y: 400 } }, []).bodyWall).toEqual(
+      expect.objectContaining({ start: { x: 0, y: 0 }, end: { x: 1000, y: 0 } }),
+    );
+  });
+
   it('trims a wall crossing a column back to the near column face', () => {
     const col = makeColumn(); // spans x in [800,1200]
     // Wall starts at the column center and heads right; attached at a corner so sync
@@ -309,5 +372,77 @@ describe('getWallRenderData', () => {
     expect(data.trimStart.x).toBeGreaterThanOrEqual(800);
     expect(data.trimStart.x).toBeLessThanOrEqual(1200);
     expect(data.trimEnd).toEqual({ x: 5000, y: 1000 });
+  });
+});
+
+/**
+ * The rule the whole feature turns on: a wall is trimmed on the line it is
+ * BUILT on, not the line it is drawn on. An offset small enough to leave the
+ * body still inside its column dies into the column face, exactly as it always
+ * did; an offset big enough to carry it clear of the column is not cut back at
+ * all, because there is nothing there to cut it back to. A bypass wall does not
+ * die into the column, and its clear run is its full centreline length.
+ */
+describe('getWallRenderData — offset bodies and column trimming', () => {
+  // 400 x 400 on the origin: x and y both span [-200, 200].
+  const squareColumn = () => createColumn(0, 0, 400, 400);
+  const centreAttachment = (columnId) => ({
+    kind: 'column',
+    columnId,
+    featureType: 'centerline',
+    featureIndex: 0,
+    offset: 0,
+  });
+
+  function wallOffColumnCentre(column, outboardOffset) {
+    return createWall({ x: 0, y: 0 }, { x: 5000, y: 0 }, 150, {
+      startAttachment: centreAttachment(column.id),
+      outboardOffset,
+    });
+  }
+
+  it('trims to the column face along the offset line while the body still overlaps', () => {
+    const column = squareColumn();
+    // 100 across, against a column reaching 200 either side — still inside it.
+    const data = getWallRenderData(wallOffColumnCentre(column, 100), [column]);
+
+    expect(data.trimStart.x).toBeCloseTo(200, 6);
+    expect(data.trimStart.y).toBeCloseTo(100, 6);
+  });
+
+  it('carries the built axis across without trimming it', () => {
+    const column = squareColumn();
+    const data = getWallRenderData(wallOffColumnCentre(column, 100), [column]);
+
+    // Same shift as the body, but the wall's full run: a stud at u = 0 belongs
+    // at the wall's start, not at the column face the body happens to die into.
+    expect(data.bodyWall.start).toEqual({ x: 0, y: 100 });
+    expect(data.bodyWall.end).toEqual({ x: 5000, y: 100 });
+    expect(data.renderWall.start.x).toBeCloseTo(200, 6);
+    // And the drawn axis stays where it was drawn.
+    expect(data.wall.start).toEqual({ x: 0, y: 0 });
+  });
+
+  it('does not trim a body that has cleared its column', () => {
+    const column = squareColumn();
+    // 300 across, past the 200 face: the ray never meets the column at all.
+    const data = getWallRenderData(wallOffColumnCentre(column, 300), [column]);
+
+    expect(data.trimStart).toEqual({ x: 0, y: 300 });
+    expect(data.trimEnd).toEqual({ x: 5000, y: 300 });
+  });
+
+  it('reports the full centreline length as the clear run once the body is clear', () => {
+    const column = squareColumn();
+    const floor = { columns: [column] };
+
+    const dying = resolveWallClearRun(wallOffColumnCentre(column, 0), floor);
+    expect(dying.trimmed).toBe(true);
+    expect(dying.length).toBeCloseTo(4800, 6);
+
+    const bypassing = resolveWallClearRun(wallOffColumnCentre(column, 300), floor);
+    expect(bypassing.trimmed).toBe(false);
+    expect(bypassing.length).toBeCloseTo(bypassing.centrelineLength, 6);
+    expect(bypassing.length).toBeCloseTo(5000, 6);
   });
 });

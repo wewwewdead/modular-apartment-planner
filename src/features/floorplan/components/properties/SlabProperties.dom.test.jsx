@@ -2,7 +2,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createFloor, createSlab } from '@/domain/models';
+import { createFloor, createSlab, createWall } from '@/domain/models';
+import { enterDrawCeilingUnderSlab, enterPickCeilingBeamsUnderSlab } from '@/features/floorplan/utils/addCeilingEntry';
 import SlabProperties from './SlabProperties';
 
 const u = {
@@ -37,10 +38,12 @@ function readout(label) {
 }
 
 function mount(overhang, editorState = {}) {
-  const floor = { ...createFloor('First', 1, { elevation: 3000 }), id: 'floor_first' };
+  const floor = { ...createFloor('First', 1, { elevation: 3000 }), id: 'floor_first', walls: editorState.walls ?? [] };
   const slab = { ...createSlab(floor.id, rectangle(0, 0, 3000, 5600), 200, 3000), id: 'slab_upper' };
   const actions = [];
   const editorActions = [];
+  const traced = [];
+  const picked = [];
 
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -61,11 +64,23 @@ function mount(overhang, editorState = {}) {
         phases={[]}
         activeTool={editorState.activeTool ?? null}
         toolState={editorState.toolState ?? {}}
+        ceilingHostFloorName={editorState.ceilingHostFloorName ?? null}
+        ceilingHostBeamCount={editorState.ceilingHostBeamCount ?? 0}
+        cantileverCeilingCount={editorState.cantileverCeilingCount ?? 0}
+        onTraceCantileverCeiling={() => traced.push('trace')}
+        onDrawCeilingUnderSlab={editorState.onDrawCeilingUnderSlab ?? (() => {})}
+        onPickCeilingBeams={editorState.onPickCeilingBeams ?? (() => picked.push('pick'))}
       />,
     ),
   );
 
-  return { slab, floor, actions, editorActions };
+  return { slab, floor, actions, editorActions, traced, picked };
+}
+
+/** Sections remember their fold per user, and a closed one renders no body. */
+function openSection(title) {
+  const head = [...container.querySelectorAll('button')].find((node) => node.textContent.trim().startsWith(title));
+  if (head && head.getAttribute('aria-expanded') === 'false') click(head);
 }
 
 function rectangle(x, y, width, depth) {
@@ -165,6 +180,32 @@ describe('SlabProperties — cantilever', () => {
 
     expect(readout('Bending utilisation')).toBeNull();
     expect(readout('Tip deflection, long term')).toBeNull();
+  });
+
+  /* The two load cases a projecting plate can be in, and the panel's obligation
+     to say which one the numbers came from. */
+
+  it('says outright when nothing was found standing on the tip', () => {
+    mount(overhang);
+
+    expect(container.textContent).toContain('No wall load detected on the tip');
+    expect(readout('Facade load on tip')).toBeNull();
+  });
+
+  it('names the facade it found on the tip and what that load is', () => {
+    // 150 CHB, 2.4 m tall, running along the projecting edge: 2.7 · 2.4 = 6.48
+    // kN/m. On the strip that is 6480 N at the tip, so 1.35 · 6480 · 600 =
+    // 5.25 kN·m on top of the plate's own 2.39, and the bending utilisation
+    // goes from 17 % to 54 % — the difference between a balcony and a facade.
+    const face = {
+      ...createWall({ x: 3000, y: 5600 }, { x: 0, y: 5600 }, 150, { height: 2400 }),
+      id: 'wall_face',
+    };
+    mount(overhang, { walls: [face] });
+
+    expect(readout('Facade load on tip')).toEqual(['6.5 from 1 wall', 'kN/m']);
+    expect(container.textContent).toContain('facade line load from 1 wall(s) on the tip');
+    expect(readout('Bending utilisation')).toEqual(['54', '%']);
   });
 });
 
@@ -520,5 +561,282 @@ describe('SlabProperties — removing a cantilever', () => {
         message: 'This run hangs out because of the edge beside it — pull that edge back instead.',
       },
     ]);
+  });
+});
+
+/**
+ * The bay rides the cantilever tool: same gesture, different thing built. What
+ * the panel has to get right is saying WHICH of the two the next click means,
+ * and asking for the one extra number a bay needs.
+ */
+describe('SlabProperties — projecting bay', () => {
+  const bayPick = {
+    kind: 'bay',
+    slabId: 'slab_upper',
+    edgeIndex: 0,
+    support: null,
+    alongMm: 1500,
+    defaultDistanceMm: 600,
+    distanceMm: 600,
+    defaultWidthMm: 2400,
+    widthMm: 2400,
+  };
+
+  function pickedBay(extra = {}) {
+    return {
+      activeTool: 'cantilever',
+      toolState: { cantileverMode: 'bay', cantileverPick: { ...bayPick, ...extra } },
+    };
+  }
+
+  it('offers the bay alongside the cantilever on a plate that has neither', () => {
+    mount(null);
+
+    expect(findByText('button', 'Add cantilever')).not.toBeNull();
+    expect(findByText('button', 'Add projecting bay')).not.toBeNull();
+  });
+
+  it('arms the same tool but says which of the two the next click means', () => {
+    const { editorActions } = mount(null);
+
+    click(findByText('button', 'Add projecting bay'));
+
+    expect(editorActions.slice(0, 3)).toEqual([
+      { type: 'SET_TOOL', tool: 'cantilever' },
+      { type: 'SELECT_OBJECT', id: 'slab_upper', objectType: 'slab' },
+      // SET_TOOL drops the tool state with the tool, so the mode goes after it.
+      { type: 'UPDATE_TOOL_STATE', payload: { cantileverMode: 'bay' } },
+    ]);
+    expect(editorActions.at(-1).message).toContain('where the bay should project');
+  });
+
+  it('asks for a projection and a width once a side is picked', () => {
+    mount(null, pickedBay());
+
+    expect(container.textContent).toContain('Projection');
+    expect(container.textContent).toContain('Bay width');
+    expect(container.textContent).toContain('from clicked edge');
+    expect(findByText('button', 'Apply bay')).not.toBeNull();
+    expect(findByText('button', 'Apply cantilever')).toBeNull();
+  });
+
+  it('threads a typed width into tool state', () => {
+    const { editorActions } = mount(null, pickedBay());
+    const input = container.querySelector('input[type="number"][step="100"]');
+
+    act(() => {
+      input.value = '1800';
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+
+    expect(editorActions[0]).toEqual({
+      type: 'UPDATE_TOOL_STATE',
+      payload: { cantileverPick: { ...bayPick, widthMm: 1800 } },
+    });
+  });
+
+  it('commits the plate and its three walls in one action', () => {
+    const { actions } = mount(null, pickedBay());
+
+    click(findByText('button', 'Apply bay'));
+
+    expect(actions).toHaveLength(1);
+    expect(actions[0].type).toBe('SLAB_PROJECT_BAY');
+    expect(actions[0].walls).toHaveLength(3);
+  });
+});
+
+/**
+ * A plate's ceiling belongs to the storey BELOW it — a floor's slabs are the
+ * deck it stands on — so this section is offered from the plate and says which
+ * storey the ceiling will land on. The panel holds no project: which storey
+ * that is, and whether the plate reaches past it, arrive as props.
+ */
+describe('SlabProperties — ceiling under the slab', () => {
+  const below = { ceilingHostFloorName: 'Ground', cantileverCeilingCount: 1 };
+
+  it('says why there is nothing to offer on the lowest floor', () => {
+    mount(null);
+    openSection('Ceiling');
+
+    expect(container.textContent).toContain('This is the lowest floor');
+    expect(findByText('button', 'Draw ceiling under slab')).toBeNull();
+    expect(findByText('button', 'Trace cantilever ceiling')).toBeNull();
+  });
+
+  it('names the storey the ceiling will land on', () => {
+    mount(null, below);
+    openSection('Ceiling');
+
+    expect(findByText('button', 'Draw ceiling under slab')).not.toBeNull();
+    expect(findByText('button', 'Trace cantilever ceiling').disabled).toBe(false);
+  });
+
+  it('keeps the automatic trace on screen but disabled where the plate does not overhang, and says why', () => {
+    mount(null, { ...below, cantileverCeilingCount: 0 });
+    openSection('Ceiling');
+
+    expect(findByText('button', 'Trace cantilever ceiling').disabled).toBe(true);
+    expect(container.textContent).toContain('Slab does not overhang the floor below');
+    // Drawing it by hand is still the answer, so that one stays live.
+    expect(findByText('button', 'Draw ceiling under slab').disabled).toBe(false);
+  });
+
+  it('arms the draw tool for the storey below, in the order the tool needs', () => {
+    const editorActions = [];
+    mount(null, {
+      ...below,
+      onDrawCeilingUnderSlab: () =>
+        enterDrawCeilingUnderSlab({
+          slab: { id: 'slab_upper' },
+          targetFloor: { id: 'floor_ground', name: 'Ground' },
+          editorDispatch: (action) => editorActions.push(action),
+        }),
+    });
+    openSection('Ceiling');
+
+    click(findByText('button', 'Draw ceiling under slab'));
+
+    // SET_TOOL clears the selection and the tool state together, so the plate
+    // and then the target storey have to follow it.
+    expect(editorActions).toEqual([
+      { type: 'SET_TOOL', tool: 'ceiling' },
+      { type: 'SELECT_OBJECT', id: 'slab_upper', objectType: 'slab' },
+      { type: 'UPDATE_TOOL_STATE', payload: { ceilingTargetFloorId: 'floor_ground' } },
+      {
+        type: 'SET_STATUS_MESSAGE',
+        message: 'Trace the ceiling area under this slab — click points, close on the first point.',
+      },
+    ]);
+  });
+
+  it('hands the automatic trace back to the panel that holds the project', () => {
+    const { traced } = mount(null, below);
+    openSection('Ceiling');
+
+    click(findByText('button', 'Trace cantilever ceiling'));
+
+    expect(traced).toEqual(['trace']);
+  });
+
+  /* ── The part inside the frame ──────────────────────────────────────────
+   *
+   * Most of a plate is not overhanging anything: it stands inside its own
+   * beams, and the line a ceiling stops on there is a beam face rather than
+   * anything worth tracing by hand. So the first offer is to point at the
+   * beams — which are on the storey below, and may not exist yet.
+   */
+
+  it('offers the beam pick first, and only where there are beams below to pick', () => {
+    mount(null, { ...below, ceilingHostBeamCount: 4 });
+    openSection('Ceiling');
+
+    const buttons = [...container.querySelectorAll('button')].map((node) => node.textContent.trim());
+    expect(buttons.indexOf('Pick beams')).toBeLessThan(buttons.indexOf('Trace cantilever ceiling'));
+    expect(findByText('button', 'Pick beams').disabled).toBe(false);
+    expect(container.textContent).not.toContain('No beams overhead');
+  });
+
+  it('says which storey needs beams when there are none to pick', () => {
+    mount(null, below);
+    openSection('Ceiling');
+
+    expect(findByText('button', 'Pick beams').disabled).toBe(true);
+    expect(container.textContent).toContain('No beams overhead on Ground — place top beams on its columns');
+  });
+
+  it('arms the pick tool for the storey below, in the order the tool needs', () => {
+    const editorActions = [];
+    mount(null, {
+      ...below,
+      ceilingHostBeamCount: 4,
+      onPickCeilingBeams: () =>
+        enterPickCeilingBeamsUnderSlab({
+          slab: { id: 'slab_upper' },
+          targetFloor: { id: 'floor_ground', name: 'Ground' },
+          editorDispatch: (action) => editorActions.push(action),
+        }),
+    });
+    openSection('Ceiling');
+
+    click(findByText('button', 'Pick beams'));
+
+    expect(editorActions).toEqual([
+      { type: 'SET_TOOL', tool: 'ceiling_beam_pick' },
+      { type: 'SELECT_OBJECT', id: 'slab_upper', objectType: 'slab' },
+      {
+        type: 'UPDATE_TOOL_STATE',
+        payload: { ceilingTargetFloorId: 'floor_ground', ceilingClipSlabId: 'slab_upper' },
+      },
+      {
+        type: 'SET_STATUS_MESSAGE',
+        message:
+          'Click the beams on Ground, the storey below this one, then press Enter — the ceiling covers the plate inside them.',
+      },
+    ]);
+  });
+
+  /* ── One cantilever of several ──────────────────────────────────────────
+   *
+   * The count arrives already narrowed to the run picked on the plan — the
+   * panel that holds the project does the narrowing — so all this has to do is
+   * say which of the two things it is offering.
+   */
+
+  const twoRuns = {
+    floorId: 'floor_first',
+    belowFloorId: 'floor_ground',
+    slabId: 'slab_upper',
+    maxDepthMm: 1200,
+    overhangEdges: [
+      { start: { x: 3000, y: 5600 }, end: { x: 0, y: 5600 }, depthMm: 600, lengthMm: 3000, boundaryEdgeIndex: 2 },
+      { start: { x: 0, y: 5600 }, end: { x: 0, y: 0 }, depthMm: 1200, lengthMm: 5600, boundaryEdgeIndex: 3 },
+    ],
+  };
+
+  it('names the picked cantilever on the trace button', () => {
+    mount(twoRuns, { ...below, selectedOverhangEdge: { slabId: 'slab_upper', edgeIndex: 0 } });
+    openSection('Ceiling');
+
+    expect(findByText('button', 'Trace ceiling for this cantilever')).not.toBeNull();
+    expect(findByText('button', 'Trace cantilever ceiling')).toBeNull();
+  });
+
+  it('keeps the whole-plate wording when no run is picked, and on a pick that no longer answers to one', () => {
+    mount(twoRuns, below);
+    openSection('Ceiling');
+    expect(findByText('button', 'Trace cantilever ceiling')).not.toBeNull();
+
+    container.remove();
+    mount(twoRuns, { ...below, selectedOverhangEdge: { slabId: 'slab_upper', edgeIndex: 9 } });
+    openSection('Ceiling');
+    expect(findByText('button', 'Trace cantilever ceiling')).not.toBeNull();
+  });
+
+  it('tells a cantilever too small to ceil apart from a plate that overhangs nothing', () => {
+    mount(twoRuns, {
+      ...below,
+      cantileverCeilingCount: 0,
+      selectedOverhangEdge: { slabId: 'slab_upper', edgeIndex: 0 },
+    });
+    openSection('Ceiling');
+
+    expect(container.textContent).toContain('This cantilever is too small to carry a ceiling');
+    expect(container.textContent).not.toContain('Slab does not overhang the floor below');
+    expect(findByText('button', 'Trace ceiling for this cantilever').disabled).toBe(true);
+
+    container.remove();
+    mount(null, { ...below, cantileverCeilingCount: 0 });
+    openSection('Ceiling');
+    expect(container.textContent).toContain('Slab does not overhang the floor below');
+  });
+
+  it('hands the scoped trace back the same way as the unscoped one', () => {
+    const { traced } = mount(twoRuns, { ...below, selectedOverhangEdge: { slabId: 'slab_upper', edgeIndex: 0 } });
+    openSection('Ceiling');
+
+    click(findByText('button', 'Trace ceiling for this cantilever'));
+
+    expect(traced).toEqual(['trace']);
   });
 });

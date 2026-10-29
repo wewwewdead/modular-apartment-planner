@@ -172,3 +172,67 @@ describe('roomPolygonKey', () => {
     expect(roomPolygonKey(a)).not.toBe(roomPolygonKey(b));
   });
 });
+
+/**
+ * A wall built off the line it was drawn on bounds its room at the face nearer
+ * the room, not at the axis. The whole point is that the usable floor reaches
+ * PAST the grid line: a 140 wall pushed 200 outboard leaves its inside face
+ * 130 outside the axis, and that is where the room stops.
+ *
+ * The rule is discontinuous at zero, and deliberately so — a wall with no offset
+ * measures on its centreline exactly as it always has.
+ */
+describe('detectRooms — walls built off their axis', () => {
+  // The room lies at y > 0, so an outboard offset on the bottom wall is toward
+  // -y: direction (1,0) puts +perpendicular on +y, hence a negative offset.
+  function outboard(baseWall, offset, thickness = 140) {
+    return { ...baseWall, thickness, outboardOffset: offset };
+  }
+
+  it('measures to the inboard face of an offset wall', () => {
+    const [bottom, right, top, left] = rectangleWalls();
+    const rooms = detectRooms([outboard(bottom, -200), right, top, left]);
+
+    expect(rooms).toHaveLength(1);
+    // 200 out less half of 140 leaves the inside face 130 past the axis.
+    expect(rooms[0].area).toBeCloseTo(4000 * 3130, 3);
+    expect(rooms[0].points.some((point) => Math.abs(point.y + 130) < 1e-6)).toBe(true);
+  });
+
+  it('closes the loop where an offset wall meets ordinary ones', () => {
+    const [bottom, right, top, left] = rectangleWalls();
+    const rooms = detectRooms([outboard(bottom, -200), right, top, left]);
+
+    // The corners the unoffset neighbours were drawn at travelled along their
+    // own lines to meet the shifted one — the loop never opened.
+    expect(rooms).toHaveLength(1);
+    expect(rooms[0].points).toHaveLength(4);
+  });
+
+  it('mitres a corner where both walls are offset', () => {
+    const [bottom, right, top, left] = rectangleWalls();
+    // The right wall runs (4000,0) -> (4000,3000): direction (0,1) puts
+    // +perpendicular on -x, so outboard (+x) is again a negative offset.
+    const rooms = detectRooms([outboard(bottom, -200), outboard(right, -200), top, left]);
+
+    expect(rooms).toHaveLength(1);
+    expect(rooms[0].area).toBeCloseTo(4130 * 3130, 3);
+  });
+
+  it('leaves a plan where nothing is offset exactly as it was', () => {
+    const plain = rectangleWalls();
+    const zeroed = plain.map((entry) => ({ ...entry, outboardOffset: 0 }));
+
+    expect(detectRooms(zeroed)).toEqual(detectRooms(plain));
+    expect(detectRooms(zeroed)[0].area).toBeCloseTo(12_000_000, 3);
+  });
+
+  it('ignores an offset stored on an arc wall', () => {
+    const [bottom, right, top, left] = rectangleWalls();
+    const curved = { ...bottom, controlPoint: { x: 2000, y: 200 }, outboardOffset: -200, thickness: 140 };
+
+    // The arc's chord still bounds the room on its axis: room detection works
+    // on segments, and an offset an arc cannot honour must not move them.
+    expect(detectRooms([curved, right, top, left])[0].area).toBeCloseTo(12_000_000, 3);
+  });
+});

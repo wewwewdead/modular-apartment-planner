@@ -1,3 +1,4 @@
+import { projectSectionLine } from '@/sections/geometry';
 import { buildTrussSystemGeometry } from './trussGeometry';
 import { projectPointToSectionCut, sectionCutLength } from './sectionCutGeometry';
 import { SECTION_VISIBILITY_REASONS } from '@/sections/diagnostics';
@@ -58,25 +59,12 @@ export function buildTrussSectionElements(trussSystems = [], sectionCut) {
             continue;
           }
 
-          const renderMode =
-            Math.abs(projectedStart.offset) <= EPSILON ||
-            Math.abs(projectedEnd.offset) <= EPSILON ||
-            (projectedStart.offset < 0 && projectedEnd.offset > 0) ||
-            (projectedStart.offset > 0 && projectedEnd.offset < 0)
-              ? 'cut'
-              : 'projection';
-
-          lineElements.push({
+          const element = projectSectionLine(sectionCut, member.startWorld, member.endWorld, {
             id: `section-truss-${copy.id}-${member.id}`,
             category: 'truss',
-            renderMode,
-            depth: Math.max(0, (projectedStart.offset + projectedEnd.offset) / 2),
             sourceId: instanceGeometry.instance.id,
-            points: [
-              { x: projectedStart.along, z: member.startWorld.elevation },
-              { x: projectedEnd.along, z: member.endWorld.elevation },
-            ],
           });
+          if (element) lineElements.push(element);
         }
       }
 
@@ -95,25 +83,12 @@ export function buildTrussSectionElements(trussSystems = [], sectionCut) {
           continue;
         }
 
-        const renderMode =
-          Math.abs(projectedStart.offset) <= EPSILON ||
-          Math.abs(projectedEnd.offset) <= EPSILON ||
-          (projectedStart.offset < 0 && projectedEnd.offset > 0) ||
-          (projectedStart.offset > 0 && projectedEnd.offset < 0)
-            ? 'cut'
-            : 'projection';
-
-        lineElements.push({
+        const element = projectSectionLine(sectionCut, segment.startWorld, segment.endWorld, {
           id: `section-purlin-${segment.id}`,
           category: 'truss',
-          renderMode,
-          depth: Math.max(0, (projectedStart.offset + projectedEnd.offset) / 2),
           sourceId: instanceGeometry.instance.id,
-          points: [
-            { x: projectedStart.along, z: segment.startWorld.elevation },
-            { x: projectedEnd.along, z: segment.endWorld.elevation },
-          ],
         });
+        if (element) lineElements.push(element);
       }
     }
   }

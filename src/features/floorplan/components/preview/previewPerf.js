@@ -32,6 +32,28 @@ const STORAGE_KEY = 'previewPerf';
 /** Frames kept — five seconds at 60 fps, which is longer than any gesture. */
 const FRAME_HISTORY = 300;
 
+/**
+ * How many ceiling luminaires light the whole scene as real THREE lights.
+ *
+ * Every `MeshStandardMaterial` fragment iterates every point and spot light in
+ * the render list, whether or not the light reaches it — there is no culling of
+ * lights against geometry in three's forward renderer. So the shading cost of a
+ * lit building is (pixels × lights), and a four-storey block of flats with a
+ * downlight grid in every room walks straight into three figures of them.
+ *
+ * The budget is here rather than beside the code that applies it because this is
+ * the file a measurement session already has open: turn it down until the frame
+ * time moves, and that is the number this scene can afford.
+ *
+ * 24 is chosen to be invisible on anything ordinary — a whole flat's worth of
+ * fittings, two rooms of a house lit at once — so the compromise only appears on
+ * models where every room is already a wash of overlapping pools. Past it the
+ * dimmest lamps stop being lights and their flux is folded into the room's
+ * bounce fill instead: the room keeps its lumens and loses the pool under the
+ * fitting. See `applySceneLightBudgets`.
+ */
+export const MAX_ACTIVE_FIXTURE_LIGHTS = 24;
+
 function readGate() {
   if (typeof window === 'undefined') return false;
   try {

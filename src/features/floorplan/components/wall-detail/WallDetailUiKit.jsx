@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import { useNumericDraft } from '@/features/floorplan/components/useNumericDraft';
 import styles from './WallDetailEditor.module.css';
 
 const GLYPHS = {
@@ -35,6 +36,15 @@ const GLYPHS = {
     <>
       <path d="M3 12h18M4 7v10M20 7v10" />
       <path d="M8 9l-3 3 3 3M16 9l3 3-3 3" />
+    </>
+  ),
+  // A hole cut through a sheet: the sheet's own edge, then the void inside it
+  // drawn the way a plan hatches a cut-out.
+  opening: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="1" />
+      <rect x="7.5" y="8" width="9" height="8" />
+      <path d="M7.5 8l9 8M16.5 8l-9 8" />
     </>
   ),
   trash: <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />,
@@ -106,6 +116,37 @@ export function NumberField({ label, value, onChange, min, step = 1, suffix = 'm
           step={step}
           disabled={disabled}
           onChange={(event) => onChange(Number(event.target.value))}
+        />
+        {suffix ? <small>{suffix}</small> : null}
+      </span>
+    </label>
+  );
+}
+
+/**
+ * A number that is allowed to be negative.
+ *
+ * The plain NumberField above commits on every keystroke, which a positive-only
+ * dimension survives — every prefix of "300" is a number. A signed one does not:
+ * the first character of "-150" is a lone minus, which parses to nothing, and a
+ * committed nothing writes zero straight back over the box before the second
+ * character arrives. So this one keeps a draft and commits on Enter or blur, the
+ * same rule the floor plan's own number entry runs on.
+ */
+export function SignedNumberField({ label, value, onChange, step = 1, suffix = 'mm', disabled = false }) {
+  const { displayValue, handleChange, handleKeyDown, handleBlur } = useNumericDraft(value, onChange);
+  return (
+    <label className={styles.field}>
+      <span>{label}</span>
+      <span className={styles.inputWrap}>
+        <input
+          type="number"
+          value={displayValue}
+          step={step}
+          disabled={disabled}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
         />
         {suffix ? <small>{suffix}</small> : null}
       </span>

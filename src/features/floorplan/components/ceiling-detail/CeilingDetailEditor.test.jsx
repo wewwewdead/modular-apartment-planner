@@ -40,6 +40,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/features/floorplan/context/FloorplanContext', () => ({
   useProject: () => ({ project: mocks.project, dispatch: mocks.dispatch }),
   useEditor: () => ({ ...mocks.editor, dispatch: mocks.editorDispatch }),
+  useEditorState: () => ({ ...mocks.editor, dispatch: mocks.editorDispatch }),
 }));
 
 describe('CeilingDetailEditor', () => {
@@ -135,7 +136,7 @@ describe('CeilingDetailEditor', () => {
     const html = renderToStaticMarkup(<CeilingDetailEditor />);
 
     expect(html).toContain('Nothing selected');
-    expect(html).toContain('click a board, furring channel, screw, or opening on the plan');
+    expect(html).toContain('click a board, furring channel, screw, opening, or measurement on the plan');
   });
 
   it('keeps every workflow section as an accordion with a controlled body', () => {

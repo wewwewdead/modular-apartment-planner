@@ -12,8 +12,9 @@ import { getSectionVisibilityMessage, SECTION_VISIBILITY_REASONS } from '@/secti
 import { usePhaseFilteredFloor } from '@/hooks/usePhaseFilteredFloor';
 import { useEditorTool } from '@/editor/useEditorTool';
 import { applyWallDragPreview } from '@/features/floorplan/utils/wallDragPreview';
+import { enterAddCeiling } from '@/features/floorplan/utils/addCeilingEntry';
 import { describeWallEditRejection } from '@/domain/modelGraph';
-import { MIN_ZOOM, MAX_ZOOM, ZOOM_FACTOR } from '@/domain/defaults';
+import { GRID_MAJOR, GRID_MINOR, MIN_ZOOM, MAX_ZOOM, ZOOM_FACTOR } from '@/domain/defaults';
 import { formatSurveyorBearing, pointsToSurveyorBearing } from '@/geometry/bearing';
 import { TOOLS } from '@/editor/tools';
 import { isTypingTarget } from '@/utils/keyboard';
@@ -25,6 +26,7 @@ import RoofScene from './RoofScene';
 import TrussScene from './TrussScene';
 import BeamLevelChip from './BeamLevelChip';
 import ElectricalDeviceChip from './ElectricalDeviceChip';
+import SectionViewControls from './SectionViewControls';
 import CanvasOverlayControls from './CanvasOverlayControls';
 import CanvasStatusBar from './CanvasStatusBar';
 import { RenderProfilerScope, useRenderProfile } from './renderProfiling';
@@ -45,7 +47,16 @@ export default function SvgCanvas() {
   const cursorPosRef = useRef({ x: 0, y: 0 });
   const pendingMoveEvent = useRef(null);
   const moveFrame = useRef(0);
-  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
+  /*
+   * The status bar's coordinate readout, written into the DOM rather than held
+   * in state. It changes on every hover frame, and putting it through React
+   * re-rendered the entire canvas — every wall, room, dimension and overlay —
+   * to move two numbers. `cursorPosRef` still carries the same value for the
+   * paste handler, which reads it on a keystroke rather than a frame.
+   */
+  const cursorChannelRef = useRef(null);
+  const svgRectRef = useRef(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
   const { project, derived, dispatch, getFloor } = useProject();
   const editor = useEditor();
@@ -99,6 +110,14 @@ export default function SvgCanvas() {
     const forFloor = overhangs.filter((entry) => entry.floorId === activeFloorId);
     return forFloor.length ? forFloor : null;
   }, [overhangs, activeFloorId]);
+  // Whose beams the ceiling pick is offering. Anchored on a plate, the frame
+  // that carries it belongs to the storey BELOW the plan on screen — plan
+  // coordinates are shared across the stack, so outlining another floor's beams
+  // over this drawing puts them exactly where they will be clicked.
+  const ceilingPickFloor = useMemo(
+    () => (toolState.ceilingTargetFloorId ? getFloor(toolState.ceilingTargetFloorId) || floor : floor),
+    [toolState.ceilingTargetFloorId, getFloor, floor],
+  );
   const filteredProject = useMemo(
     () => filterProjectByPhase(project, activePhaseId, phaseViewMode),
     [project, activePhaseId, phaseViewMode],
@@ -110,8 +129,17 @@ export default function SvgCanvas() {
   const visibleProjectRailings = Boolean((filteredProject.floors || []).some((entry) => (entry.railings || []).length));
   const railingsHiddenByPhase = Boolean(hasProjectRailings && !visibleProjectRailings);
   const hasProjectTrusses = Boolean((filteredProject.trussSystems || []).length);
-  const floorTrussSystems = (filteredProject.trussSystems || []).filter((ts) => ts.floorId === activeFloorId);
-  const allFloorTrussSystems = (project.trussSystems || []).filter((ts) => ts.floorId === activeFloorId);
+  // Memoized because these arrays are handler-memo, effect and prop dependencies
+  // all the way down: a fresh one per render rebuilt every tool handler and
+  // re-subscribed the window key listeners on every frame of a pan.
+  const floorTrussSystems = useMemo(
+    () => (filteredProject.trussSystems || []).filter((ts) => ts.floorId === activeFloorId),
+    [filteredProject.trussSystems, activeFloorId],
+  );
+  const allFloorTrussSystems = useMemo(
+    () => (project.trussSystems || []).filter((ts) => ts.floorId === activeFloorId),
+    [project.trussSystems, activeFloorId],
+  );
   const trussesHiddenByPhase = Boolean(allFloorTrussSystems.length && !floorTrussSystems.length);
   const activeTrussContext = useMemo(() => {
     if (selectedType === 'trussSystem') {
@@ -155,12 +183,30 @@ export default function SvgCanvas() {
     activePhaseId,
   });
 
+  /*
+   * The canvas rect, cached.
+   *
+   * `getBoundingClientRect` forces the browser to flush layout, and it was read
+   * on every processed pointer move — right after React had committed that
+   * frame's changes, so the flush was never the free kind. The rect only moves
+   * when the element does, which the resize observer below and the window's own
+   * scroll and resize events cover; a pointer-down drops it too, so a layout
+   * change nothing observed still cannot survive into a drag.
+   */
+  const readSvgRect = useCallback(() => {
+    if (!svgRectRef.current) {
+      svgRectRef.current = svgRef.current?.getBoundingClientRect() || null;
+    }
+    return svgRectRef.current;
+  }, []);
+
   const getModelPos = useCallback(
     (e) => {
-      const rect = svgRef.current.getBoundingClientRect();
+      const rect = readSvgRect();
+      if (!rect) return { x: 0, y: 0 };
       return screenToModel(e.clientX, e.clientY, viewport, rect);
     },
-    [viewport],
+    [readSvgRect, viewport],
   );
 
   // --- Mouse/pointer handlers ---
@@ -171,6 +217,7 @@ export default function SvgCanvas() {
       // to change collapses into one undo entry, and the whole-project
       // coordination pass waits for the release instead of running per frame.
       dispatch({ type: 'BEGIN_DRAG_GESTURE' });
+      svgRectRef.current = null;
 
       if (e.button === 1 || (e.button === 0 && spaceHeld.current)) {
         isPanning.current = true;
@@ -199,7 +246,7 @@ export default function SvgCanvas() {
       }
       const modelPos = getModelPos(e);
       cursorPosRef.current = modelPos;
-      setCursorPos(modelPos);
+      cursorChannelRef.current?.(modelPos);
       if (modelTarget === 'floor' && pastePreview?.active) {
         updatePastePreview(modelPos);
         return;
@@ -282,7 +329,8 @@ export default function SvgCanvas() {
   const handleWheel = useCallback(
     (e) => {
       e.preventDefault();
-      const rect = svgRef.current.getBoundingClientRect();
+      const rect = readSvgRect();
+      if (!rect) return;
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
       const direction = e.deltaY < 0 ? 1 : -1;
@@ -292,23 +340,69 @@ export default function SvgCanvas() {
       const newPanY = mouseY - (mouseY - viewport.panY) * (newZoom / viewport.zoom);
       editorDispatch({ type: 'ZOOM', zoom: newZoom, panX: newPanX, panY: newPanY });
     },
-    [viewport, editorDispatch],
+    [readSvgRect, viewport, editorDispatch],
   );
 
   const handleResetCenterPoint = useCallback(() => {
-    const rect = svgRef.current?.getBoundingClientRect();
+    const rect = readSvgRect();
     if (!rect) return;
     editorDispatch({
       type: 'SET_VIEWPORT',
       viewport: { ...viewport, panX: rect.width / 2, panY: rect.height / 2 },
     });
-  }, [editorDispatch, viewport]);
+  }, [editorDispatch, readSvgRect, viewport]);
 
   const handleToggleFocus = useCallback(() => {
     editorDispatch({ type: 'TOGGLE_FOCUS_PANEL', panel: 'canvas' });
   }, [editorDispatch]);
 
   // --- Effects ---
+
+  /*
+   * Everything that can move the canvas without the pointer knowing about it.
+   *
+   * The observer's own box is used for the measured size — the grid is painted
+   * over exactly that — because it comes free with the callback. Scroll and
+   * resize only drop the cached rect: they can move the canvas without resizing
+   * it, and measuring on every scroll event would put back the forced layout
+   * this is here to remove.
+   */
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return undefined;
+
+    const invalidateRect = () => {
+      svgRectRef.current = null;
+    };
+
+    const measure = (width, height) => {
+      invalidateRect();
+      setCanvasSize((size) => (size.width === width && size.height === height ? size : { width, height }));
+    };
+
+    const observer =
+      typeof ResizeObserver === 'function'
+        ? new ResizeObserver((entries) => {
+            const box = entries[entries.length - 1]?.contentRect;
+            if (box) measure(box.width, box.height);
+          })
+        : null;
+
+    if (observer) {
+      observer.observe(svg);
+    } else {
+      const rect = svg.getBoundingClientRect();
+      measure(rect.width, rect.height);
+    }
+
+    window.addEventListener('resize', invalidateRect);
+    window.addEventListener('scroll', invalidateRect, true);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', invalidateRect);
+      window.removeEventListener('scroll', invalidateRect, true);
+    };
+  }, []);
 
   useEffect(() => {
     if (!statusMessage) return undefined;
@@ -432,7 +526,11 @@ export default function SvgCanvas() {
               editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SLAB });
               return;
             case 'p':
-              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.CEILING });
+              // Not a bare SET_TOOL: a selected plate says which deck the
+              // ceiling goes under, and that deck's ceiling belongs to the
+              // storey below it. Shared with the sidebar so the key and the
+              // button are one flow.
+              enterAddCeiling({ project, activeFloorId, selectedId, selectedType, editorDispatch });
               return;
             case 'r':
               editorDispatch({ type: 'SET_TOOL', tool: TOOLS.ROOM });
@@ -496,6 +594,10 @@ export default function SvgCanvas() {
     selectedId,
     selectedType,
     floorTrussSystems,
+    // Costs no extra re-subscription: `tool` already keys on the project and the
+    // active floor, so this listener was rebuilt with them either way.
+    project,
+    activeFloorId,
   ]);
 
   useEffect(() => {
@@ -511,6 +613,30 @@ export default function SvgCanvas() {
   }, [handleWheel]);
 
   // --- Derived values ---
+
+  /*
+   * The grid is painted over what is on screen, not over a 200-metre square.
+   *
+   * Both patterns are `userSpaceOnUse`, so they are anchored to the model origin
+   * and the tiling does not shift as the rect moves with the pan — but the
+   * browser still re-tiles everything the rect covers on every frame it moves,
+   * and at the default zoom a 200 m square is on the order of a million stroked
+   * tiles. The margin is two major tiles of slack, so a frame that lands before
+   * the rect has caught up still has grid under it.
+   */
+  const gridRect = useMemo(() => {
+    const zoom = viewport.zoom || 1;
+    const margin = GRID_MAJOR * 2;
+    return {
+      x: -viewport.panX / zoom - margin,
+      y: -viewport.panY / zoom - margin,
+      width: canvasSize.width / zoom + margin * 2,
+      height: canvasSize.height / zoom + margin * 2,
+    };
+  }, [canvasSize.height, canvasSize.width, viewport.panX, viewport.panY, viewport.zoom]);
+  // Below a couple of screen pixels a 50 mm tile is not a grid, it is a wash of
+  // colour — and it is twenty times as many tiles as the metre lines over it.
+  const showMinorGrid = GRID_MINOR * viewport.zoom >= 2;
 
   const cursor = isSpaceHeld ? 'grab' : modelTarget === 'floor' && pastePreview?.active ? 'copy' : tool.getCursor();
   const zoomPercent = Math.round(viewport.zoom * 1000);
@@ -573,8 +699,6 @@ export default function SvgCanvas() {
       : null;
 
   useRenderProfile('SvgCanvas', {
-    cursorX: Math.round(cursorPos.x),
-    cursorY: Math.round(cursorPos.y),
     viewMode,
     modelTarget,
     activeTool,
@@ -608,6 +732,11 @@ export default function SvgCanvas() {
           deviceType={toolState.deviceType}
           editorDispatch={editorDispatch}
         />
+        <SectionViewControls
+          project={project}
+          scene={floorSectionScene || roofSectionScene || trussSectionScene}
+          dispatch={dispatch}
+        />
         <svg
           ref={svgRef}
           className={styles.svg}
@@ -619,16 +748,28 @@ export default function SvgCanvas() {
         >
           <CanvasZoomProvider value={viewport.zoom}>
             <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
-              {viewMode === 'plan' && showGrid && <GridRenderer />}
               {viewMode === 'plan' && showGrid && (
-                <rect
-                  x={-100000}
-                  y={-100000}
-                  width={200000}
-                  height={200000}
-                  fill="url(#grid-major)"
-                  style={{ pointerEvents: 'none' }}
-                />
+                <>
+                  <GridRenderer />
+                  {showMinorGrid && (
+                    <rect
+                      x={gridRect.x}
+                      y={gridRect.y}
+                      width={gridRect.width}
+                      height={gridRect.height}
+                      fill="url(#grid-minor)"
+                      style={{ pointerEvents: 'none' }}
+                    />
+                  )}
+                  <rect
+                    x={gridRect.x}
+                    y={gridRect.y}
+                    width={gridRect.width}
+                    height={gridRect.height}
+                    fill="url(#grid-major)"
+                    style={{ pointerEvents: 'none' }}
+                  />
+                </>
               )}
               {modelTarget === 'roof' ? (
                 <RoofScene
@@ -665,6 +806,7 @@ export default function SvgCanvas() {
                   floor={floor}
                   filteredFloor={filteredFloor}
                   filteredProject={filteredProject}
+                  pickFloor={ceilingPickFloor}
                   floorBelow={floorBelow}
                   showFloorBelowUnderlay={showFloorBelowUnderlay}
                   floorOverhangs={floorOverhangs}
@@ -695,7 +837,7 @@ export default function SvgCanvas() {
           isFocused={isCanvasFocused}
         />
         <CanvasStatusBar
-          cursorPos={cursorPos}
+          cursorChannelRef={cursorChannelRef}
           zoomPercent={zoomPercent}
           viewMode={viewMode}
           modelTarget={modelTarget}

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useEditor } from '@/features/floorplan/context/FloorplanContext';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEditorState } from '@/features/floorplan/context/FloorplanContext';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { buildPreviewScene } from '@/three/scene/buildPreviewScene';
 import { buildSelectionOverlay } from './buildPreviewObjects';
@@ -70,7 +70,7 @@ function useHeldWhileSuspended(value, suspended) {
  * without unmounting, so the camera and the walk pose survive the overlay; the
  * edits made behind it are caught up in one rebuild when it comes back.
  */
-export default function ThreePreviewPanel({
+function ThreePreviewPanel({
   project,
   activeFloorId,
   isFocused = false,
@@ -114,7 +114,7 @@ export default function ThreePreviewPanel({
     hiddenWallBoards,
     hiddenCeilingBoards,
     dispatch: editorDispatch,
-  } = useEditor();
+  } = useEditorState();
 
   const awakeProject = useHeldWhileSuspended(project, suspended);
 
@@ -152,13 +152,23 @@ export default function ThreePreviewPanel({
     [filteredProject, activeFloorId, visibleFloorIds, hiddenWallBoards, hiddenCeilingBoards, assemblyDriven],
   );
 
-  const activeFloor = (project?.floors || []).find((floor) => floor.id === activeFloorId) || null;
-  const visibleCount = sceneDescriptor.floors
-    .filter((floor) => floor.visible)
-    .reduce((count, floor) => count + floor.objects.length, 0);
-  const visibleFloorCount = sceneDescriptor.floors.filter(
-    (floor) => floor.visible && floor.floorId !== sceneDescriptor.roofLayerId,
-  ).length;
+  const activeFloor = useMemo(
+    () => (project?.floors || []).find((floor) => floor.id === activeFloorId) || null,
+    [project?.floors, activeFloorId],
+  );
+  // A walk over every object in the scene, for two numbers in the status line.
+  // Keyed on the descriptor, which is already the thing that changes when the
+  // counts do.
+  const { visibleCount, visibleFloorCount } = useMemo(() => {
+    let objects = 0;
+    let floors = 0;
+    for (const floor of sceneDescriptor.floors) {
+      if (!floor.visible) continue;
+      objects += floor.objects.length;
+      if (floor.floorId !== sceneDescriptor.roofLayerId) floors += 1;
+    }
+    return { visibleCount: objects, visibleFloorCount: floors };
+  }, [sceneDescriptor]);
   const inspection = useMemo(
     () => getPreviewInspection(project, selectedType, selectedId),
     [project, selectedId, selectedType],
@@ -567,3 +577,5 @@ export default function ThreePreviewPanel({
     </section>
   );
 }
+
+export default memo(ThreePreviewPanel);

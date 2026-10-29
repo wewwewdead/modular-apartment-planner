@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { ClipboardProvider } from '@/app/ClipboardProvider';
 import Modal from '@/ui/Modal';
 import NewProjectModal from '@/ui/NewProjectModal';
@@ -6,7 +6,7 @@ import { ConfirmDialogProvider } from '@/ui/ConfirmDialog';
 import styles from '@/app/App.module.css';
 import { ChevronDownIcon, ChevronUpIcon } from '@/ui/ToolbarIcons';
 import modalStyles from '@/ui/Modal.module.css';
-import { FloorplanProvider, useEditor, useFloorplanContext } from './context/FloorplanContext';
+import { FloorplanProvider, useEditorState, useFloorplanContext, useToolState } from './context/FloorplanContext';
 import { DaylightStudyProvider } from './context/DaylightStudyContext';
 import Toolbar from './components/Toolbar';
 import Sidebar from './components/Sidebar';
@@ -48,6 +48,67 @@ function FocusExitHint() {
   );
 }
 
+/*
+ * Escape leaves focus mode — but the canvas tools get first refusal.
+ *
+ * On the canvas, Escape already means something: it drops a drag, clears a wall
+ * chain, aborts a paste. So focus mode stands aside whenever one of those is in
+ * flight, and you press Escape twice — once to cancel what you were doing, once
+ * to come back out. That is the order people expect.
+ *
+ * The list below is of *in-progress markers*, deliberately not "is a placement
+ * tool active". Tools do not all return to select on Escape — the wall tool
+ * clears its chain and stays on the wall tool — so keying off the active tool
+ * would mean the keyboard could never leave focus again. Every marker here is
+ * cleared by the very Escape that was withheld, which is what guarantees the
+ * second press gets through and focus can never trap you.
+ *
+ * This listener belongs to a parent, and React flushes child effects first, so
+ * the canvas has already had its turn at the key by the time this runs.
+ *
+ * It lives in its own component because the markers it reads are rewritten on
+ * every pointer frame of a placement tool, and the shell it used to sit in
+ * renders the entire workspace. Reading them through a ref keeps the window
+ * listener from being re-subscribed frame by frame as well.
+ */
+function FocusEscapeGuard({ focusedPanel }) {
+  const { pastePreview, dispatch } = useEditorState();
+  const toolState = useToolState();
+  const markersRef = useRef(null);
+
+  useEffect(() => {
+    markersRef.current = { toolState, pastePreview };
+  });
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      const target = event.target;
+      if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName)) return;
+
+      if (focusedPanel === 'canvas') {
+        const markers = markersRef.current || {};
+        const activeToolState = markers.toolState || {};
+        const cancellingSomething =
+          markers.pastePreview?.active ||
+          activeToolState.dragging ||
+          activeToolState.pendingDrag ||
+          activeToolState.start ||
+          activeToolState.chainStart ||
+          activeToolState.startColumnId;
+        if (cancellingSomething) return;
+      }
+
+      dispatch({ type: 'TOGGLE_FOCUS_PANEL', panel: null });
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [focusedPanel, dispatch]);
+
+  return null;
+}
+
 function EditorShell({
   project,
   onNew,
@@ -59,16 +120,8 @@ function EditorShell({
   onToggleSidebar,
   onToggleProperties,
 }) {
-  const {
-    workspaceMode,
-    activeFloorId,
-    focusedPanel,
-    toolState,
-    pastePreview,
-    wallDetailEditor,
-    ceilingDetailEditor,
-    dispatch,
-  } = useEditor();
+  const { workspaceMode, activeFloorId, focusedPanel, wallDetailEditor, ceilingDetailEditor, dispatch } =
+    useEditorState();
 
   /*
    * A detail editor is an overlay, and this whole shell stays mounted under it.
@@ -100,49 +153,10 @@ function EditorShell({
   const [toolbarHiddenInFocus, setToolbarHiddenInFocus] = useState(false);
   const isToolbarHidden = isFocused && toolbarHiddenInFocus;
 
-  /*
-   * Escape leaves focus mode — but the canvas tools get first refusal.
-   *
-   * On the canvas, Escape already means something: it drops a drag, clears a
-   * wall chain, aborts a paste. So focus mode stands aside whenever one of
-   * those is in flight, and you press Escape twice — once to cancel what you
-   * were doing, once to come back out. That is the order people expect.
-   *
-   * The list below is of *in-progress markers*, deliberately not "is a
-   * placement tool active". Tools do not all return to select on Escape — the
-   * wall tool clears its chain and stays on the wall tool — so keying off the
-   * active tool would mean the keyboard could never leave focus again. Every
-   * marker here is cleared by the very Escape that was withheld, which is what
-   * guarantees the second press gets through and focus can never trap you.
-   *
-   * This listener belongs to a parent, and React flushes child effects first,
-   * so the canvas has already had its turn at the key by the time this runs.
-   */
-  useEffect(() => {
-    if (!isFocused) return undefined;
-
-    const handleKeyDown = (event) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return;
-      const target = event.target;
-      if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName)) return;
-
-      if (focusedPanel === 'canvas') {
-        const cancellingSomething =
-          pastePreview?.active ||
-          toolState?.dragging ||
-          toolState?.pendingDrag ||
-          toolState?.start ||
-          toolState?.chainStart ||
-          toolState?.startColumnId;
-        if (cancellingSomething) return;
-      }
-
-      dispatch({ type: 'TOGGLE_FOCUS_PANEL', panel: null });
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFocused, focusedPanel, toolState, pastePreview, dispatch]);
+  const handleTogglePreviewFocus = useCallback(
+    () => dispatch({ type: 'TOGGLE_FOCUS_PANEL', panel: 'preview' }),
+    [dispatch],
+  );
 
   return (
     <div
@@ -194,7 +208,7 @@ function EditorShell({
                     project={project}
                     activeFloorId={activeFloorId}
                     isFocused={focusedPanel === 'preview'}
-                    onToggleFocus={() => dispatch({ type: 'TOGGLE_FOCUS_PANEL', panel: 'preview' })}
+                    onToggleFocus={handleTogglePreviewFocus}
                     suspended={isCoveredByDetailEditor}
                   />
                 </Suspense>
@@ -223,9 +237,12 @@ function EditorShell({
         </button>
       )}
       {isFocused && <FocusExitHint key={focusedPanel} />}
+      {isFocused && <FocusEscapeGuard focusedPanel={focusedPanel} />}
     </div>
   );
 }
+
+const MemoizedEditorShell = memo(EditorShell);
 
 function FloorplanShell() {
   const { state, actions, selectors } = useFloorplanContext();
@@ -243,7 +260,7 @@ function FloorplanShell() {
         style={{ display: 'none' }}
       />
 
-      <EditorShell
+      <MemoizedEditorShell
         project={state.project}
         onNew={actions.project.newProject}
         onSave={actions.project.saveProject}

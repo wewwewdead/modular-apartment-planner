@@ -8,7 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
-import { createFloor, createWall } from '@/domain/models';
+import { createFloor, createSlab, createWall } from '@/domain/models';
 import { createWallDetailing, createWallDimension, deriveWallFasteners } from '@/domain/wallDetailing';
 import WallDetailEditor from './WallDetailEditor';
 
@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/features/floorplan/context/FloorplanContext', () => ({
   useProject: () => ({ project: mocks.project, dispatch: mocks.dispatch }),
   useEditor: () => ({ ...mocks.editor, dispatch: mocks.editorDispatch }),
+  useEditorState: () => ({ ...mocks.editor, dispatch: mocks.editorDispatch }),
 }));
 
 // The live 3D pane is lazy and pulls in three.js. Standing in for it keeps the
@@ -459,5 +460,175 @@ describe('WallDetailEditor selection shared with the 3D pane', () => {
 
     act(() => previewProps.pick(null));
     expect(previewProps.current.assemblySelection).toBeNull();
+  });
+});
+
+describe('WallDetailEditor over a storey line', () => {
+  it('draws the deck a bypass wall runs past and frames the whole resolved span', () => {
+    const floor = mocks.project.floors[0];
+    floor.elevation = 3000;
+    floor.floorToFloorHeight = 3000;
+    floor.slabs = [
+      createSlab(
+        floor.id,
+        [
+          { x: -500, y: -500 },
+          { x: 3500, y: -500 },
+          { x: 3500, y: 500 },
+          { x: -500, y: 500 },
+        ],
+        250,
+        3000,
+        { name: 'Level 2 deck' },
+      ),
+    ];
+    floor.walls = [{ ...floor.walls[0], framingMode: 'bypass' }];
+
+    const { container } = render(<WallDetailEditor />);
+
+    // The deck reads on the drawing as a named datum band, which is the only
+    // thing that explains why the studs carry on past the floor line.
+    expect(canvasTexts(container).some((text) => text.startsWith('Level 2 deck'))).toBe(true);
+    expect(canvasTitles(container).some((title) => title.startsWith('Level 2 deck ·'))).toBe(true);
+    expect(canvasTitles(container).some((title) => title.startsWith('Ledger ·'))).toBe(true);
+
+    // 250 of drop under a 3000 storey: one frame 3250 tall, not the wall's own
+    // stored height.
+    expect(wallHeight).not.toBe(3250);
+    expect(canvasTitles(container).some((title) => title.startsWith('Stud · 50 × 3250 mm'))).toBe(true);
+  });
+});
+
+/**
+ * The corner detail inside the wall editor.
+ *
+ * The same two stored numbers the wall properties panel writes, editable here
+ * and drawn here — and the drawing has to make the overhang read as PAST the
+ * end of the wall rather than as a longer wall, or the number means nothing.
+ */
+describe('board overhang in the wall detail editor', () => {
+  /** The number input under a given field label in the side panel. */
+  function fieldInput(container, label) {
+    const field = [...container.querySelectorAll('label')].find(
+      (node) => node.firstElementChild?.textContent?.trim() === label,
+    );
+    return field?.querySelector('input') || null;
+  }
+
+  const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+
+  // Typed and then blurred, which is what the signed field commits on: a lone
+  // minus is not a number, so a per-keystroke commit would write zero back over
+  // the box before the digits arrived.
+  function type(input, text) {
+    fireEvent.focus(input);
+    for (let index = 1; index <= text.length; index += 1) {
+      fireEvent.keyDown(input, { key: text[index - 1] });
+      nativeSetter.call(input, text.slice(0, index));
+      fireEvent.input(input, { inputType: 'insertText' });
+    }
+    fireEvent.blur(input);
+  }
+
+  /** The assembly carried by the last committed WALL_UPDATE. */
+  const committedAssembly = () => mocks.dispatch.mock.calls.map(([action]) => action).at(-1)?.wall?.assembly;
+
+  function lapTheWall(overhang) {
+    const wall = mocks.project.floors[0].walls[0];
+    wall.assembly = { ...wall.assembly, interior: { material: 'fiber_cement', thickness: 6, ...overhang } };
+  }
+
+  it('writes the same assembly fields the properties panel writes', () => {
+    const { container } = render(<WallDetailEditor />);
+
+    type(fieldInput(container, 'Overhang end'), '137');
+
+    expect(committedAssembly().interior).toMatchObject({ overhangEnd: 137, overhangStart: 0 });
+    // Cladding only: a board that runs further leaves the wall the same thickness.
+    expect(mocks.dispatch.mock.calls.at(-1)[0].wall.thickness).toBe(87);
+  });
+
+  it('takes a setback, which a per-keystroke field could not accept at all', () => {
+    const { container } = render(<WallDetailEditor />);
+
+    type(fieldInput(container, 'Overhang start'), '-90');
+
+    expect(committedAssembly().interior.overhangStart).toBe(-90);
+  });
+
+  it('reads back what is stored, for the face being edited', () => {
+    lapTheWall({ overhangStart: 40, overhangEnd: -25 });
+    const { container } = render(<WallDetailEditor />);
+
+    expect(fieldInput(container, 'Overhang start').value).toBe('40');
+    expect(fieldInput(container, 'Overhang end').value).toBe('-25');
+  });
+
+  it('draws nothing extra for a board that stops where its wall does', () => {
+    const { container } = render(<WallDetailEditor />);
+
+    expect(container.querySelector('[data-testid="board-overhang"]')).toBeNull();
+    // The canvas is exactly the wall: 3000 × its height, starting at zero.
+    expect(container.querySelector('svg[data-tool]').getAttribute('viewBox')).toBe(`0 0 3000 ${wallHeight}`);
+  });
+
+  it('widens the canvas over the overhang and marks where the wall stops', () => {
+    lapTheWall({ overhangEnd: 200 });
+    const { container } = render(<WallDetailEditor />);
+
+    const marker = container.querySelector('[data-testid="board-overhang"]');
+    expect(marker).not.toBeNull();
+    expect(marker.querySelector('[data-edge="end"][data-kind="overhang"]')).not.toBeNull();
+    // The board reaches 200 past u = 3000. This face is drawn mirrored — seen
+    // from in front of it — so the extra 200 lands on the LEFT of the drawing,
+    // and the viewBox has to start there or the overhang is off the page.
+    expect(container.querySelector('svg[data-tool]').getAttribute('viewBox')).toBe(`-200 0 3200 ${wallHeight}`);
+    expect(canvasTitles(container).some((title) => title.startsWith('Wall end · Board over 200'))).toBe(true);
+  });
+
+  /*
+   * The face the bug report was about: boards drawn by hand, THEN an overhang.
+   * The drawing has to put cladding in the strip it just widened over — a band
+   * with nothing in it is exactly the "nothing was added" the user saw — and the
+   * numbers it stores have to stay on the wall's own run, so the lap is still
+   * derived and still follows the overhang the next time it changes.
+   */
+  it('fills the lap with the boards the user drew, and stores them without it', () => {
+    lapTheWall({ overhangEnd: 200 });
+    const face = mocks.project.floors[0].walls[0].assembly.detailing.sides.interior;
+    face.layout = {
+      ...face.layout,
+      mode: 'custom',
+      customPanels: [
+        { id: 'left', u: 0, v: 0, width: 1500, height: 2400 },
+        { id: 'right', u: 1500, v: 0, width: 1500, height: 2400 },
+      ],
+    };
+    const { container } = render(<WallDetailEditor />);
+
+    const right = shapeWithTitle(container, 'P2 ·');
+    expect(Number(right.getAttribute('x')) + Number(right.getAttribute('width'))).toBe(3200);
+    // The board that reaches neither end is where it was drawn.
+    const left = shapeWithTitle(container, 'P1 ·');
+    expect(Number(left.getAttribute('x')) + Number(left.getAttribute('width'))).toBe(1500);
+
+    fireEvent.click(
+      [...container.querySelectorAll('button')].find(
+        (node) => node.title === 'Turn the generated grid into editable panels',
+      ),
+    );
+
+    expect(Math.max(...committedPanels().map((panel) => panel.u + panel.width))).toBe(3000);
+  });
+
+  it('reads a setback as wall with no board on it rather than as an overhang', () => {
+    lapTheWall({ overhangStart: -150 });
+    const { container } = render(<WallDetailEditor />);
+
+    const marker = container.querySelector('[data-testid="board-overhang"]');
+    expect(marker.querySelector('[data-edge="start"][data-kind="setback"]')).not.toBeNull();
+    // Nothing runs past the wall, so the canvas is still just the wall.
+    expect(container.querySelector('svg[data-tool]').getAttribute('viewBox')).toBe(`0 0 3000 ${wallHeight}`);
+    expect(canvasTitles(container).some((title) => title.startsWith('Wall start · Board set back 150'))).toBe(true);
   });
 });

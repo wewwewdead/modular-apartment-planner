@@ -6,6 +6,7 @@ import {
   getDraftPreviewEntity,
   getSourceRefEntities,
   resolveAngleIsometricPlane,
+  shouldSnapOverrideOrtho,
   TOOL_DEFINITIONS,
   TOOL_SHORTCUT_MAP,
 } from './sketchConstants';
@@ -257,5 +258,26 @@ describe('angle plane provenance', () => {
 
     expect(entity.isometricPlane).toBe('right');
     expect(entity.meta.sourceRefs).toEqual([null, vertexRef, null]);
+  });
+});
+
+describe('shouldSnapOverrideOrtho', () => {
+  const at = { x: 1, y: 2 };
+
+  it('lets every point snap on an entity win over ortho', () => {
+    for (const snapType of ['endpoint', 'midpoint', 'corner', 'center', 'intersection', 'control', 'arcPoint']) {
+      expect(shouldSnapOverrideOrtho({ point: at, snapType })).toBe(true);
+    }
+    // Snaps built without an explicit snapType fall back to their sourceType.
+    expect(shouldSnapOverrideOrtho({ point: at, snapType: null, sourceType: 'vertex' })).toBe(true);
+  });
+
+  it('keeps ortho for segment-derived and grid snaps, and for no snap', () => {
+    for (const snapType of ['nearest', 'perpendicular', 'grid']) {
+      expect(shouldSnapOverrideOrtho({ point: at, snapType })).toBe(false);
+    }
+    expect(shouldSnapOverrideOrtho(null)).toBe(false);
+    expect(shouldSnapOverrideOrtho({ point: null, snapType: 'endpoint' })).toBe(false);
+    expect(shouldSnapOverrideOrtho({ point: at, snapType: null, sourceType: null })).toBe(false);
   });
 });

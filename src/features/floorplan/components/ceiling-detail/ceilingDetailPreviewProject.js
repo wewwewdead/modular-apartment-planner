@@ -83,12 +83,14 @@ function mergeById(...groups) {
  * through the columns, so dropping either would draw a different ceiling here
  * than the model has.
  *
- * The storey above comes along for the same reason, stripped to the slabs the
- * boundary is drawn from. A ceiling reaches as far as the slab it closes off,
- * which is further than the beams wherever that slab cantilevers, and a preview
- * project without those slabs would re-derive a smaller ceiling than the model
- * has. Which slabs count is asked of the same routine the boundary asks, so the
- * two cannot drift.
+ * The storey above comes along, stripped to the slabs overhead. Two reasons, and
+ * the second is the load-bearing one. It is the deck the boards hang under, so a
+ * camera looking up in this pane sees the same soffit it would see in the model
+ * rather than open sky. And where the ceiling's beams frame no rectangle at all
+ * — one beam, or a collinear pair — the slab IS the boundary, so a preview
+ * project without it would re-derive a different ceiling than the model has.
+ * Which slabs count is asked of the same routine the boundary asks, so the two
+ * cannot drift.
  */
 export function createCeilingDetailPreviewProject(project, ceilingId) {
   const ceiling = (project?.ceilings || []).find((entry) => entry.id === ceilingId) || null;
@@ -101,7 +103,14 @@ export function createCeilingDetailPreviewProject(project, ceilingId) {
     // The elevations are resolved against the real project on purpose: a hung
     // ceiling reads its attachment plane off the support beams, and the
     // stripped floor no longer has them to read.
-    const band = collectCeilingBandStructure(floor, ceilingElevationRange(resolveCeilingElevations(project, ceiling)));
+    //
+    // The bearing ends go down with the band for the same reason the band does
+    // at all. In a stepped bay they are what lowers the band's floor under the
+    // low step, so a preview asking without them would show a bay's worth of
+    // structure the boards were never traced around — the two panes of the
+    // editor telling the user different things about the same wall.
+    const elevations = resolveCeilingElevations(project, ceiling);
+    const band = collectCeilingBandStructure(floor, ceilingElevationRange(elevations), elevations.supportBearingEnds);
     const support =
       ceiling.attachment?.mode === CEILING_ATTACHMENT_MODES.BEAM
         ? collectSupportStructure(floor, ceiling.attachment.beamIds || [])

@@ -60,11 +60,16 @@ vi.mock('three', () => {
       this.name = '';
       this.children = [];
       this.parent = null;
+      // A finished build is frozen (see `staticMatrices`), which every node in it
+      // has to be able to answer.
+      this.matrixAutoUpdate = true;
     }
     add(child) {
       this.children.push(child);
       child.parent = this;
     }
+    updateMatrix() {}
+    updateMatrixWorld() {}
     traverse(fn) {
       fn(this);
       this.children.forEach((c) => (c.traverse ? c.traverse(fn) : fn(c)));
@@ -81,11 +86,14 @@ vi.mock('three', () => {
       this.scale = { x: 1, y: 1, z: 1, copy() {} };
       this.quaternion = new MockQuaternion();
       this.parent = null;
+      this.matrixAutoUpdate = true;
     }
     add(child) {
       this.children.push(child);
       child.parent = this;
     }
+    updateMatrix() {}
+    updateMatrixWorld() {}
     remove(child) {
       this.children = this.children.filter((c) => c !== child);
       if (child) child.parent = null;
@@ -108,7 +116,11 @@ vi.mock('three', () => {
       // Box outlines are one shared unit geometry sized by the object's own
       // scale, so a line segment now has one.
       this.scale = { x: 1, y: 1, z: 1, set() {} };
+      this.matrixAutoUpdate = true;
+      this.children = [];
     }
+    updateMatrix() {}
+    updateMatrixWorld() {}
     traverse(fn) {
       fn(this);
     }

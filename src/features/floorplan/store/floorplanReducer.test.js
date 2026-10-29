@@ -805,6 +805,78 @@ describe('live-model pipeline — performance', () => {
   });
 });
 
+/*
+ * The read slices are what every memoized panel keys on, and an editor-only
+ * action lands here sixty times a second while the plan is being panned. If a
+ * pan republishes them, the memoization downstream — the panels, the 3D preview,
+ * the canvas scene — is worth nothing.
+ */
+describe('read slices keep their identity across editor-only actions', () => {
+  const editorOnlyActions = [
+    { type: 'PAN', dx: 12, dy: -7 },
+    { type: 'ZOOM', zoom: 0.2, panX: 100, panY: 50 },
+    { type: 'UPDATE_TOOL_STATE', payload: { preview: { x: 1000, y: 2000 } } },
+    { type: 'SET_TOOL', tool: 'door' },
+    { type: 'TOGGLE_GRID' },
+    { type: 'SET_STATUS_MESSAGE', message: 'hello' },
+  ];
+
+  it.each(editorOnlyActions.map((action) => [action.type, action]))('%s reuses entities', (_label, action) => {
+    const { state } = loadTwoRoomState();
+    const next = floorplanReducer(state, action);
+
+    expect(next).not.toBe(state);
+    expect(next.entities).toBe(state.entities);
+    expect(next.floors).toBe(state.floors);
+    expect(next.rooms).toBe(state.rooms);
+    expect(next.walls).toBe(state.walls);
+    expect(next.phases).toBe(state.phases);
+    expect(next.derived).toBe(state.derived);
+  });
+
+  it('reuses the selection slice while the selection itself is unmoved', () => {
+    const state = floorplanReducer(loadTwoRoomState().state, {
+      type: 'SELECT_OBJECT',
+      id: 'divider',
+      objectType: 'wall',
+    });
+
+    const panned = floorplanReducer(state, { type: 'PAN', dx: 4, dy: 4 });
+    expect(panned.selection).toBe(state.selection);
+
+    const reselected = floorplanReducer(state, { type: 'SELECT_OBJECT', id: 'left', objectType: 'wall' });
+    expect(reselected.selection).not.toBe(state.selection);
+    expect(reselected.selection.selectedId).toBe('left');
+  });
+
+  it('rebuilds entities when the project or the active floor changes', () => {
+    const { state, floorId } = loadTwoRoomState();
+
+    const edited = floorplanReducer(state, {
+      type: 'WALL_UPDATE',
+      floorId,
+      wall: { id: 'divider', start: { x: 4200, y: 0 }, end: { x: 4200, y: 3000 } },
+    });
+    expect(edited.entities).not.toBe(state.entities);
+    expect(edited.walls).toBe(edited.entities.walls);
+
+    const secondFloor = createFloor('Upper', 1);
+    const twoFloors = floorplanReducer(state, { type: 'FLOOR_ADD', floor: secondFloor });
+    const switched = floorplanReducer(twoFloors, { type: 'SET_ACTIVE_FLOOR', floorId: secondFloor.id });
+    expect(switched.entities).not.toBe(twoFloors.entities);
+    expect(switched.entities.floor?.id).toBe(secondFloor.id);
+  });
+
+  it('still publishes the viewport a pan just moved', () => {
+    const { state } = loadTwoRoomState();
+    const next = floorplanReducer(state, { type: 'PAN', dx: 30, dy: 40 });
+
+    expect(next.viewport).toBe(next.editor.viewport);
+    expect(next.viewport.panX).toBe(state.viewport.panX + 30);
+    expect(next.viewport.panY).toBe(state.viewport.panY + 40);
+  });
+});
+
 describe('electrical devices', () => {
   function loadWallState() {
     let state = initializeFloorplanState(createProject());
@@ -991,5 +1063,119 @@ describe('overhang run sub-selection', () => {
     });
 
     expect(other.editor.selectedOverhangEdge).toEqual({ slabId: 'slab_upper', edgeIndex: 2 });
+  });
+});
+
+/**
+ * A projecting bay is one act: the plate grows a protrusion and the three walls
+ * that enclose it appear on its new edges. Two commits would mean two undos and
+ * a moment with a bay and no walls in between.
+ */
+describe('SLAB_PROJECT_BAY', () => {
+  const PLATE = [
+    { x: 0, y: 0 },
+    { x: 6000, y: 0 },
+    { x: 6000, y: 4000 },
+    { x: 0, y: 4000 },
+  ];
+
+  const BAY_BOUNDARY = [
+    { x: 0, y: 0 },
+    { x: 1800, y: 0 },
+    { x: 1800, y: -600 },
+    { x: 4200, y: -600 },
+    { x: 4200, y: 0 },
+    { x: 6000, y: 0 },
+    { x: 6000, y: 4000 },
+    { x: 0, y: 4000 },
+  ];
+
+  function stateWithPlate() {
+    let state = initializeFloorplanState(createProject());
+    const floorId = state.project.floors[0].id;
+    const slab = { ...createSlab(floorId, PLATE), id: 'slab_upper' };
+    state = floorplanReducer(state, { type: 'SLAB_ADD', floorId, slab });
+    state = floorplanReducer(state, { type: 'SELECT_OVERHANG_EDGE', slabId: 'slab_upper', edgeIndex: 0 });
+    return { state, floorId };
+  }
+
+  function bayWalls() {
+    return [
+      { ...createWall({ x: 1800, y: 0 }, { x: 1800, y: -600 }), id: 'bay_return_a', stackId: 'wallstack_1' },
+      { ...createWall({ x: 1800, y: -600 }, { x: 4200, y: -600 }), id: 'bay_face', stackId: 'wallstack_1' },
+      { ...createWall({ x: 4200, y: -600 }, { x: 4200, y: 0 }), id: 'bay_return_b', stackId: 'wallstack_1' },
+    ];
+  }
+
+  function projectBay(state, floorId, extra = {}) {
+    return floorplanReducer(state, {
+      type: 'SLAB_PROJECT_BAY',
+      floorId,
+      slabId: 'slab_upper',
+      boundaryPoints: BAY_BOUNDARY,
+      walls: bayWalls(),
+      ...extra,
+    });
+  }
+
+  it('reshapes the plate and adds the three walls together', () => {
+    const { state, floorId } = stateWithPlate();
+    const next = projectBay(state, floorId);
+    const floor = next.project.floors.find((entry) => entry.id === floorId);
+
+    expect(floor.slabs[0].boundaryPoints).toEqual(BAY_BOUNDARY);
+    expect(floor.walls.map((wall) => wall.id)).toEqual(['bay_return_a', 'bay_face', 'bay_return_b']);
+    expect(new Set(floor.walls.map((wall) => wall.stackId)).size).toBe(1);
+    expect(floor.walls.every((wall) => wall.outboardOffset === 0)).toBe(true);
+  });
+
+  it('files the bay in the building graph, the way a column stack is filed', () => {
+    // The stackId on the wall is the source of truth; the reverse index is
+    // rebuilt by the same commit-path sync that maintains columnStacks.
+    const { state, floorId } = stateWithPlate();
+    const next = projectBay(state, floorId);
+
+    expect(next.project.building.systems.structural.wallStacks).toEqual([
+      {
+        id: 'wallstack_1',
+        wallRefs: [
+          { floorId, wallId: 'bay_return_a' },
+          { floorId, wallId: 'bay_face' },
+          { floorId, wallId: 'bay_return_b' },
+        ],
+      },
+    ]);
+  });
+
+  it('is ONE undo step', () => {
+    const { state, floorId } = stateWithPlate();
+    const projectBefore = state.project;
+    const historyBefore = state.history.length;
+
+    const next = projectBay(state, floorId);
+    expect(next.history.length).toBe(historyBefore + 1);
+
+    const undone = floorplanReducer(next, { type: 'UNDO' });
+    expect(undone.project).toBe(projectBefore);
+  });
+
+  it('forgets the run that was measured against the old boundary', () => {
+    const { state, floorId } = stateWithPlate();
+    expect(state.editor.selectedOverhangEdge).not.toBeNull();
+
+    expect(projectBay(state, floorId).editor.selectedOverhangEdge).toBeNull();
+  });
+
+  it('adds to whatever is already on the floor and keeps what each wall carries', () => {
+    const { state, floorId } = stateWithPlate();
+    const existing = { ...createWall({ x: 0, y: 4000 }, { x: 6000, y: 4000 }), id: 'existing' };
+    const withWall = floorplanReducer(state, { type: 'WALL_ADD', floorId, wall: existing });
+
+    const floor = projectBay(withWall, floorId, { phaseId: 'phase_2' }).project.floors.find(
+      (entry) => entry.id === floorId,
+    );
+
+    expect(floor.walls.map((wall) => wall.id)).toEqual(['existing', 'bay_return_a', 'bay_face', 'bay_return_b']);
+    expect(floor.walls.find((wall) => wall.id === 'bay_face').stackId).toBe('wallstack_1');
   });
 });

@@ -2,12 +2,14 @@ import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { BEAM_SUPPORT_PROXIMITY_MM, beamSupportsOverhang, computeFloorOverhangs } from '@/geometry/floorOverhang';
 import { distanceToSegment, segmentIntersection } from '@/geometry/line';
-import { dot, midpoint, normalize, subtract } from '@/geometry/point';
+import { distance, dot, midpoint, normalize, subtract } from '@/geometry/point';
 import { pointInPolygon, polygonArea, polygonCentroid } from '@/geometry/polygon';
 import { intersectionArea } from '@/geometry/polygonBoolean';
+import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { positionOnWall } from '@/geometry/wallGeometry';
 import { getFloorElevation, getOrderedFloors } from './floorModels';
 import { DESIGN_CONFIDENCE } from './trustModels';
+import { resolveWallBaseBearing, WALL_FRAMING_MODES, normalizeWallFramingMode, wallOutboardOffset } from './wallFit';
 
 export const DEFAULT_STRUCTURAL_COORDINATION_PROFILE = Object.freeze({
   id: 'gamma_small_rc_apartment_coordination_v1',
@@ -30,6 +32,24 @@ export const OVERHANG_BEAM_DROP_MM = 600;
 
 /** A beam top fractionally above the soffit is rounding, not a clash. */
 export const OVERHANG_BEAM_RISE_MM = 25;
+
+/**
+ * Mirrors STRUCTURAL_ALIGNMENT_TOLERANCE in `@/domain/buildingGraph`, kept local
+ * for the reason `floorOverhang` keeps its own copy: buildingGraph imports this
+ * module, so reading the constant back out of it would close the ring.
+ */
+const STACK_ALIGNMENT_TOLERANCE_MM = 25;
+
+/**
+ * How much of a bypass wall's run may hang with nothing under it before the
+ * model says so. Half is deliberately loose: a facade running past its deck is
+ * SUPPOSED to overhang the plate edge, and the case worth reporting is the wall
+ * that missed the building rather than the one that oversails it.
+ */
+const BYPASS_WALL_BEARING_SHARE = 0.5;
+
+/** ...and the hanging stretch has to be a gap rather than a corner detail. */
+const BYPASS_WALL_UNSUPPORTED_RUN_MM = 300;
 
 function issue(ruleId, severity, message, entityRefs, inputs, resultKind = 'configured_rule_check') {
   return {
@@ -543,6 +563,271 @@ function validateLoadbearingWalls(project) {
   return issues;
 }
 
+/* ── Walls, and what is under them ───────────────────────────────────────
+ *
+ * Two questions about the same body, asked in one pass because resolving that
+ * body is the expensive part and this runs on every settled edit: does the wall
+ * land on anything at all, and does it hang off the edge of what it lands on.
+ */
+
+function planBounds(points) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const point of points) {
+    if (point.x < minX) minX = point.x;
+    if (point.x > maxX) maxX = point.x;
+    if (point.y < minY) minY = point.y;
+    if (point.y > maxY) maxY = point.y;
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+function boundsIntersect(a, b) {
+  return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
+}
+
+/**
+ * How far the wall's body reaches past every plate on its floor, and whether any
+ * of it is on one at all.
+ *
+ * Measured at the corners of the built body: a rectangle that has left a convex
+ * plate has left it at a corner first, and the four of them are what a wall
+ * costs to check. A corner outside every plate is reported at its distance to
+ * the nearest plate edge, which is the overrun a setback would be measured
+ * against.
+ */
+function wallPlateOverrun(outline, plates) {
+  let overrunMm = 0;
+  let cornersOnPlate = 0;
+
+  for (const corner of outline) {
+    let nearest = Number.POSITIVE_INFINITY;
+    let onPlate = false;
+    for (const plate of plates) {
+      if (pointInPolygon(corner, plate)) {
+        onPlate = true;
+        break;
+      }
+      for (let index = 0; index < plate.length; index += 1) {
+        nearest = Math.min(nearest, distanceToSegment(corner, plate[index], plate[(index + 1) % plate.length]));
+      }
+    }
+    if (onPlate) {
+      cornersOnPlate += 1;
+      continue;
+    }
+    if (Number.isFinite(nearest) && nearest > overrunMm) overrunMm = nearest;
+  }
+
+  return { overrunMm, cornersOnPlate };
+}
+
+function validateWallBearing(floor, profile) {
+  const walls = floor.walls || [];
+  if (!walls.length) return [];
+
+  const plates = [];
+  const plateBounds = [];
+  for (const slab of floor.slabs || []) {
+    const boundary = slab.boundaryPoints || [];
+    if (boundary.length < 3) continue;
+    plates.push(boundary);
+    plateBounds.push(planBounds(boundary));
+  }
+
+  const bypassWalls = walls.filter((wall) => normalizeWallFramingMode(wall.framingMode) === WALL_FRAMING_MODES.BYPASS);
+  // A floor with no plate has nothing for a wall to slide off, and a floor with
+  // no bypass wall has nothing to check the bearing of. Most floors are both.
+  if (!plates.length && !bypassWalls.length) return [];
+
+  const baseInputs = { profileId: profile.id, profileSource: profile.source, floorId: floor.id };
+  const issues = [];
+
+  for (const wall of walls) {
+    const outline = plates.length ? getWallRenderData(wall, floor.columns || [])?.outline : null;
+    if (!outline || outline.length < 3) continue;
+    const bounds = planBounds(outline);
+    if (!plateBounds.some((entry) => boundsIntersect(bounds, entry))) continue;
+
+    const { overrunMm, cornersOnPlate } = wallPlateOverrun(outline, plates);
+    // Nothing of the wall is on a plate: it is not a wall that slid off its
+    // plate, it is a wall somewhere else, and the bypass check below is the one
+    // with something to say about it.
+    if (!cornersOnPlate) continue;
+    // A slab traced to the wall CENTRELINE is a legitimate drawing — the app's
+    // own test-fit generator produces exactly that — and half the body then
+    // hangs past the edge of every perimeter plate. What this check is for is a
+    // wall whose bearing line left the plate, so the allowance is half the
+    // built thickness plus the alignment tolerance: an overrun beyond that
+    // means the centreline itself is off the slab.
+    const allowanceMm = (Number(wall.thickness) || 0) / 2 + STACK_ALIGNMENT_TOLERANCE_MM;
+    if (overrunMm <= allowanceMm) continue;
+
+    issues.push(
+      issue(
+        'STRUCT.WALL_OFF_SLAB_EDGE',
+        'warning',
+        `Wall body reaches ${Math.round(overrunMm)} mm past the edge of the slab it bears on.`,
+        [{ type: 'wall', id: wall.id }],
+        {
+          ...baseInputs,
+          overrun: overrunMm,
+          tolerance: STACK_ALIGNMENT_TOLERANCE_MM,
+          allowance: allowanceMm,
+          outboardOffset: wallOutboardOffset(wall),
+          framingMode: normalizeWallFramingMode(wall.framingMode),
+        },
+        'verified_geometry',
+      ),
+    );
+  }
+
+  for (const wall of bypassWalls) {
+    const bearing = resolveWallBaseBearing(wall, floor);
+    if (!bearing) continue;
+    if (bearing.unsupportedRatio <= BYPASS_WALL_BEARING_SHARE) continue;
+    if (bearing.unsupportedRunMm <= BYPASS_WALL_UNSUPPORTED_RUN_MM) continue;
+
+    issues.push(
+      issue(
+        'STRUCT.BYPASS_WALL_UNSUPPORTED',
+        'warning',
+        `Bypass wall runs ${Math.round(bearing.unsupportedRunMm)} mm with no slab or beam under it on its own floor.`,
+        [{ type: 'wall', id: wall.id }],
+        {
+          ...baseInputs,
+          runLength: bearing.runMm,
+          unsupportedRun: bearing.unsupportedRunMm,
+          unsupportedRatio: bearing.unsupportedRatio,
+          configuredMaximumUnsupportedRatio: BYPASS_WALL_BEARING_SHARE,
+          configuredMinimumUnsupportedRun: BYPASS_WALL_UNSUPPORTED_RUN_MM,
+          bearingSourceCount: bearing.bearingSourceCount,
+          sampleCount: bearing.sampleCount,
+        },
+        'verified_geometry',
+      ),
+    );
+  }
+
+  return issues;
+}
+
+/* ── Bays across storeys ─────────────────────────────────────────────────
+ *
+ * A `stackId` on a wall says which facade it belongs to, the way a column's
+ * says which line it stands on. Unlike a column stack, one storey's share of a
+ * wall stack is SEVERAL walls — a bay is a face and two returns — so the checks
+ * compare a storey's group against the group below rather than one wall against
+ * one wall.
+ */
+
+/**
+ * How far this wall sits from the one it stacks on. Both pairings of the
+ * endpoints are tried because a bay drawn on the storey above is routinely
+ * traced the other way round, and a wall drawn end-for-end is in the same place.
+ */
+function wallAxisDeviationMm(wall, other) {
+  const direct = Math.max(distance(wall.start, other.start), distance(wall.end, other.end));
+  const reversed = Math.max(distance(wall.start, other.end), distance(wall.end, other.start));
+  return Math.min(direct, reversed);
+}
+
+/** The wall of the storey below this one lines up with: nearest by midpoint. */
+function nearestStackMember(wall, candidates) {
+  const centre = midpoint(wall.start, wall.end);
+  let best = null;
+  for (const candidate of candidates) {
+    const gap = distance(centre, midpoint(candidate.wall.start, candidate.wall.end));
+    if (!best || gap < best.gap) best = { ...candidate, gap };
+  }
+  return best;
+}
+
+function validateWallStacks(project) {
+  const orderedFloors = getOrderedFloors(project);
+  const orderedFloorIds = orderedFloors.map((floor) => floor.id);
+  const stacks = new Map();
+
+  orderedFloors.forEach((floor, floorIndex) => {
+    for (const wall of floor.walls || []) {
+      if (!wall.stackId) continue;
+      const entry = stacks.get(wall.stackId) || { members: [], floorIndices: new Set() };
+      entry.members.push({ wall, floorId: floor.id, floorIndex });
+      entry.floorIndices.add(floorIndex);
+      stacks.set(wall.stackId, entry);
+    }
+  });
+
+  const issues = [];
+  for (const [stackId, { members, floorIndices }] of stacks) {
+    // A bay one storey tall is a bay, not a broken stack. Everything below
+    // compares storeys, and there is nothing to compare against.
+    if (floorIndices.size < 2) continue;
+
+    const baseIndex = Math.min(...floorIndices);
+    const reference = members.filter((member) => member.floorIndex === baseIndex);
+
+    for (const member of members) {
+      if (member.floorIndex === baseIndex) continue;
+      const partner = nearestStackMember(member.wall, reference);
+      if (!partner) continue;
+
+      const axisOffsetMm = wallAxisDeviationMm(member.wall, partner.wall);
+      const outboardDeltaMm = Math.abs(wallOutboardOffset(member.wall) - wallOutboardOffset(partner.wall));
+      // Either one puts the storeys out of line, so the worse of the two is
+      // what the bay is out by — a facade built 200 further out is as misaligned
+      // as one drawn 200 further out.
+      const offset = Math.max(axisOffsetMm, outboardDeltaMm);
+      if (offset <= STACK_ALIGNMENT_TOLERANCE_MM) continue;
+
+      issues.push(
+        issue(
+          'STRUCT.BAY_STACK_MISALIGNED',
+          'warning',
+          `Wall is ${Math.round(offset)} mm from the bay stack axis below it.`,
+          [
+            { type: 'wallStack', id: stackId },
+            { type: 'wall', id: member.wall.id },
+          ],
+          {
+            floorId: member.floorId,
+            referenceFloorId: partner.floorId,
+            referenceWallId: partner.wall.id,
+            axisOffset: axisOffsetMm,
+            outboardOffsetDelta: outboardDeltaMm,
+            offset,
+            tolerance: STACK_ALIGNMENT_TOLERANCE_MM,
+          },
+          'verified_geometry',
+        ),
+      );
+    }
+
+    const lowest = baseIndex;
+    const highest = Math.max(...floorIndices);
+    for (let index = lowest; index <= highest; index += 1) {
+      if (floorIndices.has(index)) continue;
+      issues.push(
+        issue(
+          'STRUCT.BAY_STACK_DISCONTINUITY',
+          'warning',
+          `Bay stack ${stackId} skips an intermediate level.`,
+          [
+            { type: 'wallStack', id: stackId },
+            { type: 'floor', id: orderedFloorIds[index] },
+          ],
+          { missingFloorId: orderedFloorIds[index], presentFloorCount: floorIndices.size },
+          'verified_geometry',
+        ),
+      );
+    }
+  }
+
+  return issues;
+}
+
 function slabSoffitLevel(slab, floor) {
   const top = Number.isFinite(slab?.elevation) ? slab.elevation : getFloorElevation(floor);
   const thickness = Number.isFinite(slab?.thickness) ? slab.thickness : 0;
@@ -565,6 +850,25 @@ function projectBeamAxes(project) {
     }
   }
   return axes;
+}
+
+/**
+ * Which of a floor's walls stand on these projecting runs.
+ *
+ * The same plan proximity `beamSupportsOverhang` applies to a beam, applied to
+ * the wall's BUILT body: an outboard facade is drawn on the grid line and stands
+ * somewhere else, and it is where it stands that the plate feels.
+ */
+function wallsStandingOnRuns(floor, runs) {
+  const columns = floor.columns || [];
+  const standing = [];
+  for (const wall of floor.walls || []) {
+    const rendered = getWallRenderData(wall, columns);
+    if (!rendered?.trimStart || !rendered?.trimEnd) continue;
+    if (!beamSupportsOverhang({ start: rendered.trimStart, end: rendered.trimEnd }, runs)) continue;
+    standing.push(wall);
+  }
+  return standing;
 }
 
 /**
@@ -609,6 +913,33 @@ function validateSlabOverhangs(project, profile) {
 
     if (overhang.maxDepthMm <= OVERHANG_SUPPORT_REVIEW_DEPTH_MM) continue;
 
+    // Runs deep enough to be a cantilever rather than a nib — the same line the
+    // support review is drawn at, and the only runs a wall on the tip changes
+    // the load case of.
+    const deepRuns = (overhang.overhangEdges || []).filter((run) => run.depthMm > OVERHANG_SUPPORT_REVIEW_DEPTH_MM);
+    const standing = deepRuns.length ? wallsStandingOnRuns(floor, deepRuns) : [];
+    if (standing.length) {
+      issues.push(
+        issue(
+          'STRUCT.CANTILEVER_CARRIES_WALL',
+          // Not a fault. A bay is meant to carry its own facade, and the model
+          // saying so is the difference between a cantilever checked as a bare
+          // plate and one checked as what it is — see the tip line load in
+          // `analysis/cantileverStructural`.
+          'info',
+          `${standing.length} wall(s) stand on this projecting slab edge, so the cantilever carries a line load at its tip.`,
+          [...refs, ...standing.map((wall) => ({ type: 'wall', id: wall.id }))],
+          {
+            ...baseInputs,
+            wallIds: standing.map((wall) => wall.id),
+            reviewDepthThreshold: OVERHANG_SUPPORT_REVIEW_DEPTH_MM,
+            wallProximityAllowance: BEAM_SUPPORT_PROXIMITY_MM,
+          },
+          'verified_geometry',
+        ),
+      );
+    }
+
     const soffitLevel = slabSoffitLevel(slab, floor);
     const carried = beamAxes.some(
       (entry) =>
@@ -650,8 +981,10 @@ export function validateStructuralCoordination(project, profileOverride = null) 
         validateSlabCoordination(floor, slab, profile, below.get(floor.id) || null),
       ),
       ...validateOpeningsNearColumns(floor, profile),
+      ...validateWallBearing(floor, profile),
     ]),
     ...validateLoadbearingWalls(project),
+    ...validateWallStacks(project),
     ...validateSlabOverhangs(project, profile),
   ];
 }

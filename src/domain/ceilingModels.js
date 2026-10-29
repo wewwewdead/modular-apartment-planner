@@ -4,7 +4,8 @@ import { intersectPolygons, subtractPolygons } from '@/geometry/polygonBoolean';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { collectCeilingObstructions } from './ceilingObstructions';
-import { getProjectFloor } from './floorModels';
+import { resolveColumnTopLevel } from './beamLevels';
+import { getFloorTopElevation, getProjectFloor } from './floorModels';
 import {
   deriveCeilingBoundaryFromBeams,
   deriveCeilingStructuralCoverage,
@@ -43,6 +44,20 @@ import {
   resolveFixtureBulbId,
   resolveFixturePhotometrics,
 } from './lightingCatalog';
+// A dimension is a dimension: two points in an assembly's own UV frame, a
+// direction, an offset and a rounding rule. The wall detailing module owns that
+// vocabulary already, and a reflected ceiling plan measures in exactly the same
+// frame — so the ceiling brings the model across rather than growing a second
+// one that would drift from it.
+import {
+  WALL_DIMENSION_MODES,
+  WALL_DIMENSION_PRECISIONS,
+  createWallDimension,
+  describeDimension,
+  normalizeDimensionPoint,
+  rectAnchorPoint,
+  uniqueDimensionValues,
+} from './wallDetailing';
 
 export const CEILING_SCHEMA_VERSION = 1;
 
@@ -338,6 +353,33 @@ export function createCeilingSuspension(overrides = {}) {
   };
 }
 
+/**
+ * One hand-drawn measurement on the reflected ceiling plan. The shape is the
+ * wall editor's, endpoints and all, so both drawings round, snap and re-anchor
+ * identically; only the id prefix says which drawing it was taken on.
+ */
+export function createCeilingDimension(dimension = {}) {
+  return createWallDimension({ ...dimension, id: dimension.id || generateId('ceiling_dim') });
+}
+
+/**
+ * What the plan is dimensioned to: how finely measurements round, which derived
+ * chains are drawn, and every measurement taken by hand. The show flags name the
+ * things a ceiling has — boards and furring rather than panels and studs.
+ */
+export function createCeilingDimensions(overrides = {}) {
+  return {
+    precision: WALL_DIMENSION_PRECISIONS.includes(Number(overrides?.precision)) ? Number(overrides.precision) : 0.01,
+    showOverall: overrides?.showOverall ?? true,
+    showOpenings: overrides?.showOpenings ?? true,
+    showBoards: overrides?.showBoards ?? false,
+    showFraming: overrides?.showFraming ?? false,
+    manual: Array.isArray(overrides?.manual)
+      ? overrides.manual.map((dimension) => createCeilingDimension(dimension))
+      : [],
+  };
+}
+
 export function createCeilingDetailing(overrides = {}) {
   return {
     schemaVersion: CEILING_SCHEMA_VERSION,
@@ -350,6 +392,7 @@ export function createCeilingDetailing(overrides = {}) {
       createCeilingOpening(opening, opening),
     ),
     lighting: createCeilingLighting(overrides.lighting),
+    dimensions: createCeilingDimensions(overrides.dimensions),
   };
 }
 
@@ -448,11 +491,22 @@ export function createCeilingForProject(project, options = {}) {
       ? resolveCeilingSupportBeams(floor, requestedBeamIds)
       : selectPreferredCeilingBeamLevel(floor)?.beams || [];
 
-  // Attachment is a statement about beams, so it is read off the beams alone: a
-  // ceiling whose only shape came from the slab overhead hangs from nothing and
-  // must not claim to hang from beams.
-  const beamBoundary = deriveCeilingBoundaryFromBeams(supportBeams, floor);
-  const attachedToBeams = clonePlanPoints(beamBoundary).length >= 3;
+  // Whether a ceiling hangs from beams and what shape they enclose are two
+  // different questions, and naming beams answers only the first. A single beam
+  // — or a pair on one grid line — frames no rectangle to draw, yet it is still
+  // what the ceiling hangs from, and dropping such a ceiling back to the storey
+  // datum would strand it above the very beams it was asked to hang under:
+  // manual mode is traced against its own board plane alone, so nothing below
+  // that plane is seen and the framing derives straight through the structure.
+  //
+  // Only a caller that named beams gets that reading. A ceiling that asked for
+  // nothing is being guessed at, and there the beams' own rectangle is the
+  // evidence that a level frames anything at all — while a ceiling whose only
+  // shape came from the slab overhead hangs from nothing and must not claim to
+  // hang from beams.
+  const attachedToBeams = requestedBeamIds.length
+    ? supportBeams.length > 0
+    : clonePlanPoints(deriveCeilingBoundaryFromBeams(supportBeams, floor)).length >= 3;
   const beamElevation = attachedToBeams ? Math.min(...supportBeams.map((beam) => finite(beam.floorLevel))) : null;
   const coverage = clonePlanPoints(deriveCeilingStructuralCoverage({ project, floor, supportBeams }));
 
@@ -512,9 +566,10 @@ function resolveCeilingFloors(project, ceiling) {
 }
 
 /**
- * The slabs overhead a ceiling's boundary is drawn from, and the floor they are
- * on. Exported so the RCP editor's preview project can carry exactly the slabs
- * the boundary resolves through instead of guessing at them.
+ * The slabs overhead a ceiling sits under, and the floor they are on. Exported
+ * so the RCP editor's preview project can carry exactly the slabs the boundary
+ * would resolve through instead of guessing at them — the deck the boards hang
+ * beneath, and the boundary itself for a ceiling whose beams frame nothing.
  */
 export function resolveCeilingCoverageSlabs(project, ceiling) {
   return selectCeilingCoverageSlabs({
@@ -555,10 +610,11 @@ export function resolveCeilingBoundary(project, ceiling) {
     // outline is withheld, and only because someone traced it by hand.
     if (ceiling?.boundarySource === CEILING_BOUNDARY_SOURCES.DRAWN && stored.length >= 3) return stored;
 
-    // Derived on every read, so dragging a column, moving a beam or pulling a
-    // slab edge out over a cantilever moves the ceiling with it. The stored
-    // polygon is the snapshot to fall back on when the structure no longer
-    // resolves.
+    // Derived on every read, so dragging a column or moving a beam moves the
+    // ceiling with it. Pulling a slab edge does not: the frame governs the AUTO
+    // boundary, and a ceiling wanted out under an overhang is traced by hand —
+    // which is the branch above. The stored polygon is the snapshot to fall back
+    // on when the structure no longer resolves.
     const derived = clonePlanPoints(
       deriveCeilingStructuralCoverage({
         project,
@@ -572,12 +628,28 @@ export function resolveCeilingBoundary(project, ceiling) {
   });
 }
 
+function findColumn(floor, columnId) {
+  return columnId ? (floor?.columns || []).find((column) => column.id === columnId) || null : null;
+}
+
+/**
+ * Where one beam end stands in plan, or null when it stands nowhere the model
+ * can name: a point ref carries its position on its face, a column ref borrows
+ * its column's centre, and a ref to a column that has been deleted has no place
+ * left to speak from.
+ */
+function beamEndAnchor(floor, ref) {
+  if (ref?.kind === 'point') return { x: finite(ref.x), y: finite(ref.y) };
+  const column = ref?.kind === 'column' ? findColumn(floor, ref.id) : null;
+  return column ? { x: finite(column.x), y: finite(column.y) } : null;
+}
+
 export function resolveCeilingElevations(project, ceiling) {
   const detailing = resolveCeilingDetailing(ceiling);
   const beamMode = ceiling?.attachment?.mode === CEILING_ATTACHMENT_MODES.BEAM;
-  const supportLevels = resolveCeilingBeamSupports(project, ceiling)
-    .map((beam) => Number(beam.floorLevel))
-    .filter(Number.isFinite);
+  const floor = getProjectFloor(project, ceiling?.floorId);
+  const supports = resolveCeilingBeamSupports(project, ceiling);
+  const supportLevels = supports.map((beam) => Number(beam.floorLevel)).filter(Number.isFinite);
   // The lowest beam top governs: the ceiling cannot hang from higher than the
   // support that stops first. With no beam left to read, the stored elevation is
   // the last thing the ceiling knew about its own attachment plane.
@@ -590,7 +662,109 @@ export function resolveCeilingElevations(project, ceiling) {
   const furringTop = furringBottom + detailing.framing.furringDepth;
   const carrierBottom = furringTop;
   const carrierTop = carrierBottom + detailing.framing.carrierDepth;
-  return { attachment, boardUnderside, boardTop, furringBottom, furringTop, carrierBottom, carrierTop };
+  // The lowest underside of the beams the ceiling hangs from. The assembly hangs
+  // INSIDE the beams' depth, so the bay it fills is bounded not by the boards'
+  // own plane but by everything built up under those beams — a partition fitted
+  // to the beam soffit, a column stopped at it — and the band the tracer reads
+  // has to reach at least that far down to see them. Null when there is nothing
+  // to hang from: a manual ceiling sits on its own datum and knows no soffit,
+  // and a beam-attached one whose beams have been deleted has none left to read.
+  // A beam stored without a usable depth is taken at its own level, which is
+  // what a beam of no depth physically is.
+  const supportSoffits = supports
+    .map((beam) => Number(beam.floorLevel) - Math.max(Number(beam.depth) || 0, 0))
+    .filter(Number.isFinite);
+  const supportSoffit = supportSoffits.length ? Math.min(...supportSoffits) : null;
+  // The level the support beams are carried at. Retyping a beam's level lifts it
+  // off the columns holding it up without shortening them, and the zone between
+  // the two is still structure: the columns are built up through it to meet the
+  // beam, and anything else standing in it — a partition the fitter never
+  // touched because it runs under no beam, a column left at its old head — is
+  // beside the assembly rather than under it.
+  //
+  // The bay's bearing plane is the HIGHEST head any of its supports stand on,
+  // read per beam END rather than per beam. What this level states is where the
+  // storey's structure used to stop — the plane the framing stood at before the
+  // beams were raised off it — and that is a fact about the bay, not about its
+  // unluckiest corner. One stub column landing low (a split-level pocket, a post
+  // stopped short) says where a single beam end bears; it says nothing about
+  // where the storey stops, and letting it drag the plane down would reach the
+  // band past everything standing in the bay and cut the boards around walls
+  // that pass a clear metre underneath. Per end, because a bay whose every beam
+  // happens to touch that one short column would otherwise take its level from
+  // it twice over instead of from the tall columns carrying the other ends.
+  //
+  // Null on the same terms as the soffit, since both are read off the support
+  // beams and there is nothing to bear on without them. A beam that names no
+  // column it can find — bare point refs, or columns since deleted or left
+  // heightless — bears on nothing readable and falls back once to the top of its
+  // storey, the only statement left about where its support stops.
+  //
+  // This scalar is the FIELDLESS SUMMARY of the bay: one number, the highest
+  // plane in it, and it is what `ceilingElevationRange` folds into the band for
+  // every caller that can only be handed a band. `supportBearingEnds` below
+  // carries the same statements unsummarised, for the one caller that can ask
+  // the question locally.
+  const supportBearings = supports.flatMap((beam) => {
+    const ends = [beam.startRef, beam.endRef]
+      .filter((ref) => ref?.kind === 'column')
+      .map((ref) => resolveColumnTopLevel(floor, ref.id))
+      .filter(Number.isFinite);
+    return ends.length ? ends : [getFloorTopElevation(floor)];
+  });
+  const supportBearing = supportBearings.length ? Math.max(...supportBearings) : null;
+  // The same bearing statements as positions instead of as one number: one
+  // entry per statement, anchored where in plan it was made and carrying the
+  // level it names. A bay that genuinely steps has no single bearing plane —
+  // the 2000 stub in the split-level pocket and the 3000 columns along the rest
+  // of the frame are both true, each about its own end of the bay — so the
+  // tracer is handed the ends themselves and judges each obstruction against
+  // the plane of the support nearest it. Summarising first is what loses the
+  // step: read as a MAX the pocket disappears and a partition built to it is
+  // missed, read as a MIN the pocket speaks for the whole bay and the boards
+  // are cut around walls a metre clear of them.
+  //
+  // Only an end that can say WHERE contributes. A column end anchors at that
+  // column's centre; a bare-point end at the point it was drawn on; a ref to a
+  // column since deleted at nothing at all, because a statement with no place
+  // cannot be the nearest one to anything. The storey-top fallback is a fact
+  // about one beam that bears on nothing readable, so it is anchored at that
+  // beam's own ends rather than left to float over the bay.
+  //
+  // Absent — not empty — where a ceiling has nothing to hang from, so the
+  // elevations of a manual ceiling stay the object they have always been. The
+  // field is a refinement offered to a caller that can use it, never a new part
+  // of the shape every reader has to know about.
+  const supportBearingEnds = supports.flatMap((beam) => {
+    const refs = [beam.startRef, beam.endRef];
+    const borne = refs
+      .map((ref) => {
+        if (ref?.kind !== 'column') return null;
+        const level = resolveColumnTopLevel(floor, ref.id);
+        const column = Number.isFinite(level) ? findColumn(floor, ref.id) : null;
+        return column ? { x: finite(column.x), y: finite(column.y), level } : null;
+      })
+      .filter(Boolean);
+    if (borne.length) return borne;
+
+    const storeyTop = getFloorTopElevation(floor);
+    return refs
+      .map((ref) => beamEndAnchor(floor, ref))
+      .filter(Boolean)
+      .map((anchor) => ({ ...anchor, level: storeyTop }));
+  });
+  return {
+    attachment,
+    boardUnderside,
+    boardTop,
+    furringBottom,
+    furringTop,
+    carrierBottom,
+    carrierTop,
+    supportSoffit,
+    supportBearing,
+    ...(supportBearingEnds.length ? { supportBearingEnds } : {}),
+  };
 }
 
 /**
@@ -670,14 +844,39 @@ function openingRect(opening) {
 }
 
 /**
- * Vertical slice the ceiling assembly occupies, from the underside of the
- * boards up to whatever it hangs from. Structure crossing this band is what the
- * ceiling has to stop at. Exported because the RCP editor's 3D preview has to
- * show exactly the structure the boards were traced around, and it can only do
- * that by asking for the same band.
+ * Vertical slice a ceiling has to be traced against, from the lowest level that
+ * still bounds it up to whatever it hangs from. Structure crossing this band is
+ * what the ceiling has to stop at. Exported because the RCP editor's 3D preview
+ * has to show exactly the structure the boards were traced around, and it can
+ * only do that by asking for the same band.
+ *
+ * The bottom is the board underside for a ceiling sitting on its own datum, but
+ * a beam-hung one reaches down to the soffit of its support beams. The boards
+ * hang inside the depth of those beams, so a wall or column built up to their
+ * underside divides the bay from beside the assembly rather than passing below
+ * it — an auto-fitted partition stops at exactly that soffit — and boards run
+ * through it would be boards built through a wall.
+ *
+ * It reaches further still when the beams have been raised off what carries
+ * them: a beam retyped above its columns owns the whole zone down to their
+ * heads, because that is where the structure holding it up actually stops and
+ * the columns have to be built up through the gap to meet it. Everything left
+ * standing at the old level — the partition the fitter never touched because it
+ * runs under no beam, a column still at the storey height — rises into that zone
+ * and bounds the ceiling just as it did before the beam moved.
+ *
+ * So the bottom is simply the lowest of the three, which also keeps a suspension
+ * drop deeper than the beams honest: hang the ceiling below the soffit and the
+ * boards are the lowest thing again.
  */
 export function ceilingElevationRange(elevations) {
-  return { min: elevations.boardUnderside, max: Math.max(elevations.carrierTop, elevations.attachment) };
+  const bottoms = [elevations.boardUnderside, elevations.supportSoffit, elevations.supportBearing].filter(
+    Number.isFinite,
+  );
+  return {
+    min: Math.min(...bottoms),
+    max: Math.max(elevations.carrierTop, elevations.attachment),
+  };
 }
 
 function ceilingContext(ceiling, project) {
@@ -686,9 +885,14 @@ function ceilingContext(ceiling, project) {
   const space = getCeilingLocalSpace(boundary);
   const boundaryLocal = boundary.map((point) => space.toLocal(point));
   const boundaryXy = uvToXy(boundaryLocal);
+  // Resolved once and read twice on purpose: the band and the bearing ends that
+  // refine its floor are two halves of one statement about the same supports,
+  // and a second resolve could only ever be an opportunity for them to disagree.
+  const elevations = resolveCeilingElevations(project, ceiling);
   const obstructions = collectCeilingObstructions(
     resolveCeilingFloors(project, ceiling),
-    ceilingElevationRange(resolveCeilingElevations(project, ceiling)),
+    ceilingElevationRange(elevations),
+    elevations.supportBearingEnds,
   ).map((outline) => uvToXy(outline.map((point) => space.toLocal(point))));
 
   return {
@@ -849,19 +1053,70 @@ function stationValues(limit, spacing) {
   return values;
 }
 
+/**
+ * The stretches of one clipped piece a member can be built on, measured along
+ * the band.
+ *
+ * A framing member is a rectangle of the band's full section, so a piece is only
+ * usable where the whole section survives. Where a beam bites halfway across the
+ * band, or a notch in the boundary clips its corner, what comes back from the
+ * clip is an L, and a bounding box around it would hand back exactly the area
+ * the clip just took out — a furring laid through the beam that stopped it.
+ *
+ * The intrusions are read off the piece's own edges: an edge lying on one of the
+ * band's own long sides is the band running clear, and every other edge — the
+ * face of the beam, the notch's return, a boundary running at an angle — is
+ * something standing in the section, so no member may cross where it projects.
+ * Ends are found this way too, being edges square across the band.
+ */
+function bandRunsFromPiece(rings, band, along) {
+  const alongKey = along === 'u' ? 'x' : 'y';
+  const acrossKey = along === 'u' ? 'y' : 'x';
+  const sides = along === 'u' ? [band.v0, band.v1] : [band.u0, band.u1];
+
+  let min = Infinity;
+  let max = -Infinity;
+  const cuts = [];
+  for (const ring of rings) {
+    for (let index = 0; index < ring.length; index += 1) {
+      const start = ring[index];
+      const end = ring[(index + 1) % ring.length];
+      min = Math.min(min, start[alongKey]);
+      max = Math.max(max, start[alongKey]);
+      const onSide = sides.some(
+        (side) => Math.abs(start[acrossKey] - side) <= EPSILON && Math.abs(end[acrossKey] - side) <= EPSILON,
+      );
+      if (onSide) continue;
+      cuts.push({ from: Math.min(start[alongKey], end[alongKey]), to: Math.max(start[alongKey], end[alongKey]) });
+    }
+  }
+  if (!(max - min > EPSILON)) return [];
+
+  const runs = [];
+  let open = min;
+  for (const cut of cuts.sort((a, b) => a.from - b.from)) {
+    if (cut.from - open > EPSILON) runs.push({ from: open, to: Math.min(cut.from, max) });
+    open = Math.max(open, cut.to);
+    if (open >= max - EPSILON) break;
+  }
+  if (max - open > EPSILON) runs.push({ from: open, to: max });
+
+  return runs;
+}
+
 // A band runs the full length of the ceiling; the pieces that survive are the
 // runs between the walls, beams and columns it meets on the way.
-function clipBandToCeilingArea(band, boundaryXy, obstructions) {
+function clipBandToCeilingArea(band, boundaryXy, obstructions, along) {
   return intersectPolygons(uvToXy(rectOutline(band)), boundaryXy)
     .flatMap((clipped) => subtractPolygons(clipped.outline, [...obstructions, ...clipped.holes]))
-    .map((region) => region.outline)
-    .filter((outline) => outline.length >= 3)
-    .map((outline) => ({
-      u0: Math.min(...outline.map((point) => point.x)),
-      u1: Math.max(...outline.map((point) => point.x)),
-      v0: Math.min(...outline.map((point) => point.y)),
-      v1: Math.max(...outline.map((point) => point.y)),
-    }));
+    .filter((region) => region.outline.length >= 3)
+    .flatMap((region) => bandRunsFromPiece([region.outline, ...(region.holes || [])], band, along))
+    .sort((first, second) => first.from - second.from)
+    .map((run) =>
+      along === 'u'
+        ? { u0: run.from, u1: run.to, v0: band.v0, v1: band.v1 }
+        : { u0: band.u0, u1: band.u1, v0: run.from, v1: run.to },
+    );
 }
 
 function regionContains(region, point) {
@@ -902,9 +1157,12 @@ function ringEdges(ring, region) {
  *
  * Vertices move along the miter of their two edges, so the offset ring stays
  * closed and consecutive members still meet at the corners.
+ *
+ * The ring's oriented edges are passed in rather than worked out here: the same
+ * orientation answers where the stations go, and one probe per edge is enough to
+ * settle it once.
  */
-function insetRing(ring, distance, region) {
-  const edges = ringEdges(ring, region);
+function insetRing(ring, distance, edges) {
   if (edges.length !== ring.length) return ring.map((point) => ({ ...point }));
 
   return ring.map((point, index) => {
@@ -962,12 +1220,117 @@ function squareFits(point, region, clearance) {
   ].every((corner) => regionContains(region, corner));
 }
 
+/**
+ * A face is square to a band when it runs within this of parallel to it. A band
+ * is an axis-aligned rectangle in the ceiling's own space, so it can only be
+ * laid tight against a face it is already parallel to; roughly a third of a
+ * degree of slop absorbs the floating-point noise a polygon clip leaves on an
+ * edge without letting a genuinely skew face through.
+ */
+const EDGE_SQUARENESS = 0.006;
+
+/**
+ * One station hard against every region edge a band could run along.
+ *
+ * A module gets the two faces at the ends of its own extent for free whenever
+ * the ceiling's bounding box IS the structure — which, with the beams governing
+ * the AUTO boundary again, is once more true of a beam-framed rectangle. It is
+ * not true of anything else, and the cases where it fails are the ordinary ones:
+ * a hand-traced boundary stopping wherever the user drew it, a beam or a
+ * partition crossing the middle of the bay, the return around a column, the ring
+ * around an obstruction. At every one of those the module's stations land where
+ * the grid wanted them and the face carries nothing, so a fitter looking up with
+ * the boards hidden sees nothing behind their cut edge.
+ *
+ * So the stations are read off the ceiling area itself rather than off a box
+ * drawn round it. Every edge of every region — the perimeter against a beam, the
+ * return around a column, the ring around an obstruction standing in the middle
+ * of it — that runs WITH the band gets a station half a member in from it, which
+ * stands the member's own face on the structure's face. It is the treatment an
+ * opening already gets from its trimmers, applied to the edges the ceiling was
+ * cut to rather than only to the ones cut into it.
+ *
+ * Edges shorter than `minimumEdge` are left alone: a chamfer or a column's
+ * return is something the surrounding grid already reaches across, not a face
+ * that opens a gap in it.
+ */
+function regionEdgeStations(ringSets, along, width, limit, minimumEdge) {
+  const acrossKey = along === 'u' ? 'y' : 'x';
+  const stations = [];
+
+  for (const rings of ringSets) {
+    for (const entry of rings) {
+      if (!entry) continue;
+      for (const edge of entry.edges) {
+        if (edge.length < minimumEdge) continue;
+        if (Math.abs(edge.direction[acrossKey]) > EDGE_SQUARENESS) continue;
+        const side = Math.sign(edge.inward[acrossKey]);
+        if (!side) continue;
+        // Clamped into the ceiling's own extent so the member it carries is a
+        // whole member: a band centred on the very edge would be half a member
+        // sticking out past the boundary.
+        stations.push(
+          clamp(edge.start[acrossKey] + (side * width) / 2, width / 2, Math.max(width / 2, limit - width / 2)),
+        );
+      }
+    }
+  }
+
+  return stations;
+}
+
+/**
+ * The stations one module runs at: its own, plus the edge stations that hold the
+ * board edges up.
+ *
+ * Where the two would build members on top of each other the edge wins — a
+ * module station is where the grid would like a member, an edge station is where
+ * a board edge needs one — and a module station is dropped only when an edge
+ * station stands within a member's width of it, which is exactly when the two
+ * would be one member drawn twice.
+ *
+ * Each station carries the key its members are named by, so a module row keeps
+ * the id it has always had whether or not an edge station was inserted before
+ * it.
+ */
+function bandStations(limit, spacing, width, edges) {
+  const overlapping = (value, others) => others.some((other) => Math.abs(other - value) < width - EPSILON);
+  const kept = [];
+
+  for (const value of [...edges].sort((first, second) => first - second)) {
+    if (overlapping(value, kept)) continue;
+    kept.push(value);
+  }
+  const stations = kept.map((value, index) => ({ value, key: `e${index}` }));
+
+  stationValues(limit, spacing).forEach((value, index) => {
+    if (overlapping(value, kept)) return;
+    stations.push({ value, key: String(index) });
+  });
+
+  return stations.sort((first, second) => first.value - second.value);
+}
+
 function deriveAutomaticCeilingFraming(context, ceilingId) {
   const { detailing, boundaryXy, obstructions, regions, length, depth, openings } = context;
   const framing = detailing.framing;
   const members = [];
 
-  stationValues(depth, framing.furringSpacing).forEach((v, rowIndex) => {
+  // One bay of the tightest module in the assembly: a face shorter than that is
+  // already spanned by the members running past it on either side.
+  const minimumEdge = Math.min(framing.furringSpacing, framing.carrierSpacing);
+
+  // Oriented once and read three times — the stations for each module, and the
+  // angle laid down every ring. Orienting an edge costs a containment probe, and
+  // nothing about the rings changes between those passes.
+  const ringSets = regions.map((region) =>
+    [region.outline, ...(region.holes || [])].map((ring) =>
+      ring.length >= 3 ? { ring, edges: ringEdges(ring, region) } : null,
+    ),
+  );
+
+  const furringEdges = regionEdgeStations(ringSets, 'u', framing.furringWidth, depth, minimumEdge);
+  bandStations(depth, framing.furringSpacing, framing.furringWidth, furringEdges).forEach(({ value: v, key }) => {
     const band = {
       u0: 0,
       u1: length,
@@ -975,9 +1338,9 @@ function deriveAutomaticCeilingFraming(context, ceilingId) {
       v1: clamp(v + framing.furringWidth / 2, 0, depth),
     };
     if (rectangleArea(band) <= EPSILON) return;
-    clipBandToCeilingArea(band, boundaryXy, obstructions).forEach((fragment, fragmentIndex) => {
+    clipBandToCeilingArea(band, boundaryXy, obstructions, 'u').forEach((fragment, fragmentIndex) => {
       members.push({
-        id: `${ceilingId}:auto:furring:${rowIndex}:${fragmentIndex}`,
+        id: `${ceilingId}:auto:furring:${key}:${fragmentIndex}`,
         kind: 'furring',
         orientation: 'horizontal',
         u0: fragment.u0,
@@ -991,7 +1354,8 @@ function deriveAutomaticCeilingFraming(context, ceilingId) {
     });
   });
 
-  stationValues(length, framing.carrierSpacing).forEach((u, columnIndex) => {
+  const carrierEdges = regionEdgeStations(ringSets, 'v', framing.carrierWidth, length, minimumEdge);
+  bandStations(length, framing.carrierSpacing, framing.carrierWidth, carrierEdges).forEach(({ value: u, key }) => {
     const band = {
       u0: clamp(u - framing.carrierWidth / 2, 0, length),
       u1: clamp(u + framing.carrierWidth / 2, 0, length),
@@ -999,9 +1363,9 @@ function deriveAutomaticCeilingFraming(context, ceilingId) {
       v1: depth,
     };
     if (rectangleArea(band) <= EPSILON) return;
-    clipBandToCeilingArea(band, boundaryXy, obstructions).forEach((fragment, fragmentIndex) => {
+    clipBandToCeilingArea(band, boundaryXy, obstructions, 'v').forEach((fragment, fragmentIndex) => {
       members.push({
-        id: `${ceilingId}:auto:carrier:${columnIndex}:${fragmentIndex}`,
+        id: `${ceilingId}:auto:carrier:${key}:${fragmentIndex}`,
         kind: 'carrier',
         orientation: 'vertical',
         u0: band.u0,
@@ -1018,10 +1382,10 @@ function deriveAutomaticCeilingFraming(context, ceilingId) {
   // Every edge of the surviving ceiling area gets an angle, holes included: the
   // ceiling dies into a beam or a partition the same way it dies into the wall
   // at its perimeter.
-  regions.forEach((region, regionIndex) => {
-    [region.outline, ...(region.holes || [])].forEach((ring, ringIndex) => {
-      if (ring.length < 3) return;
-      const inset = insetRing(ring, CEILING_WALL_ANGLE_LEG / 2, region);
+  ringSets.forEach((rings, regionIndex) => {
+    rings.forEach((entry, ringIndex) => {
+      if (!entry) return;
+      const inset = insetRing(entry.ring, CEILING_WALL_ANGLE_LEG / 2, entry.edges);
       inset.forEach((start, edgeIndex) => {
         const end = inset[(edgeIndex + 1) % inset.length];
         if (Math.hypot(end.x - start.x, end.y - start.y) <= EPSILON) return;
@@ -1299,6 +1663,213 @@ export function deriveCeilingLightFixtures(ceiling, project) {
   });
 }
 
+/**
+ * The exact point a stored measurement endpoint means, read off the drawing as
+ * it stands now. Storing the anchor rather than the coordinate is what lets a
+ * measurement follow the board, channel, opening, screw, hanger or luminaire it
+ * was taken from when that piece moves.
+ *
+ * Wall angles are excluded: they are a run of line rather than a rectangle, so
+ * there is no anchor grid on them to resolve — the ceiling outline itself is the
+ * thing you would measure to, and that is the 'ceiling' reference.
+ */
+export function resolveCeilingDimensionReference(reference, fallback, context) {
+  if (!reference) return normalizeDimensionPoint(fallback);
+  const markerPoint = (entries) => {
+    const found = (entries || []).find((entry) => entry.id === reference.entityId);
+    return found ? { u: finite(found.u), v: finite(found.v) } : normalizeDimensionPoint(fallback);
+  };
+  let entity = null;
+  if (reference.entityType === 'ceiling' && reference.entityId === context.ceilingId) {
+    entity = { u0: 0, u1: context.length, v0: 0, v1: context.depth };
+  } else if (reference.entityType === 'panel') {
+    entity = (context.panels || []).find(
+      (panel) => panel.localId === reference.entityId || panel.id === reference.entityId,
+    );
+  } else if (reference.entityType === 'opening') {
+    entity = (context.openings || []).find((opening) => opening.id === reference.entityId);
+  } else if (reference.entityType === 'framing') {
+    entity = (context.members || []).find((member) => member.id === reference.entityId && member.kind !== 'wall_angle');
+  } else if (reference.entityType === 'fastener') {
+    return markerPoint(context.fasteners);
+  } else if (reference.entityType === 'hanger') {
+    return markerPoint(context.hangers);
+  } else if (reference.entityType === 'fixture') {
+    return markerPoint(context.fixtures);
+  }
+  if (!entity) return normalizeDimensionPoint(fallback);
+  return rectAnchorPoint(entity, reference) || normalizeDimensionPoint(fallback);
+}
+
+/**
+ * The chains the drawing works out for itself: the ceiling's own extent, every
+ * opening's size and set-out, the board joint grid, and the centres the frame
+ * is set out on. Each group is a checkbox, because a boarding drawing and a
+ * setting-out drawing want different ones.
+ */
+function automaticCeilingDimensions(settings, context) {
+  const dimensions = [];
+  const makeDimension = (id, name, dimension) =>
+    describeDimension(id, name, dimension, 'automatic', settings.precision);
+
+  if (settings.showOverall) {
+    dimensions.push(
+      makeDimension('auto:overall:length', 'Overall ceiling length', {
+        mode: WALL_DIMENSION_MODES.HORIZONTAL,
+        start: { u: 0, v: 0 },
+        end: { u: context.length, v: 0 },
+        offset: 70,
+      }),
+      makeDimension('auto:overall:depth', 'Overall ceiling depth', {
+        mode: WALL_DIMENSION_MODES.VERTICAL,
+        start: { u: 0, v: 0 },
+        end: { u: 0, v: context.depth },
+        offset: 70,
+      }),
+    );
+  }
+
+  if (settings.showOpenings) {
+    for (const opening of context.openings) {
+      const kind = String(opening.type || 'opening').replaceAll('_', ' ');
+      dimensions.push(
+        makeDimension(`auto:opening:${opening.id}:width`, `${kind} width`, {
+          mode: WALL_DIMENSION_MODES.HORIZONTAL,
+          start: { u: opening.u0, v: opening.v1 },
+          end: { u: opening.u1, v: opening.v1 },
+          offset: -60,
+        }),
+        makeDimension(`auto:opening:${opening.id}:depth`, `${kind} depth`, {
+          mode: WALL_DIMENSION_MODES.VERTICAL,
+          start: { u: opening.u1, v: opening.v0 },
+          end: { u: opening.u1, v: opening.v1 },
+          offset: -60,
+        }),
+      );
+      if (opening.u0 > EPSILON) {
+        dimensions.push(
+          makeDimension(`auto:opening:${opening.id}:setout:u`, `${kind} set-out from west edge`, {
+            mode: WALL_DIMENSION_MODES.HORIZONTAL,
+            start: { u: 0, v: opening.v0 },
+            end: { u: opening.u0, v: opening.v0 },
+            offset: 150,
+          }),
+        );
+      }
+      if (opening.v0 > EPSILON) {
+        dimensions.push(
+          makeDimension(`auto:opening:${opening.id}:setout:v`, `${kind} set-out from south edge`, {
+            mode: WALL_DIMENSION_MODES.VERTICAL,
+            start: { u: opening.u0, v: 0 },
+            end: { u: opening.u0, v: opening.v0 },
+            offset: 150,
+          }),
+        );
+      }
+    }
+  }
+
+  if (settings.showBoards && context.panels.length) {
+    const uValues = uniqueDimensionValues([
+      0,
+      context.length,
+      ...context.panels.flatMap((panel) => [panel.u0, panel.u1]),
+    ]);
+    const vValues = uniqueDimensionValues([
+      0,
+      context.depth,
+      ...context.panels.flatMap((panel) => [panel.v0, panel.v1]),
+    ]);
+    for (let index = 1; index < uValues.length; index += 1) {
+      dimensions.push(
+        makeDimension(`auto:board:u:${index}`, 'Board joint chain along U', {
+          mode: WALL_DIMENSION_MODES.HORIZONTAL,
+          start: { u: uValues[index - 1], v: 0 },
+          end: { u: uValues[index], v: 0 },
+          offset: 230,
+        }),
+      );
+    }
+    for (let index = 1; index < vValues.length; index += 1) {
+      dimensions.push(
+        makeDimension(`auto:board:v:${index}`, 'Board joint chain along V', {
+          mode: WALL_DIMENSION_MODES.VERTICAL,
+          start: { u: 0, v: vValues[index - 1] },
+          end: { u: 0, v: vValues[index] },
+          offset: 230,
+        }),
+      );
+    }
+  }
+
+  if (settings.showFraming) {
+    // Carriers run along V and are spaced across U; furring runs along U and is
+    // spaced up V. Each chain is drawn on the axis its spacing is measured on.
+    const carrierCenters = uniqueDimensionValues(
+      context.members.filter((member) => member.kind === 'carrier').map((member) => (member.u0 + member.u1) / 2),
+    );
+    for (let index = 1; index < carrierCenters.length; index += 1) {
+      dimensions.push(
+        makeDimension(`auto:framing:carrier:${index}`, 'Carrier centre spacing', {
+          mode: WALL_DIMENSION_MODES.HORIZONTAL,
+          start: { u: carrierCenters[index - 1], v: context.depth },
+          end: { u: carrierCenters[index], v: context.depth },
+          offset: -150,
+        }),
+      );
+    }
+    const furringCenters = uniqueDimensionValues(
+      context.members.filter((member) => member.kind === 'furring').map((member) => (member.v0 + member.v1) / 2),
+    );
+    for (let index = 1; index < furringCenters.length; index += 1) {
+      dimensions.push(
+        makeDimension(`auto:framing:furring:${index}`, 'Furring centre spacing', {
+          mode: WALL_DIMENSION_MODES.VERTICAL,
+          start: { u: context.length, v: furringCenters[index - 1] },
+          end: { u: context.length, v: furringCenters[index] },
+          offset: -150,
+        }),
+      );
+    }
+  }
+
+  return dimensions.filter((dimension) => dimension.measurement > EPSILON);
+}
+
+function ceilingDimensionEntries(settings, context) {
+  const manual = settings.manual
+    .map((stored) => {
+      const dimension = createCeilingDimension(stored);
+      dimension.start = resolveCeilingDimensionReference(dimension.startRef, dimension.start, context);
+      dimension.end = resolveCeilingDimensionReference(dimension.endRef, dimension.end, context);
+      return describeDimension(
+        dimension.id,
+        dimension.note || 'User dimension',
+        dimension,
+        'custom',
+        settings.precision,
+      );
+    })
+    .filter((dimension) => dimension.measurement > EPSILON);
+  return [...automaticCeilingDimensions(settings, context), ...manual];
+}
+
+export function deriveCeilingDimensions(ceiling, project) {
+  const context = ceilingContext(ceiling, project);
+  if (!context.detailing.enabled || context.length <= EPSILON || context.depth <= EPSILON) return [];
+  return ceilingDimensionEntries(context.detailing.dimensions, {
+    ceilingId: ceiling.id,
+    length: context.length,
+    depth: context.depth,
+    openings: context.openings,
+    panels: deriveCeilingPanels(ceiling, project),
+    members: deriveCeilingFramingMembers(ceiling, project),
+    fasteners: deriveCeilingFasteners(ceiling, project),
+    hangers: deriveCeilingHangers(ceiling, project),
+    fixtures: deriveCeilingLightFixtures(ceiling, project),
+  });
+}
+
 function memberLength(member) {
   if (member.kind === 'wall_angle') {
     return Math.hypot(member.end.u - member.start.u, member.end.v - member.start.v);
@@ -1392,6 +1963,12 @@ export function deriveCeilingTakeoff(ceiling, project) {
 
 export function deriveCeilingDetail(ceiling, project) {
   const context = ceilingContext(ceiling, project);
+  const panels = deriveCeilingPanels(ceiling, project);
+  const framing = deriveCeilingFramingMembers(ceiling, project);
+  const hangers = deriveCeilingHangers(ceiling, project);
+  const fasteners = deriveCeilingFasteners(ceiling, project);
+  const lightFixtures = deriveCeilingLightFixtures(ceiling, project);
+  const openings = context.detailing.openings.map(openingRect);
   return {
     ceilingId: ceiling.id,
     length: context.length,
@@ -1405,13 +1982,27 @@ export function deriveCeilingDetail(ceiling, project) {
       outline: xyToUv(region.outline),
       holes: (region.holes || []).map(xyToUv),
     })),
-    openings: context.detailing.openings.map(openingRect),
+    openings,
     configuration: context.detailing,
-    panels: deriveCeilingPanels(ceiling, project),
-    framing: deriveCeilingFramingMembers(ceiling, project),
-    hangers: deriveCeilingHangers(ceiling, project),
-    fasteners: deriveCeilingFasteners(ceiling, project),
-    lightFixtures: deriveCeilingLightFixtures(ceiling, project),
+    panels,
+    framing,
+    hangers,
+    fasteners,
+    lightFixtures,
+    dimensions:
+      context.detailing.enabled && context.length > EPSILON && context.depth > EPSILON
+        ? ceilingDimensionEntries(context.detailing.dimensions, {
+            ceilingId: ceiling.id,
+            length: context.length,
+            depth: context.depth,
+            openings,
+            panels,
+            members: framing,
+            fasteners,
+            hangers,
+            fixtures: lightFixtures,
+          })
+        : [],
     takeoff: deriveCeilingTakeoff(ceiling, project),
     elevations: resolveCeilingElevations(project, ceiling),
   };

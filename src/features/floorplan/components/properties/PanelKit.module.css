@@ -162,6 +162,12 @@
   cursor: pointer;
 }
 
+/* Still readable — a decision the model has taken over is worth seeing. */
+.select:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .unit {
   flex: 0 0 auto;
   font-family: var(--font-blueprint);

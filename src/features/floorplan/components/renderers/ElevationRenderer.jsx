@@ -1,10 +1,10 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { buildProjectElevationScene } from '@/elevations/scene';
 import { buildElevationAnnotationScene } from '@/elevations/annotations';
 import ElevationSceneLayer from './ElevationSceneLayer';
 
 function ElevationRenderer({ project, floor, viewMode, selectedId, selectedType }) {
-  const scene = buildProjectElevationScene(project, floor?.id, viewMode);
+  const scene = useMemo(() => buildProjectElevationScene(project, floor?.id, viewMode), [project, floor?.id, viewMode]);
   if (!scene) return null;
   const annotationScene = buildElevationAnnotationScene(floor, scene);
 

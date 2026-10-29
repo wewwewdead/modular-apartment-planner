@@ -1,6 +1,6 @@
-import { useCallback, useEffect } from 'react';
+import { memo, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useEditor } from '@/features/floorplan/context/FloorplanContext';
+import { useEditorState, useToolSettings } from '@/features/floorplan/context/FloorplanContext';
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
 import { usePlanClipboardController } from '@/features/floorplan/hooks/usePlanClipboardController';
 import { TOOLS } from '@/editor/tools';
@@ -83,7 +83,7 @@ const toolItems = [
   { tool: TOOLS.FILLET, label: 'Fillet', shortcut: 'G', Icon: FilletIcon },
 ];
 
-export default function Toolbar({
+function Toolbar({
   onNew,
   onSave,
   onShare,
@@ -101,13 +101,15 @@ export default function Toolbar({
     viewMode,
     workspaceMode,
     modelTarget,
-    toolState,
     activePhaseId,
     selectedId,
     selectedType,
     sunStudy,
     dispatch: editorDispatch,
-  } = useEditor();
+  } = useEditorState();
+  // Only which fixture is armed, never the ghost that follows the pointer: the
+  // toolbar has nothing to say about a preview position.
+  const { fixtureType: armedFixtureType } = useToolSettings();
   const { project, isDirty, canUndo, canRedo, dispatch } = useProject();
   const { canCopySelection, canPaste, copySelection, cutSelection, beginPaste } = usePlanClipboardController();
   const isPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'floor';
@@ -472,7 +474,7 @@ export default function Toolbar({
       <div className={styles.fixturePalette}>
         <span className={styles.fixturePaletteLabel}>Fixtures</span>
         {fixtureItems.map(({ fixtureType, label, Icon }) => {
-          const isActive = activeTool === TOOLS.FIXTURE && toolState.fixtureType === fixtureType;
+          const isActive = activeTool === TOOLS.FIXTURE && armedFixtureType === fixtureType;
           return (
             <Tooltip key={fixtureType} label={label} shortcut="F">
               <button
@@ -548,3 +550,5 @@ export default function Toolbar({
     </div>
   );
 }
+
+export default memo(Toolbar);

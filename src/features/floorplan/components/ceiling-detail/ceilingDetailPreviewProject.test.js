@@ -4,6 +4,7 @@ import {
   ceilingElevationRange,
   createCeiling,
   createCeilingForProject,
+  deriveCeilingDetail,
   resolveCeilingBoundary,
   resolveCeilingElevations,
 } from '@/domain/ceilingModels';
@@ -219,9 +220,10 @@ describe('createCeilingDetailPreviewProject', () => {
 });
 
 // The boundary is re-derived inside the preview project, so anything it is
-// derived from has to travel with it — including the slab overhead, which is
-// filed on the floor above and reaches further than any beam wherever it
-// cantilevers.
+// derived from has to travel with it. The beams govern that for a framed bay,
+// and they are restored above — but the slab overhead is still the deck the
+// boards hang under, and still the boundary itself for a ceiling whose beams
+// frame nothing, so it travels too.
 describe('the slab a ceiling closes off travels with the preview', () => {
   const CANTILEVERED_SLAB = [
     { x: 0, y: 0 },
@@ -272,11 +274,30 @@ describe('the slab a ceiling closes off travels with the preview', () => {
 
     const preview = createCeilingDetailPreviewProject(project, ceiling.id);
 
-    expect(Math.max(...resolveCeilingBoundary(project, ceiling).map((point) => point.x))).toBeCloseTo(7500, 6);
+    // The eastern beams stop at 5875, and the slab cantilevers 1500 past them.
+    // The beams govern, so the ceiling stops where they do in both projects.
+    expect(Math.max(...resolveCeilingBoundary(project, ceiling).map((point) => point.x))).toBeCloseTo(5875, 6);
     expect(resolveCeilingBoundary(preview, ceiling)).toEqual(resolveCeilingBoundary(project, ceiling));
   });
 
-  it('carries only the slabs the boundary is drawn from, on a floor stripped of everything else', () => {
+  it('derives the same slab boundary inside the preview when the beams frame nothing', () => {
+    const { project, ceiling, ground } = stackedProject();
+    // One beam encloses no rectangle, so the slab overhead is the only thing
+    // left that says what this ceiling covers — and it lives on the other floor.
+    const single = {
+      ...project,
+      floors: [{ ...ground, beams: ground.beams.slice(0, 1) }, project.floors[1]],
+      ceilings: [{ ...ceiling, attachment: { mode: 'beam', beamIds: ['beam_s'] } }],
+    };
+    const hung = single.ceilings[0];
+
+    const preview = createCeilingDetailPreviewProject(single, hung.id);
+
+    expect(Math.max(...resolveCeilingBoundary(single, hung).map((point) => point.x))).toBeCloseTo(7500, 6);
+    expect(resolveCeilingBoundary(preview, hung)).toEqual(resolveCeilingBoundary(single, hung));
+  });
+
+  it('carries only the slabs the ceiling sits under, on a floor stripped of everything else', () => {
     const { project, ceiling, upper } = stackedProject();
 
     const preview = createCeilingDetailPreviewProject(project, ceiling.id);
@@ -320,5 +341,60 @@ describe('preview structure matches what the obstruction tracer sees', () => {
       collectCeilingObstructions([floor], range).length,
     );
     expect(collectCeilingObstructions([previewFloor], range)).toHaveLength(2);
+  });
+
+  // A bay whose north-east corner drops into a split-level pocket: three columns
+  // at the storey height, one 2000 stub, and the beams retyped 600 above all
+  // four. The band the range states starts at 3000 for the whole bay, so a
+  // partition built up to the stub's framing is only ever seen through the
+  // bearing field — which makes this the case where a preview that asked
+  // without the field would draw a bay the boards were not traced around.
+  function steppedBay(wallHeight) {
+    const floor = createFloor('Ground', 0, { elevation: 0, floorToFloorHeight: 3000 });
+    floor.columns = [
+      ['col_sw', 0, 0, 3000],
+      ['col_se', 8000, 0, 3000],
+      ['col_ne', 8000, 6000, 2000],
+      ['col_nw', 0, 6000, 3000],
+    ].map(([id, x, y, height]) => ({ ...createColumn(x, y, 300, 300, { height }), id }));
+    floor.beams = [
+      ['beam_s', 'col_sw', 'col_se'],
+      ['beam_e', 'col_se', 'col_ne'],
+      ['beam_n', 'col_ne', 'col_nw'],
+      ['beam_w', 'col_nw', 'col_sw'],
+    ].map(([id, start, end]) => ({
+      ...createBeam({ kind: 'column', id: start }, { kind: 'column', id: end }, 300, 450, 3600),
+      id,
+    }));
+    // Diagonally across the stub corner, 1789 mm from it and 4000 from the next
+    // nearest support — the distances are worked through in
+    // ceilingObstructions.test.js, where the tracer's side of this is pinned.
+    floor.walls = [
+      {
+        ...createWall({ x: 8000, y: 4000 }, { x: 4000, y: 6000 }, 200, { height: wallHeight, heightMode: 'manual' }),
+        id: 'wall_stub_diagonal',
+      },
+    ];
+
+    const project = { id: 'project', floors: [floor], ceilings: [], trussSystems: [] };
+    const ceiling = createCeilingForProject(project, { floorId: floor.id });
+    project.ceilings = [ceiling];
+    return { project, ceiling };
+  }
+
+  it('restores the low step of a bay exactly when the boards were cut around it', () => {
+    // 2100 stands 100 above the stub's framing and 900 below the bay's; 1500
+    // clears even the stub. The preview has to agree with the boards on both.
+    for (const [wallHeight, traced] of [
+      [2100, true],
+      [1500, false],
+    ]) {
+      const { project, ceiling } = steppedBay(wallHeight);
+
+      const previewFloor = createCeilingDetailPreviewProject(project, ceiling.id).floors[0];
+
+      expect(previewFloor.walls.map((wall) => wall.id)).toEqual(traced ? ['wall_stub_diagonal'] : []);
+      expect(deriveCeilingDetail(ceiling, project).regions).toHaveLength(traced ? 2 : 1);
+    }
   });
 });

@@ -201,6 +201,8 @@ export default function useSketchStudio() {
   // --- Return composed API ---
   return {
     document: state.document,
+    setCadModel: (model) => dispatch({ type: 'SET_CAD_MODEL', payload: model }),
+    setWorkspaceMode: (mode) => dispatch(setUiFlag('workspaceMode', mode)),
     viewport: state.viewport,
     ui: state.ui,
     interaction: state.interaction,

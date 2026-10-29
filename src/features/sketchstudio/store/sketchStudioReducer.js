@@ -205,6 +205,8 @@ function finalizeUndoableState(state, nextState, options = {}) {
 
 export default function sketchStudioReducer(state, action) {
   switch (action.type) {
+    case 'SET_CAD_MODEL':
+      return finalizeUndoableState(state, { ...state, document: { ...state.document, model: action.payload } });
     case SKETCH_STUDIO_ACTIONS.SET_CANVAS_SIZE:
       return {
         ...state,
@@ -768,6 +770,7 @@ export default function sketchStudioReducer(state, action) {
           orthoEnabled: nextUi.orthoEnabled ?? state.ui.orthoEnabled,
           viewMode: nextUi.viewMode ?? state.ui.viewMode,
           isometricPlane: nextUi.isometricPlane ?? state.ui.isometricPlane,
+          workspaceMode: nextUi.workspaceMode || 'draft',
           focusedJointId: null,
           editingJointId: null,
         },

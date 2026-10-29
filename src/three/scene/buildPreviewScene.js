@@ -126,10 +126,13 @@ export function buildPreviewScene(project, options = {}) {
       // systems are separate source objects, so include their refs too — and
       // ceilings likewise live in a project-level array. A ceiling's attachment
       // plane and obstructions come from the beams, columns and walls of this
-      // same floor, so `floor` answers for them — but its boundary reaches as
-      // far as the slab it closes off, which is filed on the floor ABOVE, so
-      // pulling a slab edge out over a cantilever up there has to rebuild the
-      // ceiling down here. Only floors carrying a ceiling declare it.
+      // same floor, so `floor` answers for them — and so does its boundary
+      // wherever those beams frame a rectangle. Where they frame none (no
+      // supports, one beam, a collinear pair) the boundary is the slab overhead
+      // instead, which is filed on the floor ABOVE: pulling that slab's edge has
+      // to rebuild the ceiling down here, and this floor's own identity cannot
+      // say so. A per-floor key cannot tell which of its ceilings are framed, so
+      // every floor carrying one declares it.
       // stairSources/landingSources: cross-floor railing-stair attachment means
       // any floor's stairs or landings changing must rebuild every floor.
       sourceKey: {

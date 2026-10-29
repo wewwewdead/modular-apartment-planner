@@ -1,5 +1,5 @@
 import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useEditor, useProject } from '@/features/floorplan/context/FloorplanContext';
+import { useEditorState, useProject } from '@/features/floorplan/context/FloorplanContext';
 import {
   CEILING_ATTACHMENT_MODES,
   CEILING_BOUNDARY_SOURCES,
@@ -8,6 +8,7 @@ import {
   CEILING_OPENING_TYPES,
   CEILING_PANEL_LAYOUT_MODES,
   createCeilingDetailing,
+  createCeilingDimension,
   createCeilingLightFixture,
   createCeilingOpening,
   createCustomCeilingFramingMember,
@@ -16,6 +17,12 @@ import {
   getProjectCeiling,
   resolveCeilingBeamSupports,
 } from '@/domain/ceilingModels';
+import {
+  WALL_DIMENSION_MODES,
+  WALL_DIMENSION_PRECISIONS,
+  formatWallDimensionValue,
+  wallDimensionMeasurement,
+} from '@/domain/wallDetailing';
 import {
   BEAM_ANGLE_RANGE_DEG,
   COLOR_TEMPERATURES,
@@ -44,8 +51,13 @@ import {
   moveMemberWithinBounds,
   movePanelWithinBounds,
   movePointWithinBounds,
+  moveWallDimensionWithinBounds,
   panWallViewport,
+  polygonSnapTargets,
+  quantizeWallLocalPoint,
+  rectSnapTargets,
   screenPointToWallLocal,
+  snapWallDimensionEndpoint,
   snapWallLocalPoint,
   zoomWallViewport,
 } from '@/features/floorplan/components/wall-detail/wallDetailEditorGeometry';
@@ -55,7 +67,14 @@ import {
   WallCanvasRulers,
   useWallCanvasMetrics,
 } from '@/features/floorplan/components/wall-detail/WallCanvasChrome';
-import { wallUnitsPerPixel } from '@/features/floorplan/components/wall-detail/wallDetailCanvasMath';
+import {
+  friendlyAnchorPhrase,
+  wallUnitsPerPixel,
+} from '@/features/floorplan/components/wall-detail/wallDetailCanvasMath';
+import {
+  DimensionAcquisitionGraphic,
+  DimensionGraphic,
+} from '@/features/floorplan/components/wall-detail/WallDimensionGraphics';
 import {
   AdvancedGroup,
   CollapsibleSection,
@@ -65,6 +84,7 @@ import {
   NumberField,
   SelectField,
   StepStrip,
+  TextField,
   Toggle,
   ToolButton,
   ToolGlyph,
@@ -123,7 +143,11 @@ const CANVAS_TOOLS = Object.freeze({
   DRAW_OPENING: 'draw_opening',
   ADD_LIGHT: 'add_light',
   ADD_FASTENER: 'add_fastener',
+  DRAW_DIMENSION: 'draw_dimension',
 });
+
+const DIMENSION_SNAP_RADIUS_PX = 22;
+const DIMENSION_POINT_GRAVITY_PX = 14;
 
 const WORKSPACE_VIEWS = Object.freeze({
   RCP: 'rcp',
@@ -150,6 +174,7 @@ const TOOL_HINTS = Object.freeze({
   [CANVAS_TOOLS.DRAW_OPENING]: 'Drag a rectangle to cut an opening in the ceiling',
   [CANVAS_TOOLS.ADD_LIGHT]: 'Click to place a light fixture',
   [CANVAS_TOOLS.ADD_FASTENER]: 'Click to place a screw',
+  [CANVAS_TOOLS.DRAW_DIMENSION]: 'Click two exact points (or drag); hold Shift to keep the run level or plumb',
 });
 
 /** Single source of truth for every canvas tool: icon, plain-language name, tooltip and shortcut. */
@@ -204,7 +229,7 @@ const TOOL_DEFINITIONS = Object.freeze([
   },
   {
     tool: CANVAS_TOOLS.DRAW_OPENING,
-    icon: 'measure',
+    icon: 'opening',
     label: 'Opening',
     shortcut: 'O',
     title: 'Draw opening — drag out a hatch, downlight, or diffuser cut-out (O)',
@@ -229,6 +254,14 @@ const TOOL_DEFINITIONS = Object.freeze([
     title: 'Place screw — click to fix a board to the furring (F)',
     group: 'detail',
   },
+  {
+    tool: CANVAS_TOOLS.DRAW_DIMENSION,
+    icon: 'measure',
+    label: 'Measure',
+    shortcut: 'M',
+    title: 'Draw measurement — click two exact points, or drag; Shift locks level/plumb (M)',
+    group: 'measure',
+  },
 ]);
 
 const TOOL_GROUP_LABELS = Object.freeze({
@@ -236,6 +269,7 @@ const TOOL_GROUP_LABELS = Object.freeze({
   board: 'Boards',
   frame: 'Structure',
   detail: 'Openings, lights, and screws',
+  measure: 'Measuring',
 });
 
 const TOOL_BY_ID = Object.freeze(
@@ -254,6 +288,12 @@ const WORKFLOW_STEPS = Object.freeze([
   { id: 'openings', short: 'Openings', title: 'Openings', hint: 'Access hatches, downlights, and diffusers' },
   { id: 'lighting', short: 'Lights', title: 'Lighting', hint: 'Luminaires, lamps, and what they put out' },
   { id: 'screws', short: 'Screws', title: 'Screws', hint: 'Fixing spacing and clearances' },
+  {
+    id: 'dimensions',
+    short: 'Sizes',
+    title: 'Dimensions',
+    hint: 'Measurements the installer sets the ceiling out from',
+  },
   { id: 'takeoff', short: 'Takeoff', title: 'Takeoff', hint: 'Board, framing, hanger, screw, and lighting quantities' },
 ]);
 
@@ -265,6 +305,7 @@ const LAYER_LABELS = Object.freeze({
   hangers: 'Hangers',
   screws: 'Screws',
   fixtures: 'Lights',
+  dimensions: 'Sizes',
 });
 
 const SELECTION_LABELS = Object.freeze({
@@ -273,6 +314,7 @@ const SELECTION_LABELS = Object.freeze({
   fastener: 'screw',
   opening: 'ceiling opening',
   fixture: 'light fixture',
+  dimension: 'measurement',
 });
 
 const OPENING_TYPE_LABELS = Object.freeze({
@@ -293,7 +335,13 @@ const FRAMING_COLORS = Object.freeze({
   furring: 'rgba(49, 129, 168, 0.35)',
   carrier: 'rgba(120, 96, 190, 0.42)',
   trimmer: 'rgba(214, 158, 74, 0.4)',
+  wall_angle: 'rgba(86, 158, 130, 0.5)',
 });
+
+// Below this the wall angle would draw thinner than a line and disappear on a
+// zoomed-out plan, so it is drawn at its real leg width or this, whichever is
+// wider.
+const MIN_MEMBER_LINE_PX = 1.5;
 
 /**
  * One colour per board material, so a ceiling boarded in two of them reads as
@@ -522,6 +570,65 @@ function createDrawnCeilingMember(tool, start, end, framing, bounds) {
 }
 
 /**
+ * Everything on the reflected ceiling plan a measurement endpoint can lock onto:
+ * the ceiling outline itself, every board corner and edge, the framing centres,
+ * openings, and the marker points — screws, hangers and luminaires.
+ *
+ * The wall editor's collector cannot be reused as it stands. It keeps only the
+ * near frame (`frameIndex === 0`), which no ceiling member carries, and it names
+ * the whole-assembly rectangle 'wall'. Everything below it — the anchor grid on
+ * a rectangle, the vertex/edge grid on a traced outline — is imported.
+ */
+function collectCeilingDimensionSnapTargets({
+  ceilingId,
+  panels = [],
+  members = [],
+  openings = [],
+  fasteners = [],
+  hangers = [],
+  fixtures = [],
+  length,
+  depth,
+}) {
+  const markerTargets = (entries, entityType) =>
+    entries.map((entry) => ({
+      kind: 'point',
+      u: entry.u,
+      v: entry.v,
+      reference: { entityType, entityId: entry.id, anchor: 'center' },
+    }));
+  return [
+    ...rectSnapTargets('ceiling', ceilingId, { u0: 0, u1: length, v0: 0, v1: depth }),
+    ...panels.flatMap((panel) =>
+      panel.outlinePoints?.length
+        ? polygonSnapTargets('panel', panel.localId || panel.id, panel.outlinePoints)
+        : rectSnapTargets('panel', panel.localId || panel.id, panel),
+    ),
+    // Wall angles run as a line rather than a rectangle, so they carry no anchor
+    // grid — the ceiling outline is what you measure to along that edge.
+    ...members
+      .filter((member) => member.kind !== 'wall_angle')
+      .flatMap((member) => {
+        const centerU = (member.u0 + member.u1) / 2;
+        const centerV = (member.v0 + member.v1) / 2;
+        return [
+          ...rectSnapTargets('framing', member.id, member),
+          {
+            kind: 'segment',
+            start: member.orientation === 'vertical' ? { u: centerU, v: member.v0 } : { u: member.u0, v: centerV },
+            end: member.orientation === 'vertical' ? { u: centerU, v: member.v1 } : { u: member.u1, v: centerV },
+            reference: { entityType: 'framing', entityId: member.id, anchor: 'axis_center' },
+          },
+        ];
+      }),
+    ...openings.flatMap((opening) => rectSnapTargets('opening', opening.id, opening)),
+    ...markerTargets(fasteners, 'fastener'),
+    ...markerTargets(hangers, 'hanger'),
+    ...markerTargets(fixtures, 'fixture'),
+  ];
+}
+
+/**
  * Everything on the reflected ceiling plan that only moves when the ceiling
  * itself changes: snap grid, openings, boards, framing, hangers, screws, and the
  * boundary rings. A real ceiling is thousands of these nodes — a 6 × 4 m board
@@ -589,14 +696,25 @@ const CeilingPlanLayers = memo(function CeilingPlanLayers({
       {layers.structure &&
         frameMembers.map((member) =>
           member.kind === 'wall_angle' ? (
+            // Drawn at the width of its own leg rather than as a profile line.
+            // The angle is the edge framing of every ring the ceiling was traced
+            // into — its perimeter, and the face of every beam, column and
+            // partition cut out of it — and a hairline running 12.5 mm off the
+            // ceiling outline reads as that outline rather than as a member. It
+            // stays out of the way of the pointer: an angle is derived from the
+            // area, so there is nothing to select on it, and a 25 mm band down
+            // every edge would otherwise swallow clicks meant for the board.
             <line
               key={member.id}
-              className={styles.openingProfile}
               x1={member.start.u}
               y1={member.start.v}
               x2={member.end.u}
               y2={member.end.v}
-              vectorEffect="non-scaling-stroke"
+              style={{
+                stroke: FRAMING_COLORS.wall_angle,
+                strokeWidth: Math.max(member.width || 0, MIN_MEMBER_LINE_PX * unitPx),
+                pointerEvents: 'none',
+              }}
             >
               <title>{FRAMING_KIND_LABELS.wall_angle}</title>
             </line>
@@ -762,9 +880,59 @@ const CeilingPlanLayers = memo(function CeilingPlanLayers({
   );
 });
 
+/**
+ * The committed measurements — derived chains and hand-drawn ones alike. They
+ * live in their own memo rather than inside `CeilingPlanLayers` because they are
+ * drawn in un-flipped SVG space: `DimensionGraphic` turns UV into drawing
+ * coordinates itself, which is what keeps the text upright on a plan whose V
+ * axis runs the other way.
+ *
+ * `hiddenId` is the measurement currently under a drag. That one is drawn live
+ * outside the memo, so a drag never re-renders the rest of the sheet.
+ */
+const CeilingDimensionLayer = memo(function CeilingDimensionLayer({
+  dimensions,
+  view,
+  unitPx,
+  selectedId,
+  hiddenId,
+  selectTool,
+  onDimensionPointerDown,
+  onStartHandlePointerDown,
+  onEndHandlePointerDown,
+}) {
+  const handleRadius = 4.5 * unitPx;
+  const fontSize = 12.5 * unitPx;
+  return (
+    <>
+      {dimensions
+        .filter((dimension) => dimension.id !== hiddenId)
+        .map((dimension) => {
+          const selected = selectedId === dimension.id;
+          return (
+            <DimensionGraphic
+              key={dimension.id}
+              dimension={dimension}
+              view={view}
+              selected={selected}
+              editable={selected && dimension.source === 'custom' && selectTool}
+              unitPx={unitPx}
+              handleRadius={handleRadius}
+              fontSize={fontSize}
+              title={`${dimension.name || 'Measurement'} · ${dimension.label}`}
+              onPointerDown={(event) => onDimensionPointerDown(event, dimension)}
+              onStartHandlePointerDown={(event) => onStartHandlePointerDown(event, dimension)}
+              onEndHandlePointerDown={(event) => onEndHandlePointerDown(event, dimension)}
+            />
+          );
+        })}
+    </>
+  );
+});
+
 export default function CeilingDetailEditor() {
   const { project, dispatch, canUndo = false, canRedo = false } = useProject();
-  const { ceilingDetailEditor, dispatch: editorDispatch } = useEditor();
+  const { ceilingDetailEditor, dispatch: editorDispatch } = useEditorState();
   const svgRef = useRef(null);
   const canvasFrameRef = useRef(null);
   /*
@@ -787,10 +955,12 @@ export default function CeilingDetailEditor() {
     hangers: true,
     screws: true,
     fixtures: true,
+    dimensions: true,
   });
   const [selection, setSelection] = useState(null);
   const [canvasTool, setCanvasTool] = useState(CANVAS_TOOLS.SELECT);
   const [gesture, setGesture] = useState(null);
+  const [dimensionAcquisition, setDimensionAcquisition] = useState(null);
   const [panelTrace, setPanelTrace] = useState(null);
   const [viewport, setViewport] = useState({ zoom: 1, panU: 0, panV: 0 });
   const [panGesture, setPanGesture] = useState(null);
@@ -807,6 +977,7 @@ export default function CeilingDetailEditor() {
     openings: false,
     lighting: false,
     screws: false,
+    dimensions: false,
     takeoff: true,
     selection: true,
     summary: true,
@@ -826,6 +997,11 @@ export default function CeilingDetailEditor() {
     onElementPointerDown: (...args) => canvasHandlersRef.current.beginElementMove?.(...args),
     isCustomMember: (id) => Boolean(canvasHandlersRef.current.isCustomMember?.(id)),
     isManualFastener: (id) => Boolean(canvasHandlersRef.current.isManualFastener?.(id)),
+    onDimensionPointerDown: (...args) => canvasHandlersRef.current.pressDimension?.(...args),
+    onStartHandlePointerDown: (event, dimension) =>
+      canvasHandlersRef.current.beginDimensionEndpointMove?.(event, dimension, 'start'),
+    onEndHandlePointerDown: (event, dimension) =>
+      canvasHandlersRef.current.beginDimensionEndpointMove?.(event, dimension, 'end'),
   }).current;
   /*
     A pick in the 3D pane, translated back to a selection on the plan. Only the
@@ -913,6 +1089,7 @@ export default function CeilingDetailEditor() {
   const fasteners = detail?.fasteners || [];
   const lightFixtures = detail?.lightFixtures || [];
   const openings = detail?.openings || [];
+  const dimensions = detail?.dimensions || [];
   const profile = face ? getCeilingProductProfile(face.productProfileId) : null;
   const jurisdiction = configuration ? getCeilingJurisdictionProfile(configuration.jurisdictionProfileId) : null;
   // Reflected ceiling plan: U runs east, V runs north, and nothing is mirrored —
@@ -944,6 +1121,29 @@ export default function CeilingDetailEditor() {
           })
         : { u: [], v: [] },
     [detail],
+  );
+  /*
+    A boarded ceiling carries several hundred screws, and every one of them is a
+    snap target. They are only built while there is something to snap: the
+    measuring tool is up, or a measurement is selected and its endpoint grips are
+    on the drawing.
+  */
+  const dimensionSnapTargets = useMemo(
+    () =>
+      detail && (canvasTool === CANVAS_TOOLS.DRAW_DIMENSION || selection?.type === 'dimension')
+        ? collectCeilingDimensionSnapTargets({
+            ceilingId: detail.ceilingId,
+            panels: detail.panels,
+            members: detail.framing,
+            openings: detail.openings,
+            fasteners: detail.fasteners,
+            hangers: detail.hangers,
+            fixtures: detail.lightFixtures,
+            length: detail.length,
+            depth: detail.depth,
+          })
+        : [],
+    [canvasTool, detail, selection?.type],
   );
 
   if (!ceilingDetailEditor) {
@@ -992,6 +1192,7 @@ export default function CeilingDetailEditor() {
   const updateSuspension = (patch) => updateDetailing({ suspension: { ...configuration.suspension, ...patch } });
   const updateOpenings = (next) => updateDetailing({ openings: next });
   const updateLighting = (patch) => updateDetailing({ lighting: { ...configuration.lighting, ...patch } });
+  const updateDimensionSettings = (patch) => updateDetailing({ dimensions: { ...configuration.dimensions, ...patch } });
 
   /**
    * Switching a generated grid to custom must not wipe the grid: the boards on
@@ -1021,6 +1222,7 @@ export default function CeilingDetailEditor() {
   const chooseCanvasTool = (tool) => {
     setCanvasTool(tool);
     setGesture(null);
+    setDimensionAcquisition(null);
     gestureRectRef.current = null;
     if (tool !== CANVAS_TOOLS.TRACE_PANEL) setPanelTrace(null);
   };
@@ -1065,12 +1267,20 @@ export default function CeilingDetailEditor() {
     setSelection(null);
   };
 
+  const deleteSelectedDimension = () => {
+    updateDimensionSettings({
+      manual: configuration.dimensions.manual.filter((dimension) => dimension.id !== selection.id),
+    });
+    setSelection(null);
+  };
+
   const deleteSelection = () => {
     if (selection?.type === 'panel') deleteSelectedPanel();
     else if (selection?.type === 'framing') deleteSelectedMember();
     else if (selection?.type === 'fastener') deleteSelectedFastener();
     else if (selection?.type === 'opening') deleteSelectedOpening();
     else if (selection?.type === 'fixture') deleteSelectedFixture();
+    else if (selection?.type === 'dimension') deleteSelectedDimension();
   };
 
   const updateSelectedPanel = (patch) => {
@@ -1085,6 +1295,17 @@ export default function CeilingDetailEditor() {
     updateFraming({
       members: configuration.framing.members.map((member) =>
         member.id === selection.id ? createCustomCeilingFramingMember({ ...member, ...patch, id: member.id }) : member,
+      ),
+    });
+  };
+
+  const updateSelectedDimension = (patch) => {
+    if (selection?.type !== 'dimension') return;
+    updateDimensionSettings({
+      manual: configuration.dimensions.manual.map((dimension) =>
+        dimension.id === selection.id
+          ? createCeilingDimension({ ...dimension, ...patch, id: dimension.id })
+          : dimension,
       ),
     });
   };
@@ -1151,6 +1372,43 @@ export default function CeilingDetailEditor() {
           threshold: Math.max(8, (detail.length / Math.max(1, rect.width)) * 10),
         })
       : point;
+  };
+
+  /**
+   * The exact point a measuring click lands on. Unlike the drawing tools this
+   * never rounds to the snap grid: it either locks onto real geometry — a board
+   * corner, a channel centreline, an opening edge, a screw — or falls back to
+   * the free point rounded to the measurement precision, which is far finer than
+   * the grid.
+   */
+  const eventToDimensionEndpoint = (event) => {
+    const rect = gestureRectRef.current || svgRef.current?.getBoundingClientRect();
+    if (!rect) return { point: { u: 0, v: 0 }, reference: null, markerRadius: 10 };
+    const raw = screenPointToWallLocal(event, rect, bounds);
+    const markerRadius =
+      Math.max(bounds.length / Math.max(1, rect.width), bounds.height / Math.max(1, rect.height)) * 9;
+    if (snapEnabled) {
+      const target = snapWallDimensionEndpoint(raw, dimensionSnapTargets, {
+        thresholdPixels: DIMENSION_SNAP_RADIUS_PX,
+        pointThresholdPixels: DIMENSION_POINT_GRAVITY_PX,
+        pixelsPerU: rect.width / bounds.length,
+        pixelsPerV: rect.height / bounds.height,
+      });
+      if (target) return { ...target, markerRadius };
+    }
+    return { point: quantizeWallLocalPoint(raw, configuration.dimensions.precision), reference: null, markerRadius };
+  };
+
+  /** Hold Shift to keep a measurement level or plumb relative to its anchor point. */
+  const orthoDimensionEndpoint = (event, anchorPoint) => {
+    const acquisition = eventToDimensionEndpoint(event);
+    if (!event.shiftKey || !anchorPoint) return acquisition;
+    const du = Math.abs(acquisition.point.u - anchorPoint.u);
+    const dv = Math.abs(acquisition.point.v - anchorPoint.v);
+    const point =
+      du >= dv ? { u: acquisition.point.u, v: anchorPoint.v } : { u: anchorPoint.u, v: acquisition.point.v };
+    const unchanged = Math.abs(point.u - acquisition.point.u) < 1e-9 && Math.abs(point.v - acquisition.point.v) < 1e-9;
+    return { ...acquisition, point, reference: unchanged ? acquisition.reference : null };
   };
 
   const zoomViewportAt = (requestedZoom, clientX, clientY) => {
@@ -1238,7 +1496,34 @@ export default function CeilingDetailEditor() {
     if (value.tool === CANVAS_TOOLS.DRAW_PANEL || value.tool === CANVAS_TOOLS.DRAW_OPENING) {
       return createDrawnPanel(value.start, value.current, bounds, MIN_DRAWN_SIZE * 2.5);
     }
+    if (value.tool === CANVAS_TOOLS.DRAW_DIMENSION) {
+      // A run within 34° of an axis is read as a set-out along that axis; only a
+      // genuinely diagonal one is drawn as an aligned measurement.
+      const deltaU = Math.abs(value.current.u - value.start.u);
+      const deltaV = Math.abs(value.current.v - value.start.v);
+      const mode =
+        deltaU > deltaV * 1.5
+          ? WALL_DIMENSION_MODES.HORIZONTAL
+          : deltaV > deltaU * 1.5
+            ? WALL_DIMENSION_MODES.VERTICAL
+            : WALL_DIMENSION_MODES.ALIGNED;
+      return createCeilingDimension({
+        mode,
+        start: value.start,
+        end: value.current,
+        startRef: value.startRef,
+        endRef: value.endRef,
+        offset: 60,
+      });
+    }
     return createDrawnCeilingMember(value.tool, value.start, value.current, configuration.framing, bounds);
+  };
+
+  const commitDrawnDimension = (finalGesture) => {
+    const entity = drawnGestureEntity(finalGesture);
+    if (!entity || wallDimensionMeasurement(entity) < 1) return;
+    updateDimensionSettings({ manual: [...configuration.dimensions.manual, entity] });
+    setSelection({ type: 'dimension', id: entity.id });
   };
 
   const commitPanelTrace = (points = panelTrace?.points || []) => {
@@ -1293,7 +1578,38 @@ export default function CeilingDetailEditor() {
       setPanelTrace({ points: [...points, point], previewPoint: point });
       return;
     }
+    if (canvasTool === CANVAS_TOOLS.DRAW_DIMENSION && gesture?.awaitingSecondClick) {
+      // Second click of a click-click measurement: commit between the two points.
+      // Like a trace, the pointer was free between the clicks, so the rect is
+      // taken fresh here and let go again straight away.
+      event.preventDefault();
+      pinCanvasRect();
+      const acquisition = orthoDimensionEndpoint(event, gesture.start);
+      releaseCanvasRect();
+      setDimensionAcquisition(acquisition);
+      setGesture(null);
+      commitDrawnDimension({ ...gesture, current: acquisition.point, endRef: acquisition.reference });
+      return;
+    }
     pinCanvasRect();
+    if (canvasTool === CANVAS_TOOLS.DRAW_DIMENSION) {
+      event.preventDefault();
+      const acquisition = eventToDimensionEndpoint(event);
+      setDimensionAcquisition(acquisition);
+      svgRef.current?.setPointerCapture?.(event.pointerId);
+      setGesture({
+        kind: 'draw',
+        tool: canvasTool,
+        start: acquisition.point,
+        current: acquisition.point,
+        startRef: acquisition.reference,
+        endRef: acquisition.reference,
+        pointerId: event.pointerId,
+        screenX: event.clientX,
+        screenY: event.clientY,
+      });
+      return;
+    }
     const point = eventToLocal(event, true);
     if (canvasTool === CANVAS_TOOLS.ADD_FASTENER) {
       addFastener(point);
@@ -1344,6 +1660,30 @@ export default function CeilingDetailEditor() {
     if (canvasTool === CANVAS_TOOLS.TRACE_PANEL && panelTrace?.points.length) {
       setPanelTrace((value) => (value ? { ...value, previewPoint: eventToLocal(event, true) } : value));
       return;
+    }
+    const adjustingDimension = gesture?.kind === 'dimension_endpoint';
+    if ((canvasTool === CANVAS_TOOLS.DRAW_DIMENSION || adjustingDimension) && !spacePanActive) {
+      const orthoAnchor = adjustingDimension
+        ? gesture.endpoint === 'start'
+          ? gesture.dimension.end
+          : gesture.dimension.start
+        : gesture?.kind === 'draw' && gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION
+          ? gesture.start
+          : null;
+      const acquisition = orthoDimensionEndpoint(event, orthoAnchor);
+      setDimensionAcquisition(acquisition);
+      if (adjustingDimension && gesture.pointerId === event.pointerId) {
+        setGesture((value) =>
+          value ? { ...value, current: acquisition.point, reference: acquisition.reference } : value,
+        );
+        return;
+      }
+      if (gesture?.kind === 'draw' && gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION) {
+        setGesture((value) =>
+          value ? { ...value, current: acquisition.point, endRef: acquisition.reference } : value,
+        );
+        return;
+      }
     }
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     const point = eventToLocal(event, gesture.kind === 'draw');
@@ -1439,15 +1779,130 @@ export default function CeilingDetailEditor() {
     });
   };
 
+  const commitDimensionEndpoint = (finalGesture, event) => {
+    const acquisition = orthoDimensionEndpoint(
+      event,
+      finalGesture.endpoint === 'start' ? finalGesture.dimension.end : finalGesture.dimension.start,
+    );
+    const coordinateKey = finalGesture.endpoint === 'start' ? 'start' : 'end';
+    const referenceKey = finalGesture.endpoint === 'start' ? 'startRef' : 'endRef';
+    setDimensionAcquisition(acquisition);
+    updateDimensionSettings({
+      manual: configuration.dimensions.manual.map((dimension) =>
+        dimension.id === finalGesture.dimensionId
+          ? createCeilingDimension({
+              ...dimension,
+              [coordinateKey]: acquisition.point,
+              [referenceKey]: acquisition.reference,
+              id: dimension.id,
+            })
+          : dimension,
+      ),
+    });
+  };
+
+  const commitDimensionMove = (finalGesture, event) => {
+    const current = eventToLocal(event, false);
+    const delta = { u: current.u - finalGesture.start.u, v: current.v - finalGesture.start.v };
+    if (Math.hypot(delta.u, delta.v) < Math.max(1, unitPx * 2)) return;
+    const moved = moveWallDimensionWithinBounds(
+      finalGesture.dimension,
+      delta,
+      bounds,
+      configuration.dimensions.precision,
+    );
+    updateDimensionSettings({
+      manual: configuration.dimensions.manual.map((dimension) =>
+        dimension.id === finalGesture.dimensionId ? createCeilingDimension({ ...moved, id: dimension.id }) : dimension,
+      ),
+    });
+  };
+
   const finishCanvasGesture = (event) => {
     if (panGesture) return;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
+    if (gesture.kind === 'dimension_endpoint' || gesture.kind === 'dimension_move') {
+      const finalGesture = gesture;
+      svgRef.current?.releasePointerCapture?.(event.pointerId);
+      setGesture(null);
+      if (finalGesture.kind === 'dimension_endpoint') commitDimensionEndpoint(finalGesture, event);
+      else commitDimensionMove(finalGesture, event);
+      releaseCanvasRect();
+      return;
+    }
+    if (gesture.kind === 'draw' && gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION) {
+      const acquisition = orthoDimensionEndpoint(event, gesture.start);
+      // A press that never travelled is the FIRST click of a click-click
+      // measurement: the gesture stays alive, waiting for the second point, and
+      // the pinned rect is let go because the pointer is free again.
+      const dragPixels = Math.hypot(
+        event.clientX - (gesture.screenX ?? event.clientX),
+        event.clientY - (gesture.screenY ?? event.clientY),
+      );
+      svgRef.current?.releasePointerCapture?.(event.pointerId);
+      releaseCanvasRect();
+      setDimensionAcquisition(acquisition);
+      if (dragPixels < 5) {
+        setGesture((value) => (value ? { ...value, awaitingSecondClick: true } : value));
+        return;
+      }
+      const finalGesture = { ...gesture, current: acquisition.point, endRef: acquisition.reference };
+      setGesture(null);
+      commitDrawnDimension(finalGesture);
+      return;
+    }
     const finalGesture = { ...gesture, current: eventToLocal(event, gesture.kind === 'draw') };
     svgRef.current?.releasePointerCapture?.(event.pointerId);
     releaseCanvasRect();
     setGesture(null);
     if (finalGesture.kind === 'draw') commitDrawnEntity(finalGesture);
     else commitMovedEntity(finalGesture);
+  };
+
+  const pressDimension = (event, dimension) => {
+    if (spacePanActive || canvasTool !== CANVAS_TOOLS.SELECT || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    // Pinned before the selection is set, for the same reason every other press
+    // on this canvas is: selecting is what relayouts the workspace.
+    pinCanvasRect();
+    setSelection({ type: 'dimension', id: dimension.id });
+    if (dimension.source !== 'custom') {
+      releaseCanvasRect();
+      return;
+    }
+    const point = eventToLocal(event, false);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
+    setGesture({
+      kind: 'dimension_move',
+      dimensionId: dimension.id,
+      dimension,
+      start: point,
+      current: point,
+      pointerId: event.pointerId,
+    });
+  };
+
+  const beginDimensionEndpointMove = (event, dimension, endpoint) => {
+    if (spacePanActive || canvasTool !== CANVAS_TOOLS.SELECT || dimension.source !== 'custom' || event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    pinCanvasRect();
+    const acquisition = eventToDimensionEndpoint(event);
+    svgRef.current?.setPointerCapture?.(event.pointerId);
+    setSelection({ type: 'dimension', id: dimension.id });
+    setDimensionAcquisition(acquisition);
+    setGesture({
+      kind: 'dimension_endpoint',
+      dimensionId: dimension.id,
+      dimension,
+      endpoint,
+      current: acquisition.point,
+      reference: acquisition.reference,
+      pointerId: event.pointerId,
+    });
   };
 
   const finishPanelTrace = (event) => {
@@ -1481,9 +1936,19 @@ export default function CeilingDetailEditor() {
     selection?.type === 'fixture'
       ? configuration.lighting.fixtures.find((fixture) => fixture.id === selection.id)
       : null;
+  const selectedDimension =
+    selection?.type === 'dimension' ? dimensions.find((entry) => entry.id === selection.id) : null;
   const selectionIsDeletable = Boolean(
-    selectedPanel || selectedMember || selectedFastener || selectedOpening || selectedFixture,
+    selectedPanel ||
+    selectedMember ||
+    selectedFastener ||
+    selectedOpening ||
+    selectedFixture ||
+    selectedDimension?.source === 'custom',
   );
+  // A derived dimension can be picked and read but never deleted, so what the
+  // aside has to show is not the same question as what Delete can remove.
+  const selectionHasCard = Boolean(selectionIsDeletable || selectedDimension);
   const selectionSummary = selection
     ? `${SELECTION_LABELS[selection.type] || selection.type} selected`
     : 'Nothing selected';
@@ -1504,15 +1969,54 @@ export default function CeilingDetailEditor() {
     takeoff.lighting.fixtureCount === 1 ? '' : 's'
   } · ${Math.round(takeoff.lighting.totalLumens)} lm total${lightingDensity}`;
   const activeToolDefinition = TOOL_BY_ID[canvasTool];
-  const gesturePreview = gesture?.kind === 'draw' ? drawnGestureEntity() : movedGestureEntity();
+  const rawGesturePreview = gesture?.kind === 'draw' ? drawnGestureEntity() : movedGestureEntity();
+  // A measurement is only a measurement once it says what it measures, so the
+  // rubber band carries the live number the moment it has one.
+  const labelledDimension = (dimension, id = dimension.id) => ({
+    ...dimension,
+    id,
+    source: 'preview',
+    label: formatWallDimensionValue(wallDimensionMeasurement(dimension), configuration.dimensions.precision),
+  });
+  const gesturePreview =
+    gesture?.kind === 'draw' && gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION && rawGesturePreview
+      ? labelledDimension(rawGesturePreview)
+      : rawGesturePreview;
   const gesturePreviewType =
     gesture?.kind === 'draw'
       ? gesture.tool === CANVAS_TOOLS.DRAW_PANEL
         ? 'panel'
         : gesture.tool === CANVAS_TOOLS.DRAW_OPENING
           ? 'opening'
-          : 'framing'
+          : gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION
+            ? 'dimension'
+            : 'framing'
       : gesture?.type;
+  const dimensionGesturePreview =
+    gesture?.kind === 'dimension_endpoint'
+      ? labelledDimension(
+          createCeilingDimension({
+            ...gesture.dimension,
+            [gesture.endpoint === 'start' ? 'start' : 'end']: gesture.current,
+            [gesture.endpoint === 'start' ? 'startRef' : 'endRef']: gesture.reference,
+            id: gesture.dimensionId,
+          }),
+          gesture.dimensionId,
+        )
+      : gesture?.kind === 'dimension_move'
+        ? labelledDimension(
+            createCeilingDimension({
+              ...moveWallDimensionWithinBounds(
+                gesture.dimension,
+                { u: gesture.current.u - gesture.start.u, v: gesture.current.v - gesture.start.v },
+                bounds,
+                configuration.dimensions.precision,
+              ),
+              id: gesture.dimensionId,
+            }),
+            gesture.dimensionId,
+          )
+        : null;
   const panelTracePreview = panelTrace?.points?.length
     ? [...panelTrace.points, panelTrace.previewPoint || panelTrace.points[panelTrace.points.length - 1]]
     : [];
@@ -1603,8 +2107,39 @@ export default function CeilingDetailEditor() {
       ? 'Reference only — the cited document verifies the board sizes and the ceiling application, not a complete fixing schedule. Furring, carrier, hanger, and screw values here are planning defaults. A qualified professional must confirm them against a current installation guide before construction.'
       : 'Custom assumption — every value on this ceiling is a planning default, not a manufacturer or code requirement. A qualified professional must review the whole assembly before construction.';
 
+  const referenceEntityName = (reference) => {
+    if (reference.entityType === 'ceiling') return 'Ceiling';
+    if (reference.entityType === 'opening') return 'Opening';
+    if (reference.entityType === 'fastener') return 'Screw';
+    if (reference.entityType === 'hanger') return 'Hanger';
+    if (reference.entityType === 'fixture') return 'Light';
+    if (reference.entityType === 'panel') {
+      const panel = panels.find((entry) => entry.localId === reference.entityId || entry.id === reference.entityId);
+      return panel?.label || 'Board';
+    }
+    if (reference.entityType === 'framing') {
+      const member = frameMembers.find((entry) => entry.id === reference.entityId);
+      return member ? FRAMING_KIND_LABELS[member.kind] || member.kind : 'Framing';
+    }
+    return reference.entityType;
+  };
+  /** "P3 · top-left corner" instead of "panel vertex_2". */
+  const describeReference = (reference) =>
+    reference ? `${referenceEntityName(reference)} · ${friendlyAnchorPhrase(reference.anchor)}` : 'free point';
+  const activeDimensionSnap =
+    gesture?.kind === 'draw' && gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION
+      ? gesture.endRef
+      : gesture?.kind === 'dimension_endpoint'
+        ? gesture.reference
+        : canvasTool === CANVAS_TOOLS.DRAW_DIMENSION
+          ? dimensionAcquisition?.reference
+          : null;
+
   const gestureReadout = (() => {
     if (gesture?.kind === 'draw' && gesturePreview) {
+      // The measuring tool draws its own live label above the line it is
+      // stretching, so a chip at the cursor would state the number twice.
+      if (gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION) return null;
       if (gesture.tool === CANVAS_TOOLS.DRAW_PANEL || gesture.tool === CANVAS_TOOLS.DRAW_OPENING) {
         return {
           point: gesture.current,
@@ -1648,6 +2183,7 @@ export default function CeilingDetailEditor() {
         // First Escape cancels the in-flight gesture but keeps the tool active.
         event.preventDefault();
         setGesture(null);
+        setDimensionAcquisition(null);
         releaseCanvasRect();
         return;
       }
@@ -1682,7 +2218,13 @@ export default function CeilingDetailEditor() {
     chooseCanvasTool(definition.tool);
   };
 
-  canvasHandlersRef.current = { beginElementMove, isCustomMember, isManualFastener };
+  canvasHandlersRef.current = {
+    beginElementMove,
+    isCustomMember,
+    isManualFastener,
+    pressDimension,
+    beginDimensionEndpointMove,
+  };
 
   /**
    * The boards split by what they are made of. A ceiling boarded in one material
@@ -2306,8 +2848,66 @@ export default function CeilingDetailEditor() {
           </CollapsibleSection>
 
           <CollapsibleSection
-            id="ceiling-takeoff"
+            id="ceiling-dimensions"
             step={7}
+            title="Dimensions"
+            summary={`${dimensions.length} shown · ${
+              dimensions.filter((dimension) => dimension.source === 'custom').length
+            } yours`}
+            open={openSections.dimensions}
+            onToggle={() => toggleSection('dimensions')}
+            innerRef={sectionRef('dimensions')}
+          >
+            <div className={styles.toolRow} aria-label="Measuring tools">
+              {renderToolButton(CANVAS_TOOLS.DRAW_DIMENSION)}
+            </div>
+            <InfoHint label="How exact measuring works">
+              <p className={styles.inlineHelp}>
+                Click two exact points to measure, or drag; hold Shift to keep the run level or plumb. Endpoints lock
+                onto ceiling edges, board corners and joints, furring and carrier centrelines, opening edges, screws,
+                hangers and lights, and stay tied to them when the piece moves. A free endpoint uses the measurement
+                precision, not the coarse drawing grid. With Select, drag the amber line to move a measurement, or drag
+                either green endpoint to reshape it.
+              </p>
+            </InfoHint>
+            <SelectField
+              label="Precision"
+              value={String(configuration.dimensions.precision)}
+              onChange={(precision) => updateDimensionSettings({ precision: Number(precision) })}
+            >
+              {WALL_DIMENSION_PRECISIONS.map((precision) => (
+                <option key={precision} value={precision}>
+                  {precision.toFixed(precision === 1 ? 0 : precision === 0.1 ? 1 : 2)} mm
+                </option>
+              ))}
+            </SelectField>
+            <div className={styles.dimensionToggles}>
+              <Toggle
+                checked={configuration.dimensions.showOverall}
+                onChange={(showOverall) => updateDimensionSettings({ showOverall })}
+                label="Overall ceiling length and depth"
+              />
+              <Toggle
+                checked={configuration.dimensions.showOpenings}
+                onChange={(showOpenings) => updateDimensionSettings({ showOpenings })}
+                label="Opening sizes and set-out"
+              />
+              <Toggle
+                checked={configuration.dimensions.showBoards}
+                onChange={(showBoards) => updateDimensionSettings({ showBoards })}
+                label="Board joint chains"
+              />
+              <Toggle
+                checked={configuration.dimensions.showFraming}
+                onChange={(showFraming) => updateDimensionSettings({ showFraming })}
+                label="Furring and carrier centre spacing"
+              />
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            id="ceiling-takeoff"
+            step={8}
             title="Takeoff"
             summary={`${takeoff.panelCount} boards · ${takeoff.fastenerCount} screws`}
             open={openSections.takeoff}
@@ -2367,7 +2967,7 @@ export default function CeilingDetailEditor() {
         <main className={styles.workspace}>
           <div className={styles.canvasToolbar}>
             <div className={styles.toolPalette} role="toolbar" aria-label="Drawing tools">
-              {['navigate', 'board', 'frame', 'detail'].map((group) => (
+              {['navigate', 'board', 'frame', 'detail', 'measure'].map((group) => (
                 <div key={group} className={styles.toolCluster} title={TOOL_GROUP_LABELS[group]}>
                   {TOOL_DEFINITIONS.filter((definition) => definition.group === group).map((definition) => (
                     <span key={definition.tool} className={styles.toolSlot}>
@@ -2475,7 +3075,7 @@ export default function CeilingDetailEditor() {
               ))}
             </div>
           </div>
-          <div className={styles.statusBar} data-snapped="false">
+          <div className={styles.statusBar} data-snapped={activeDimensionSnap ? 'true' : 'false'}>
             <span className={styles.statusLive} role="status">
               <span className={styles.statusTool}>
                 <ToolGlyph name={activeToolDefinition.icon} />
@@ -2483,6 +3083,9 @@ export default function CeilingDetailEditor() {
                 <kbd className={styles.kbd}>{activeToolDefinition.shortcut}</kbd>
               </span>
               <span className={styles.statusHint}>{TOOL_HINTS[canvasTool]}</span>
+              {activeDimensionSnap ? (
+                <span className={styles.statusSnap}>{`Snapped to ${describeReference(activeDimensionSnap)}`}</span>
+              ) : null}
               <span className={styles.statusSelection}>{selectionSummary}</span>
             </span>
             <span
@@ -2527,6 +3130,7 @@ export default function CeilingDetailEditor() {
                     onDoubleClick={finishPanelTrace}
                     onPointerCancel={() => {
                       setGesture(null);
+                      setDimensionAcquisition(null);
                       releaseCanvasRect();
                     }}
                   >
@@ -2620,6 +3224,56 @@ export default function CeilingDetailEditor() {
                         </g>
                       ) : null}
                     </g>
+
+                    {/* Measurements are drawn outside the flipped group: the
+                        graphic maps UV to drawing coordinates itself, which is
+                        what keeps every label upright on the sheet. */}
+                    {layerVisibility.dimensions ? (
+                      <CeilingDimensionLayer
+                        dimensions={dimensions}
+                        view={bounds}
+                        unitPx={unitPx}
+                        selectedId={selection?.type === 'dimension' ? selection.id : null}
+                        hiddenId={dimensionGesturePreview?.id || null}
+                        selectTool={canvasTool === CANVAS_TOOLS.SELECT}
+                        onDimensionPointerDown={stableCanvasHandlers.onDimensionPointerDown}
+                        onStartHandlePointerDown={stableCanvasHandlers.onStartHandlePointerDown}
+                        onEndHandlePointerDown={stableCanvasHandlers.onEndHandlePointerDown}
+                      />
+                    ) : null}
+
+                    {gesturePreview && gesturePreviewType === 'dimension' ? (
+                      <DimensionGraphic
+                        dimension={gesturePreview}
+                        view={bounds}
+                        selected
+                        unitPx={unitPx}
+                        handleRadius={4.5 * unitPx}
+                        fontSize={12.5 * unitPx}
+                      />
+                    ) : null}
+
+                    {layerVisibility.dimensions && dimensionGesturePreview ? (
+                      <DimensionGraphic
+                        dimension={dimensionGesturePreview}
+                        view={bounds}
+                        selected
+                        unitPx={unitPx}
+                        handleRadius={4.5 * unitPx}
+                        fontSize={12.5 * unitPx}
+                      />
+                    ) : null}
+
+                    {(canvasTool === CANVAS_TOOLS.DRAW_DIMENSION || gesture?.kind === 'dimension_endpoint') &&
+                    dimensionAcquisition ? (
+                      <DimensionAcquisitionGraphic
+                        acquisition={dimensionAcquisition}
+                        view={bounds}
+                        precision={configuration.dimensions.precision}
+                        referenceLabel={describeReference(dimensionAcquisition.reference)}
+                      />
+                    ) : null}
+
                     {gestureReadout ? (
                       <CanvasReadoutChip
                         point={gestureReadout.point}
@@ -2687,10 +3341,10 @@ export default function CeilingDetailEditor() {
             onToggle={() => toggleSection('selection')}
             innerRef={sectionRef('selection')}
           >
-            {selectionIsDeletable ? null : (
+            {selectionHasCard ? null : (
               <EmptyState icon="select" title="Nothing selected">
-                Pick the Select tool, then click a board, furring channel, screw, or opening on the plan to edit its
-                exact numbers here — a light fixture works the same way.
+                Pick the Select tool, then click a board, furring channel, screw, opening, or measurement on the plan to
+                edit its exact numbers here — a light fixture works the same way.
               </EmptyState>
             )}
 
@@ -2879,6 +3533,104 @@ export default function CeilingDetailEditor() {
               <div className={styles.selectionCard}>
                 <h3>Selected light — {getFixtureType(selectedFixture.fixtureType).label}</h3>
                 {renderFixtureEditor(selectedFixture)}
+              </div>
+            )}
+
+            {selectedDimension && (
+              <div className={styles.selectionCard}>
+                <h3>{selectedDimension.source === 'custom' ? 'Selected measurement' : selectedDimension.name}</h3>
+                <div className={styles.measurementReadout}>
+                  <strong>{selectedDimension.label}</strong>
+                  <span>
+                    Exact modeled value:{' '}
+                    {formatWallDimensionValue(selectedDimension.measurement, configuration.dimensions.precision)}
+                  </span>
+                  <span>From {describeReference(selectedDimension.startRef)}</span>
+                  <span>To {describeReference(selectedDimension.endRef)}</span>
+                </div>
+                {selectedDimension.source === 'custom' ? (
+                  <>
+                    <SelectField
+                      label="Direction"
+                      value={selectedDimension.mode}
+                      onChange={(mode) => updateSelectedDimension({ mode })}
+                    >
+                      <option value={WALL_DIMENSION_MODES.HORIZONTAL}>Along U (east/west)</option>
+                      <option value={WALL_DIMENSION_MODES.VERTICAL}>Along V (north/south)</option>
+                      <option value={WALL_DIMENSION_MODES.ALIGNED}>Aligned</option>
+                    </SelectField>
+                    <NumberField
+                      label="Line offset"
+                      value={selectedDimension.offset}
+                      step={configuration.dimensions.precision}
+                      onChange={(offset) => updateSelectedDimension({ offset })}
+                    />
+                    <NumberField
+                      label="Tolerance ±"
+                      value={selectedDimension.tolerance}
+                      min={0}
+                      step={configuration.dimensions.precision}
+                      onChange={(tolerance) => updateSelectedDimension({ tolerance })}
+                    />
+                    <TextField
+                      label="Label override"
+                      value={selectedDimension.textOverride}
+                      placeholder="Use measured value"
+                      onChange={(textOverride) => updateSelectedDimension({ textOverride })}
+                    />
+                    <TextField
+                      label="Site note"
+                      value={selectedDimension.note}
+                      onChange={(note) => updateSelectedDimension({ note })}
+                    />
+                    <AdvancedGroup label="Exact endpoint coordinates">
+                      <p className={styles.inlineHelp}>
+                        Usually you reshape by dragging the green endpoints on the drawing; typing here breaks the link
+                        to the piece the endpoint was snapped to.
+                      </p>
+                      <NumberField
+                        label="Start · from west edge (U)"
+                        value={selectedDimension.start.u}
+                        step={configuration.dimensions.precision}
+                        onChange={(u) =>
+                          updateSelectedDimension({ start: { ...selectedDimension.start, u }, startRef: null })
+                        }
+                      />
+                      <NumberField
+                        label="Start · from south edge (V)"
+                        value={selectedDimension.start.v}
+                        step={configuration.dimensions.precision}
+                        onChange={(v) =>
+                          updateSelectedDimension({ start: { ...selectedDimension.start, v }, startRef: null })
+                        }
+                      />
+                      <NumberField
+                        label="End · from west edge (U)"
+                        value={selectedDimension.end.u}
+                        step={configuration.dimensions.precision}
+                        onChange={(u) =>
+                          updateSelectedDimension({ end: { ...selectedDimension.end, u }, endRef: null })
+                        }
+                      />
+                      <NumberField
+                        label="End · from south edge (V)"
+                        value={selectedDimension.end.v}
+                        step={configuration.dimensions.precision}
+                        onChange={(v) =>
+                          updateSelectedDimension({ end: { ...selectedDimension.end, v }, endRef: null })
+                        }
+                      />
+                    </AdvancedGroup>
+                    <ToolbarButton danger onClick={deleteSelectedDimension}>
+                      Delete measurement
+                    </ToolbarButton>
+                  </>
+                ) : (
+                  <p>
+                    This dimension is worked out from the ceiling itself. Use the Dimensions section to turn its group
+                    off.
+                  </p>
+                )}
               </div>
             )}
           </CollapsibleSection>

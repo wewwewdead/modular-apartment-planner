@@ -36,10 +36,14 @@ export function useWallCanvasMetrics(frameRef, bounds, remeasureKey = null) {
   return computeCanvasFit({
     frameWidth: frameSize.width,
     frameHeight: frameSize.height,
-    length: bounds?.length || 0,
+    // `spanU` is the drawing's own width — wider than the wall when a board is
+    // run past its end — and `u0` is where that drawing starts. A bounds without
+    // them is a plain wall-length drawing, which is what it always was.
+    length: bounds?.spanU || bounds?.length || 0,
     height: bounds?.height || 0,
     margin: CANVAS_FIT_MARGIN,
     mirrorU: Boolean(bounds?.mirrorU),
+    originU: bounds?.u0 || 0,
   });
 }
 

@@ -1,7 +1,9 @@
 import { pointInPolygon, signedPolygonArea } from './polygon';
 import { nearestPointOnSegment, segmentIntersection } from './line';
 import { columnOutline } from './columnGeometry';
+import { add, normalize, perpendicular, scale, subtract } from './point';
 import { ENDPOINT_MERGE_TOLERANCE, MIN_ROOM_AREA } from '@/domain/defaults';
+import { wallOutboardOffset } from '@/domain/wallFit';
 
 function projectParameter(point, start, end) {
   const dx = end.x - start.x;
@@ -94,6 +96,113 @@ function normalizeWallsForColumns(walls, columns, tolerance) {
       end,
     };
   });
+}
+
+/* ── Walls built off their drawn axis ────────────────────────────────────
+ *
+ * A room is bounded by the face of the wall it can be furnished up to, and for
+ * an outboard facade that face is not on the axis: the axis stays on the grid
+ * line the structure is dimensioned to, and the body is built past it. So the
+ * segment fed to the graph is the INBOARD face — the axis shifted by the offset
+ * less half the built thickness — and the usable floor genuinely reaches past
+ * the grid line.
+ *
+ * The rule is discontinuous at zero on purpose: a wall with no offset bounds its
+ * room on the centreline, exactly as it always has, and a 1 mm offset snaps the
+ * boundary out to the inner face. Nothing else would leave existing plans alone,
+ * and a plan where nothing is offset never reaches this code at all.
+ */
+
+// How far the meeting point of two shifted lines may travel from the corner
+// they were drawn at, as a multiple of the larger shift. Past this the walls are
+// too nearly parallel to be a corner, and mitring them would fling the vertex
+// across the plan.
+const MAX_MITRE_TRAVEL_RATIO = 20;
+
+function magnitudeOf(shift) {
+  return shift ? Math.hypot(shift.x, shift.y) : 0;
+}
+
+function inboardShift(wall) {
+  const offset = wallOutboardOffset(wall);
+  if (!offset) return null;
+
+  const direction = normalize(subtract(wall.end, wall.start));
+  if (!direction.x && !direction.y) return null;
+
+  const thickness = Number(wall?.thickness) || 0;
+  const magnitude = offset - Math.sign(offset) * (thickness / 2);
+  if (!magnitude) return null;
+
+  return scale(perpendicular(direction), magnitude);
+}
+
+// Where two infinite lines cross, or null when they are parallel.
+function lineIntersection(a, b) {
+  const da = subtract(a.end, a.start);
+  const db = subtract(b.end, b.start);
+  const cross = da.x * db.y - da.y * db.x;
+  if (Math.abs(cross) < 1e-10) return null;
+
+  const delta = subtract(b.start, a.start);
+  const t = (delta.x * db.y - delta.y * db.x) / cross;
+  return add(a.start, scale(da, t));
+}
+
+/**
+ * Shifting one wall's segment sideways pulls its ends off the corners it was
+ * drawn into, and a loop that no longer meets is no room at all. So every
+ * endpoint that shared a corner with another wall is carried to where the two
+ * SHIFTED lines cross — a mitre. Both walls of a corner land on the same point
+ * whichever of them is offset, which is what keeps the loop closed when an
+ * outboard facade turns into an ordinary internal wall.
+ *
+ * Neighbours are found by the corner the walls were DRAWN at, so the joins are
+ * the ones the plan actually has. A wall meeting the same neighbour's line in
+ * more than one place takes the nearest crossing — the least disturbance to the
+ * segment it was given.
+ */
+function wallsOnInboardFaces(walls, tolerance) {
+  const shifts = walls.map(inboardShift);
+  if (!shifts.some(Boolean)) return walls;
+
+  const lines = walls.map((wall, index) => {
+    const shift = shifts[index];
+    return shift
+      ? { start: add(wall.start, shift), end: add(wall.end, shift) }
+      : { start: { ...wall.start }, end: { ...wall.end } };
+  });
+
+  const mitre = (index, endpointKey) => {
+    const drawnCorner = walls[index][endpointKey];
+    const shifted = lines[index][endpointKey];
+    let best = null;
+
+    for (let other = 0; other < walls.length; other += 1) {
+      if (other === index) continue;
+      if (!shifts[index] && !shifts[other]) continue;
+
+      const meets = ['start', 'end'].some((key) => pointsEqual(drawnCorner, walls[other][key], tolerance));
+      if (!meets) continue;
+
+      const crossing = lineIntersection(lines[index], lines[other]);
+      if (!crossing) continue;
+
+      const travel = Math.hypot(crossing.x - shifted.x, crossing.y - shifted.y);
+      const reach =
+        MAX_MITRE_TRAVEL_RATIO * Math.max(magnitudeOf(shifts[index]), magnitudeOf(shifts[other]), tolerance);
+      if (travel > reach) continue;
+      if (!best || travel < best.travel) best = { travel, point: crossing };
+    }
+
+    return best ? best.point : shifted;
+  };
+
+  return walls.map((wall, index) => ({
+    ...wall,
+    start: mitre(index, 'start'),
+    end: mitre(index, 'end'),
+  }));
 }
 
 function roomPolygonKey(points, precision = ENDPOINT_MERGE_TOLERANCE) {
@@ -308,9 +417,13 @@ function traceFaces(vertices, edges) {
 export function detectRoomFaces(walls, columns = [], mergeTolerance = ENDPOINT_MERGE_TOLERANCE) {
   if (walls.length < 3) return [];
 
+  // Column snapping runs on the drawn axes, because a column centre is where
+  // walls are joined; the inboard shift is applied to what that leaves, so the
+  // corners the mitre looks for are the corners the plan really has.
   const normalizedWalls = normalizeWallsForColumns(walls, columns, mergeTolerance);
+  const boundaryWalls = wallsOnInboardFaces(normalizedWalls, mergeTolerance);
   const vertices = [];
-  const wallSegments = buildRawSegments(normalizedWalls, vertices, mergeTolerance);
+  const wallSegments = buildRawSegments(boundaryWalls, vertices, mergeTolerance);
   const columnSegments = buildColumnSegments(columns, vertices, mergeTolerance);
   const edges = subdivideSegments([...wallSegments, ...columnSegments], vertices, mergeTolerance);
   const cycles = traceFaces(vertices, edges);

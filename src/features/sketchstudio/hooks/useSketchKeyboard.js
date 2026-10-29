@@ -72,6 +72,7 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
       }
 
       if (isEditableTarget(event.target)) return;
+      if (state.ui.workspaceMode === 'model') return;
 
       if (event.key === SHORTCUT_OVERLAY_TOGGLE_KEY && !hasPrimaryModifier && !event.altKey) {
         event.preventDefault();
@@ -349,5 +350,6 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
     state.ui.isometricPlane,
     state.ui.shortcutOverlayOpen,
     state.ui.viewMode,
+    state.ui.workspaceMode,
   ]);
 }

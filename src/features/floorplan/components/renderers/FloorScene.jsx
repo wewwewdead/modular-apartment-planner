@@ -22,6 +22,7 @@ const FloorScene = memo(function FloorScene({
   floor,
   filteredFloor,
   filteredProject,
+  pickFloor = null,
   floorBelow,
   showFloorBelowUnderlay,
   floorOverhangs,
@@ -146,6 +147,7 @@ const FloorScene = memo(function FloorScene({
               toolState={toolState}
               activeTool={activeTool}
               floor={floor}
+              pickFloor={pickFloor}
               selectedId={selectedId}
               selectedType={selectedType}
             />
