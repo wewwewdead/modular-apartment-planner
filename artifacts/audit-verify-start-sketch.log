@@ -1,0 +1,12 @@
+Start-sketch verification passed:
+- fresh model: no .cad-empty, three 400 mm tiles and three .cad-plane-label chips, Start list, rest hint
+- hover the Top tile → "Sketch on Top (XY) · click to start", hovered XY; one click → Sketch tools, Sketching
+- typed 100 × 60 rectangle, Esc Esc → support { plane XY, offset 0 }; Extrude has the focus
+- back at rest with one sketch and no parts: tiles and Start list shown
+- S → pick hint and "Pick a face or plane to sketch on"; offset 50 moves every tile; Front hint "+50 mm"
+- Right · YZ label → sketch with support { plane YZ, offset 50 }, origin (50, 0, 0)
+- Right tile → Cancel sketch: no sketch saved, back at rest with the tiles
+- Board / plate → tiles hidden at rest, Start list gone; S → tiles back at 300 mm
+- board top face hover → outline (4 segments) + "Sketch on this face of Board / plate"; click → face sketch
+- 60 px background drag during the pick → still picking, no sketch; Esc cancels
+- with a part: New → in-app OK → still .cad-workspace, Model current, tiles visible, Start list, 0 instances

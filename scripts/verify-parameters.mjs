@@ -28,8 +28,8 @@ try {
   await page.getByRole('button', { name: '3D Model & workshop', exact: true }).click();
   await current();
 
-  // 1. Design parameters from the empty-state screen.
-  await page.locator('.cad-empty').getByRole('button', { name: 'Design parameters', exact: true }).click();
+  // 1. Design parameters from the Start list (empty model, Properties panel).
+  await page.locator('.cad-start').getByRole('button', { name: 'Design parameters', exact: true }).click();
   await expect(properties.getByLabel('Preset', { exact: true })).toHaveValue('cabinet');
   await properties.getByLabel('width value', { exact: true }).fill('900');
   await properties.getByLabel('Default snap (mm)', { exact: true }).selectOption('5');

@@ -1,5 +1,5 @@
 import sampleDocument from '../data/sampleDocument';
-import { normalizeModel, removeOrphanedConnections } from '../cad/model';
+import { normalizeModel, removeEmptyParts, removeOrphanedConnections } from '../cad/model';
 import { cloneJoint as cloneJoineryJoint } from '../joinery';
 import { normalizeEntityGroupMemberships } from './groupUtils';
 
@@ -126,7 +126,9 @@ export function normalizeSketchDocument(document) {
         ? sourceWithoutRuntimeFields.layers.map(cloneLayer)
         : (sampleDocument.layers || []).map(cloneLayer),
     entities: normalizedEntities,
-    model: removeOrphanedConnections(normalizeModel(source.model)),
+    // Load-time recovery, in order: links to deleted instances, then parts
+    // that have no enabled feature (see removeEmptyParts).
+    model: removeEmptyParts(removeOrphanedConnections(normalizeModel(source.model))),
   };
 }
 

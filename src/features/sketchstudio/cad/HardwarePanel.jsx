@@ -1,43 +1,95 @@
-import { useState } from 'react';
-import { HARDWARE_TYPES, METRIC_THREADS, hardwareDefaults, hardwareDimensions } from './hardware.js';
+import { useRef, useState } from 'react';
+import {
+  DRIVES,
+  HARDWARE_GROUPS,
+  HARDWARE_TYPES,
+  HEAD_STYLES,
+  POINTS,
+  SCREW_KINDS,
+  catalogOf,
+  drivesFor,
+  hardwareDefaults,
+  hardwareDimensions,
+  hardwareFieldLabels,
+  headsFor,
+  pointsFor,
+  resolveHardware,
+  sizesFor,
+  withDrive,
+  withHead,
+  withPoint,
+} from './hardware.js';
 import { ValueField } from './CadEditors.jsx';
 import MaterialSelect from './MaterialSelect.jsx';
 
+// A choice select (Phase N): applies at once, no live-field debounce.
+function Choice({ label, value, options, names, onChange }) {
+  return (
+    <label className="cad-field">
+      {label}
+      {/* An explicit name: the wrapping label would add the chosen option's text. */}
+      <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((key) => (
+          <option key={key} value={key}>
+            {names[key].label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+// The sizes of the library, the tree editor and Place. Screws (Phase N,
+// docs/sketch-studio-screw-library.md §7) add Head style / Drive / Point
+// selects where their standard offers a choice; a head, drive or point change
+// re-derives the dependent sizes from the standard.
 export function HardwareFields({ feature, onChange }) {
   const update = (key, value) => onChange({ ...feature, [key]: value });
-  const shank = ['bolt', 'stud'].includes(feature.kind);
+  const screw = SCREW_KINDS[feature.kind] ? resolveHardware(feature) : null;
+  const heads = headsFor(feature.kind);
+  const drives = screw ? drivesFor(feature.kind, screw.head) : [];
+  // A saved drive 'none' on a recessed kind stays selectable.
+  const driveOptions = screw?.drive === 'none' && !drives.includes('none') ? [...drives, 'none'] : drives;
+  const points = pointsFor(feature.kind);
+  const shown = screw || feature;
   return (
     <div className="cad-form">
       <p className="cad-help">
-        Generic editable envelope. Enter supplier dimensions for purchased hardware. Threads, knurls and clinching
-        deformation are not modeled.
+        Generic editable envelope. Enter supplier dimensions for purchased hardware. Threads, knurls, drill flutes and
+        clinching deformation are not modeled; drive recesses are schematic.
       </p>
-      {Object.entries({
-        length: shank ? 'Shank length (mm)' : 'Body length / thickness (mm)',
-        ...(shank
-          ? { diameter: 'Shank diameter (mm)' }
-          : {
-              bodyDiameter: ['nut', 'standoff'].includes(feature.kind)
-                ? 'Body across flats (mm)'
-                : 'Body diameter (mm)',
-              boreDiameter: 'Bore diameter (mm)',
-            }),
-        ...(!['nut', 'washer', 'standoff', 'insert'].includes(feature.kind)
-          ? {
-              headDiameter: feature.kind === 'bolt' ? 'Head across flats (mm)' : 'Flange diameter (mm)',
-              headHeight: 'Head / flange height (mm)',
-            }
-          : {}),
-        ...(feature.kind !== 'washer' ? { pitch: 'Thread pitch (mm)' } : {}),
-        supplierCode: 'Supplier part number',
-        installationHole: 'Supplier installation hole (mm)',
-        minimumSheet: 'Supplier minimum sheet thickness (mm)',
-        notes: 'Installation / finish notes',
-      }).map(([key, label]) => (
+      {heads.length > 1 && (
+        <Choice
+          label="Head style"
+          value={screw.head}
+          options={heads}
+          names={HEAD_STYLES}
+          onChange={(head) => onChange(withHead(feature, head))}
+        />
+      )}
+      {driveOptions.length > 1 && (
+        <Choice
+          label="Drive"
+          value={screw.drive}
+          options={driveOptions}
+          names={DRIVES}
+          onChange={(drive) => onChange(withDrive(feature, drive))}
+        />
+      )}
+      {points.length > 1 && (
+        <Choice
+          label="Point"
+          value={screw.point}
+          options={points}
+          names={POINTS}
+          onChange={(point) => onChange(withPoint(feature, point))}
+        />
+      )}
+      {hardwareFieldLabels(feature).map(([key, label]) => (
         <ValueField
-          key={`${feature.id}-${key}-${feature[key]}`}
+          key={`${feature.id}-${key}`}
           label={label}
-          value={feature[key]}
+          value={shown[key]}
           asText={['supplierCode', 'notes'].includes(key)}
           onChange={(v) => update(key, v)}
         />
@@ -45,42 +97,59 @@ export function HardwareFields({ feature, onChange }) {
     </div>
   );
 }
-export default function HardwarePanel({ onAdd, canAttach, ready = true, projectMaterials = [] }) {
+// attachRow (Phase M): the selected hole is a hole row, so Attach to selected
+// hole opens Place with every hole of the row chosen instead of committing.
+export default function HardwarePanel({ onAdd, canAttach, attachRow = false, ready = true, projectMaterials = [] }) {
   const [feature, setFeature] = useState(() => hardwareDefaults());
   const [attach, setAttach] = useState(true);
+  // The last size chosen in each catalog: bolt M6 → wood screw (4.0) → bolt
+  // lands on M6 again (spec §5).
+  const lastSizes = useRef({});
   let problem = '';
   try {
     hardwareDimensions(feature);
   } catch (e) {
     problem = e.message;
   }
+  const changeKind = (kind) => {
+    lastSizes.current[catalogOf(feature.kind)] = feature.size;
+    const sizes = sizesFor(kind);
+    const remembered = lastSizes.current[catalogOf(kind)];
+    const size = sizes.includes(feature.size) ? feature.size : sizes.includes(remembered) ? remembered : undefined;
+    setFeature({ ...hardwareDefaults(kind, size), material: feature.material });
+  };
+  // A new size keeps the chosen head, drive and point.
+  const changeSize = (size) => {
+    lastSizes.current[catalogOf(feature.kind)] = size;
+    let next = hardwareDefaults(feature.kind, size);
+    if (SCREW_KINDS[feature.kind]) {
+      if (feature.head && feature.head !== next.head) next = withHead(next, feature.head);
+      if (feature.drive && feature.drive !== next.drive) next = withDrive(next, feature.drive);
+      if (feature.point && feature.point !== next.point) next = withPoint(next, feature.point);
+    }
+    setFeature({ ...next, material: feature.material });
+  };
   return (
     <>
       <h3>Hardware library</h3>
       <label className="cad-field">
         Hardware type
-        <select
-          value={feature.kind}
-          onChange={(e) =>
-            setFeature({ ...hardwareDefaults(e.target.value, feature.size), material: feature.material })
-          }
-        >
-          {Object.entries(HARDWARE_TYPES).map(([key, label]) => (
-            <option key={key} value={key}>
-              {label}
-            </option>
+        <select value={feature.kind} onChange={(e) => changeKind(e.target.value)}>
+          {HARDWARE_GROUPS.map((group) => (
+            <optgroup key={group.label} label={group.label}>
+              {group.kinds.map((key) => (
+                <option key={key} value={key}>
+                  {HARDWARE_TYPES[key]}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </label>
       <label className="cad-field">
         Metric size
-        <select
-          value={feature.size}
-          onChange={(e) =>
-            setFeature({ ...hardwareDefaults(feature.kind, e.target.value), material: feature.material })
-          }
-        >
-          {Object.keys(METRIC_THREADS).map((s) => (
+        <select value={feature.size} onChange={(e) => changeSize(e.target.value)}>
+          {sizesFor(feature.kind).map((s) => (
             <option key={s}>{s}</option>
           ))}
         </select>
@@ -100,8 +169,10 @@ export default function HardwarePanel({ onAdd, canAttach, ready = true, projectM
       )}
       <p className="cad-help">
         {canAttach && attach
-          ? 'The seating plane follows this hole and its parent part. Set the axial offset in Connections / welds.'
-          : 'Adds a movable part at the origin. Use Move part or exact Position fields to assemble it.'}
+          ? attachRow
+            ? "Opens Place with every hole of this row chosen; remove any you don't want, then press Enter."
+            : 'The seating plane follows this hole and its parent part. Set the axial offset in Connections / welds.'
+          : 'Add hardware, then click the hole centres it goes in (click one again to remove it, Shift+click picks a whole row) and press Enter: one part is seated in every chosen hole. Or click a flat face in the view to seat it there (bolts, studs and screws point into the face), or click empty ground; that single one is a movable part.'}
       </p>
       <button
         className="cad-primary cad-wide"

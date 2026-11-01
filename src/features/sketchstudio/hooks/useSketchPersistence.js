@@ -196,6 +196,8 @@ export default function useSketchPersistence(state, dispatch) {
         activeLayerId: nextDocument.layers[0]?.id || 'default',
         snapEnabled: state.ui.snapEnabled,
         orthoEnabled: state.ui.orthoEnabled,
+        // New keeps the current workspace (3D stays 3D; a missing mode loads as 2D drafting).
+        workspaceMode: state.ui.workspaceMode,
       },
     });
     applyWorkspace(workspace, {
@@ -210,6 +212,7 @@ export default function useSketchPersistence(state, dispatch) {
     state.document.units,
     state.ui.orthoEnabled,
     state.ui.snapEnabled,
+    state.ui.workspaceMode,
   ]);
 
   const handleImportSketchFile = useCallback(

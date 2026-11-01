@@ -10,6 +10,8 @@ import { annotationText } from './drawings.js';
 import { createKernelSession } from './kernel.js';
 import { furnitureExample, bracketExample } from './examples.js';
 import { buildCutList, planLinearStock } from './fabrication.js';
+import { createHardware, hardwareDefaults } from './hardware.js';
+import { mapPlacement } from './placement.js';
 const require = createRequire(import.meta.url);
 beforeAll(
   async () =>
@@ -469,5 +471,217 @@ describe('exact modeling kernel', () => {
         ]),
       ),
     ).toThrow(/ambiguous reference/);
+  });
+});
+
+// Phase K (docs/sketch-studio-hole-row.md §4.3): one hole feature with a row
+// record is cut once per centre; holeIndex seats hardware in any of them.
+describe('hole rows in the kernel', () => {
+  const plate = { id: 'base', type: 'box', width: 100, depth: 80, height: 10 };
+  const rowHole = (row, extra = {}) => ({
+    id: 'row',
+    type: 'hole',
+    diameter: 6,
+    depth: 5,
+    throughAll: true,
+    position: [20, 40, 10],
+    direction: [0, 0, -1],
+    row,
+    ...extra,
+  });
+  it('cuts 4 × Ø6 through a plate, reports every centre and keeps the bounds', () => {
+    const session = createKernelSession(fixture([plate, rowHole({ count: 4, pitch: 20, direction: [1, 0, 0] })]));
+    try {
+      const snapshot = session.snapshot();
+      const metrics = snapshot.parts[0].features.row;
+      expect(metrics.removedVolume).toBeCloseTo(4 * Math.PI * 9 * 10, 0);
+      expect(Math.abs(metrics.removedVolume / (4 * Math.PI * 9 * 10) - 1)).toBeLessThan(0.01);
+      expect(metrics.cut.position).toEqual([20, 40, 10]);
+      expect(metrics.row).toMatchObject({ count: 4, pitch: 20, direction: [1, 0, 0] });
+      expect(metrics.row.centres).toEqual([
+        [20, 40, 10],
+        [40, 40, 10],
+        [60, 40, 10],
+        [80, 40, 10],
+      ]);
+      expect(snapshot.parts[0].volume).toBeCloseTo(80000 - 4 * Math.PI * 9 * 10, 0);
+      expect(snapshot.parts[0].bounds).toEqual([
+        [0, 0, 0],
+        [100, 80, 10],
+      ]);
+    } finally {
+      session.dispose();
+    }
+  });
+  it('names the hole of a row that misses the part', () => {
+    expect(() => createKernelSession(fixture([plate, rowHole({ count: 4, pitch: 30, direction: [1, 0, 0] })]))).toThrow(
+      /Hole 4 of 4 removes no material\. Shorten the spacing or move the row/,
+    );
+  });
+  it('rejects a malformed row with the resolveRow messages', () => {
+    expect(() =>
+      createKernelSession(fixture([plate, rowHole({ count: 2.5, pitch: 20, direction: [1, 0, 0] })])),
+    ).toThrow('Holes in a row must be a whole number from 1 to 100.');
+    expect(() => createKernelSession(fixture([plate, rowHole({ count: 3, pitch: 0, direction: [1, 0, 0] })]))).toThrow(
+      'Row spacing must be greater than zero.',
+    );
+    expect(() => createKernelSession(fixture([plate, rowHole({ count: 3, pitch: 20, direction: [0, 0, 1] })]))).toThrow(
+      'Row direction must lie in the face of the first hole.',
+    );
+  });
+  it('drives the spacing from a named parameter and seats hardware in hole 3 (holeIndex 2)', () => {
+    const build = (pitch) => {
+      const model = fixture([plate, rowHole({ count: 4, pitch: '=pitch', direction: [1, 0, 0] })]);
+      model.parameters = [{ id: 'pitch', name: 'pitch', value: pitch }];
+      model.parts.push({
+        id: 'pin',
+        name: 'Pin',
+        features: [{ id: 'axis', type: 'cylinder', radius: 2, length: 20 }],
+      });
+      model.instances.push({ id: 'pin-1', partId: 'pin', position: [0, 0, 50], rotation: [0, 0, 0] });
+      model.connections.push({
+        id: 'seat',
+        type: 'concentric',
+        from: 'pin-1',
+        to: 'i',
+        fromFeatureId: 'axis',
+        toFeatureId: 'row',
+        holeIndex: 2,
+        offset: 0,
+      });
+      return model;
+    };
+    for (const pitch of [20, 25]) {
+      const session = createKernelSession(build(pitch));
+      try {
+        const snapshot = session.snapshot();
+        const centres = snapshot.parts[0].features.row.row.centres;
+        expect(centres.map((c) => c[0])).toEqual([20, 20 + pitch, 20 + 2 * pitch, 20 + 3 * pitch]);
+        const [min, max] = snapshot.instances.find((x) => x.id === 'pin-1').bounds;
+        expect((min[0] + max[0]) / 2).toBeCloseTo(20 + 2 * pitch, 4);
+        expect((min[1] + max[1]) / 2).toBeCloseTo(40, 4);
+      } finally {
+        session.dispose();
+      }
+    }
+  });
+  // Phase M (docs/sketch-studio-hardware-holes.md §6): ONE hardware part with
+  // an instance per chosen hole; each concentric connection names its hole.
+  it('attaches cylindrical axes concentrically: three instances of one M6 bolt part in a 3-hole row', () => {
+    const model = fixture([plate, rowHole({ count: 3, pitch: 30, direction: [1, 0, 0] })]);
+    const { part } = createHardware(hardwareDefaults('bolt', 'M6'));
+    const boltFeature = part.features[0];
+    model.parts.push(part);
+    const ids = ['bolt-1', 'bolt-2', 'bolt-3'];
+    // Posed anywhere: the connection seats each one.
+    ids.forEach((id, k) =>
+      model.instances.push({ id, partId: part.id, position: [k * 7, -50, 40], rotation: [0, 0, 0], visible: true }),
+    );
+    ids.forEach((id, k) =>
+      model.connections.push({
+        id: `seat-${k}`,
+        type: 'concentric',
+        from: id,
+        to: 'i',
+        fromFeatureId: boltFeature.id,
+        toFeatureId: 'row',
+        ...(k > 0 ? { holeIndex: k } : {}),
+        offset: 0,
+      }),
+    );
+    const session = createKernelSession(model);
+    try {
+      const snapshot = session.snapshot();
+      ids.forEach((id, k) => {
+        const placed = snapshot.instances.find((x) => x.id === id);
+        // The seating plane origin lands on its centre; bolts point into the plate.
+        const origin = mapPlacement([0, 0, 0], placed.placement);
+        [20 + 30 * k, 40, 10].forEach((v, i) => expect(origin[i]).toBeCloseTo(v, 4));
+        const down = mapPlacement([0, 0, -1], placed.placement, true);
+        [0, 0, -1].forEach((v, i) => expect(down[i]).toBeCloseTo(v, 6));
+      });
+      // The BOM counts the instances of the one part.
+      const rows = buildCutList(model, snapshot);
+      expect(rows.find((r) => r.partId === part.id)).toMatchObject({ name: 'Hex bolt M6', quantity: 3 });
+    } finally {
+      session.dispose();
+    }
+  });
+  // Phase N (docs/sketch-studio-screw-library.md §10): a flush-head screw
+  // seats the same way: its rim (Z = 0) on hole 2 of the row, cone below.
+  it('seats a countersunk socket screw M6 in hole 2 of a 3-hole row', () => {
+    const model = fixture([plate, rowHole({ count: 3, pitch: 30, direction: [1, 0, 0] })]);
+    const { part, instance } = createHardware(hardwareDefaults('countersunk-socket', 'M6'));
+    model.parts.push(part);
+    model.instances.push({ ...instance, position: [5, -50, 40] });
+    model.connections.push({
+      id: 'seat',
+      type: 'concentric',
+      from: instance.id,
+      to: 'i',
+      fromFeatureId: part.features[0].id,
+      toFeatureId: 'row',
+      holeIndex: 1,
+      offset: 0,
+    });
+    const session = createKernelSession(model);
+    try {
+      const snapshot = session.snapshot();
+      const placed = snapshot.instances.find((x) => x.id === instance.id);
+      const origin = mapPlacement([0, 0, 0], placed.placement);
+      [50, 40, 10].forEach((v, i) => expect(origin[i]).toBeCloseTo(v, 4));
+      // The rim is flush with the plate top; the screw runs into the plate.
+      expect(placed.bounds[1][2]).toBeCloseTo(10, 3);
+      expect(placed.bounds[0][2]).toBeCloseTo(10 - 16, 3);
+      const row = buildCutList(model, snapshot).find((r) => r.partId === part.id);
+      expect(row).toMatchObject({ name: 'Countersunk socket screw M6', quantity: 1 });
+      expect(row.note).toContain('ISO 10642');
+    } finally {
+      session.dispose();
+    }
+  });
+  it('cuts a row along a round tube from a member-placed first hole (spec §3.5)', () => {
+    const created = createPart('member');
+    created.part.features[0].section = { type: 'pipe', diameter: 40, wall: 2 };
+    const hole = createCutFeature('hole', created.part);
+    hole.row = { count: 3, pitch: 50, direction: [0, 0, 1] };
+    created.part.features.push(hole);
+    const single = createCutFeature('hole', created.part);
+    const session = createKernelSession({ ...emptyModel(), parts: [created.part], instances: [created.instance] });
+    try {
+      const metrics = session.snapshot().parts[0].features[hole.id];
+      expect(metrics.row.centres.map((c) => c[2])).toEqual([350, 400, 450]);
+      for (const c of metrics.row.centres) expect(c.slice(0, 2)).toEqual(metrics.cut.position.slice(0, 2));
+      expect(metrics.removedVolume).toBeGreaterThan(0);
+    } finally {
+      session.dispose();
+    }
+    expect(single.row).toBeUndefined();
+  });
+  it('a count that evaluates to 1 is a single hole; a file without row keeps its metrics', () => {
+    const model = fixture([plate, rowHole({ count: '=n', pitch: 20, direction: [1, 0, 0] })]);
+    model.parameters = [{ id: 'n', name: 'n', value: 1 }];
+    const one = createKernelSession(model);
+    try {
+      const metrics = one.snapshot().parts[0].features.row;
+      expect(metrics.removedVolume).toBeCloseTo(Math.PI * 9 * 10, 0);
+      expect(metrics.row.centres).toEqual([[20, 40, 10]]);
+    } finally {
+      one.dispose();
+    }
+    const plain = createKernelSession(
+      fixture([
+        { id: 'base', type: 'box', width: 100, depth: 80, height: 5 },
+        { id: 'hole', type: 'hole', diameter: 10, depth: 5, position: [20, 20, 0] },
+      ]),
+    );
+    try {
+      const metrics = plain.snapshot().parts[0].features.hole;
+      expect(Object.keys(metrics)).toEqual(['cut', 'removedVolume', 'bounds', 'volume']);
+      expect(metrics.row).toBeUndefined();
+      expect(metrics.removedVolume).toBeCloseTo(Math.PI * 25 * 5, 3);
+    } finally {
+      plain.dispose();
+    }
   });
 });

@@ -201,10 +201,11 @@ it('picks a flat face as a sketch frame and maps screen points onto the plane', 
   expect(onSelect).toHaveBeenCalledWith('item');
 });
 
-function Harness({ onFinish, onCancel = () => {}, viewport }) {
+function Harness({ onFinish, onCancel = () => {}, viewport, markPoints }) {
   const frame = planeFrame('XY');
   const session = {
     key: 's',
+    markPoints,
     frame,
     name: 'Sketch 1',
     support: { type: 'plane', plane: 'XY', offset: 0 },
@@ -269,4 +270,21 @@ it('draws a typed rectangle from a snapped click and finishes with the entities'
   expect(screen.queryByLabelText('Sketch x')).toBeNull();
   fireEvent.keyDown(window, { key: 'Escape' });
   expect(onFinish).toHaveBeenCalledWith([{ id: 'e1', type: 'rect', a: [0, 0], b: [120, 65] }]);
+});
+
+it('snaps to measure mark points on the plane and shows them as diamonds', () => {
+  const viewport = createRef();
+  render(<Harness onFinish={vi.fn()} viewport={viewport} markPoints={[[300, 200]]} />);
+  expect(named('sketch-marks')).toHaveLength(1);
+  expect(named('sketch-marks')[0].material.color.getHexString()).toBe('8a3fc6');
+  const canvas = document.querySelector('canvas');
+  const frame = planeFrame('XY');
+  const p0 = viewport.current.planePoint(0, 0, frame);
+  const px = viewport.current.planePoint(1, 0, frame);
+  const py = viewport.current.planePoint(0, 1, frame);
+  const screenOf = ([u, v]) => [(u - p0[0]) / (px[0] - p0[0]), (v - p0[1]) / (py[1] - p0[1])];
+  fireEvent.click(screen.getByRole('button', { name: 'Line' }));
+  const [x, y] = screenOf([300, 200]);
+  pointer(canvas, 'pointermove', x + 2, y - 1);
+  expect(screen.getByRole('status').textContent).toMatch(/X 300 · Y 200 mm · mark/);
 });

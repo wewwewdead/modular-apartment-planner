@@ -1,7 +1,7 @@
 import * as cad from 'replicad';
 import { exactProjection } from './projection.js';
 import { mapPlacement } from './placement.js';
-import { resolveCutPlacement } from './cutPlacement.js';
+import { resolveCutPlacement, resolveRow } from './cutPlacement.js';
 import { hardwareGeometry } from './hardwareGeometry.js';
 import {
   normalizeModel,
@@ -277,10 +277,14 @@ export function createKernelSession(input) {
           case 'hole':
           case 'pocket': {
             if (!shape) throw new Error('A cut requires an earlier solid.');
-            let tool;
+            // One tool per hole: a single cut, or every centre of a hole row
+            // (Phase K, feature.row), cut one at a time so a hole that misses
+            // is named.
+            let tools;
+            let row = null;
             if (f.type === 'pocket' && f.shape !== 'rectangle') {
               if (!f.sketchId) throw new Error('Choose a closed sketch for this pocket, or use a rectangular pocket.');
-              tool = own(sketch(f.sketchId).extrude(p(f.depth)));
+              tools = [own(sketch(f.sketchId).extrude(p(f.depth)))];
             } else {
               const cut = resolveCutPlacement(
                 f,
@@ -288,12 +292,13 @@ export function createKernelSession(input) {
                 own(shape.boundingBox).bounds,
                 params,
               );
+              row = resolveRow(f, cut, params);
               // Start just outside the nominal surface, while blind depth still
               // ends at the requested distance from that surface.
               const clearance = f.placement || f.throughAll || f.shape === 'rectangle' ? 0.01 : 0;
-              const start = cut.position.map((x, i) => x - cut.direction[i] * clearance);
-              tool =
-                f.type === 'hole'
+              tools = (row ? row.centres : [cut.position]).map((centre) => {
+                const start = centre.map((x, i) => x - cut.direction[i] * clearance);
+                return f.type === 'hole'
                   ? own(cad.makeCylinder(p(f.diameter) / 2, cut.depth + clearance, start, cut.direction))
                   : own(
                       own(
@@ -305,16 +310,25 @@ export function createKernelSession(input) {
                         }).sketchOnPlane(own(new cad.Plane(start, cut.widthDirection, cut.direction))),
                       ).extrude(cut.depth + clearance),
                     );
-              featureMetrics[f.id] = { cut };
+              });
+              featureMetrics[f.id] = { cut, ...(row ? { row } : {}) };
             }
-            const before = cad.measureVolume(shape);
-            next = own(shape.cut(tool));
-            const removed = before - cad.measureVolume(next);
-            if (removed <= Math.max(1e-7, before * 1e-12))
-              throw new Error(
-                'Cut removes no material. Change the side, position or depth; the tool may miss the part or overlap an existing cut.',
-              );
-            featureMetrics[f.id] = { ...featureMetrics[f.id], removedVolume: removed };
+            let removedVolume = 0;
+            next = shape;
+            tools.forEach((tool, k) => {
+              const before = cad.measureVolume(next);
+              const after = own(next.cut(tool));
+              const removed = before - cad.measureVolume(after);
+              if (removed <= Math.max(1e-7, before * 1e-12))
+                throw new Error(
+                  row && row.count > 1
+                    ? `Hole ${k + 1} of ${row.count} removes no material. Shorten the spacing or move the row; the tool may miss the part or overlap an existing cut.`
+                    : 'Cut removes no material. Change the side, position or depth; the tool may miss the part or overlap an existing cut.',
+                );
+              removedVolume += removed;
+              next = after;
+            });
+            featureMetrics[f.id] = { ...featureMetrics[f.id], removedVolume };
             break;
           }
           case 'union':
@@ -447,7 +461,8 @@ export function createKernelSession(input) {
           operations.push(...attachment);
         } else if (c.type === 'concentric') {
           const targetInstance = model.instances.find((i) => i.id === c.to);
-          const getAxis = (inst, featureId) => {
+          // holeIndex (Phase K): which hole of a hole row the axis runs through.
+          const getAxis = (inst, featureId, holeIndex = 0) => {
             const definition = model.parts.find((p) => p.id === inst.partId);
             const feature = definition.features.find((f) => f.id === featureId && !f.suppressed);
             if (!feature || !['hardware', 'cylinder', 'hole', 'member'].includes(feature.type))
@@ -461,8 +476,11 @@ export function createKernelSession(input) {
                 'Axis references are ambiguous after transforms or patterns. Use an explicit instance placement.',
               );
             const resolvedCut = metrics.get(inst.partId)?.[feature.id]?.cut;
+            const rowCentre = metrics.get(inst.partId)?.[feature.id]?.row?.centres?.[holeIndex];
             const origin =
-              feature.type === 'member' ? v(feature.start) : resolvedCut?.position || v(feature.position || [0, 0, 0]);
+              feature.type === 'member'
+                ? v(feature.start)
+                : rowCentre || resolvedCut?.position || v(feature.position || [0, 0, 0]);
             const direction =
               feature.type === 'member'
                 ? v(feature.end).map((x, i) => x - origin[i])
@@ -480,7 +498,7 @@ export function createKernelSession(input) {
             };
           };
           const a = getAxis(instance, c.fromFeatureId),
-            b = getAxis(targetInstance, c.toFeatureId);
+            b = getAxis(targetInstance, c.toFeatureId, Number.isInteger(c.holeIndex) ? c.holeIndex : 0);
           const [ax, ay, az] = a.direction,
             [bx, by, bz] = b.direction;
           let axis = [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx];

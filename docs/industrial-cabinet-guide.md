@@ -116,9 +116,10 @@ in step 2), which is also how you add parts the preset does not have.
 
 ### 3. Left side (first part)
 
-4. **Sketch** tab → **Sketch on plane**. In the Properties panel set Sketch
-   plane **YZ**, Plane offset `0` → **Start sketch**. The camera squares up to
-   the plane.
+4. **Sketch** tab → **New sketch**. In the Properties panel, under **Exact
+   plane**, set Sketch plane **YZ**, Plane offset `0` → **Start sketch** (or
+   just click the **Right · YZ** origin plane in the view). The camera squares
+   up to the plane.
 5. Click **Rectangle**. Click the origin (it snaps), then type `500` → Tab →
    `1800` → Enter. Width runs along Y (depth), height along Z.
 6. **Finish sketch** → Operation **Extrude**, Result **New part**, Part name
@@ -130,18 +131,20 @@ in step 2), which is also how you add parts the preset does not have.
 
 ### 4. Bottom, top and fixed shelf
 
-7. **Sketch on plane** → **XY**, Plane offset `100` → **Start sketch** →
+7. **New sketch** → Exact plane **XY**, Plane offset `100` → **Start sketch**
+   (or type the offset and click the **Top** plane) →
    **Rectangle**: click the origin, type `764` → Tab → `500` → Enter →
    **Finish sketch** → Extrude, New part, Part name `Bottom`, Distance `18` →
    Apply.
 8. Select Bottom in the tree → Placement & rotation → Position X `18`, so it
    sits between the sides. (This is the exact-number way; step 11 shows the
    click way.)
-9. **Sketch on plane** → **XY**, offset `1782`, same 764 × 500 rectangle →
+9. **New sketch** → Exact plane **XY**, offset `1782` → **Start sketch** (or
+   type the offset and click the **Top** plane), same 764 × 500 rectangle →
    Extrude `18`, name `Top`. Position X `18`.
 10. **Fixed shelf:** the same on **XY**, offset `900`, name `Fixed shelf`,
     Position X `18`.
-11. **Stiffener:** **Sketch on face** → click the **underside of the fixed
+11. **Stiffener:** **New sketch** → click the **underside of the fixed
     shelf** (choose **bottom** in the view box first). **Rectangle** from the
     front-left corner: `764` → Tab → `60` → Enter. **Finish sketch** → Extrude
     `18`, name `Stiffener`. The new part lands exactly on the face you drew
@@ -166,11 +169,13 @@ in step 2), which is also how you add parts the preset does not have.
 
 ### 6. Plinth and back
 
-15. **Sketch on plane** → **XZ**, Plane offset `50` → **Rectangle** `764` ×
+15. **New sketch** → Exact plane **XZ**, Plane offset `50` → **Start sketch**
+    (or type the offset and click the **Front** plane) → **Rectangle** `764` ×
     `100` from the origin → Extrude `18`, name `Plinth`. Position X `18`,
     Z `0`. The board should occupy Y 50–68 — 50 mm back from the front; tick
     **Flip direction** if the preview grows the wrong way.
-16. **Sketch on plane** → **XZ**, Plane offset `500` (the rear face) →
+16. **New sketch** → Exact plane **XZ**, Plane offset `500` (the rear face) →
+    **Start sketch** (or type the offset and click the **Front** plane) →
     **Rectangle** starting at (0, 100): type `0` → Tab → `100` → Enter for the
     first corner, then `800` → Tab → `1700` → Enter. **Finish sketch** →
     Extrude `12`, name `Back`. Tick **Flip direction** if the preview puts it
@@ -202,7 +207,8 @@ in step 2), which is also how you add parts the preset does not have.
 
 ### 8. Adjustable shelves
 
-21. **Sketch on plane** → **XY**, offset `500` → **Rectangle** starting at
+21. **New sketch** → Exact plane **XY**, offset `500` → **Start sketch** (or
+    type the offset and click the **Top** plane) → **Rectangle** starting at
     (19, 10): `19` → Tab → `10` → Enter, then `762` → Tab → `480` → Enter →
     Extrude `18`, name `Adjustable shelf`. **Duplicate instance** → set the
     copy's Position X `19`, Z `1300`.

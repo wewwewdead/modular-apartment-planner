@@ -15,7 +15,7 @@ import { getSlabDisplayLabel } from '@/domain/slabLabels';
 import { getStairDisplayLabel } from '@/domain/stairLabels';
 import { getLandingDisplayLabel } from '@/domain/landingLabels';
 import { getAnnotationDisplayLabel } from '@/annotations/format';
-import ProjectLifecyclePanel from './ProjectLifecyclePanel';
+import ProjectLifecyclePanel, { LIFECYCLE_STAGES } from './ProjectLifecyclePanel';
 import SunStudyPanel from './SunStudyPanel';
 import DaylightPanel from './DaylightPanel';
 import SolarAccessPanel from './SolarAccessPanel';
@@ -158,6 +158,7 @@ function Sidebar() {
   const attachableRoofTrussSystems = useMemo(() => getAttachableRoofTrussSystems(project), [project]);
   const roofPhase = roofSystem?.phaseId ? orderedPhases.find((phase) => phase.id === roofSystem.phaseId) || null : null;
   const [collapsedSections, setCollapsedSections] = useState({
+    lifecycle: false,
     floors: false,
     roof: false,
     roofPlanes: false,
@@ -194,6 +195,9 @@ function Sidebar() {
     (command) => dispatch({ type: 'EXECUTE_BUILDING_COMMAND', command }),
     [dispatch],
   );
+
+  const lifecycleStageEntry = LIFECYCLE_STAGES.find((stage) => stage.id === lifecycleStage) || LIFECYCLE_STAGES[0];
+  const lifecycleStageSummary = `${lifecycleStageEntry.index} · ${lifecycleStageEntry.label}`;
 
   const selectObject = (id, type) => {
     editorDispatch({ type: 'SELECT_OBJECT', id, objectType: type });
@@ -437,13 +441,22 @@ function Sidebar() {
         onToggle={() => editorDispatch({ type: 'TOGGLE_SOLAR_ACCESS' })}
       />
 
-      <ProjectLifecyclePanel
-        project={project}
-        derived={derived}
-        activeStage={lifecycleStage}
-        onStageChange={setLifecycleStage}
-        onExecuteCommand={executeBuildingCommand}
-      />
+      {/* The lifecycle panel is the tallest block here, so it folds like the
+          rest; folded, the header still says which stage it is on. */}
+      <Section
+        title="Design Engineer"
+        count={collapsedSections.lifecycle ? lifecycleStageSummary : undefined}
+        collapsed={collapsedSections.lifecycle}
+        onToggle={() => toggleSection('lifecycle')}
+      >
+        <ProjectLifecyclePanel
+          project={project}
+          derived={derived}
+          activeStage={lifecycleStage}
+          onStageChange={setLifecycleStage}
+          onExecuteCommand={executeBuildingCommand}
+        />
+      </Section>
 
       <Section
         title="Floors"

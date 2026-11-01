@@ -43,21 +43,22 @@ export function sheetHoleFeatures(sheet, model, snapshot, view) {
         // A later transform/pattern changes the topology: do not invent a center.
         const later = part.features.slice(part.features.indexOf(feature) + 1);
         if (later.some((f) => !f.suppressed && ['transform', 'pattern', 'mirror'].includes(f.type))) return [];
-        const position = placement ? mapPlacement(cut.position, placement) : cut.position;
         const direction = placement ? mapPlacement(cut.direction, placement, true) : cut.direction;
         if (Math.hypot(...project(direction, view.basis)) > 1e-6) return [];
-        return [
-          {
-            id: feature.id,
-            partId: part.id,
-            instanceId: instance.id,
-            point: project(position, view.basis),
-            diameter: circular ? circular.diameter : numeric(feature.diameter, parameters),
-            holeSpec: feature.holeSpec,
-            throughAll: feature.throughAll === true,
-            depth: cut.depth,
-          },
-        ];
+        // A hole row (Phase K): one entry per centre, all with the feature's id,
+        // so a callout over it reads "4 × Ø…" and a chain across it gives the pitch.
+        const row = circular ? null : geometry?.features[feature.id]?.row;
+        const centres = row?.centres?.length ? row.centres : [cut.position];
+        return centres.map((centre) => ({
+          id: feature.id,
+          partId: part.id,
+          instanceId: instance.id,
+          point: project(placement ? mapPlacement(centre, placement) : centre, view.basis),
+          diameter: circular ? circular.diameter : numeric(feature.diameter, parameters),
+          holeSpec: feature.holeSpec,
+          throughAll: feature.throughAll === true,
+          depth: cut.depth,
+        }));
       });
   });
 }

@@ -38,6 +38,20 @@ describe('buildAnnotationScene settings overrides', () => {
     expect(scene.dimensions).toContain(scene.manualDimensions[0]);
   });
 
+  it('suppresses the overall chain and totals under an override without touching the floor settings', () => {
+    // Two walls, because the overall chain declines to dimension a single one.
+    const floor = wallFloor({ showOverallDimensions: true });
+    floor.walls.push({ id: 'wall_2', start: { x: 0, y: 0 }, end: { x: 0, y: 3000 }, thickness: 200, height: 3000 });
+
+    const scene = buildAnnotationScene(floor, { showOverallDimensions: false });
+
+    expect(
+      scene.dimensions.some((figure) => figure.sourceType === 'overall' || figure.sourceType === 'overall-chain'),
+    ).toBe(false);
+    // The override is a view concern: the floor's own settings are not written.
+    expect(floor.annotationSettings.showOverallDimensions).toBe(true);
+  });
+
   it('leaves the other derived classes governed by the floor settings when only wall dimensions are overridden', () => {
     // Two walls, because the overall chain declines to dimension a single one.
     const floor = wallFloor({ showOverallDimensions: true, showWallDimensions: true });

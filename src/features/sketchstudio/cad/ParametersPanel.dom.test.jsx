@@ -61,7 +61,8 @@ it('gives ValueField the same autocomplete and keeps the expression it stores', 
   expect(screen.getByRole('listbox')).toBeTruthy();
   fireEvent.keyDown(input, { key: 'Enter' }); // "t" complete → Enter commits (blur)
   fireEvent.blur(input);
-  expect(onChange).toHaveBeenCalledWith('=t');
+  // Phase L: the commit carries its meta ({ live: false, session }).
+  expect(onChange).toHaveBeenCalledWith('=t', expect.objectContaining({ live: false }));
 });
 
 function Panel({ initial, onCommit = () => {} }) {

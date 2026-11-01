@@ -320,6 +320,15 @@
   color: var(--color-text-secondary);
 }
 
+/* At the narrowest sidebar (240px) a long name or meta line wraps, breaking
+   inside a word if it must, rather than overflowing the row's button. */
+.floorName,
+.floorMeta {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .floorActions {
   display: flex;
   align-items: center;
@@ -411,6 +420,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* Phase view mode toggle */

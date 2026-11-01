@@ -158,7 +158,7 @@ export default function ProfileEditor({ sketch, parameters, onChange, solvedProf
           <>
             {(profile.type === 'rectangle' ? ['width', 'height'] : ['radius']).map((key) => (
               <ValueField
-                key={key + profile[key]}
+                key={key}
                 label={key + ' (mm)'}
                 value={profile[key]}
                 onChange={(value) => change({ [key]: value })}
@@ -167,7 +167,7 @@ export default function ProfileEditor({ sketch, parameters, onChange, solvedProf
           </>
         )}
         <ValueField
-          key={String(profile.offset || 0)}
+          key="offset"
           label="Profile offset (mm)"
           value={profile.offset || 0}
           onChange={(offset) => change({ offset })}

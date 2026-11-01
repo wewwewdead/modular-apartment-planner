@@ -38,7 +38,8 @@ export function cadSteps(page) {
   };
   const sketchOnPlane = async (plane, offset = 0) => {
     await page.getByRole('button', { name: 'Sketch', exact: true }).click();
-    await page.getByRole('button', { name: 'Sketch on plane', exact: true }).click();
+    // New sketch, then the exact plane in the Properties panel (Phase I).
+    await page.locator('.cad-ribbon').getByRole('button', { name: 'New sketch', exact: true }).click();
     await properties.getByLabel('Sketch plane', { exact: true }).selectOption(plane);
     await properties.getByLabel('Plane offset (mm)', { exact: true }).fill(String(offset));
     await properties.getByRole('button', { name: 'Start sketch', exact: true }).click();
@@ -101,7 +102,7 @@ export function cadSteps(page) {
   const holeThroughFace = async ({ viewName, u, v, radius }) => {
     await view(viewName);
     await page.getByRole('button', { name: 'Sketch', exact: true }).click();
-    await page.getByRole('button', { name: 'Sketch on face', exact: true }).click();
+    await page.locator('.cad-ribbon').getByRole('button', { name: 'New sketch', exact: true }).click();
     const c = await canvasCenter();
     await page.mouse.click(c.x, c.y);
     await toolbar.waitFor();

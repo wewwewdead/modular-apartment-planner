@@ -20,6 +20,8 @@ export function emptyModel() {
     parts: [],
     instances: [],
     connections: [],
+    // Measure marks (see marks.js): display and snapping only; the kernel ignores them.
+    marks: [],
     sheets: [
       {
         id: 'assembly-sheet',
@@ -37,6 +39,16 @@ export function emptyModel() {
   };
 }
 
+// What a measure mark reads: the straight distance or one axis.
+export const MARK_ALONG = Object.freeze(['aligned', 'X', 'Y', 'Z']);
+const finite3 = (value) => Array.isArray(value) && value.length === 3 && value.every(Number.isFinite);
+// A mark end: part-local coordinates on an instance, or world ones (instanceId null).
+const markAnchor = (anchor) =>
+  Boolean(anchor) &&
+  typeof anchor === 'object' &&
+  (anchor.instanceId === null || typeof anchor.instanceId === 'string') &&
+  finite3(anchor.local);
+
 // CAD lives beside legacy entities. No old profile is implicitly made into a solid.
 export function normalizeModel(value) {
   if (value == null) return emptyModel();
@@ -44,7 +56,7 @@ export function normalizeModel(value) {
     throw new Error('Unsupported solid-model schema.');
   const defaults = emptyModel();
   const result = { ...defaults, ...value, fabrication: { ...DEFAULT_FABRICATION, ...value.fabrication } };
-  for (const key of ['parameters', 'sketches', 'parts', 'instances', 'connections', 'sheets']) {
+  for (const key of ['parameters', 'sketches', 'parts', 'instances', 'connections', 'sheets', 'marks']) {
     if (!Array.isArray(result[key])) throw new Error(`Model ${key} must be a list.`);
     const ids = new Set();
     for (const item of result[key]) {
@@ -75,6 +87,11 @@ export function normalizeModel(value) {
     )
       throw new Error(`Invalid assembly instance: ${instance.id}`);
   }
+  // Marks on a part that no longer exists are not an error here: they are
+  // simply not drawn.
+  for (const mark of result.marks)
+    if (!markAnchor(mark.from) || !markAnchor(mark.to) || !MARK_ALONG.includes(mark.along) || !finite3(mark.offset))
+      throw new Error(`Invalid mark: ${mark.id}`);
   if (!result.sheets.length) throw new Error('Keep at least one drawing sheet.');
   for (const sheet of result.sheets)
     if (!Array.isArray(sheet.views) || !sheet.views.length || (sheet.annotations && !Array.isArray(sheet.annotations)))
@@ -97,6 +114,7 @@ export function removeInstance(model, id) {
     ...model,
     instances: model.instances.filter((instance) => instance.id !== id),
     connections: model.connections.filter((connection) => connection.from !== id && connection.to !== id),
+    marks: (model.marks || []).filter((mark) => mark.from?.instanceId !== id && mark.to?.instanceId !== id),
     sheets: model.sheets.map((sheet) => ({
       ...sheet,
       ...(sheet.instanceIds ? { instanceIds: sheet.instanceIds.filter((instanceId) => instanceId !== id) } : {}),
@@ -105,6 +123,59 @@ export function removeInstance(model, id) {
         : {}),
     })),
   };
+}
+
+// Removes a part definition with every instance of it (Phase M.1,
+// docs/sketch-studio-remove-part.md §3.1): each instance goes through
+// removeInstance (connections, marks, sheet assembly lists, instance-anchored
+// annotations), then the part, its part detail sheets and the annotations
+// that name it. Refused while another part uses it as a Boolean tool.
+export function removePart(model, partId) {
+  const part = model.parts.find((p) => p.id === partId);
+  if (!part) throw new Error(`Unknown part: ${partId}`);
+  for (const other of model.parts) {
+    if (other.id === partId) continue;
+    const feature = (other.features || []).find((f) => f.toolPartId === partId);
+    if (feature)
+      throw new Error(
+        `"${part.name}" is the Boolean tool of "${other.name}" (${feature.type}); remove that feature first.`,
+      );
+  }
+  const removed = model.instances
+    .filter((instance) => instance.partId === partId)
+    .reduce((next, instance) => removeInstance(next, instance.id), model);
+  return {
+    ...removed,
+    parts: removed.parts.filter((p) => p.id !== partId),
+    sheets: removed.sheets
+      .filter((sheet) => sheet.partId !== partId)
+      .map((sheet) =>
+        sheet.annotations
+          ? { ...sheet, annotations: sheet.annotations.filter((annotation) => annotation.partId !== partId) }
+          : sheet,
+      ),
+  };
+}
+
+// Saves made before Phase M.1 can hold a part whose only feature was removed
+// or suppressed (the panel allowed both). The kernel refuses to build such a
+// part ("has no active solid features"), which fails the whole model, and with
+// no solid there is nothing to select, so the file could never be repaired in
+// the app. On load those parts go through removePart (instances, marks and
+// sheet references with them). Their sketches stay: the profile can be
+// extruded again. A part that is still another part's Boolean tool is kept;
+// removing it would only move the error. Returns the same object when there
+// is nothing to remove.
+export function removeEmptyParts(model) {
+  return model.parts
+    .filter((part) => !(part.features || []).some((f) => !f.suppressed))
+    .reduce((next, part) => {
+      try {
+        return removePart(next, part.id);
+      } catch {
+        return next;
+      }
+    }, model);
 }
 
 export function resolveParameters(parameters) {

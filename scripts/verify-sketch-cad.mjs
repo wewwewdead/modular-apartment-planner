@@ -37,7 +37,7 @@ try {
   await page.reload();
   await page.getByText('Model current', { exact: true }).waitFor({ timeout: 60000 });
   await page.getByRole('button', { name: 'Sketch', exact: true }).click();
-  await page.getByRole('button', { name: 'New sketch', exact: true }).click();
+  await page.getByRole('button', { name: 'Sketch from fields', exact: true }).click();
   await page.getByLabel('Profile', { exact: true }).selectOption('circle');
   await page.getByRole('button', { name: 'Create sketch', exact: true }).click();
   await page.getByRole('button', { name: 'Enable PlaneGCS constraints', exact: true }).click();

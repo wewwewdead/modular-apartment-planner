@@ -71,7 +71,7 @@ try {
   await page.reload();
   await page.getByRole('button', { name: '3D Model & workshop', exact: true }).click();
   await current();
-  await page.getByRole('button', { name: 'Create tube member', exact: true }).click();
+  await page.locator('.cad-start').getByRole('button', { name: 'Tube / member', exact: true }).click();
   await current();
   await page.getByRole('button', { name: 'Rotate part', exact: true }).click();
   await view('top');

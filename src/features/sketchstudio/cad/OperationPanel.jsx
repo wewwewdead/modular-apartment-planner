@@ -1,6 +1,27 @@
-import { FeatureForm, ValueField, VectorFields, JsonEditor } from './CadEditors.jsx';
+import {
+  CutLocationFields,
+  CutSizeFields,
+  FeatureForm,
+  RowFields,
+  ValueField,
+  VectorFields,
+  JsonEditor,
+} from './CadEditors.jsx';
 import { clone, uid } from './model.js';
 import { OPERATION_HELP, PROFILE_OPERATIONS } from './operations.js';
+import { bendRadiusOf, placedSketch, stopInference } from './placementTool.js';
+import { CUT_TOOLS, cutFeatureChange } from './placementCuts.js';
+import { setHardwareOffset } from './placementHardware.js';
+import { HardwareFields } from './HardwarePanel.jsx';
+
+const sketchPocket = (feature) => feature.type === 'pocket' && feature.shape !== 'rectangle';
+// A size typed into a draft-only placement field: a positive number.
+const sizeValue = (value, label, allowZero = false) => {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0 || (!allowZero && number === 0))
+    throw new Error(`${label} must be a ${allowZero ? 'non-negative' : 'positive'} number of millimetres.`);
+  return number;
+};
 
 export default function OperationPanel({
   draft,
@@ -14,9 +35,42 @@ export default function OperationPanel({
   onApply,
   onCancel,
   onFit,
+  // Direct placement (placementTool.js): the placement line and its actions.
+  placementText = '',
+  onReplace,
+  onFinishPlacement,
+  onSweepOptions,
+  onChangeAxis,
+  // Hole / Pocket (Phase J): commit and reopen the tool with the same sizes.
+  onApplyAgain,
+  // A hole row (Phase K): the engraved row direction ("+X of face · 0°").
+  rowDirection = '',
+  // Hardware in chosen holes (Phase M): the Chosen holes rows ({ key, label,
+  // removeLabel }) and their Remove.
+  chosenHoles = [],
+  onRemoveHole = () => {},
+  onError = () => {},
 }) {
-  const f = draft.feature;
-  const updateFeature = (feature) => onChange({ ...draft, feature });
+  const p = draft.placement;
+  const f = draft.feature || { type: p?.tool || 'extrude', sections: [] };
+  // Choosing an Operation by hand stops the drag-direction inference.
+  const updateFeature = (feature) => {
+    const next = { ...draft, feature };
+    onChange(feature.operation !== draft.feature?.operation ? stopInference(next) : next);
+  };
+  // A live value (Phase L) that fails validation waits silently for Enter / blur.
+  const guarded = (action) => (value, meta) => {
+    try {
+      action(value);
+    } catch (e) {
+      if (!meta?.live) onError(e.message);
+    }
+  };
+  const placed = placedSketch(draft);
+  const inferring = Boolean(p?.inferOperation && draft.feature && !draft.newPart);
+  const hostName = draft.newPart
+    ? draft.newPart.name
+    : model.parts.find((part) => part.id === draft.partId)?.name || 'this part';
   const changeSketch = (s) => {
     if (!s.profile || !['rectangle', 'circle', 'polygon', 'path'].includes(s.profile.type))
       throw new Error('Choose a valid profile type.');
@@ -43,16 +97,52 @@ export default function OperationPanel({
     onChange({ ...draft, sketches: [...draft.sketches, s], feature: referenceSketch(s.id, slot) });
   };
   const ids = [...new Set([f.sketchId, f.profileId, ...(f.sections || [])].filter(Boolean))];
+  // Hole / Pocket: sizes first, the location fieldset under Exact placement,
+  // both read against the preview (the resolved cut, the solid before it).
+  const cutTool = CUT_TOOLS.includes(f.type);
+  const cutPart = cutTool ? preview.snapshot?.parts?.find((part) => part.id === draft.partId) : null;
+  const cutPrevious = cutPart
+    ? (model.parts.find((part) => part.id === draft.partId)?.features || [])
+        .slice(
+          0,
+          (model.parts.find((part) => part.id === draft.partId)?.features || []).findIndex((x) => x.id === f.id),
+        )
+        .filter((x) => !x.suppressed)
+        .at(-1)
+    : null;
+  const changeCut = (feature) => onChange(cutFeatureChange(draft, feature));
+  // A hole row (Phase K): one feature with a row record, or the Hole tool
+  // opened as a row (placement.row) before its feature has one.
+  const holeRow = f.type === 'hole' && Boolean(f.row || p?.row);
+  const rowSeed = Boolean(p?.row?.seed && p.stage === 'place');
+  const changeRow = (feature) => {
+    const next = cutFeatureChange(draft, feature);
+    onChange(
+      next.placement?.row && feature.row
+        ? {
+            ...next,
+            placement: {
+              ...next.placement,
+              row: { ...next.placement.row, count: feature.row.count, pitch: feature.row.pitch },
+            },
+          }
+        : next,
+    );
+  };
+  const kind = holeRow ? 'hole row' : f.type;
+  const hardware = p?.tool === 'hardware';
+  const holeCount = p?.holes?.length || 0;
+  const seated = hardware && p.stage === 'shape' && draft.connections?.length > 0;
   return (
     <div className="cad-operation-panel">
       <h3>
-        {draft.editing ? 'Edit' : 'Configure'} {f.type}
+        {draft.editing ? 'Edit' : p ? 'Place' : 'Configure'} {kind}
       </h3>
-      <p className="cad-help">{OPERATION_HELP[f.type]}</p>
+      <p className="cad-help">{OPERATION_HELP[holeRow ? 'holeRow' : f.type]}</p>
       <p className="cad-help">Changes are a preview until you Apply. Cancel keeps the saved model unchanged.</p>
       <div className="cad-operation-actions">
         <button className="cad-primary" disabled={stale || Boolean(problem) || !preview.ready} onClick={onApply}>
-          Apply {f.type}
+          Apply {kind}
         </button>
         <button onClick={onCancel}>Cancel operation</button>
       </div>
@@ -76,15 +166,210 @@ export default function OperationPanel({
         </div>
       )}
       {!problem && preview.error && <button onClick={preview.retry}>Retry preview</button>}
-      <FeatureForm
-        feature={f}
-        model={model}
-        targetPartId={draft.partId}
-        referenceOptions={draft.references}
-        onChange={updateFeature}
-      />
-      {PROFILE_OPERATIONS.includes(f.type) && (
+      {p && (
+        <section className="cad-placement-line" aria-label="Placement">
+          {placementText && <p>{placementText}</p>}
+          <div className="cad-inline">
+            {p.stage === 'place' && p.tool === 'sweep' && (
+              <button className="cad-primary" disabled={p.points.length < 2} onClick={onFinishPlacement}>
+                Finish path
+              </button>
+            )}
+            {p.stage === 'place' && p.tool === 'loft' && (
+              <button className="cad-primary" disabled={p.sections.length < 2} onClick={onFinishPlacement}>
+                Finish sections
+              </button>
+            )}
+            {p.stage === 'place' && hardware && (
+              <button className="cad-primary" disabled={!holeCount} onClick={onFinishPlacement}>
+                Seat in {holeCount} {holeCount === 1 ? 'hole' : 'holes'}
+              </button>
+            )}
+            {p.stage !== 'place' &&
+              (p.mode === 'placed' || p.mode === 'plane' || p.memberEnd || (p.mode === 'cut' && !sketchPocket(f))) && (
+                <button onClick={onReplace}>{p.tool === 'sweep' ? 'Redraw path' : 'Re-place'}</button>
+              )}
+            {cutTool && !draft.editing && p.stage === 'shape' && onApplyAgain && (
+              <button
+                className="cad-primary"
+                disabled={stale || Boolean(problem) || !preview.ready}
+                onClick={onApplyAgain}
+              >
+                Apply and place another
+              </button>
+            )}
+            {p.tool === 'revolve' && p.stage === 'shape' && <button onClick={onChangeAxis}>Change axis</button>}
+            {f.type === 'trim' && p.stage === 'shape' && (
+              <button onClick={() => updateFeature({ ...f, side: f.side === 'positive' ? 'negative' : 'positive' })}>
+                Keep other side
+              </button>
+            )}
+          </div>
+          {draft.feature && !draft.newPart && PROFILE_OPERATIONS.includes(f.type) && (
+            <p className="cad-help">Shapes the {hostName} definition: every instance of it updates.</p>
+          )}
+        </section>
+      )}
+      {hardware && chosenHoles.length > 0 && (
+        <section className="cad-chosen-holes">
+          <h4>Chosen holes</h4>
+          <ul aria-label="Chosen holes">
+            {chosenHoles.map((hole) => (
+              <li key={hole.key}>
+                <span>{hole.label}</span>
+                <button aria-label={hole.removeLabel} onClick={() => onRemoveHole(hole.key)}>
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {seated && draft.newPart && (
+        <ValueField
+          key={`${draft.newPart.id}-offset`}
+          label="Axial offset (mm)"
+          value={draft.connections[0].offset ?? 0}
+          onChange={guarded((offset) => onChange(setHardwareOffset(draft, offset)))}
+        />
+      )}
+      {hardware && !draft.feature && p.hardware && (
+        // The sizes while choosing holes: the rings follow them.
+        <HardwareFields
+          feature={p.hardware}
+          onChange={(next) => onChange({ ...draft, placement: { ...p, hardware: next } })}
+        />
+      )}
+      {draft.newPart && draft.feature && (
+        <ValueField
+          key="part-name"
+          label="Part name"
+          value={draft.newPart.name}
+          asText
+          onChange={(name) =>
+            onChange({ ...draft, newPart: { ...draft.newPart, name: String(name).trim() || draft.newPart.name } })
+          }
+        />
+      )}
+      {placed && (
+        <fieldset className="cad-primary-values">
+          <legend>Profile size</legend>
+          {(placed.profile.type === 'circle' ? ['radius'] : ['width', 'height']).map((key) => (
+            <ValueField
+              key={key}
+              label={`${key[0].toUpperCase()}${key.slice(1)} (mm)`}
+              value={placed.profile[key]}
+              onChange={(value) => {
+                const profile = { ...placed.profile, [key]: value };
+                // A placed rectangle stays centred on the point it was placed at.
+                if (placed.profile.type === 'rectangle' && f.type === 'extrude') {
+                  const w = Number(profile.width),
+                    h = Number(profile.height);
+                  const [ox, oy] = placed.profile.origin || [0, 0];
+                  const centre = [ox + Number(placed.profile.width) / 2, oy + Number(placed.profile.height) / 2];
+                  if ([w, h, ...centre].every(Number.isFinite)) profile.origin = [centre[0] - w / 2, centre[1] - h / 2];
+                }
+                changeSketch({ ...placed, profile });
+              }}
+            />
+          ))}
+        </fieldset>
+      )}
+      {p?.tool === 'sweep' && (
+        <fieldset className="cad-primary-values">
+          <legend>Cross section</legend>
+          <label className="cad-field">
+            Section
+            <select
+              aria-label="Section shape"
+              value={p.section.type}
+              onChange={(e) => onSweepOptions({ section: { type: e.target.value } })}
+            >
+              <option value="circle">Circle</option>
+              <option value="rectangle">Rectangle</option>
+            </select>
+          </label>
+          {(p.section.type === 'circle' ? ['radius'] : ['width', 'height']).map((key) => (
+            <ValueField
+              key={key}
+              label={`${key[0].toUpperCase()}${key.slice(1)} (mm)`}
+              value={p.section[key]}
+              onChange={guarded((value) => onSweepOptions({ section: { [key]: sizeValue(value, key) } }))}
+            />
+          ))}
+          <ValueField
+            key="wall"
+            label="Wall thickness (mm)"
+            value={p.section.wall || 0}
+            onChange={guarded((value) =>
+              onSweepOptions({ section: { wall: sizeValue(value, 'Wall thickness', true) } }),
+            )}
+          />
+          <ValueField
+            key="bend"
+            label="Bend radius (mm)"
+            value={bendRadiusOf(p)}
+            onChange={guarded((value) =>
+              onSweepOptions({ bendRadius: value === '' ? null : sizeValue(value, 'Bend radius', true) }),
+            )}
+          />
+          <p className="cad-help">
+            Wall thickness 0 is solid. Bend radius 0 keeps sharp corners; empty is 2 × the section radius.
+          </p>
+        </fieldset>
+      )}
+      {draft.feature && cutTool && (
         <>
+          {holeRow && (
+            <fieldset className="cad-primary-values">
+              <legend>Row</legend>
+              <RowFields
+                feature={f}
+                model={model}
+                onChange={changeRow}
+                minCount={2}
+                seed={rowSeed ? { count: p.row.count } : null}
+                onSeedCount={(count) => onChange({ ...draft, placement: { ...p, row: { ...p.row, count } } })}
+                directionText={rowDirection}
+              />
+            </fieldset>
+          )}
+          <fieldset className="cad-primary-values">
+            <legend>{f.type === 'hole' ? 'Hole' : 'Pocket'}</legend>
+            <CutSizeFields feature={f} model={model} onChange={changeCut} />
+          </fieldset>
+          <details className="cad-exact-placement">
+            <summary>Exact placement (mm)</summary>
+            <CutLocationFields
+              feature={f}
+              model={model}
+              onChange={changeCut}
+              metrics={cutPart?.features?.[f.id] || null}
+              bounds={cutPart?.features?.[cutPrevious?.id]?.bounds || null}
+            />
+            {f.type === 'hole' && f.row && (
+              <VectorFields
+                label="Row direction (part mm)"
+                value={f.row.direction || [1, 0, 0]}
+                onChange={(direction) => changeRow({ ...f, row: { ...f.row, direction } })}
+              />
+            )}
+          </details>
+        </>
+      )}
+      {draft.feature && !cutTool && (
+        <FeatureForm
+          feature={f}
+          model={model}
+          targetPartId={draft.partId}
+          referenceOptions={draft.references}
+          onChange={updateFeature}
+          operationLabel={inferring ? 'Operation (auto)' : 'Operation'}
+        />
+      )}
+      {draft.feature && PROFILE_OPERATIONS.includes(f.type) && (
+        <details className="cad-exact-placement" open={!p}>
+          <summary>Exact placement (mm)</summary>
           <h4>Profiles for this operation</h4>
           <div className="cad-inline">
             {f.type === 'sweep' && <button onClick={() => addProfile('path')}>New straight path</button>}
@@ -178,7 +463,7 @@ export default function OperationPanel({
                       .filter((key) => key in profile)
                       .map((key) => (
                         <ValueField
-                          key={`${key}-${profile[key]}`}
+                          key={key}
                           label={`${s.name} ${key} (mm)`}
                           value={profile[key]}
                           onChange={(value) => updateProfile(key, value)}
@@ -191,7 +476,7 @@ export default function OperationPanel({
                           <legend>Profile {key} (2D mm)</legend>
                           {profile[key].map((value, index) => (
                             <ValueField
-                              key={`${index}-${value}`}
+                              key={index}
                               label={`${key} ${['X', 'Y'][index]}`}
                               value={value}
                               onChange={(next) =>
@@ -211,7 +496,7 @@ export default function OperationPanel({
                           <legend>Path end (2D mm)</legend>
                           {profile.segments[0].end.map((value, index) => (
                             <ValueField
-                              key={`${index}-${value}`}
+                              key={index}
                               label={`End ${['X', 'Y'][index]}`}
                               value={value}
                               onChange={(next) =>
@@ -240,7 +525,7 @@ export default function OperationPanel({
               </details>
             );
           })}
-        </>
+        </details>
       )}
     </div>
   );

@@ -47,7 +47,8 @@ const typeHud = async (first, second) => {
 };
 const sketchOnPlane = async (plane, offset = 0) => {
   await page.getByRole('button', { name: 'Sketch', exact: true }).click();
-  await page.getByRole('button', { name: 'Sketch on plane', exact: true }).click();
+  // New sketch, then the exact plane in the Properties panel (Phase I).
+  await page.locator('.cad-ribbon').getByRole('button', { name: 'New sketch', exact: true }).click();
   await properties.getByLabel('Sketch plane', { exact: true }).selectOption(plane);
   await properties.getByLabel('Plane offset (mm)', { exact: true }).fill(String(offset));
   await properties.getByRole('button', { name: 'Start sketch', exact: true }).click();
@@ -123,7 +124,7 @@ try {
   const top = model.instances[0];
   await page.getByLabel('Standard view').selectOption('bottom');
   await page.getByRole('button', { name: 'Sketch', exact: true }).click();
-  await page.getByRole('button', { name: 'Sketch on face', exact: true }).click();
+  await page.locator('.cad-ribbon').getByRole('button', { name: 'New sketch', exact: true }).click();
   const pick = await canvasCenter();
   await page.mouse.click(pick.x, pick.y);
   await toolbar.waitFor();
@@ -233,7 +234,7 @@ try {
   //    a 50 × 50 block as a new part; its instance must sit on that face.
   await page.getByLabel('Standard view').selectOption('top');
   await page.getByRole('button', { name: 'Sketch', exact: true }).click();
-  await page.getByRole('button', { name: 'Sketch on face', exact: true }).click();
+  await page.locator('.cad-ribbon').getByRole('button', { name: 'New sketch', exact: true }).click();
   const topFace = await canvasCenter();
   await page.mouse.click(topFace.x, topFace.y);
   await toolbar.waitFor();

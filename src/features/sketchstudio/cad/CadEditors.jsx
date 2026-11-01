@@ -1,28 +1,166 @@
-import { useState } from 'react';
-import { uid } from './model.js';
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { numeric, resolveParameters, uid, vector } from './model.js';
 import { enableConstraints, addConstraint, CONSTRAINT_TYPES } from './constraints.js';
 import { HardwareFields } from './HardwarePanel.jsx';
 import { METRIC_THREADS, holePreset } from './hardware.js';
-import { CUT_SIDES } from './cutPlacement.js';
-import ExpressionInput from './ExpressionInput.jsx';
+import { CUT_SIDES, cutWidthDirection } from './cutPlacement.js';
+import { defaultPitch, flipRow, setRowLength } from './placementRows.js';
+import ExpressionInput, { ParameterContext } from './ExpressionInput.jsx';
+import { FieldSessionContext, LIVE_DEBOUNCE_MS, liveFieldValue, stepFieldValue } from './liveField.js';
 
-export function ValueField({ label, value, onChange, asText = false }) {
-  const [draft, setDraft] = useState(String(value ?? ''));
+// A Properties field (Phase L, docs/sketch-studio-live-fields.md §3). The
+// value applies as you type, LIVE_DEBOUNCE_MS after the last keystroke,
+// whenever the text is committable (liveFieldValue): onChange(next, { live:
+// true, session }). Enter / Tab / click-away commit the text as before
+// ({ live: false, session }), so text that cannot be parsed still reaches the
+// consumer and its error shows. Esc puts back the value the field had when
+// the edit began. Up / Down step a plain number by 1 (Shift: 10). While
+// editing, the draft is never overwritten from props, so a live commit
+// echoing back cannot move the caret or eat a trailing "."; the field keeps
+// its identity (call sites key on the object, never on the value).
+export function ValueField({ label, value, onChange, asText = false, live = true }) {
+  const { values } = useContext(ParameterContext);
+  const channel = useContext(FieldSessionContext);
+  // The text being edited; null when not editing (the field shows the value).
+  const [draft, setDraft] = useState(null);
+  // Text that could not be committed, kept on screen after blur until the
+  // value changes (its error refers to it): { text, value }.
+  const [held, setHeld] = useState(null);
+  // The edit session: { session, start, last, committed, dirty, reverting }.
+  const edit = useRef(null);
+  const timer = useRef(null);
+  const latest = useRef(onChange);
+  useLayoutEffect(() => {
+    latest.current = onChange;
+  });
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const shown = draft ?? (held && Object.is(held.value, value) ? held.text : String(value ?? ''));
+  const stopTimer = () => {
+    clearTimeout(timer.current);
+    timer.current = null;
+  };
+  const begin = () => {
+    if (edit.current) return edit.current;
+    edit.current = {
+      session: uid('field'),
+      start: value,
+      last: value,
+      committed: false,
+      dirty: false,
+      reverting: false,
+    };
+    setDraft(shown);
+    setHeld(null);
+    return edit.current;
+  };
+  const end = () => {
+    stopTimer();
+    edit.current = null;
+    setDraft(null);
+  };
+  // onChange with the session published on the workspace channel for the
+  // duration of the (synchronous) call.
+  const send = (next, meta) => {
+    if (channel) channel.current = meta;
+    try {
+      latest.current(next, meta);
+    } finally {
+      if (channel) channel.current = null;
+    }
+  };
+  const sendLive = (next) => {
+    const session = edit.current;
+    if (!session) return;
+    session.last = next;
+    session.committed = true;
+    try {
+      send(next, { live: true, session: session.session });
+    } catch {
+      // A live value the consumer rejects waits for Enter / blur (spec §2.2).
+    }
+  };
+  const schedule = (text) => {
+    stopTimer();
+    const session = edit.current;
+    if (!live || !session) return;
+    const next = liveFieldValue(text, { asText, values });
+    if (next === undefined || String(next) === String(session.last ?? '')) return;
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      sendLive(next);
+    }, LIVE_DEBOUNCE_MS);
+  };
   return (
     <label className="cad-field">
       <span>{label}</span>
       <ExpressionInput
         // An explicit name: the open suggestion list sits inside the label.
         aria-label={typeof label === 'string' ? label : undefined}
-        value={draft}
-        onChange={setDraft}
+        value={shown}
+        onFocus={begin}
+        onChange={(text) => {
+          begin().dirty = true;
+          setDraft(text);
+          setHeld(null);
+          schedule(text);
+        }}
         onBlur={() => {
-          const text = draft.trim();
-          if (text !== String(value ?? ''))
-            onChange(!asText && text !== '' && Number.isFinite(Number(text)) ? Number(text) : text);
+          const session = edit.current;
+          if (!session) return;
+          const raw = draft ?? shown;
+          end();
+          if (session.reverting || !session.dirty) return;
+          const text = raw.trim();
+          if (text === String(value ?? '')) return;
+          if (liveFieldValue(text, { asText, values }) === undefined) setHeld({ text: raw, value });
+          send(!asText && text !== '' && Number.isFinite(Number(text)) ? Number(text) : text, {
+            live: false,
+            session: session.session,
+          });
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur();
+          else if ((e.ctrlKey || e.metaKey) && ['z', 'y'].includes(e.key.toLowerCase())) {
+            // The studio's Undo / Redo runs even in a field: drop the typing
+            // (the field then shows the restored value) so a later keystroke
+            // starts a new session instead of folding into an undone entry.
+            if (edit.current) end();
+          } else if (e.key === 'Escape') {
+            const session = edit.current;
+            // Nothing typed: Esc does its usual job (closes the tool, and so on).
+            if (!session || (!session.dirty && !session.committed)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            stopTimer();
+            session.reverting = true;
+            if (session.committed) {
+              try {
+                send(session.start, { live: false, session: session.session, revert: true });
+              } catch {
+                // The value from before the edit; nothing to report.
+              }
+            }
+            setHeld(null);
+            e.currentTarget.blur();
+            // Not focused (no blur event): close the session here.
+            if (edit.current === session) end();
+          } else if (
+            (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
+            !asText &&
+            !e.altKey &&
+            !e.ctrlKey &&
+            !e.metaKey
+          ) {
+            // ExpressionInput keeps the arrows while its suggestion list is open.
+            const next = stepFieldValue(shown, e.key === 'ArrowUp' ? 1 : -1, e.shiftKey ? 10 : 1);
+            if (next == null) return;
+            e.preventDefault();
+            begin().dirty = true;
+            stopTimer();
+            setDraft(String(next));
+            setHeld(null);
+            if (live) sendLive(next);
+          }
         }}
       />
     </label>
@@ -61,10 +199,15 @@ export function VectorFields({ label, value, onChange }) {
       <legend>{label}</legend>
       {value.map((component, index) => (
         <ValueField
-          key={`${index}-${component}`}
+          key={index}
           label={['X', 'Y', 'Z'][index]}
           value={component}
-          onChange={(next) => onChange(value.map((v, i) => (i === index ? next : v)))}
+          onChange={(next, meta) =>
+            onChange(
+              value.map((v, i) => (i === index ? next : v)),
+              meta,
+            )
+          }
         />
       ))}
     </fieldset>
@@ -81,6 +224,7 @@ export function FeatureForm({
   cutBounds,
   referenceOptions = [],
   targetPartId,
+  operationLabel = 'Operation',
 }) {
   if (feature.type === 'hardware') return <HardwareFields feature={feature} onChange={onChange} />;
   if (['hole', 'pocket'].includes(feature.type))
@@ -124,7 +268,7 @@ export function FeatureForm({
         if (key === 'operation')
           return (
             <label className="cad-field" key={key}>
-              Operation
+              {operationLabel}
               <select aria-label="Operation" value={value} onChange={(e) => update(key, e.target.value)}>
                 {['add', 'cut', 'intersect', 'replace'].map((mode) => (
                   <option key={mode}>{mode}</option>
@@ -205,13 +349,13 @@ export function FeatureForm({
                   </select>
                 </label>
                 <ValueField
-                  key={`offset-${value.offset}`}
+                  key="offset"
                   label="Plane offset (mm)"
                   value={value.offset}
                   onChange={(offset) => update(key, { ...value, offset })}
                 />
                 <ValueField
-                  key={`count-${value.expectedCount}`}
+                  key="expected-count"
                   label={`Expected ${kind}`}
                   value={value.expectedCount}
                   onChange={(expectedCount) => update(key, { ...value, expectedCount })}
@@ -328,7 +472,7 @@ export function FeatureForm({
                 .filter(([field]) => field !== 'type')
                 .map(([field, amount]) => (
                   <ValueField
-                    key={`${field}-${amount}`}
+                    key={field}
                     label={field === 'diameter' ? 'Outside diameter' : field === 'wall' ? 'Wall thickness' : field}
                     value={amount}
                     onChange={(next) => update(key, { ...value, [field]: next })}
@@ -389,34 +533,34 @@ export function FeatureForm({
               />
             </details>
           );
-        return (
-          <ValueField
-            key={`${key}-${value}`}
-            label={labels[key] || key}
-            value={value}
-            onChange={(v) => update(key, v)}
-          />
-        );
+        return <ValueField key={key} label={labels[key] || key} value={value} onChange={(v) => update(key, v)} />;
       })}
     </div>
   );
 }
 
-function CutFeatureForm({ feature, model, onChange, metrics, onFocus, onMove, bounds }) {
-  const update = (key, value) => onChange({ ...feature, [key]: value });
-  const placement = feature.placement;
+// Who can carry a member placement: the enabled members before this cut.
+function cutMembers(model, feature) {
   const part = model.parts.find((p) => p.features.some((f) => f.id === feature.id));
-  const members =
+  return (
     part?.features
       .slice(
         0,
         part.features.findIndex((f) => f.id === feature.id),
       )
-      .filter((f) => f.type === 'member' && !f.suppressed) || [];
-  const setPlacement = (key, value) => update('placement', { ...placement, [key]: value });
+      .filter((f) => f.type === 'member' && !f.suppressed) || []
+  );
+}
+
+// A cut's size and extent: hole purpose / thread, pocket profile, diameter
+// or width × length, extent and depth. `middle` sits after the thread fields
+// (the tree editor's lock, Move hole and result lines).
+export function CutSizeFields({ feature, model, onChange, middle = null }) {
+  const update = (key, value) => onChange({ ...feature, [key]: value });
+  const members = cutMembers(model, feature);
   const sketchPocket = feature.type === 'pocket' && feature.shape !== 'rectangle';
   return (
-    <div className="cad-form">
+    <>
       {feature.type === 'hole' && (
         <>
           <label className="cad-field">
@@ -451,37 +595,9 @@ function CutFeatureForm({ feature, model, onChange, metrics, onFocus, onMove, bo
               drill and usable thread depth for the material and tap.
             </p>
           )}
-          <label>
-            <input
-              type="checkbox"
-              checked={Boolean(feature.positionLocked)}
-              onChange={(e) => update('positionLocked', e.target.checked)}
-            />{' '}
-            Lock hole position
-          </label>
-          {onMove && (
-            <button disabled={feature.positionLocked || feature.suppressed} onClick={onMove}>
-              Move hole on surface
-            </button>
-          )}
         </>
       )}
-      {metrics?.removedVolume > 0 && (
-        <>
-          <p className="cad-help" role="status">
-            Cut applied · {metrics.removedVolume.toFixed(2)} mm³ removed.
-          </p>
-          {metrics.cut && onFocus && (
-            <button className="cad-primary cad-wide" onClick={onFocus}>
-              View cut close up
-            </button>
-          )}
-        </>
-      )}
-      <p className="cad-help">
-        Cuts edit the part definition and all its instances. Tube sides follow the member’s own axes, even after moving
-        or rotating the assembly.
-      </p>
+      {middle}
       {feature.type === 'pocket' && (
         <label className="cad-field">
           Pocket profile
@@ -520,7 +636,7 @@ function CutFeatureForm({ feature, model, onChange, metrics, onFocus, onMove, bo
       )}
       {feature.type === 'hole' ? (
         <ValueField
-          key={`diameter-${feature.diameter}`}
+          key="diameter"
           label="Diameter (mm)"
           value={feature.diameter}
           onChange={(v) => onChange({ ...feature, diameter: v })}
@@ -528,13 +644,13 @@ function CutFeatureForm({ feature, model, onChange, metrics, onFocus, onMove, bo
       ) : !sketchPocket ? (
         <>
           <ValueField
-            key={`width-${feature.width}`}
+            key="width"
             label="Pocket width (mm)"
             value={feature.width}
             onChange={(v) => update('width', v)}
           />
           <ValueField
-            key={`height-${feature.height}`}
+            key="height"
             label="Pocket length (mm)"
             value={feature.height}
             onChange={(v) => update('height', v)}
@@ -574,13 +690,22 @@ function CutFeatureForm({ feature, model, onChange, metrics, onFocus, onMove, bo
         </label>
       )}
       {(!feature.throughAll || sketchPocket) && (
-        <ValueField
-          key={`depth-${feature.depth}`}
-          label="Depth (mm)"
-          value={feature.depth}
-          onChange={(v) => update('depth', v)}
-        />
+        <ValueField key="depth" label="Depth (mm)" value={feature.depth} onChange={(v) => update('depth', v)} />
       )}
+    </>
+  );
+}
+
+// Where a cut is: the Hole / pocket location fieldset (member, part side or
+// exact part coordinates). Nothing for a sketch pocket (its sketch places it).
+export function CutLocationFields({ feature, model, onChange, metrics, bounds }) {
+  const update = (key, value) => onChange({ ...feature, [key]: value });
+  const placement = feature.placement;
+  const members = cutMembers(model, feature);
+  const setPlacement = (key, value) => update('placement', { ...placement, [key]: value });
+  const sketchPocket = feature.type === 'pocket' && feature.shape !== 'rectangle';
+  return (
+    <>
       {!sketchPocket && (
         <fieldset className="cad-section-fields" disabled={Boolean(feature.positionLocked)}>
           <legend>Hole / pocket location</legend>
@@ -667,21 +792,21 @@ function CutFeatureForm({ feature, model, onChange, metrics, onFocus, onMove, bo
                   </label>
                   {placement.distance == null ? (
                     <ValueField
-                      key={`along-${placement.along}`}
+                      key="along"
                       label="Along member (%)"
                       value={placement.along}
                       onChange={(v) => setPlacement('along', v)}
                     />
                   ) : (
                     <ValueField
-                      key={`distance-${placement.distance}`}
+                      key="distance"
                       label="From finished start (mm)"
                       value={placement.distance}
                       onChange={(v) => setPlacement('distance', v)}
                     />
                   )}
                   <ValueField
-                    key={`offset-${placement.offset}`}
+                    key="offset"
                     label="Across side offset (mm)"
                     value={placement.offset}
                     onChange={(v) => setPlacement('offset', v)}
@@ -714,7 +839,7 @@ function CutFeatureForm({ feature, model, onChange, metrics, onFocus, onMove, bo
                     </select>
                   </label>
                   <ValueField
-                    key={`u-${placement.u}`}
+                    key="u"
                     label={
                       placement.units === 'mm'
                         ? `From minimum ${['X', 'Y', 'Z'].filter((_, i) => i !== CUT_SIDES[placement.side].axis)[0]} edge (mm)`
@@ -724,7 +849,7 @@ function CutFeatureForm({ feature, model, onChange, metrics, onFocus, onMove, bo
                     onChange={(v) => setPlacement('u', v)}
                   />
                   <ValueField
-                    key={`v-${placement.v}`}
+                    key="v"
                     label={
                       placement.units === 'mm'
                         ? `From minimum ${['X', 'Y', 'Z'].filter((_, i) => i !== CUT_SIDES[placement.side].axis)[1]} edge (mm)`
@@ -757,6 +882,182 @@ function CutFeatureForm({ feature, model, onChange, metrics, onFocus, onMove, bo
           )}
         </fieldset>
       )}
+    </>
+  );
+}
+
+// A hole row (Phase K, docs/sketch-studio-hole-row.md §6): count, spacing,
+// row length and direction, shared by the operation panel (minCount 2) and
+// the tree editor (minCount 1: typing 1 removes the row; 2 or more on a
+// single hole makes a row from it). `seed`: the operation panel's direction
+// stage, where only the count is set ({ count }, changed by onSeedCount).
+// `directionText`: the engraved direction ("+X of face · 0°" / "at 30°").
+// Live values (Phase L, docs/sketch-studio-live-fields.md §4): a count or
+// spacing that is out of range is ignored silently while typing and reported
+// on Enter / blur; count 1 removes the row only on Enter / blur, so typing 1
+// on the way to 12 keeps it.
+export function RowFields({
+  feature,
+  model,
+  onChange,
+  minCount = 2,
+  metrics = null,
+  seed = null,
+  onSeedCount = null,
+  directionText = '',
+}) {
+  const [error, setError] = useState('');
+  let parameters = {};
+  try {
+    parameters = resolveParameters(model?.parameters || []);
+  } catch {
+    parameters = {};
+  }
+  const value = (v, fallback = null) => {
+    try {
+      return numeric(v, parameters);
+    } catch {
+      return fallback;
+    }
+  };
+  const guard = (action) => (input, meta) => {
+    try {
+      action(input, meta);
+      setError('');
+    } catch (e) {
+      if (!meta?.live) setError(e.message);
+    }
+  };
+  const row = feature.row || null;
+  const count = seed ? seed.count : row ? row.count : 1;
+  const setCount = guard((input, meta) => {
+    const n = numeric(input, parameters, 'Holes in a row');
+    if (!Number.isInteger(n) || n < minCount || n > 100)
+      throw new Error(`Holes in a row must be a whole number from ${minCount} to 100.`);
+    if (seed) return onSeedCount(input);
+    if (input === 1) {
+      // Structural: removing the row waits for the commit.
+      if (meta?.live) return;
+      const { row: _row, ...single } = feature;
+      return onChange(single);
+    }
+    if (row) return onChange({ ...feature, row: { ...row, count: input } });
+    let direction;
+    if (metrics?.cut?.widthDirection) direction = metrics.cut.widthDirection.map((v) => +v.toFixed(9) || 0);
+    else {
+      const d = vector(feature.direction || [0, 0, 1], parameters);
+      const l = Math.hypot(...d);
+      direction = cutWidthDirection(d.map((v) => v / l)).map((v) => +v.toFixed(9) || 0);
+    }
+    onChange({ ...feature, row: { count: input, pitch: defaultPitch(value(feature.diameter, 6)), direction } });
+  });
+  const pitch = row ? value(row.pitch) : null;
+  const n = value(count);
+  const length = pitch != null && n > 1 ? +(pitch * (n - 1)).toFixed(4) : null;
+  const diameter = value(feature.diameter);
+  return (
+    <>
+      <ValueField key="row-count" label="Holes in row" value={count} onChange={setCount} />
+      {!row && !seed && <p className="cad-help">2 or more makes a straight row from this hole.</p>}
+      {seed && <p className="cad-help">Click where the last hole goes; ↑ ↓ also change the count.</p>}
+      {row && (
+        <>
+          <ValueField
+            key="row-pitch"
+            label="Spacing (mm)"
+            value={row.pitch}
+            onChange={guard((input) => {
+              numeric(input, parameters, 'Row spacing');
+              if (!(numeric(input, parameters, 'Row spacing') > 0))
+                throw new Error('Row spacing must be greater than zero.');
+              onChange({ ...feature, row: { ...row, pitch: input } });
+            })}
+          />
+          {length != null && (
+            <ValueField
+              key="row-length"
+              label="Row length (mm)"
+              value={length}
+              onChange={guard((input) => onChange(setRowLength(feature, input, parameters)))}
+            />
+          )}
+          <div className="cad-field cad-row-direction">
+            <span>Direction</span>
+            {/* A plain span: an <output> is a status, and the panels keep one status line. */}
+            <span aria-label="Row direction">{directionText || 'in the face of the first hole'}</span>
+          </div>
+          <button type="button" onClick={guard(() => onChange(flipRow(feature, parameters)))}>
+            Flip direction
+          </button>
+          {pitch != null && diameter != null && pitch < diameter && (
+            <p className="cad-help" role="note">
+              Spacing {+pitch.toFixed(2)} mm is less than the hole diameter {+diameter.toFixed(2)} mm: the holes overlap
+              into a slot.
+            </p>
+          )}
+        </>
+      )}
+      {error && (
+        <p className="cad-error" role="alert">
+          {error}
+        </p>
+      )}
+    </>
+  );
+}
+
+function CutFeatureForm({ feature, model, onChange, metrics, onFocus, onMove, bounds }) {
+  const update = (key, value) => onChange({ ...feature, [key]: value });
+  return (
+    <div className="cad-form">
+      <CutSizeFields
+        feature={feature}
+        model={model}
+        onChange={onChange}
+        middle={
+          <>
+            {feature.type === 'hole' && (
+              <>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(feature.positionLocked)}
+                    onChange={(e) => update('positionLocked', e.target.checked)}
+                  />{' '}
+                  Lock hole position
+                </label>
+                {onMove && (
+                  <button disabled={feature.positionLocked || feature.suppressed} onClick={onMove}>
+                    Move hole on surface
+                  </button>
+                )}
+                {/* Phase K: a straight row of identical holes from this one. */}
+                <fieldset className="cad-row-fields">
+                  <legend>Row of holes</legend>
+                  <RowFields feature={feature} model={model} onChange={onChange} minCount={1} metrics={metrics} />
+                </fieldset>
+              </>
+            )}
+            {metrics?.removedVolume > 0 && (
+              <>
+                <p className="cad-help" role="status">
+                  Cut applied · {metrics.removedVolume.toFixed(2)} mm³ removed.
+                </p>
+                {metrics.cut && onFocus && (
+                  <button className="cad-primary cad-wide" onClick={onFocus}>
+                    View cut close up
+                  </button>
+                )}
+              </>
+            )}
+            <p className="cad-help">
+              Cuts edit the part definition and all its instances. Tube sides follow the member’s own axes, even after
+              moving or rotating the assembly.
+            </p>
+          </>
+        }
+      />
+      <CutLocationFields feature={feature} model={model} onChange={onChange} metrics={metrics} bounds={bounds} />
       <p className="cad-help">
         Zoom in to see small cuts. Specified depth makes a recess; through all also cuts the opposite tube wall.
       </p>

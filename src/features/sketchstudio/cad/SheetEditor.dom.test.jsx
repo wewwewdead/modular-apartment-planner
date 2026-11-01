@@ -37,6 +37,24 @@ describe('drawing sheet editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove annotation 1' }));
     expect(saved().annotations).toEqual([]);
   });
+  it('names a hole row in the holes list (Phase K): "Hole 1 · Ø… · row of 5"', () => {
+    const model = pumpBracketExample();
+    const part = model.parts.find((p) => p.id === 'pump-bracket');
+    part.features = part.features.map((f) =>
+      f.id === 'pump-opening-1' ? { ...f, row: { count: 5, pitch: '=holePitch', direction: [1, 0, 0] } } : f,
+    );
+    render(
+      <SheetEditor
+        sheet={{ ...model.sheets[1], annotations: [] }}
+        model={model}
+        onChange={() => {}}
+        ready
+        onGenerate={() => {}}
+      />,
+    );
+    expect(screen.getByLabelText('Hole 1 · Ø=openingDiameter · row of 5')).toBeTruthy();
+    expect(screen.getByLabelText('Hole 2 · Ø=openingDiameter')).toBeTruthy();
+  });
   it('updates view scales and notes and clears references when changing the subject', () => {
     render(<Harness />);
     fireEvent.change(screen.getAllByLabelText('View scale (blank = sheet)')[0], { target: { value: '0.5' } });

@@ -12,8 +12,9 @@ function nearestOnSegment(p, [a, b]) {
 }
 
 // Every snap target, most specific first. `boundary` holds the projected edges
-// of the face (and any other model edges) lying in the sketch plane.
-export function snapTargets({ entities = [], boundary = [], extraPoints = [] }) {
+// of the face (and any other model edges) lying in the sketch plane; `marks`
+// the 3D measure mark points projected onto the plane.
+export function snapTargets({ entities = [], boundary = [], extraPoints = [], marks = [] }) {
   const points = [{ point: [0, 0], kind: 'origin' }];
   for (const point of extraPoints) points.push({ point, kind: 'endpoint' });
   for (const entity of entities) points.push(...entityKeyPoints(entity));
@@ -23,6 +24,7 @@ export function snapTargets({ entities = [], boundary = [], extraPoints = [] }) 
       { point: b, kind: 'edge end' },
       { point: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], kind: 'edge midpoint' },
     );
+  for (const point of marks) points.push({ point, kind: 'mark' });
   const curves = [
     ...boundary.map((segment) => ({ segment, kind: 'on edge' })),
     ...entities.flatMap((entity) => entitySegments(entity).map((segment) => ({ segment, kind: 'on sketch' }))),

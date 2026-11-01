@@ -31,8 +31,7 @@ load capacity or select a suitable material grade.
 2. Open **Sketch Studio**.
 3. Click **3D Model & workshop**.
 4. If you already have work open, save it before clicking **New**.
-5. Start a new document. If you return to the drafting screen, click
-   **3D Model & workshop** again.
+5. Start a new document.
 6. Change the document name at the top to **Mounting plate tutorial**.
 7. Press Enter or click outside the name field to finish editing.
 
@@ -45,7 +44,10 @@ npm run dev
 Open the local address printed by the terminal, then navigate to Sketch Studio.
 
 **Checkpoint:** you should see the **Sketch**, **Solid**, **Assemble**,
-**Drawings**, and **Manufacture** tabs.
+**Drawings**, and **Manufacture** tabs, and the three origin planes
+(**Top · XY**, **Front · XZ**, **Right · YZ**) meeting at the origin in the
+centre of the view, with the **Start** list in the Properties panel. Clicking
+a plane would start a sketch on it; this tutorial starts from a board instead.
 
 ## 2. Create the plate
 
@@ -64,7 +66,10 @@ Open the local address printed by the terminal, then navigate to Sketch Studio.
    | `height`                  | `3`   | Z thickness |
 
 8. Press Enter after each value, and wait for **Model current** in the footer.
-9. Click **Fit** above the viewport.
+9. Open **Placement & rotation** and set **Position (mm)** X, Y and Z to `0`.
+   A new board lands centred under the centre of your view and the camera
+   does not move, so its position does not start at zero.
+10. Click **Fit** above the viewport.
 
 Keep the part's position and rotation at zero for this tutorial.
 
@@ -74,15 +79,19 @@ at X=0, Y=0, Z=0 and ends at X=100, Y=50, Z=3.
 ## 3. Add the first through hole
 
 1. Keep **Mounting plate** selected.
-2. In **Solid**, click **Hole**.
-3. Set **Diameter (mm)** to `6`.
-4. Set **Cut placement** to **Part side**.
-5. Set **Cut side** to **Top**.
-6. Set **Cut extent** to **Through all — both tube walls**. This shared
-   option also cuts completely through a solid plate.
+2. In **Solid**, click **Hole**. The hint under the view reads "Hole: click a
+   flat face to drill there".
+3. Click anywhere on the top face of the plate. A red arrow, a square and a
+   grip appear on the new hole, and Properties shows **Place hole**.
+4. Set **Diameter (mm)** to `6`.
+5. Keep **Cut extent** at **Through all — both tube walls** (a new hole starts
+   there). This shared option also cuts completely through a solid plate.
+6. Open **Exact placement (mm)**. Set **Cut placement** to **Part side** and
+   **Cut side** to **Top**.
 7. Set **First face axis (%)** to `10`.
 8. Set **Second face axis (%)** to `20`.
-9. Press Enter after each numeric entry and wait for **Model current**.
+9. Press Enter after each numeric entry, wait for **Preview ready**, then click
+   **Apply hole** and wait for **Model current**.
 
 On the Top side, the first face axis is X and the second is Y:
 
@@ -98,9 +107,15 @@ click **Fit** if the hole is difficult to see.
 
 ## 4. Add the other three holes
 
-Add each hole separately with **Solid → Hole**, then configure it before
-adding the next one. All four holes use **Part side**, **Top**, Ø6, and
-**Through all**.
+Add each hole separately with **Solid → Hole**: click the plate's top face,
+then set the exact position under **Exact placement (mm)** before **Apply
+hole**. All four holes use **Part side**, **Top**, Ø6, and **Through all**.
+**Apply and place another** applies the hole and starts the next one with the
+same diameter and extent.
+**Solid → Hole row** can instead place the two holes of one edge at once:
+click the first hole, press ↓ twice (or set _Holes in row_ to 2), then click
+the second (see Hole rows in `sketch-studio-cad.md`); the two holes are then
+one feature.
 
 | Hole              | First face axis (%) | Second face axis (%) | Resulting center X, Y (mm) |
 | ----------------- | ------------------- | -------------------- | -------------------------- |
@@ -109,11 +124,10 @@ adding the next one. All four holes use **Part side**, **Top**, Ø6, and
 | 3                 | 90                  | 80                   | 90, 40                     |
 | 4                 | 10                  | 80                   | 10, 40                     |
 
-Wait for **Model current** after configuring each hole.
+Wait for **Model current** after applying each hole.
 
-New holes initially appear at the center of the plate. Move each to its
-listed position before adding another hole, so the next default hole does
-not overlap an existing center hole.
+A new hole starts where you click. Set its listed position before applying,
+so it does not land on an existing hole.
 
 **Checkpoint:** the top view shows four holes, each 10 mm from its two
 adjacent edges. The feature tree contains one box and four hole features.

@@ -189,11 +189,17 @@ describe('ProjectLifecyclePanel', () => {
       />,
     );
 
+    // Units are set inside the field (an adornment after the input), not in
+    // the label's parentheses.
+    const adorned = (label, unit) =>
+      new RegExp(
+        `<span>${label}</span><span[^>]*><input aria-label="${label}"[^>]*><span[^>]*aria-hidden="true"[^>]*>${unit}</span>`,
+      );
     expect(html).toContain('Rectangular lot setup');
-    expect(html).toContain('Lot width (m)');
-    expect(html).toContain('North angle (°)');
+    expect(html).toMatch(adorned('Lot width', 'm'));
+    expect(html).toMatch(adorned('North angle', '°'));
     expect(html).toContain('Road frontage');
-    expect(html).toContain('Front setback (m)');
+    expect(html).toMatch(adorned('Front setback', 'm'));
     expect(html).toContain('Apply site constraints');
     // Both lot input modes are offered.
     expect(html).toContain('Rectangular lot');

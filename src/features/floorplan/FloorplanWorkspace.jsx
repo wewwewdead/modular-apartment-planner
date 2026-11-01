@@ -109,6 +109,128 @@ function FocusEscapeGuard({ focusedPanel }) {
   return null;
 }
 
+const SIDEBAR_WIDTH_KEY = 'floorplan.sidebar.width';
+const SIDEBAR_WIDTH_DEFAULT = 256;
+const SIDEBAR_WIDTH_MIN = 240;
+const SIDEBAR_WIDTH_MAX = 420;
+const SIDEBAR_WIDTH_STEP = 16;
+const OVERLAY_BREAKPOINT = '(max-width: 1024px)';
+
+function clampSidebarWidth(width) {
+  return Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, Math.round(width)));
+}
+
+function readSidebarWidth() {
+  try {
+    const stored = Number(window.localStorage.getItem(SIDEBAR_WIDTH_KEY));
+    return stored > 0 ? clampSidebarWidth(stored) : SIDEBAR_WIDTH_DEFAULT;
+  } catch {
+    return SIDEBAR_WIDTH_DEFAULT; // private mode or blocked storage: the default is fine
+  }
+}
+
+function writeSidebarWidth(width) {
+  try {
+    window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
+  } catch {
+    /* the width still applies, it just is not remembered */
+  }
+}
+
+/** True while the window is at the width where the sidebar becomes an overlay. */
+function useOverlayBreakpoint() {
+  const [matches, setMatches] = useState(
+    () => typeof window !== 'undefined' && Boolean(window.matchMedia?.(OVERLAY_BREAKPOINT).matches),
+  );
+  useEffect(() => {
+    const query = window.matchMedia?.(OVERLAY_BREAKPOINT);
+    if (!query) return undefined;
+    const update = () => setMatches(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  return matches;
+}
+
+/*
+ * The sidebar's grab strip. A drag writes `--layout-sidebar-width` straight
+ * onto the layout element, at most once a frame, and only hands the width to
+ * React on release: re-rendering the shell renders the whole workspace, which
+ * is far too much to do per pointer frame. Nothing here touches the floorplan
+ * store.
+ */
+function SidebarResizer({ width, layoutRef, onCommit }) {
+  const dragRef = useRef(null);
+
+  const apply = (strip, next) => {
+    layoutRef.current?.style.setProperty('--layout-sidebar-width', `${next}px`);
+    strip.setAttribute('aria-valuenow', String(next));
+  };
+
+  const handlePointerDown = (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const strip = event.currentTarget;
+    strip.setPointerCapture(event.pointerId);
+    strip.dataset.dragging = 'true';
+    dragRef.current = { startX: event.clientX, startWidth: width, next: width, frame: 0 };
+  };
+
+  const handlePointerMove = (event) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    drag.next = clampSidebarWidth(drag.startWidth + event.clientX - drag.startX);
+    if (drag.frame) return;
+    const strip = event.currentTarget;
+    drag.frame = window.requestAnimationFrame(() => {
+      drag.frame = 0;
+      apply(strip, drag.next);
+    });
+  };
+
+  const finishDrag = (event) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    dragRef.current = null;
+    const strip = event.currentTarget;
+    if (drag.frame) window.cancelAnimationFrame(drag.frame);
+    if (strip.hasPointerCapture?.(event.pointerId)) strip.releasePointerCapture(event.pointerId);
+    delete strip.dataset.dragging;
+    apply(strip, drag.next);
+    onCommit(drag.next);
+  };
+
+  const handleKeyDown = (event) => {
+    const steps = { ArrowLeft: -SIDEBAR_WIDTH_STEP, ArrowRight: SIDEBAR_WIDTH_STEP };
+    if (event.key in steps) onCommit(clampSidebarWidth(width + steps[event.key]));
+    else if (event.key === 'Home') onCommit(SIDEBAR_WIDTH_MIN);
+    else if (event.key === 'End') onCommit(SIDEBAR_WIDTH_MAX);
+    else return;
+    event.preventDefault();
+  };
+
+  return (
+    <div
+      className={styles.sidebarResizer}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize sidebar"
+      aria-valuemin={SIDEBAR_WIDTH_MIN}
+      aria-valuemax={SIDEBAR_WIDTH_MAX}
+      aria-valuenow={width}
+      tabIndex={0}
+      title="Drag to resize the sidebar · double-click to reset"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishDrag}
+      onPointerCancel={finishDrag}
+      onDoubleClick={() => onCommit(SIDEBAR_WIDTH_DEFAULT)}
+      onKeyDown={handleKeyDown}
+    />
+  );
+}
+
 function EditorShell({
   project,
   onNew,
@@ -158,15 +280,28 @@ function EditorShell({
     [dispatch],
   );
 
+  // The sidebar's user-set width. Under the overlay breakpoint the sidebar
+  // floats at --sidebar-width regardless, so the stored width only applies to
+  // the docked layout.
+  const layoutRef = useRef(null);
+  const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
+  const isOverlayLayout = useOverlayBreakpoint();
+  const commitSidebarWidth = useCallback((width) => {
+    setSidebarWidth(width);
+    writeSidebarWidth(width);
+  }, []);
+  const showSidebarResizer = !isFocused && !isSidebarCollapsed && !isOverlayLayout;
+
   return (
     <div
+      ref={layoutRef}
       className={`${styles.layout} ${isFocused ? styles.layoutFocused : ''} ${
         isToolbarHidden ? styles.layoutToolbarHidden : ''
       }`}
       style={{
         // In focus mode the panels float over the pane rather than taking a
         // column from it, so the grid tracks collapse either way.
-        '--layout-sidebar-width': isSidebarCollapsed || isFocused ? '0px' : 'var(--sidebar-width)',
+        '--layout-sidebar-width': isSidebarCollapsed || isFocused ? '0px' : `${sidebarWidth}px`,
         '--layout-properties-width': isPropertiesCollapsed || isFocused ? '0px' : 'var(--properties-width)',
       }}
     >
@@ -191,6 +326,9 @@ function EditorShell({
       >
         <Sidebar />
       </div>
+      {showSidebarResizer && (
+        <SidebarResizer width={sidebarWidth} layoutRef={layoutRef} onCommit={commitSidebarWidth} />
+      )}
       <div className={styles.canvas}>
         {workspaceMode === 'sheet' ? (
           <SheetCanvas />

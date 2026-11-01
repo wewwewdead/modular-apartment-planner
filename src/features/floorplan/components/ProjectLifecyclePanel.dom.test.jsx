@@ -202,3 +202,51 @@ describe('StructureStage grid form', () => {
     expect(container.textContent).toContain('spacing must be positive finite millimetres');
   });
 });
+
+describe('Lifecycle stage rail', () => {
+  function mountAt(activeStage) {
+    const changes = [];
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() =>
+      root.render(
+        <ProjectLifecyclePanel
+          project={createProject()}
+          derived={derivedFixture()}
+          activeStage={activeStage}
+          onStageChange={(stage) => changes.push(stage)}
+          onExecuteCommand={() => {}}
+        />,
+      ),
+    );
+    return changes;
+  }
+
+  it('names each chip by number, label and status, and marks only the active one', () => {
+    mountAt('site');
+    const chips = [...container.querySelectorAll('nav[aria-label="Building lifecycle stages"] button')];
+    expect(chips).toHaveLength(8);
+    expect(chips[1].textContent).toMatch(/^2 Site — /);
+    expect(chips[1].getAttribute('title')).toBe(chips[1].textContent);
+    expect(chips.filter((chip) => chip.getAttribute('aria-current') === 'step')).toEqual([chips[1]]);
+  });
+
+  it('steps with Previous / Next and disables them at the ends', () => {
+    const changes = mountAt('site');
+    const previous = container.querySelector('[aria-label="Previous stage"]');
+    const next = container.querySelector('[aria-label="Next stage"]');
+    act(() => previous.click());
+    act(() => next.click());
+    expect(changes).toEqual(['brief', 'spaces']);
+    container.remove();
+
+    mountAt('brief');
+    expect(container.querySelector('[aria-label="Previous stage"]').disabled).toBe(true);
+    expect(container.querySelector('[aria-label="Next stage"]').disabled).toBe(false);
+    container.remove();
+
+    mountAt('documents');
+    expect(container.querySelector('[aria-label="Next stage"]').disabled).toBe(true);
+  });
+});

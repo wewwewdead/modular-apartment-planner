@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 // Workstation shortcuts end to end: R / M pick the gizmo, ] / [ turn the
-// selected part (World or Local), and nothing fires while typing, dragging
-// or in another tool. The kernel hook and the 3D viewport are stand-ins.
+// selected part (World or Local), D toggles Measure, Delete removes the
+// selected mark, and nothing fires while typing, dragging or in another tool.
+// The kernel hook and the 3D viewport are stand-ins.
 import { afterEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useImperativeHandle } from 'react';
+import * as THREE from 'three';
 import { MemoryRouter } from 'react-router-dom';
 import CadWorkspace from './CadWorkspace.jsx';
 import { createPart, emptyModel } from './model.js';
@@ -43,6 +45,22 @@ vi.mock('./CadViewport.jsx', () => ({
       isDragging: () => viewport.dragging,
       getPivot: () => [20, 20, 350],
       getCanvas: () => null,
+      getGroupPoses: () =>
+        new Map([
+          [
+            'leg',
+            {
+              matrix: new THREE.Matrix4(),
+              placement: [],
+              visible: true,
+              bounds: [
+                [0, 0, 0],
+                [40, 40, 700],
+              ],
+            },
+          ],
+        ]),
+      getSceneSpan: () => 1000,
     }));
     viewport.props = props;
     return <div aria-label="Solid model viewport" />;
@@ -78,7 +96,7 @@ function setup(rotation = [0, 0, 0]) {
   act(() => viewport.props.onSelect('leg'));
   // The model commits through the parent document, as SketchStudio does.
   const rerender = () => view.rerender(workspace());
-  return { setCadModel, rerender, latest: () => current.instances[0] };
+  return { setCadModel, rerender, latest: () => current.instances[0], model: () => current };
 }
 const press = (key, init = {}, target = window) => act(() => fireEvent.keyDown(target, { key, ...init }));
 
@@ -154,4 +172,76 @@ it('stays quiet while typing, dragging, with modifiers or without a selection', 
   press(']', { code: 'BracketRight' });
   expect(viewport.props.transformMode).toBe('translate');
   expect(setCadModel).not.toHaveBeenCalled();
+});
+
+it('D toggles Measure and the Marks panel, with or without a selection; Esc ends it', () => {
+  setup();
+  act(() => viewport.props.onSelect(null));
+  press('d');
+  expect(viewport.props.measureMode).toBe(true);
+  expect(viewport.props.moveEnabled).toBe(false);
+  expect(screen.getByRole('heading', { name: 'Measure' })).toBeTruthy();
+  expect(screen.getByText('No marks yet. Click Measure, then two points on the model.')).toBeTruthy();
+  expect(screen.getAllByRole('button', { name: 'Done measuring' })).toHaveLength(2);
+  // R / M wait while measuring.
+  press('m');
+  expect(viewport.props.measureMode).toBe(true);
+  press('d');
+  expect(viewport.props.measureMode).toBe(false);
+  // The panel stays open after D.
+  expect(screen.getByRole('heading', { name: 'Measure' })).toBeTruthy();
+  press('d');
+  expect(viewport.props.measureMode).toBe(true);
+  press('Escape');
+  expect(viewport.props.measureMode).toBe(false);
+  expect(screen.queryByRole('heading', { name: 'Measure' })).toBeNull();
+  // Not while typing.
+  press('d', {}, screen.getByLabelText('Standard view'));
+  expect(viewport.props.measureMode).toBe(false);
+});
+
+it('keeps a measured mark, reads it along an axis, saves it as a parameter and deletes it', () => {
+  const { setCadModel, rerender, model } = setup();
+  press('d');
+  // (A block body: onMeasure returns perform's promise, which act would await.)
+  act(() => {
+    viewport.props.onMeasure({
+      from: { instanceId: 'leg', local: [0, 0, 0] },
+      to: { instanceId: 'leg', local: [40, 0, 700] },
+      fromWorld: [0, 0, 0],
+      toWorld: [40, 0, 700],
+    });
+  });
+  rerender();
+  const [mark] = model().marks;
+  expect(mark).toMatchObject({ along: 'aligned', from: { instanceId: 'leg' }, to: { instanceId: 'leg' } });
+  expect(viewport.props.marks).toEqual([mark]);
+  expect(viewport.props.selectedMarkId).toBe(mark.id);
+  // Still measuring: the next two clicks make the next mark.
+  expect(viewport.props.measureMode).toBe(true);
+  const length = Math.hypot(40, 700);
+  expect(screen.getByText(`${+length.toFixed(2)} mm`)).toBeTruthy();
+  expect(screen.getByText(/From Square tube \(0\.00, 0\.00, 0\.00\)/)).toBeTruthy();
+  // Along Z: 700, and the line stands off square to Z.
+  act(() => fireEvent.change(screen.getByLabelText('Measure along'), { target: { value: 'Z' } }));
+  rerender();
+  expect(model().marks[0].along).toBe('Z');
+  expect(model().marks[0].offset[2]).toBe(0);
+  expect(screen.getByText('700 mm')).toBeTruthy();
+  // Save as parameter: prefilled with the first free name.
+  act(() => fireEvent.click(screen.getByRole('button', { name: 'Save as parameter' })));
+  const name = screen.getByLabelText('Parameter name');
+  expect(name.value).toBe('mark1');
+  act(() => fireEvent.change(name, { target: { value: 'legHeight' } }));
+  act(() => fireEvent.keyDown(name, { key: 'Enter' }));
+  rerender();
+  expect(model().parameters).toEqual([expect.objectContaining({ name: 'legHeight', value: 700 })]);
+  // Label click selects (as the viewport reports it); Delete removes the selected mark.
+  act(() => viewport.props.onSelectMark(mark.id));
+  const calls = setCadModel.mock.calls.length;
+  press('Delete');
+  expect(setCadModel).toHaveBeenCalledTimes(calls + 1);
+  rerender();
+  expect(model().marks).toEqual([]);
+  expect(screen.getByText('No marks yet. Click Measure, then two points on the model.')).toBeTruthy();
 });

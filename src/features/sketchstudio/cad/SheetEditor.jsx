@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ValueField, JsonEditor } from './CadEditors.jsx';
 import { PAGE_SIZES } from './drawings.js';
-import { isCircularCutFeature, uid } from './model.js';
+import { isCircularCutFeature, numeric, resolveParameters, uid } from './model.js';
 import { describeManualDimension, isManualDimension } from './sheetAnnotations.js';
 import { sheetHasPartsList } from './partsList.js';
 import MaterialSelect from './MaterialSelect.jsx';
@@ -25,7 +25,7 @@ export default function SheetEditor({
   const update = (key, value) => onChange({ ...sheet, [key]: value });
   const field = (key, label) => (
     <ValueField
-      key={`${sheet.id}-${key}-${sheet[key]}`}
+      key={`${sheet.id}-${key}`}
       label={label}
       value={sheet[key] || ''}
       onChange={(v) => update(key, String(v))}
@@ -40,6 +40,17 @@ export default function SheetEditor({
     if (f.type === 'hole') return f.diameter;
     const radius = model.sketches.find((s) => s.id === f.sketchId)?.profile.radius;
     return typeof radius === 'number' ? radius * 2 : `2 × ${radius}`;
+  };
+  // A hole row (Phase K): "Hole 2 · Ø6.6 · row of 4".
+  const rowNote = (f) => {
+    if (f.type !== 'hole' || !f.row) return '';
+    let count = f.row.count;
+    try {
+      count = numeric(f.row.count, resolveParameters(model.parameters));
+    } catch {
+      // Shown as typed.
+    }
+    return count === 1 ? '' : ` · row of ${count}`;
   };
   const manual = (sheet.annotations || []).filter(isManualDimension);
   const changeAnnotation = (id, patch) =>
@@ -125,7 +136,7 @@ export default function SheetEditor({
         </label>
       </div>
       <ValueField
-        key={`scale-${sheet.scale}`}
+        key="scale"
         label="Sheet scale (1 = full size)"
         value={sheet.scale}
         onChange={(v) => update('scale', v)}
@@ -182,13 +193,13 @@ export default function SheetEditor({
                 </select>
               </label>
               <ValueField
-                key={config.name}
+                key="label"
                 label="View label"
                 value={config.name}
                 onChange={(name) => changeView({ ...config, name: String(name) })}
               />
               <ValueField
-                key={config.scale ?? 'sheet'}
+                key="scale"
                 label="View scale (blank = sheet)"
                 value={config.scale ?? ''}
                 onChange={(scale) => changeView({ ...config, scale: scale === '' ? undefined : scale })}
@@ -263,7 +274,7 @@ export default function SheetEditor({
           </label>
           {sheet.section.origin.map((value, i) => (
             <ValueField
-              key={`${i}-${value}`}
+              key={i}
               label={`Cut position ${['X', 'Y', 'Z'][i]}`}
               value={value}
               onChange={(v) =>
@@ -352,6 +363,7 @@ export default function SheetEditor({
                 }
               />
               {f.type === 'hole' ? 'Hole' : 'Circular cut'} {index + 1} · Ø{holeDiameter(f)}
+              {rowNote(f)}
             </label>
           ))}
           {!holes.length && <p className="cad-help">Add Hole features to the part first.</p>}
@@ -386,7 +398,7 @@ export default function SheetEditor({
                         </select>
                       </label>
                       <ValueField
-                        key={a.offset}
+                        key="offset"
                         label="Dimension offset"
                         value={a.offset ?? 12}
                         onChange={(v) => change('offset', v)}
@@ -404,13 +416,13 @@ export default function SheetEditor({
                   {a.type === 'hole-callout' && (
                     <>
                       <ValueField
-                        key={`x-${a.dx}`}
+                        key="dx"
                         label="Leader horizontal offset"
                         value={a.dx ?? 7}
                         onChange={(v) => change('dx', v)}
                       />
                       <ValueField
-                        key={`y-${a.dy}`}
+                        key="dy"
                         label="Leader vertical offset"
                         value={a.dy ?? -18}
                         onChange={(v) => change('dy', v)}
@@ -477,7 +489,7 @@ export default function SheetEditor({
             )}
             {a.type === 'linear' && (
               <ValueField
-                key={`offset-${a.offset}`}
+                key="offset"
                 label="Line offset (model mm)"
                 value={a.offset}
                 onChange={(v) => changeAnnotation(a.id, { offset: Number(v) || 0 })}

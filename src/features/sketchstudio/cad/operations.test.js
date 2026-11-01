@@ -179,4 +179,38 @@ describe('guided solid operations', () => {
     pattern.feature.step = [0, 0, 0];
     expect(() => createKernelSession(operationModel(pattern))).toThrow(/nonzero spacing/);
   });
+  // Phase M: hardware seated in several holes brings one instance per hole.
+  it('appends a hardware draft’s extra instances after its new instance, with every connection', () => {
+    const model = board();
+    const part = { id: 'bolt', name: 'Hex bolt M6', features: [] };
+    const feature = { id: 'hw', type: 'hardware', kind: 'bolt', size: 'M6' };
+    const at = (id, x) => ({ id, partId: 'bolt', position: [x, 0, 50], rotation: [0, 0, 0], visible: true });
+    const connection = (from, extra = {}) => ({
+      id: `c-${from}`,
+      type: 'concentric',
+      from,
+      to: model.instances[0].id,
+      fromFeatureId: 'hw',
+      toFeatureId: 'r',
+      offset: 0,
+      ...extra,
+    });
+    const draft = {
+      baseModel: model,
+      partId: 'bolt',
+      newPart: part,
+      newInstance: at('i1', 10),
+      extraInstances: [at('i2', 40), at('i3', 70)],
+      sketches: [],
+      editing: false,
+      feature,
+      connections: [connection('i1'), connection('i2', { holeIndex: 1 }), connection('i3', { holeIndex: 2 })],
+    };
+    const next = operationModel(draft);
+    expect(next.parts.at(-1)).toEqual({ ...part, features: [feature] });
+    expect(next.instances.map((i) => i.id)).toEqual([model.instances[0].id, 'i1', 'i2', 'i3']);
+    expect(next.connections).toEqual(draft.connections);
+    // No extras (every older draft): one instance, as before.
+    expect(operationModel({ ...draft, extraInstances: undefined }).instances).toHaveLength(2);
+  });
 });

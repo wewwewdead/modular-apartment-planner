@@ -78,7 +78,20 @@ export function sketchOperationDraft({ model, snapshot, sketchId, settings, ids 
     references: [],
     editing: false,
     feature,
-    sketchFlow: { sketchId, mode, target, distance, reverse, throughAll, name: settings.name, ids: { ...ids } },
+    sketchFlow: {
+      sketchId,
+      mode,
+      target,
+      distance,
+      reverse,
+      throughAll,
+      name: settings.name,
+      ids: { ...ids },
+      // Direct placement: drag-direction inference (off once Operation is
+      // chosen by hand) and the target to return to when a drag leaves a cut.
+      inferOperation: settings.inferOperation !== false,
+      baseTarget: settings.baseTarget,
+    },
   };
   if (target === 'new') {
     const created = createPart();

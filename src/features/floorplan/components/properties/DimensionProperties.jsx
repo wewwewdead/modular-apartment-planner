@@ -135,12 +135,13 @@ function AnnotationSettingsPropertiesInner({ floor, dispatch }) {
       <div className={styles.title}>Annotations</div>
       {checkbox('Wall Dimensions', 'showWallDimensions')}
       {checkbox('Room Dimensions', 'showRoomDimensions')}
-      {/* The plan canvas never draws derived wall or room dimensions (select an
-          object to read its size in this panel); these switches govern the sheets. */}
-      <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '-4px 0 8px 148px' }}>
-        Sheets only — the plan shows an object&apos;s size here when it is selected.
-      </div>
       {checkbox('Overall Dimensions', 'showOverallDimensions')}
+      {/* The plan canvas never draws derived dimensions of any class — wall, room
+          or overall (select an object to read its size in this panel); these
+          three switches govern the sheets. */}
+      <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '-4px 0 8px 148px' }}>
+        Sheets only — the plan never draws derived dimensions. Select an object to read its size here.
+      </div>
       {checkbox('Object Tags', 'showObjectTags')}
       {checkbox('Elev. Overall', 'showElevationOverallDimensions')}
       {checkbox('Elev. Levels', 'showElevationLevelDimensions')}

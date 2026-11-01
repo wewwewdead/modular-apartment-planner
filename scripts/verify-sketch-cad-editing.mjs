@@ -2,6 +2,7 @@ import { chromium } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { emptyModel, createPart } from '../src/features/sketchstudio/cad/model.js';
+import { mapPlacement } from '../src/features/sketchstudio/cad/placement.js';
 
 await mkdir('artifacts/sketch-cad', { recursive: true });
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -134,7 +135,8 @@ try {
   await page.getByRole('button', { name: 'Import drawing into 3D', exact: true }).click();
   await page.getByLabel('Extrusion depth (mm)').fill('25');
   await page.getByText('Not imported · 1', { exact: true }).click();
-  assert(await page.getByText(/Lines must form a closed loop/).isVisible());
+  // The open loop is reported with its exact gap (import healing, 2026-10-29).
+  assert(await page.getByText(/open loop — .* mm gap|Lines must form a closed loop/).isVisible());
   await page.screenshot({ path: 'artifacts/sketch-cad/import-profiles.png' });
   await page.getByRole('button', { name: 'Import 3 parts into 3D', exact: true }).click();
   await current(page);
@@ -147,7 +149,7 @@ try {
   assert.equal(saved.document.entities.length, entities.length);
   await page.screenshot({ path: 'artifacts/sketch-cad/imported-solids.png' });
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
-  await page.getByRole('button', { name: 'Create tube member', exact: true }).waitFor();
+  await page.locator('.cad-start').getByRole('button', { name: 'Tube / member', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
   await current(page);
   checks.push(
@@ -170,13 +172,51 @@ try {
     await seed(page, { ...emptyModel(), parts: [created.part], instances: [created.instance] }, [], 'model');
     await current(page);
     await page.getByRole('button', { name: created.part.name, exact: false }).first().click();
-    await page.getByRole('button', { name: 'Hole', exact: true }).click();
-    await current(page);
+    // Hole and Pocket open in Place (Phase J): click the part, Apply, then the
+    // tree editor shows the applied cut. Front view: the tube's front face,
+    // the pipe's curved surface (drilled radially).
+    const ops = [
+      ...created.instance.rotation.map((angle, i) => ({
+        axis: [i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0],
+        angle,
+        origin: [0, 0, 0],
+      })),
+      { translation: created.instance.position },
+    ];
+    // A point on the part's surface facing the front view, `z` along it.
+    const facing = (z) => {
+      if (kind === 'tube') return mapPlacement([0, -20, z], ops);
+      let best = null;
+      for (let a = 0; a < 360; a += 5) {
+        const r = [Math.cos((a * Math.PI) / 180), Math.sin((a * Math.PI) / 180), 0];
+        const normal = mapPlacement(r, ops, true);
+        if (!best || normal[1] < best.y) best = { y: normal[1], local: [20 * r[0], 20 * r[1], z] };
+      }
+      return mapPlacement(best.local, ops);
+    };
+    const clickCut = async (type, z) => {
+      await page.getByLabel('Standard view', { exact: true }).selectOption('isometric');
+      await page.getByLabel('Standard view', { exact: true }).selectOption('front');
+      await page.waitForTimeout(400);
+      await page.getByRole('button', { name: type === 'hole' ? 'Hole' : 'Pocket', exact: true }).click();
+      const at = await page.evaluate((p) => document.querySelector('.cad-viewport').cadProject(p), facing(z));
+      await page.mouse.move(at[0], at[1], { steps: 3 });
+      await page.mouse.click(at[0], at[1]);
+      await page.getByText('Preview ready', { exact: true }).waitFor({ timeout: 60000 });
+      await page.getByRole('button', { name: `Apply ${type}`, exact: true }).click();
+      await current(page);
+    };
+    await clickCut('hole', 100);
     await page.getByText(/^Cut applied ·/).waitFor();
     assert.equal(await page.getByLabel('Cut extent', { exact: true }).inputValue(), 'through');
+    if (kind === 'pipe') assert.equal(await page.getByLabel('Cut placement', { exact: true }).inputValue(), 'member');
     await page.getByRole('button', { name: 'View cut close up', exact: true }).click();
     await page.screenshot({ path: `artifacts/sketch-cad/${kind}-hole.png` });
     if (kind === 'tube') {
+      // The location fieldset is still in the tree: put the hole on the tube,
+      // then push it off the side.
+      await page.getByLabel('Cut placement', { exact: true }).selectOption('member');
+      await current(page);
       await page.getByLabel('Across side offset (mm)', { exact: true }).fill('100');
       await page.getByLabel('Across side offset (mm)', { exact: true }).press('Enter');
       await page.getByText('Rebuild failed', { exact: true }).waitFor();
@@ -184,8 +224,16 @@ try {
       await page.getByRole('button', { name: 'Undo', exact: true }).click();
       await current(page);
     }
-    await page.getByRole('button', { name: 'Pocket', exact: true }).click();
-    await current(page);
+    await clickCut('pocket', 160);
+    await page.getByText(/^Cut applied ·/).waitFor();
+    if ((await page.getByLabel('Cut placement', { exact: true }).inputValue()) !== 'member') {
+      await page.getByLabel('Cut placement', { exact: true }).selectOption('member');
+      await current(page);
+    }
+    if (!(await page.getByLabel('Along member (%)', { exact: true }).isVisible())) {
+      await page.getByLabel('Position along member', { exact: true }).selectOption('percent');
+      await current(page);
+    }
     await page.getByLabel('Along member (%)', { exact: true }).fill('70');
     await page.getByLabel('Along member (%)', { exact: true }).press('Enter');
     await current(page);
@@ -207,7 +255,7 @@ try {
     await page.getByRole('button', { name: created.part.name, exact: false }).first().click();
     await page.getByRole('button', { name: 'Extrude', exact: true }).click();
     await page.getByText('Preview ready', { exact: true }).waitFor({ timeout: 60000 });
-    await page.getByText(/preserving the hollow section/).waitFor();
+    await page.getByText(/hollow section kept/).waitFor();
     await page.getByRole('button', { name: 'Fit preview', exact: true }).click();
     await page.screenshot({ path: `artifacts/sketch-cad/${kind}-extrude-preview.png` });
     await page.getByRole('button', { name: 'Apply extrude', exact: true }).click();
@@ -234,6 +282,21 @@ try {
     checks.push(`Saved legacy ${type}: repaired without deleting the part or feature`);
     await context.close();
   }
+  // Direct placement: Extrude, Revolve, Sweep and Loft open in Place. Seen
+  // from the top, the target board covers the centre of the fitted view: a
+  // click there places on its top face. Sweep takes a second path corner and
+  // Enter; Loft takes a second section on the ground beside the board and
+  // Enter. The clicks leave the view select, so Enter reaches the operation.
+  const placeOnTarget = async (page, type) => {
+    await page.getByLabel('Standard view', { exact: true }).selectOption('top');
+    const box = await page.locator('.cad-viewport canvas').boundingBox();
+    const cx = box.x + box.width / 2,
+      cy = box.y + box.height / 2;
+    await page.mouse.click(cx, cy);
+    if (type === 'sweep') await page.mouse.click(cx + 120, cy);
+    if (type === 'loft') await page.mouse.click(box.x + box.width - 40, cy);
+    if (type === 'sweep' || type === 'loft') await page.keyboard.press('Enter');
+  };
   for (const type of [
     'extrude',
     'revolve',
@@ -255,24 +318,25 @@ try {
     const page = await context.newPage();
     const model = emptyModel(),
       profiles = ['extrude', 'revolve', 'sweep', 'loft'].includes(type);
-    if (!profiles) {
-      const created = createPart('board');
-      created.part.name = 'Operation target';
-      created.part.features[0] = { ...created.part.features[0], width: 100, depth: 80, height: 50 };
-      model.parts.push(created.part);
-      model.instances.push(created.instance);
-      if (['union', 'subtract', 'intersect'].includes(type)) {
-        const tool = createPart('board');
-        tool.part.name = 'Boolean tool';
-        tool.part.features[0] = { ...tool.part.features[0], width: 100, depth: 80, height: 50 };
-        model.parts.push(tool.part);
-      }
+    // Every operation gets a target board: the profile operations are placed
+    // on its top face, the others act on it.
+    const created = createPart('board');
+    created.part.name = 'Operation target';
+    created.part.features[0] = { ...created.part.features[0], width: 100, depth: 80, height: 50 };
+    model.parts.push(created.part);
+    model.instances.push(created.instance);
+    if (['union', 'subtract', 'intersect'].includes(type)) {
+      const tool = createPart('board');
+      tool.part.name = 'Boolean tool';
+      tool.part.features[0] = { ...tool.part.features[0], width: 100, depth: 80, height: 50 };
+      model.parts.push(tool.part);
     }
     await seed(page, model, [], 'model');
     await current(page);
-    if (!profiles) await page.getByRole('button', { name: 'Operation target', exact: false }).first().click();
+    await page.getByRole('button', { name: 'Operation target', exact: false }).first().click();
     const command = page.getByRole('button', { name: type[0].toUpperCase() + type.slice(1), exact: true });
     await command.click();
+    if (profiles) await placeOnTarget(page, type);
     if (['union', 'subtract', 'intersect'].includes(type)) {
       const x = page.getByRole('group', { name: 'Position (part mm)', exact: true }).getByLabel('X', { exact: true });
       await x.fill('50');
@@ -287,8 +351,13 @@ try {
       assert(await page.getByRole('button', { name: 'Apply extrude', exact: true }).isDisabled());
       await page.getByRole('button', { name: 'Cancel operation', exact: true }).click();
       const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('apartment-planner-sketch-recovery')));
-      assert.equal(stored.document.model.parts.length, 0, 'Failed/cancelled preview must not create a saved part.');
+      assert.equal(
+        stored.document.model.parts[0].features.length,
+        1,
+        'Failed/cancelled preview must not add a saved feature.',
+      );
       await command.click();
+      await placeOnTarget(page, type);
       await page.getByText('Preview ready', { exact: true }).waitFor({ timeout: 60000 });
     }
     await page.getByRole('button', { name: 'Fit preview', exact: true }).click();

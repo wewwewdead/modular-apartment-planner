@@ -1,0 +1,15 @@
+Direct placement verification passed:
+- extrude place: hover readout "vertex · Board / plate top X 600 · Y 400 · Z 18", snapped to the corner (600, 400, 18); handles distance,slide,corner
+- extrude applied: length 48, sketch XY at (600,400,18) — the top face, part coordinates
+- drag into the board: operation cut, reverse true, length 6 (typed)
+- sweep: 3 path segments (1 arc), section Ø22, plane XZ
+- subtract: tool position (310,204.5,74.5) → (310,204.5,-25.5) after a Z-arrow gizmo drag (target coordinates)
+- edit extrude with preview: arrow at the stored sketch (48) dragged +20 → saved length 68
+- sketch on face → Extrude: the arrow dragged into the board turns it into a cut ({"operation":"cut","length":8,"reverse":true})
+- empty model + Extrude on the ground: new "Part 1" at (-300,-200,0)
+- 37° board, right face: sketch YZ at (600,200,9) in part coordinates
+- fillet: top-face click → "Top (XY) · 4 edges"
+- trim: face click, plane arrow −100 mm (offset −300 → −400); mirror: face click → YZ plane
+- perspective camera: arrow dragged +12 mm → length 30; Esc cancels, orbit enabled
+- revolve: default axis along the front edge, edge click → axis (0,1,0) through (0,0,18)
+- loft: two face clicks → sections 2, built and applied

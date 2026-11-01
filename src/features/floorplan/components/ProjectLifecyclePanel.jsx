@@ -294,13 +294,50 @@ export function deriveLifecycleStatus(project, derived = {}) {
   };
 }
 
+/**
+ * A derived value, engraved: label, dotted leader, value in the blueprint face
+ * (the properties panel's Readout, plus a note line). A value too long for the
+ * line drops below its leader rather than out of the sidebar.
+ */
 function Metric({ label, value, note }) {
   return (
     <div className={styles.metric}>
       <span className={styles.metricLabel}>{label}</span>
-      <strong className={styles.metricValue}>{value}</strong>
+      <span className={styles.metricLeader} aria-hidden="true" />
+      <span className={styles.metricValue}>{value}</span>
       {note && <span className={styles.metricNote}>{note}</span>}
     </div>
+  );
+}
+
+function ChevronIcon({ direction }) {
+  return (
+    <svg viewBox="0 0 12 12" aria-hidden="true" className={styles.stepIcon}>
+      <path
+        d={direction === 'previous' ? 'M7.5 2.5L4 6l3.5 3.5' : 'M4.5 2.5L8 6l-3.5 3.5'}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/**
+ * A unit set inside the field it belongs to (°, ′, m), the way an instrument
+ * engraves it beside the reading. The unit is decoration for the eye only: the
+ * control's own label already names what it measures.
+ */
+function Adorned({ unit, children }) {
+  return (
+    <span className={styles.adorned}>
+      {children}
+      <span className={styles.adornment} aria-hidden="true">
+        {unit}
+      </span>
+    </span>
   );
 }
 
@@ -586,36 +623,42 @@ function RectangularLotForm({ site, lastCommand, onExecuteCommand }) {
       <strong>Rectangular lot setup</strong>
       <div className={styles.formGrid}>
         <label>
-          <span>Lot width (m)</span>
-          <input
-            aria-label="Lot width"
-            type="number"
-            min="0.1"
-            step="0.1"
-            value={draft.width}
-            onChange={(event) => setField('width', event.target.value)}
-          />
+          <span>Lot width</span>
+          <Adorned unit="m">
+            <input
+              aria-label="Lot width"
+              type="number"
+              min="0.1"
+              step="0.1"
+              value={draft.width}
+              onChange={(event) => setField('width', event.target.value)}
+            />
+          </Adorned>
         </label>
         <label>
-          <span>Lot depth (m)</span>
-          <input
-            aria-label="Lot depth"
-            type="number"
-            min="0.1"
-            step="0.1"
-            value={draft.depth}
-            onChange={(event) => setField('depth', event.target.value)}
-          />
+          <span>Lot depth</span>
+          <Adorned unit="m">
+            <input
+              aria-label="Lot depth"
+              type="number"
+              min="0.1"
+              step="0.1"
+              value={draft.depth}
+              onChange={(event) => setField('depth', event.target.value)}
+            />
+          </Adorned>
         </label>
         <label>
-          <span>North angle (°)</span>
-          <input
-            aria-label="North angle"
-            type="number"
-            step="1"
-            value={draft.northAngle}
-            onChange={(event) => setField('northAngle', event.target.value)}
-          />
+          <span>North angle</span>
+          <Adorned unit="°">
+            <input
+              aria-label="North angle"
+              type="number"
+              step="1"
+              value={draft.northAngle}
+              onChange={(event) => setField('northAngle', event.target.value)}
+            />
+          </Adorned>
         </label>
         <label>
           <span>Road frontage</span>
@@ -639,48 +682,56 @@ function RectangularLotForm({ site, lastCommand, onExecuteCommand }) {
           />
         </label>
         <label>
-          <span>Front setback (m)</span>
-          <input
-            aria-label="Front setback"
-            type="number"
-            min="0"
-            step="0.1"
-            value={draft.frontSetback}
-            onChange={(event) => setField('frontSetback', event.target.value)}
-          />
+          <span>Front setback</span>
+          <Adorned unit="m">
+            <input
+              aria-label="Front setback"
+              type="number"
+              min="0"
+              step="0.1"
+              value={draft.frontSetback}
+              onChange={(event) => setField('frontSetback', event.target.value)}
+            />
+          </Adorned>
         </label>
         <label>
-          <span>Rear setback (m)</span>
-          <input
-            aria-label="Rear setback"
-            type="number"
-            min="0"
-            step="0.1"
-            value={draft.rearSetback}
-            onChange={(event) => setField('rearSetback', event.target.value)}
-          />
+          <span>Rear setback</span>
+          <Adorned unit="m">
+            <input
+              aria-label="Rear setback"
+              type="number"
+              min="0"
+              step="0.1"
+              value={draft.rearSetback}
+              onChange={(event) => setField('rearSetback', event.target.value)}
+            />
+          </Adorned>
         </label>
         <label>
-          <span>Left setback (m)</span>
-          <input
-            aria-label="Left setback"
-            type="number"
-            min="0"
-            step="0.1"
-            value={draft.leftSetback}
-            onChange={(event) => setField('leftSetback', event.target.value)}
-          />
+          <span>Left setback</span>
+          <Adorned unit="m">
+            <input
+              aria-label="Left setback"
+              type="number"
+              min="0"
+              step="0.1"
+              value={draft.leftSetback}
+              onChange={(event) => setField('leftSetback', event.target.value)}
+            />
+          </Adorned>
         </label>
         <label>
-          <span>Right setback (m)</span>
-          <input
-            aria-label="Right setback"
-            type="number"
-            min="0"
-            step="0.1"
-            value={draft.rightSetback}
-            onChange={(event) => setField('rightSetback', event.target.value)}
-          />
+          <span>Right setback</span>
+          <Adorned unit="m">
+            <input
+              aria-label="Right setback"
+              type="number"
+              min="0"
+              step="0.1"
+              value={draft.rightSetback}
+              onChange={(event) => setField('rightSetback', event.target.value)}
+            />
+          </Adorned>
         </label>
       </div>
       <button type="button" className={styles.primaryAction} onClick={apply}>
@@ -805,46 +856,10 @@ function SurveyedLotForm({ site, lastCommand, onExecuteCommand }) {
       <div className={styles.traverseTable}>
         {rows.map((row, index) => (
           <div className={styles.traverseRow} key={index}>
-            <div className={styles.traverseBearing}>
+            <div className={styles.traverseHeader}>
               <span className={styles.traverseLineLabel}>
-                {index + 1}–{cornerAfter(index)}
+                Line {index + 1}–{cornerAfter(index)}
               </span>
-              <select
-                aria-label={`Line ${index + 1} north or south`}
-                value={row.ns}
-                onChange={(event) => setRow(index, 'ns', event.target.value)}
-              >
-                <option value="N">N</option>
-                <option value="S">S</option>
-              </select>
-              <input
-                aria-label={`Line ${index + 1} bearing degrees`}
-                type="number"
-                min="0"
-                max="90"
-                step="1"
-                placeholder="°"
-                value={row.degrees}
-                onChange={(event) => setRow(index, 'degrees', event.target.value)}
-              />
-              <input
-                aria-label={`Line ${index + 1} bearing minutes`}
-                type="number"
-                min="0"
-                max="59"
-                step="1"
-                placeholder="′"
-                value={row.minutes}
-                onChange={(event) => setRow(index, 'minutes', event.target.value)}
-              />
-              <select
-                aria-label={`Line ${index + 1} east or west`}
-                value={row.ew}
-                onChange={(event) => setRow(index, 'ew', event.target.value)}
-              >
-                <option value="E">E</option>
-                <option value="W">W</option>
-              </select>
               <button
                 type="button"
                 className={styles.traverseRemove}
@@ -855,28 +870,74 @@ function SurveyedLotForm({ site, lastCommand, onExecuteCommand }) {
                 ×
               </button>
             </div>
-            <div className={styles.traverseMeasures}>
-              <label>
-                <span>Distance (m)</span>
+            <div className={styles.traverseBearing}>
+              <select
+                aria-label={`Line ${index + 1} north or south`}
+                value={row.ns}
+                onChange={(event) => setRow(index, 'ns', event.target.value)}
+              >
+                <option value="N">N</option>
+                <option value="S">S</option>
+              </select>
+              <Adorned unit="°">
                 <input
-                  aria-label={`Line ${index + 1} distance`}
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={row.distance}
-                  onChange={(event) => setRow(index, 'distance', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Setback (m)</span>
-                <input
-                  aria-label={`Line ${index + 1} setback`}
+                  aria-label={`Line ${index + 1} bearing degrees`}
                   type="number"
                   min="0"
-                  step="0.1"
-                  value={row.setback}
-                  onChange={(event) => setRow(index, 'setback', event.target.value)}
+                  max="90"
+                  step="1"
+                  placeholder="0"
+                  value={row.degrees}
+                  onChange={(event) => setRow(index, 'degrees', event.target.value)}
                 />
+              </Adorned>
+              <Adorned unit="′">
+                <input
+                  aria-label={`Line ${index + 1} bearing minutes`}
+                  type="number"
+                  min="0"
+                  max="59"
+                  step="1"
+                  placeholder="0"
+                  value={row.minutes}
+                  onChange={(event) => setRow(index, 'minutes', event.target.value)}
+                />
+              </Adorned>
+              <select
+                aria-label={`Line ${index + 1} east or west`}
+                value={row.ew}
+                onChange={(event) => setRow(index, 'ew', event.target.value)}
+              >
+                <option value="E">E</option>
+                <option value="W">W</option>
+              </select>
+            </div>
+            <div className={styles.traverseMeasures}>
+              <label>
+                <span>Distance</span>
+                <Adorned unit="m">
+                  <input
+                    aria-label={`Line ${index + 1} distance`}
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={row.distance}
+                    onChange={(event) => setRow(index, 'distance', event.target.value)}
+                  />
+                </Adorned>
+              </label>
+              <label>
+                <span>Setback</span>
+                <Adorned unit="m">
+                  <input
+                    aria-label={`Line ${index + 1} setback`}
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={row.setback}
+                    onChange={(event) => setRow(index, 'setback', event.target.value)}
+                  />
+                </Adorned>
               </label>
             </div>
           </div>
@@ -887,14 +948,16 @@ function SurveyedLotForm({ site, lastCommand, onExecuteCommand }) {
       </button>
       <div className={styles.formGrid}>
         <label>
-          <span>North angle (°)</span>
-          <input
-            aria-label="North angle"
-            type="number"
-            step="1"
-            value={meta.northAngle}
-            onChange={(event) => setMetaField('northAngle', event.target.value)}
-          />
+          <span>North angle</span>
+          <Adorned unit="°">
+            <input
+              aria-label="North angle"
+              type="number"
+              step="1"
+              value={meta.northAngle}
+              onChange={(event) => setMetaField('northAngle', event.target.value)}
+            />
+          </Adorned>
         </label>
         <label>
           <span>Road frontage</span>
@@ -1055,118 +1118,140 @@ function SiteStage({ building, ledger, parking, lastCommand, onExecuteCommand })
               />
             </label>
             <label>
-              <span>Bay width (m)</span>
-              <input
-                aria-label="Parking bay width"
-                type="number"
-                min="0.1"
-                step="0.1"
-                value={parkingDraft.bayWidth}
-                onChange={(event) => setParkingDraft((current) => ({ ...current, bayWidth: event.target.value }))}
-              />
+              <span>Bay width</span>
+              <Adorned unit="m">
+                <input
+                  aria-label="Parking bay width"
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={parkingDraft.bayWidth}
+                  onChange={(event) => setParkingDraft((current) => ({ ...current, bayWidth: event.target.value }))}
+                />
+              </Adorned>
             </label>
             <label>
-              <span>Bay length (m)</span>
-              <input
-                aria-label="Parking bay length"
-                type="number"
-                min="0.1"
-                step="0.1"
-                value={parkingDraft.bayLength}
-                onChange={(event) => setParkingDraft((current) => ({ ...current, bayLength: event.target.value }))}
-              />
+              <span>Bay length</span>
+              <Adorned unit="m">
+                <input
+                  aria-label="Parking bay length"
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={parkingDraft.bayLength}
+                  onChange={(event) => setParkingDraft((current) => ({ ...current, bayLength: event.target.value }))}
+                />
+              </Adorned>
             </label>
             <label>
-              <span>Bay gap (m)</span>
-              <input
-                aria-label="Parking bay gap"
-                type="number"
-                min="0"
-                step="0.1"
-                value={parkingDraft.bayGap}
-                onChange={(event) => setParkingDraft((current) => ({ ...current, bayGap: event.target.value }))}
-              />
+              <span>Bay gap</span>
+              <Adorned unit="m">
+                <input
+                  aria-label="Parking bay gap"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={parkingDraft.bayGap}
+                  onChange={(event) => setParkingDraft((current) => ({ ...current, bayGap: event.target.value }))}
+                />
+              </Adorned>
             </label>
             <label>
-              <span>First bay X (m)</span>
-              <input
-                aria-label="First parking bay X"
-                type="number"
-                step="0.1"
-                value={parkingDraft.firstBayX}
-                onChange={(event) => setParkingDraft((current) => ({ ...current, firstBayX: event.target.value }))}
-              />
+              <span>First bay X</span>
+              <Adorned unit="m">
+                <input
+                  aria-label="First parking bay X"
+                  type="number"
+                  step="0.1"
+                  value={parkingDraft.firstBayX}
+                  onChange={(event) => setParkingDraft((current) => ({ ...current, firstBayX: event.target.value }))}
+                />
+              </Adorned>
             </label>
             <label>
-              <span>First bay Y (m)</span>
-              <input
-                aria-label="First parking bay Y"
-                type="number"
-                step="0.1"
-                value={parkingDraft.firstBayY}
-                onChange={(event) => setParkingDraft((current) => ({ ...current, firstBayY: event.target.value }))}
-              />
+              <span>First bay Y</span>
+              <Adorned unit="m">
+                <input
+                  aria-label="First parking bay Y"
+                  type="number"
+                  step="0.1"
+                  value={parkingDraft.firstBayY}
+                  onChange={(event) => setParkingDraft((current) => ({ ...current, firstBayY: event.target.value }))}
+                />
+              </Adorned>
             </label>
             <label>
-              <span>Row angle (°)</span>
-              <input
-                aria-label="Parking row angle"
-                type="number"
-                step="1"
-                value={parkingDraft.angle}
-                onChange={(event) => setParkingDraft((current) => ({ ...current, angle: event.target.value }))}
-              />
+              <span>Row angle</span>
+              <Adorned unit="°">
+                <input
+                  aria-label="Parking row angle"
+                  type="number"
+                  step="1"
+                  value={parkingDraft.angle}
+                  onChange={(event) => setParkingDraft((current) => ({ ...current, angle: event.target.value }))}
+                />
+              </Adorned>
             </label>
             <label>
-              <span>Access width (m)</span>
-              <input
-                aria-label="Vehicle access width"
-                type="number"
-                min="0.1"
-                step="0.1"
-                value={parkingDraft.accessWidth}
-                onChange={(event) => setParkingDraft((current) => ({ ...current, accessWidth: event.target.value }))}
-              />
+              <span>Access width</span>
+              <Adorned unit="m">
+                <input
+                  aria-label="Vehicle access width"
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={parkingDraft.accessWidth}
+                  onChange={(event) => setParkingDraft((current) => ({ ...current, accessWidth: event.target.value }))}
+                />
+              </Adorned>
             </label>
             <label>
-              <span>Road start X (m)</span>
-              <input
-                aria-label="Vehicle route start X"
-                type="number"
-                step="0.1"
-                value={parkingDraft.routeStartX}
-                onChange={(event) => setParkingDraft((current) => ({ ...current, routeStartX: event.target.value }))}
-              />
+              <span>Road start X</span>
+              <Adorned unit="m">
+                <input
+                  aria-label="Vehicle route start X"
+                  type="number"
+                  step="0.1"
+                  value={parkingDraft.routeStartX}
+                  onChange={(event) => setParkingDraft((current) => ({ ...current, routeStartX: event.target.value }))}
+                />
+              </Adorned>
             </label>
             <label>
-              <span>Road start Y (m)</span>
-              <input
-                aria-label="Vehicle route start Y"
-                type="number"
-                step="0.1"
-                value={parkingDraft.routeStartY}
-                onChange={(event) => setParkingDraft((current) => ({ ...current, routeStartY: event.target.value }))}
-              />
+              <span>Road start Y</span>
+              <Adorned unit="m">
+                <input
+                  aria-label="Vehicle route start Y"
+                  type="number"
+                  step="0.1"
+                  value={parkingDraft.routeStartY}
+                  onChange={(event) => setParkingDraft((current) => ({ ...current, routeStartY: event.target.value }))}
+                />
+              </Adorned>
             </label>
             <label>
-              <span>Access end X (m)</span>
-              <input
-                aria-label="Vehicle route end X"
-                type="number"
-                step="0.1"
-                value={parkingDraft.routeEndX}
-                onChange={(event) => setParkingDraft((current) => ({ ...current, routeEndX: event.target.value }))}
-              />
+              <span>Access end X</span>
+              <Adorned unit="m">
+                <input
+                  aria-label="Vehicle route end X"
+                  type="number"
+                  step="0.1"
+                  value={parkingDraft.routeEndX}
+                  onChange={(event) => setParkingDraft((current) => ({ ...current, routeEndX: event.target.value }))}
+                />
+              </Adorned>
             </label>
             <label>
-              <span>Access end Y (m)</span>
-              <input
-                aria-label="Vehicle route end Y"
-                type="number"
-                step="0.1"
-                value={parkingDraft.routeEndY}
-                onChange={(event) => setParkingDraft((current) => ({ ...current, routeEndY: event.target.value }))}
-              />
+              <span>Access end Y</span>
+              <Adorned unit="m">
+                <input
+                  aria-label="Vehicle route end Y"
+                  type="number"
+                  step="0.1"
+                  value={parkingDraft.routeEndY}
+                  onChange={(event) => setParkingDraft((current) => ({ ...current, routeEndY: event.target.value }))}
+                />
+              </Adorned>
             </label>
           </div>
           <button type="button" className={styles.primaryAction} onClick={applyParking}>
@@ -5866,29 +5951,70 @@ function ProjectLifecyclePanel({ project, derived, activeStage = 'brief', onStag
     building.professionalExchange,
   ]);
 
+  const currentIndex = Math.max(
+    0,
+    LIFECYCLE_STAGES.findIndex((stage) => stage.id === activeStage),
+  );
+  const currentStage = LIFECYCLE_STAGES[currentIndex];
+  const previousStage = LIFECYCLE_STAGES[currentIndex - 1] || null;
+  const nextStage = LIFECYCLE_STAGES[currentIndex + 1] || null;
+
   return (
     <section className={styles.lifecycle} aria-label="Project lifecycle">
-      <div className={styles.lifecycleHeader}>
-        <span>Apartment Design Engineer</span>
-        <small>Coordinated Building Core</small>
-      </div>
-      <nav className={styles.stageNav} aria-label="Building lifecycle stages">
-        {LIFECYCLE_STAGES.map((stage) => (
-          <button
-            key={stage.id}
-            type="button"
-            className={`${styles.stageButton} ${activeStage === stage.id ? styles.stageButtonActive : ''}`}
-            aria-current={activeStage === stage.id ? 'step' : undefined}
-            onClick={() => onStageChange(stage.id)}
-          >
-            <span className={styles.stageIndex}>{stage.index}</span>
-            <span className={styles.stageLabel}>{stage.label}</span>
-            <span className={styles.stageStatus} data-state={status[stage.id].state}>
-              {status[stage.id].value}
-            </span>
-          </button>
-        ))}
+      {/* The sidebar's "Design Engineer" section header names the panel; a
+          second title-block line here read the same words twice. */}
+      {/* The rail: one numbered chip per stage. Its label and status are in a
+          visually-hidden span, so the chip still names itself in full. */}
+      <nav className={styles.stageRail} aria-label="Building lifecycle stages">
+        {LIFECYCLE_STAGES.map((stage) => {
+          const stageStatus = status[stage.id];
+          return (
+            <button
+              key={stage.id}
+              type="button"
+              className={styles.stageChip}
+              data-state={stageStatus.state}
+              aria-current={activeStage === stage.id ? 'step' : undefined}
+              title={`${stage.index} ${stage.label} — ${stageStatus.value}`}
+              onClick={() => onStageChange(stage.id)}
+            >
+              {stage.index}
+              <span className={styles.visuallyHidden}>{` ${stage.label} — ${stageStatus.value}`}</span>
+            </button>
+          );
+        })}
       </nav>
+      <div className={styles.stageHeader}>
+        <span className={styles.stageEyebrow}>
+          Stage {currentStage.index} of {LIFECYCLE_STAGES.length}
+        </span>
+        <span className={styles.stageStepper}>
+          <button
+            type="button"
+            className={styles.stepButton}
+            aria-label="Previous stage"
+            title={previousStage ? `${previousStage.index} ${previousStage.label}` : undefined}
+            disabled={!previousStage}
+            onClick={() => previousStage && onStageChange(previousStage.id)}
+          >
+            <ChevronIcon direction="previous" />
+          </button>
+          <button
+            type="button"
+            className={styles.stepButton}
+            aria-label="Next stage"
+            title={nextStage ? `${nextStage.index} ${nextStage.label}` : undefined}
+            disabled={!nextStage}
+            onClick={() => nextStage && onStageChange(nextStage.id)}
+          >
+            <ChevronIcon direction="next" />
+          </button>
+        </span>
+        <span className={styles.stageTitle}>{currentStage.label}</span>
+        <span className={styles.stageStatus} data-state={status[currentStage.id].state}>
+          {status[currentStage.id].value}
+        </span>
+      </div>
 
       {activeStage === 'brief' && (
         <BriefStage

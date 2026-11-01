@@ -201,7 +201,8 @@ export default function useSketchStudio() {
   // --- Return composed API ---
   return {
     document: state.document,
-    setCadModel: (model) => dispatch({ type: 'SET_CAD_MODEL', payload: model }),
+    // meta: { skipHistory, revertSession } from a CAD field's typing session.
+    setCadModel: (model, meta) => dispatch({ type: 'SET_CAD_MODEL', payload: model, meta }),
     setWorkspaceMode: (mode) => dispatch(setUiFlag('workspaceMode', mode)),
     viewport: state.viewport,
     ui: state.ui,

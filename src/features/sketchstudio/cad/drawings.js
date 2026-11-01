@@ -49,7 +49,17 @@ export function annotationText(annotation, model, snapshot) {
         : throughAll
           ? ' through all'
           : ` depth ${fmt(circular ? circular.depth : numeric(feature.depth, p), annotation.units)}`;
-    return `${annotation.type === 'hole' && feature.holeSpec ? `${threadNote(feature)}; DRILL ` : ''}${annotation.type === 'radius' ? 'R' : 'Ø'}${fmt(annotation.type === 'radius' ? diameter / 2 : diameter, annotation.units)}${annotation.type === 'hole' ? `${depth}; XYZ ${position.map((v) => fmt(numeric(v, p), annotation.units)).join(', ')}` : ''}`;
+    // A hole row (Phase K): "4 × " in front, "; 4 holes, pitch 50.00" after the first hole's XYZ.
+    const row =
+      annotation.type === 'hole' && !circular && feature.row
+        ? snapshot?.parts?.find((item) => item.id === part.id)?.features?.[feature.id]?.row || {
+            count: numeric(feature.row.count, p),
+            pitch: numeric(feature.row.pitch, p),
+          }
+        : null;
+    const many = row && row.count > 1;
+    const text = `${annotation.type === 'hole' && feature.holeSpec ? `${threadNote(feature)}; DRILL ` : ''}${annotation.type === 'radius' ? 'R' : 'Ø'}${fmt(annotation.type === 'radius' ? diameter / 2 : diameter, annotation.units)}${annotation.type === 'hole' ? `${depth}; XYZ ${position.map((v) => fmt(numeric(v, p), annotation.units)).join(', ')}` : ''}`;
+    return many ? `${row.count} × ${text}; ${row.count} holes, pitch ${fmt(row.pitch, annotation.units)}` : text;
   }
   if (annotation.type === 'angular') {
     if (!feature) throw new Error('Angular annotation needs a feature reference.');

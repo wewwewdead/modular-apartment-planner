@@ -1,4 +1,4 @@
-import { getMidpoint } from './canvasMath';
+import { getMidpoint } from './canvasMath.js';
 
 const DEFAULT_STEPS = 24;
 const AXIS_EPSILON = 1e-9;

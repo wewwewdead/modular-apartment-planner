@@ -1,0 +1,6 @@
+Measure marks verification passed:
+- measure corner to corner: HUD "600 mm · ΔX 600 · ΔY 0 · ΔZ 0 · vertex"; label "600"; mark anchored to instance-0d5cab6d-d196-4f8c-823d-2ad5f3076fbf
+- save as parameter: [{"name":"boardWidth","value":600}]
+- tube drag snaps to the mark: HUD "ΔX +580 · ΔY -100 · ΔZ 0 mm · mark"; tube centre x = 580
+- =boardWidth listed by autocomplete; tube Position X = 600; board width =boardWidth+100 rebuilt
+- sketch on XY at Z 18: the cursor snaps to the mark midpoint (X 300 · Y 0 · mark)

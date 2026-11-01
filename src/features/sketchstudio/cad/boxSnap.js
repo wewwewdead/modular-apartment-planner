@@ -4,6 +4,10 @@
 // flush (touching: min ↔ max) or aligned (same side: min ↔ min, max ↔ max).
 // Only parts that overlap the moving box across the other two axes (within
 // the threshold) count, so a far-away part's plane never pulls the drag.
+// Measure mark points (world [x, y, z]) pull a face or the box centre onto
+// their coordinate wherever they are: they are explicit user intent. One snap
+// per axis, the smallest move across box faces and mark points (box faces
+// win an exact tie).
 
 export const snapThreshold = (span) => Math.max(8, 0.01 * (span || 0));
 
@@ -17,7 +21,7 @@ function overlapsAcross(a, b, axis, threshold) {
     .every((i) => a.min[i] <= b.max[i] + threshold && b.min[i] <= a.max[i] + threshold);
 }
 
-export function snapBoxDelta(box, delta, others, { threshold = 8, axes = [0, 1, 2] } = {}) {
+export function snapBoxDelta(box, delta, others, { threshold = 8, axes = [0, 1, 2], points = [] } = {}) {
   const moved = shift(box, delta);
   const result = [...delta];
   const snaps = [];
@@ -34,6 +38,19 @@ export function snapBoxDelta(box, delta, others, { threshold = 8, axes = [0, 1, 
         const diff = other[otherSide][axis] - moved[side][axis];
         if (Math.abs(diff) <= threshold && (!best || Math.abs(diff) < Math.abs(best.diff) - 1e-9))
           best = { diff, axis, side, value: other[otherSide][axis], kind };
+      }
+    }
+    const centre = (moved.min[axis] + moved.max[axis]) / 2;
+    for (const point of points) {
+      const value = point[axis];
+      for (const [side, from, kind] of [
+        ['min', moved.min[axis], 'mark'],
+        ['max', moved.max[axis], 'mark'],
+        ['centre', centre, 'mark centre'],
+      ]) {
+        const diff = value - from;
+        if (Math.abs(diff) <= threshold && (!best || Math.abs(diff) < Math.abs(best.diff) - 1e-9))
+          best = { diff, axis, side, value, kind };
       }
     }
     if (best) {

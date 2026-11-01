@@ -67,6 +67,9 @@ export function SketchOperationPanel({
   onApply,
   onCancel,
   onFit,
+  // Direct placement: the placement line and whether a drag picks Extrude / Cut.
+  placementText = '',
+  inferring = false,
 }) {
   const settings = draft.sketchFlow;
   const sketch = model.sketches.find((s) => s.id === settings.sketchId);
@@ -101,8 +104,14 @@ export function SketchOperationPanel({
           {preview.error.message}
         </p>
       )}
+      {placementText && (
+        <section className="cad-placement-line" aria-label="Placement">
+          <p>{placementText}</p>
+          <p className="cad-help">Drag the arrow in the viewport: out of the part extrudes, into it cuts.</p>
+        </section>
+      )}
       <label className="cad-field">
-        Operation
+        {inferring ? 'Operation (auto)' : 'Operation'}
         <select aria-label="Sketch operation" value={settings.mode} onChange={(e) => onMode(e.target.value)}>
           <option value="extrude">Extrude</option>
           <option value="cut">Cut</option>
@@ -126,7 +135,7 @@ export function SketchOperationPanel({
       </label>
       {!cut && settings.target === 'new' && (
         <ValueField
-          key={`name-${settings.name}`}
+          key="part-name"
           label="Part name"
           value={settings.name || ''}
           asText
@@ -145,7 +154,7 @@ export function SketchOperationPanel({
       )}
       {!(cut && settings.throughAll) && (
         <ValueField
-          key={`distance-${settings.distance}`}
+          key="distance"
           label={cut ? 'Depth (mm)' : 'Distance (mm)'}
           value={settings.distance}
           onChange={(distance) => change({ distance })}

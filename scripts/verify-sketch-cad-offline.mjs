@@ -19,9 +19,17 @@ const workspace = {
 await mkdir('artifacts/sketch-cad', { recursive: true });
 const results = [];
 async function verifyOfflinePreview(page) {
-  await page.getByRole('button', { name: /desktop/i }).first().click();
+  await page
+    .getByRole('button', { name: /desktop/i })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Solid', exact: true }).click();
   await page.getByRole('button', { name: 'Extrude', exact: true }).click();
+  // Direct placement: Extrude opens in Place. Seen from the top, the desktop
+  // covers the centre of the fitted view; a click there places the profile.
+  await page.getByLabel('Standard view').selectOption('top');
+  const canvas = await page.locator('.cad-viewport canvas').boundingBox();
+  await page.mouse.click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
   await page.getByText('Preview ready', { exact: true }).waitFor({ timeout: 60000 });
   await page.getByRole('button', { name: 'Cancel operation', exact: true }).click();
   await page.getByText('Model current', { exact: true }).waitFor({ timeout: 60000 });

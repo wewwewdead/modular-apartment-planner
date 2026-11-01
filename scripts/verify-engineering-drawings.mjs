@@ -22,7 +22,7 @@ const download = async (button, name) => {
 try {
   await page.goto(process.env.CAD_VERIFY_URL || 'http://127.0.0.1:5180/sketch');
   await page.getByRole('button', { name: '3D Model & workshop', exact: true }).click();
-  await page.locator('.cad-empty').getByRole('button', { name: 'Pump bracket drawing study', exact: true }).click();
+  await page.locator('.cad-start').getByRole('button', { name: 'Pump bracket drawing study', exact: true }).click();
   await generate();
   await page.getByLabel('Drawing sheet', { exact: true }).selectOption({ label: 'Pump bracket — dimensioned part' });
   await expect(page.locator('.cad-sheet-preview svg')).toContainText('5 × Ø25 THRU');

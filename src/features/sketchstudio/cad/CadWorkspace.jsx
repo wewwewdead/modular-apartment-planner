@@ -11,7 +11,28 @@ import MaterialSelect from './MaterialSelect.jsx';
 import { createHardware, holePreset, METRIC_THREADS } from './hardware.js';
 import { pumpBracketExample } from './pumpBracket.js';
 import { rearCoverExample } from './rearCover.js';
-import { GUIDED_OPERATIONS, createOperationDraft, operationModel, operationProblem } from './operations.js';
+import {
+  GUIDED_OPERATIONS,
+  createOperationDraft,
+  isClosedProfile,
+  operationModel,
+  operationProblem,
+} from './operations.js';
+import {
+  applyPlacementDrag,
+  changeSweepOptions,
+  finishPlacement,
+  pickOf,
+  placeClick,
+  placementSummary,
+  placementView,
+  replacePlacement,
+  sketchFlowDistance,
+  sketchFlowPlacement,
+  startAxisPick,
+  startPlacement,
+  stepBack,
+} from './placementTool.js';
 import useCadModel from './useCadModel.js';
 import {
   flipAxis,
@@ -24,18 +45,23 @@ import {
 } from './movement.js';
 import { placementKeyAction } from './rotateKeys.js';
 import { createCutFeature, positionedCut, snapCutPoint } from './cutPlacement.js';
+import { CUT_TOOLS, cutRowDirection, cutTemplate } from './placementCuts.js';
+import { changeRowCount, rowCountLabel } from './placementRows.js';
+import { chosenHoleRows, pickRowHoles, removeChosenHole } from './placementHardware.js';
 import { mapPlacement, unmapPlacement } from './placement.js';
-import { clone, createPart, normalizeModel, numeric, removeInstance, uid } from './model.js';
+import { clone, createPart, normalizeModel, numeric, removeInstance, removePart, uid } from './model.js';
 import { furnitureExample, bracketExample } from './examples.js';
 import { ConstraintEditor, FeatureForm, JsonEditor, SketchForm, ValueField, VectorFields } from './CadEditors.jsx';
 import { buildCutList, cutListCsv } from './fabrication.js';
 import CadSketcher from './CadSketcher.jsx';
 import { ExtrudeSummary, SketchOperationPanel, SketchSummary } from './SketchPanels.jsx';
-import { SKETCH_PLANES, planeFrame, sketchConsumer, sketchWorldFrame } from './sketchPlane.js';
+import { SKETCH_PLANES, planeFrame, sketchConsumer, sketchWorldFrame, toPlane } from './sketchPlane.js';
+import { PLANE_NAMES } from './originPlanes.js';
+import { anchorWorld, formatMm, markOffset, markValue, modelPoses } from './marks.js';
 import { entityPolyline } from './sketchProfile.js';
 import { mateInstance } from './mate.js';
 import SheetPreview from './SheetPreview.jsx';
-import { ParameterContext } from './ExpressionInput.jsx';
+import { FieldContexts } from './liveField.js';
 import { DesignParametersForm, ParametersPanel } from './ParametersPanel.jsx';
 import { mergeParameters, resolveParameterRows } from './parameters.js';
 import { buildStarterModel } from './starterModels.js';
@@ -55,6 +81,16 @@ import './cad.css';
 
 const tabs = ['Sketch', 'Solid', 'Assemble', 'Drawings', 'Manufacture'];
 const WORLD_AXES = { X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };
+// What a mark reads (Marks panel).
+const MARK_READINGS = [
+  ['aligned', 'Aligned'],
+  ['X', 'X'],
+  ['Y', 'Y'],
+  ['Z', 'Z'],
+];
+const editableTarget = (target) =>
+  target instanceof HTMLElement &&
+  Boolean(target.closest('input, select, textarea, [contenteditable=""], [contenteditable="true"]'));
 // Angle snap presets beside the custom value (0 = free).
 const ROTATE_SNAPS = [
   [0, 'Free'],
@@ -111,7 +147,18 @@ export default function CadWorkspace({
   const propertiesPanel = useRef(null);
   const viewport = useRef(null);
   const featureHeading = useRef(null);
+  // The finished sketch's Extrude button, and the finish it was last focused for.
+  const extrudeButton = useRef(null);
+  const focusedFinish = useRef(null);
   const exportGeneration = useRef(0);
+  // Phase L (docs/sketch-studio-live-fields.md §5, option 2): the field
+  // channel a ValueField fills around its onChange ({ live, session, revert }),
+  // and the session of the last commit, so one typing session is one undo step.
+  const fieldMeta = useRef(null);
+  const fieldSession = useRef(null);
+  // The model that session's last commit produced: coalescing also needs the
+  // model to still be it (an Undo, or any change from elsewhere, breaks it).
+  const fieldModel = useRef(null);
   useLayoutEffect(() => {
     latestModel.current = model;
   }, [model]);
@@ -119,12 +166,44 @@ export default function CadWorkspace({
   const [operationDraft, setOperationDraft] = useState(null);
   const [showOperationPreview, setShowOperationPreview] = useState(true);
   const draftModel = useMemo(() => (operationDraft ? operationModel(operationDraft) : model), [operationDraft, model]);
+  // Direct placement (placementTool.js): a draft still being placed has no
+  // feature (or keeps its previous one while re-placing).
+  const placement = operationDraft?.placement || null;
   const draftProblem = operationDraft
-    ? operationProblem(operationDraft.feature, draftModel, operationDraft.partId)
+    ? placement?.problem ||
+      (operationDraft.feature
+        ? operationProblem(operationDraft.feature, draftModel, operationDraft.partId)
+        : 'Click in the viewport to place the operation.')
     : '';
   const draftStale = Boolean(operationDraft && operationDraft.baseModel !== model);
   const operationPreview = useCadModel(draftModel, Boolean(operationDraft && !draftStale && !draftProblem));
-  const displayPreview = Boolean(operationDraft && !draftStale && showOperationPreview && operationPreview.ready);
+  // While placing, the saved model is shown so clicks land on its faces.
+  const displayPreview = Boolean(
+    operationDraft && !draftStale && showOperationPreview && operationPreview.ready && placement?.stage !== 'place',
+  );
+  const placementContext = () => ({
+    model: operationDraft.baseModel,
+    snapshot: runtime.snapshot,
+    parameters: runtime.snapshot?.parameters || {},
+  });
+  // What the viewport draws; hidden when the saved model changed under the draft.
+  const placementShown = useMemo(() => {
+    if (!operationDraft?.placement || draftStale) return null;
+    try {
+      const shown = placementView(operationDraft, {
+        model: operationDraft.baseModel,
+        snapshot: runtime.snapshot,
+        parameters: runtime.snapshot?.parameters || {},
+      });
+      // Transform's ghost: the shown preview already carries the draft pose.
+      const tool = shown?.toolGizmo;
+      if (tool?.self && displayPreview)
+        shown.toolGizmo = { ...tool, basePose: { position: tool.position, rotation: tool.rotation } };
+      return shown;
+    } catch {
+      return null;
+    }
+  }, [operationDraft, draftStale, runtime.snapshot, displayPreview]);
   const [tab, setTab] = useState('Solid'),
     [search, setSearch] = useState(''),
     [selectedId, setSelectedId] = useState(null),
@@ -145,15 +224,31 @@ export default function CadWorkspace({
     [section, setSection] = useState(false),
     [sectionDepth, setSectionDepth] = useState(400),
     [fitKey, setFitKey] = useState(0);
+  // Another document opened while this workspace stays mounted (Open, Import,
+  // New, a template): frame it once, as a model opened with parts is framed
+  // on mount. Parts added in the session never refit (see addPart).
+  const [shownDocumentId, setShownDocumentId] = useState(document.id);
+  if (shownDocumentId !== document.id) {
+    setShownDocumentId(document.id);
+    setFitKey((v) => v + 1);
+  }
   const [focusTarget, setFocusTarget] = useState(null);
-  // In-viewport sketching: { stage: 'pick' } while choosing a face, then
-  // { stage: 'draw', frame, support, boundary, ... } while drawing.
+  // In-viewport sketching: { stage: 'pick' } while choosing a face or an
+  // origin plane, then { stage: 'draw', frame, support, boundary, ... } while drawing.
   const [sketchSession, setSketchSession] = useState(null);
-  const [sketchPlaneChoice, setSketchPlaneChoice] = useState({ plane: 'XY', offset: 0 });
+  // The pick stage's exact-plane fields; the offset also moves the origin
+  // plane tiles in the view (docs/sketch-studio-start-sketch.md §4.2).
+  const [planeDraft, setPlaneDraft] = useState({ plane: 'XY', offset: 0 });
   const [sketchSnap, setSketchSnap] = useState(1);
   const [finishedSketch, setFinishedSketch] = useState(null);
   // Face-to-face mate: { stage: 'moving' | 'target' | 'placed', ... }.
   const [mateSession, setMateSession] = useState(null);
+  // Measure tool: {} while picking points (the marks themselves are model.marks);
+  // the selected mark, Show marks (not saved) and a mark being saved as a parameter.
+  const [measureSession, setMeasureSession] = useState(null),
+    [selectedMarkId, setSelectedMarkId] = useState(null),
+    [hideMarks, setHideMarks] = useState(false),
+    [markParameter, setMarkParameter] = useState(null);
   const [dimensionTool, setDimensionTool] = useState(null);
   const [renaming, setRenaming] = useState(null);
   // The parameter last changed in the table, highlighted if the model then fails to rebuild.
@@ -193,9 +288,29 @@ export default function CadWorkspace({
       editor.scrollTop += featureHeading.current.getBoundingClientRect().top - editor.getBoundingClientRect().top - 12;
     }
   }, [featureId]);
+  // After a sketch finishes, Extrude takes the focus so Enter extrudes. A new
+  // sketch rebuilds the model, so the button may mount disabled (autoFocus
+  // then does nothing); focus it once it is enabled, unless something else
+  // was focused meanwhile.
+  useEffect(() => {
+    const button = extrudeButton.current;
+    if (panel !== 'sketch-finished' || !finishedSketch || !button || button.disabled) return;
+    if (focusedFinish.current === finishedSketch) return;
+    focusedFinish.current = finishedSketch;
+    const active = button.ownerDocument.activeElement;
+    if (!active || active === button.ownerDocument.body) button.focus();
+  });
   const instance = model.instances.find((i) => i.id === selectedId),
     part = model.parts.find((p) => p.id === instance?.partId);
   const feature = part?.features.find((f) => f.id === featureId) || part?.features.at(-1);
+  // The shown feature is the part's only enabled one: removing or suppressing
+  // it would leave a part with no solid (kernel "no active solid features"),
+  // so the panel offers Remove part instead (docs/sketch-studio-remove-part.md §3.2).
+  const soleFeature = Boolean(
+    feature && !feature.suppressed && part.features.filter((f) => !f.suppressed).length === 1,
+  );
+  const partInstanceCount = part ? model.instances.filter((i) => i.partId === part.id).length : 0;
+  const partInstanceLabel = `${partInstanceCount} instance${partInstanceCount === 1 ? '' : 's'}`;
   const sketch = model.sketches.find((s) => s.id === sketchId);
   const sheet = model.sheets.find((s) => s.id === sheetId) || model.sheets[0];
   const attached = model.connections.some((c) => c.from === selectedId && c.type !== 'weld');
@@ -204,10 +319,44 @@ export default function CadWorkspace({
     : exploded
       ? 'Turn off Exploded view to move parts.'
       : '';
+  // A commit from a field's typing session (read off the field channel): the
+  // first one pushes history (the pre-typing snapshot); later live commits and
+  // the final Enter / blur of the same session replace the model without a new
+  // entry; Esc after live edits reverts and drops the session's entry. Any
+  // commit without a session (a drag, a button, a select) ends the coalescing.
   const commit = (next) => {
-    setCadModel(normalizeModel(next));
+    const meta = fieldMeta.current;
+    const session = meta?.session ?? null;
+    const coalesce = Boolean(session) && session === fieldSession.current && fieldModel.current === model;
+    const normalized = normalizeModel(next);
+    if (meta?.revert) {
+      // Nothing of this session is (still) in the model: nothing to revert.
+      if (!coalesce) return;
+      fieldSession.current = fieldModel.current = null;
+      setCadModel(normalized, { skipHistory: true, revertSession: true });
+      setError('');
+      return;
+    }
+    fieldSession.current = session;
+    fieldModel.current = session ? normalized : null;
+    setCadModel(normalized, { skipHistory: coalesce });
     setError('');
   };
+  // A field's live value through perform: a failure stays silent until the
+  // commit on Enter / blur reports it (spec §4).
+  const performField = (action) => {
+    if (!fieldMeta.current?.live) return perform(action);
+    try {
+      action();
+    } catch {
+      // Reported on Enter / blur.
+    }
+  };
+  const marks = model.marks || [];
+  const selectedMark = marks.find((m) => m.id === selectedMarkId);
+  // Measure needs the assembled, unexploded model and no other tool.
+  const measureBlocked = Boolean(exploded || operationDraft || sketchSession || mateSession || holeMode || busy);
+  const measuring = Boolean(measureSession) && !measureBlocked;
   // Placement edits only need the displayed mesh, so they chain while the
   // kernel is still rebuilding the previous placement.
   const placeable = Boolean(
@@ -220,7 +369,8 @@ export default function CadWorkspace({
     !operationDraft &&
     !holeMode &&
     !sketchSession &&
-    !mateSession,
+    !mateSession &&
+    !measureSession,
   );
   // Turn by a fixed angle about X, Y or Z: the world axis, or in Local space
   // the part's own axis; through the picked pivot when turning about one.
@@ -238,6 +388,7 @@ export default function CadWorkspace({
   // turn it off when it is already the active one.
   const chooseGizmo = (mode) => {
     setHoleMode(null);
+    setMeasureSession(null);
     setMoveMode(!(moveMode && gizmo === mode));
     setGizmo(mode);
   };
@@ -245,16 +396,40 @@ export default function CadWorkspace({
   // handler sees the current selection and settings.
   useEffect(() => {
     const keyDown = (event) => {
+      // Delete / Backspace removes the selected mark (parts have no Delete key).
+      if (
+        (event.key === 'Delete' || event.key === 'Backspace') &&
+        selectedMark &&
+        !sketchSession &&
+        !editableTarget(event.target) &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.defaultPrevented
+      ) {
+        event.preventDefault();
+        deleteMark(selectedMark.id);
+        return;
+      }
       const action = placementKeyAction(event, {
         selected: Boolean(part),
-        busy: Boolean(sketchSession || holeMode || mateSession || operationDraft),
+        busy: Boolean(sketchSession || holeMode || mateSession || operationDraft || measureSession),
+        measuring: Boolean(measureSession),
         placeable,
         dragging: Boolean(viewport.current?.isDragging?.()),
         snap: rotateSnap,
+        toolGizmo: Boolean(placementShown?.toolGizmo),
       });
       if (!action) return;
       event.preventDefault();
-      if (action.type === 'gizmo') chooseGizmo(action.mode);
+      // R / M while a boolean tool gizmo is shown: switch its mode.
+      if (action.toolGizmo) setGizmo(action.mode);
+      else if (action.type === 'tool' && action.tool === 'sketch') {
+        if (!busy) perform(startSketchPick);
+      } else if (action.type === 'tool') {
+        if (measureSession) endMeasure();
+        else if (!measureBlocked) perform(startMeasure);
+      } else if (action.type === 'gizmo') chooseGizmo(action.mode);
       else turnSelected(action.axis, action.degrees);
     };
     window.addEventListener('keydown', keyDown);
@@ -266,18 +441,31 @@ export default function CadWorkspace({
   const select = (id) => {
     setHoleMode(null);
     setOperationDraft(null);
+    setSelectedMarkId(null);
     setSelectedId(id);
     setSketchId(null);
     setFeatureId(null);
     setPanel(null);
   };
+  // A new Board or Tube lands on the ground at the centre of the current view
+  // (the viewport's drop point, snapped to the Move grid; the origin when the
+  // viewport cannot say) and the camera stays where it is: a board's footprint
+  // is centred on the point (a box is built from its corner), a tube's axis
+  // runs up through it.
   const addPart = (kind) => {
     const created = createPart(kind);
-    commit({ ...model, parts: [...model.parts, created.part], instances: [...model.instances, created.instance] });
-    select(created.instance.id);
-    setFitKey((v) => v + 1);
+    const [x, y] = viewport.current?.viewDropPoint?.() ?? [0, 0, 0];
+    const body = created.part.features[0];
+    const position = body.type === 'box' ? [x - body.width / 2, y - body.depth / 2, 0] : [x, y, 0];
+    const instance = { ...created.instance, position };
+    commit({ ...model, parts: [...model.parts, created.part], instances: [...model.instances, instance] });
+    select(instance.id);
   };
-  const beginOperation = async (type, existingFeature = null) => {
+  // options (Phase J): { hardware } the library's hardware feature, { template }
+  // the sizes "Apply and place another" carries to the next cut; (Phase K)
+  // { row } opens the Hole tool as a hole row; (Phase M) { preselect:
+  // { instanceId, featureId } } opens Hardware with every hole of that row chosen.
+  const beginOperation = async (type, existingFeature = null, options = {}) => {
     setHoleMode(null);
     if (!existingFeature && !runtime.ready)
       throw new Error('Wait for the current model to rebuild before adding an operation.');
@@ -291,7 +479,8 @@ export default function CadWorkspace({
       }
     }
     if (latestModel.current !== model) throw new Error('The model changed. Open the operation again.');
-    const draft = createOperationDraft({
+    const chosenSketch = model.sketches.find((s) => s.id === sketchId && isClosedProfile(s)) || null;
+    let draft = createOperationDraft({
       type,
       model,
       partId: part?.id,
@@ -299,29 +488,102 @@ export default function CadWorkspace({
       bounds: runtime.snapshot?.parts.find((p) => p.id === part?.id)?.bounds,
       references,
       existingFeature,
+      placement: startPlacement({
+        type,
+        existingFeature,
+        chosenSketch,
+        hostInstanceId: part ? selectedId : null,
+        hardware: options.hardware || null,
+        template: options.template || null,
+        row: Boolean(options.row),
+      }),
     });
+    if (options.preselect)
+      draft = pickRowHoles(draft, options.preselect, {
+        model,
+        snapshot: runtime.snapshot,
+        parameters: runtime.snapshot?.parameters || {},
+      });
     setOperationDraft({ ...draft, previousSelection: selectedId, previousIsolation: isolated });
     setShowOperationPreview(true);
+    setMeasureSession(null);
     if (draft.newInstance) setSelectedId(draft.newInstance.id);
     setMoveMode(false);
     setExploded(false);
     setSection(false);
-    setIsolated(true);
+    // Isolate once the target is known; while placing, every part is clickable.
+    setIsolated(!(draft.placement?.stage === 'place' && ['face', 'path', 'section'].includes(pickOf(draft.placement))));
     setPropertiesOpen(true);
     setPanel('operation');
   };
-  const applyOperation = () =>
+  // A placement step that leaves the Place stage selects and isolates the
+  // part being shaped (never hiding the clicked part).
+  const changePlacement = (next) => {
+    if (operationDraft.placement?.stage === 'place' && next.placement?.stage !== 'place') {
+      setSelectedId(next.newInstance?.id || next.placement.hostInstanceId || selectedId);
+      // Hardware stays in context: the part it sits on remains visible.
+      setIsolated(next.placement.tool !== 'hardware');
+    }
+    if (operationDraft.placement?.stage !== 'place' && next.placement?.stage === 'place') {
+      if (['face', 'path', 'section'].includes(pickOf(next.placement))) setIsolated(false);
+    }
+    setOperationDraft(next);
+  };
+  const assertDraftCurrent = () => {
+    if (!operationDraft) throw new Error('No operation is open.');
+    if (draftStale) throw new Error('The saved model changed. Cancel and reopen this operation.');
+  };
+  const placeOperation = (info) =>
+    perform(() => {
+      assertDraftCurrent();
+      changePlacement(placeClick(operationDraft, info, placementContext()));
+    });
+  const dragOperation = (change) =>
+    perform(() => {
+      assertDraftCurrent();
+      if (operationDraft.sketchFlow)
+        return changeSketchOperation(sketchFlowDistance(operationDraft, change.value, placementContext()));
+      setOperationDraft(applyPlacementDrag(operationDraft, change, placementContext()));
+    });
+  // `pick`: a double-clicked hole centre (Hardware, Phase M); a button's
+  // click event is not one.
+  const finishOperationPlacement = (pick) =>
+    perform(() => {
+      assertDraftCurrent();
+      const hole = pick?.snapKind === 'hole centre' ? pick : null;
+      changePlacement(finishPlacement(operationDraft, placementContext(), hole));
+    });
+  const [reopen, setReopen] = useState(null);
+  // `again` (Hole / Pocket): reopen the tool in Place with the same sizes
+  // once the committed model has rebuilt (beginOperation waits for it).
+  const applyOperation = (again = false) =>
     perform(() => {
       if (draftStale || !operationPreview.ready || draftProblem || latestModel.current !== operationDraft.baseModel)
         throw new Error('Wait for a valid current preview before applying.');
       commit(draftModel);
       const id = operationDraft.newInstance?.id || selectedId;
       const featureId = operationDraft.feature.id;
+      setIsolated(operationDraft.previousIsolation);
       setOperationDraft(null);
       select(id);
       setFeatureId(featureId);
-      setFitKey((v) => v + 1);
+      if (again === true)
+        setReopen({
+          type: operationDraft.feature.type,
+          template: cutTemplate(operationDraft.feature),
+          // A hole row reopens as a row, with the same count and spacing.
+          row: Boolean(operationDraft.feature.row),
+          before: operationDraft.baseModel,
+        });
     });
+  useEffect(() => {
+    // After the commit reaches this component and the model has rebuilt.
+    if (!reopen || model === reopen.before || !runtime.ready || operationDraft) return;
+    setReopen(null);
+    perform(() => beginOperation(reopen.type, null, { template: reopen.template, row: reopen.row }));
+    // Runs once the committed model has rebuilt; beginOperation reads that render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reopen, model, runtime.ready, operationDraft]);
   const cancelOperation = () => {
     setSelectedId(operationDraft.previousSelection);
     setIsolated(operationDraft.previousIsolation);
@@ -353,6 +615,7 @@ export default function CadWorkspace({
     if (!part) throw new Error('Select the part that should receive the holes first.');
     if (!runtime.ready) throw new Error('Wait for the current model to rebuild first.');
     setHoleMode(mode);
+    setMeasureSession(null);
     setMoveMode(false);
     setExploded(false);
     setSection(false);
@@ -360,7 +623,8 @@ export default function CadWorkspace({
     setPropertiesOpen(true);
     if (mode === 'place') setPanel('hole-tool');
   };
-  const placeHole = (point, normal, planar) => {
+  // `exact`: the point came from a mark, so it is used as is (no hole snap).
+  const placeHole = (point, normal, planar, { exact = false } = {}) => {
     if (!planar)
       throw new Error('Pick a flat face. For a round tube, use Hole → On tube / member for an exact radial cut.');
     if (!runtime.ready || latestModel.current !== model) throw new Error('Wait for the current model to rebuild.');
@@ -371,18 +635,24 @@ export default function CadWorkspace({
       pose,
       true,
     );
-    const position = snapCutPoint(unmapPlacement(point, pose), direction, holeSnap);
+    const local = unmapPlacement(point, pose);
+    const position = exact ? local : snapCutPoint(local, direction, holeSnap);
     const next = positionedCut({ ...holeTemplate, id: uid('feature') }, position, direction);
     changePart({ ...part, features: [...part.features, next] });
     setFeatureId(next.id);
   };
-  const moveHole = (id, point) => {
+  // `index`: which hole of a hole row was dragged (Phase K); the whole row
+  // moves with it, so the first hole moves by the same amount.
+  const moveHole = (id, point, index = 0) => {
     if (!runtime.ready || latestModel.current !== model) throw new Error('Wait for the current model to rebuild.');
     const old = part.features.find((f) => f.id === id);
-    const cut = runtime.snapshot.parts.find((p) => p.id === part.id)?.features[id]?.cut;
+    const metrics = runtime.snapshot.parts.find((p) => p.id === part.id)?.features[id];
+    const cut = metrics?.cut;
     const pose = runtime.snapshot.instances.find((i) => i.id === selectedId)?.placement;
     if (!cut || !pose) throw new Error('This hole needs current geometry before moving.');
-    const position = snapCutPoint(unmapPlacement(point, pose), cut.direction, holeSnap);
+    const snapped = snapCutPoint(unmapPlacement(point, pose), cut.direction, holeSnap);
+    const centre = metrics.row?.centres?.[index];
+    const position = index > 0 && centre ? cut.position.map((x, i) => x + snapped[i] - centre[i]) : snapped;
     const next = positionedCut(old, position, cut.direction);
     changePart({ ...part, features: part.features.map((f) => (f.id === id ? next : f)) });
     setFeatureId(id);
@@ -399,6 +669,7 @@ export default function CadWorkspace({
   };
   const resetModesForSketch = () => {
     setHoleMode(null);
+    setMeasureSession(null);
     setMoveMode(false);
     setExploded(false);
     setSection(false);
@@ -425,6 +696,9 @@ export default function CadWorkspace({
       visible: view.visible,
       focus: view.focus,
       outline: boundary,
+      // Every drawn mark point, dropped square onto the plane (a width
+      // measured on a front edge marks a top-face sketch too).
+      markPoints: (viewport.current?.getMarkPoints?.() || []).map((p) => toPlane(frame, p).slice(0, 2)),
     });
     setFocusTarget(view.focus);
     setPanel('sketching');
@@ -446,16 +720,17 @@ export default function CadWorkspace({
     });
     setFocusTarget(view.focus);
   };
+  // New sketch (ribbon, Start list, S): pick a flat face or an origin plane
+  // in the view, or type an exact plane in the panel.
   const startSketchPick = () => {
-    if (!model.instances.length) throw new Error('Add a part first, or use Sketch on plane.');
-    if (!runtime.ready) throw new Error('Wait for the model to rebuild first.');
     resetModesForSketch();
     setSketchSession({ stage: 'pick' });
+    setPlaneDraft((draft) => ({ ...draft, offset: 0 }));
     setPanel('sketch-pick');
   };
   const pickSketchFace = (info) => {
     if (!info.planar)
-      throw new Error('Pick a flat face. Curved faces cannot hold a sketch; use Sketch on plane instead.');
+      throw new Error('Pick a flat face. Curved faces cannot hold a sketch; pick an origin plane instead.');
     if (!runtime.ready) throw new Error('Wait for the model to rebuild first.');
     beginSketch({
       frame: info.frame,
@@ -463,11 +738,12 @@ export default function CadWorkspace({
       boundary: info.outline,
     });
   };
-  const startPlaneSketch = () => {
-    const offset = Number(sketchPlaneChoice.offset) || 0;
+  // An origin plane tile, its label, or the panel's Start sketch.
+  const pickSketchPlane = (plane, offset = 0) => {
+    const amount = Number(offset) || 0;
     beginSketch({
-      frame: planeFrame(sketchPlaneChoice.plane, offset),
-      support: { type: 'plane', plane: sketchPlaneChoice.plane, offset },
+      frame: planeFrame(plane, amount),
+      support: { type: 'plane', plane, offset: amount },
     });
   };
   const editSketch = (id) => {
@@ -508,7 +784,8 @@ export default function CadWorkspace({
     });
   const openSketchDraft = (sketchId, settings, ids, base, previous) => {
     const draft = sketchOperationDraft({ model: base, snapshot: runtime.snapshot, sketchId, settings, ids });
-    setOperationDraft({ ...draft, ...previous });
+    setOperationDraft({ ...draft, ...previous, placement: sketchFlowPlacement(draft) });
+    setMeasureSession(null);
     setShowOperationPreview(true);
     setSelectedId(draft.newInstance?.id || settings.target);
     setMoveMode(false);
@@ -525,7 +802,7 @@ export default function CadWorkspace({
     openSketchDraft(sketchId, settings, {}, model, { previousSelection: selectedId, previousIsolation: isolated });
   };
   const changeSketchOperation = (settings) =>
-    perform(() =>
+    performField(() =>
       openSketchDraft(
         operationDraft.sketchFlow.sketchId,
         settings,
@@ -571,7 +848,7 @@ export default function CadWorkspace({
     setMateSession(next);
   };
   const changeMateOffset = (offset) =>
-    perform(() => {
+    performField(() => {
       const value = numeric(offset, runtime.snapshot?.parameters || {}, 'Offset');
       const next = { ...mateSession, offset: value };
       commit(mateInstance(model, next, runtime.snapshot?.parameters || {}));
@@ -584,6 +861,65 @@ export default function CadWorkspace({
     setGizmo('translate');
     setMoveMode(true);
   };
+  // Measure: two clicks on the model leave a dimension mark (model.marks).
+  const startMeasure = () => {
+    if (!model.instances.length) throw new Error('Add a part first.');
+    if (!runtime.ready) throw new Error('Wait for the model to rebuild first.');
+    resetModesForSketch();
+    setSketchSession(null);
+    setMateSession(null);
+    setMeasureSession({});
+    setPanel('marks');
+  };
+  const endMeasure = () => setMeasureSession(null);
+  const addMark = ({ from, to, fromWorld, toWorld }) =>
+    perform(() => {
+      const id = uid('mark');
+      const offset = markOffset({
+        from,
+        to,
+        A: fromWorld,
+        B: toWorld,
+        along: 'aligned',
+        poses: viewport.current.getGroupPoses(),
+        span: viewport.current.getSceneSpan(),
+      });
+      commit({ ...model, marks: [...marks, { id, from, to, along: 'aligned', offset }] });
+      setSelectedMarkId(id);
+    });
+  // A new reading stands the dimension line off square to its new direction.
+  const changeMarkAlong = (mark, along) =>
+    perform(() => {
+      const poses = viewport.current.getGroupPoses();
+      const A = anchorWorld(mark.from, poses),
+        B = anchorWorld(mark.to, poses);
+      const offset =
+        A && B
+          ? markOffset({ from: mark.from, to: mark.to, A, B, along, poses, span: viewport.current.getSceneSpan() })
+          : mark.offset;
+      commit({ ...model, marks: marks.map((m) => (m.id === mark.id ? { ...m, along, offset } : m)) });
+      setSelectedMarkId(mark.id);
+    });
+  const deleteMark = (id) => {
+    commit({ ...model, marks: marks.filter((m) => m.id !== id) });
+    if (selectedMarkId === id) setSelectedMarkId(null);
+    if (markParameter?.id === id) setMarkParameter(null);
+  };
+  // mark1, mark2, … : the first name no parameter uses yet.
+  const freeMarkName = () => {
+    let n = 1;
+    while (model.parameters.some((p) => p.name === `mark${n}`)) n++;
+    return `mark${n}`;
+  };
+  const saveMarkParameter = (value) =>
+    perform(() => {
+      const name = markParameter.name.trim();
+      const merged = mergeParameters(model.parameters, [{ name, value: Math.round(value * 1000) / 1000 }], () =>
+        uid('parameter'),
+      );
+      commit({ ...model, parameters: merged.parameters });
+      setMarkParameter(null);
+    });
   const cancelMate = () => {
     if (mateSession?.stage === 'placed')
       commit({
@@ -627,7 +963,7 @@ export default function CadWorkspace({
         );
       } else {
         commit({ ...model, parameters: merged.parameters });
-        setParameterNotice(`${counts} — next: Start a sketch or Design parameters → Build`);
+        setParameterNotice(`${counts} — next: New sketch or Design parameters → Build`);
       }
       setMoveSnap(snap);
       setPanel('parameters');
@@ -797,19 +1133,24 @@ export default function CadWorkspace({
     }
   };
   const commands = [
-    { tab: 'Sketch', label: 'Sketch on face', run: startSketchPick },
+    { tab: 'Sketch', label: 'New sketch', run: startSketchPick },
     {
       tab: 'Sketch',
-      label: 'Sketch on plane',
+      label: 'Import 2D profiles',
+      run: () => setPanel('import-drafting'),
+    },
+    { tab: 'Sketch', label: 'Freehand drafting', run: onDrafting },
+    {
+      tab: 'Sketch',
+      label: 'Sketch from fields',
       run: () => {
-        setHoleMode(null);
-        setPanel('sketch-plane');
-        setPropertiesOpen(true);
+        setPanel('sketch');
+        setSketchId(null);
       },
     },
     {
       tab: 'Sketch',
-      label: 'Line / arc / spline',
+      label: 'Precision path',
       run: () => {
         const sketch = {
           id: uid('sketch'),
@@ -825,20 +1166,6 @@ export default function CadWorkspace({
         setPanel('edit-sketch');
       },
     },
-    {
-      tab: 'Sketch',
-      label: 'New sketch',
-      run: () => {
-        setPanel('sketch');
-        setSketchId(null);
-      },
-    },
-    {
-      tab: 'Sketch',
-      label: 'Import 2D profiles',
-      run: () => setPanel('import-drafting'),
-    },
-    { tab: 'Sketch', label: 'Freehand drafting', run: onDrafting },
     { tab: 'Solid', label: 'Board / plate', run: () => addPart('board') },
     { tab: 'Solid', label: 'Tube / member', run: () => addPart('member') },
     { tab: 'Solid', label: 'Rear cover example', run: () => loadExample('cover') },
@@ -869,7 +1196,14 @@ export default function CadWorkspace({
       'mirror',
       'pattern',
       'trim',
-    ].map((type) => ({ tab: 'Solid', label: type[0].toUpperCase() + type.slice(1), run: () => addFeature(type) })),
+      'transform',
+    ].flatMap((type) => [
+      { tab: 'Solid', label: type[0].toUpperCase() + type.slice(1), run: () => addFeature(type) },
+      // Phase K: a straight row of equally spaced holes, right after Hole.
+      ...(type === 'hole'
+        ? [{ tab: 'Solid', label: 'Hole row', run: () => beginOperation('hole', null, { row: true }) }]
+        : []),
+    ]),
     {
       tab: 'Assemble',
       label: 'Duplicate instance',
@@ -885,6 +1219,7 @@ export default function CadWorkspace({
       },
     },
     { tab: 'Assemble', label: 'Mate faces', current: true, run: startMate },
+    { tab: 'Assemble', label: 'Measure', run: startMeasure },
     { tab: 'Assemble', label: 'Connections / welds', run: () => setPanel('connections') },
     {
       tab: 'Assemble',
@@ -903,7 +1238,14 @@ export default function CadWorkspace({
       },
     },
     { tab: 'Assemble', label: 'Isolate', run: () => setIsolated(!isolated) },
-    { tab: 'Assemble', label: 'Exploded view', run: () => setExploded(!exploded) },
+    {
+      tab: 'Assemble',
+      label: 'Exploded view',
+      run: () => {
+        if (!exploded) setMeasureSession(null);
+        setExploded(!exploded);
+      },
+    },
     { tab: 'Assemble', label: 'Section', run: () => setSection(!section) },
     {
       tab: 'Assemble',
@@ -1019,6 +1361,10 @@ export default function CadWorkspace({
     { tab: 'Manufacture', label: 'Workshop ZIP', current: true, run: () => exportFile('zip') },
   ];
   const pickingFace = sketchSession?.stage === 'pick' || (mateSession && mateSession.stage !== 'placed');
+  // Origin plane tiles: on an empty model at rest, and while picking where a new sketch goes.
+  const planesShown =
+    (model.parts.length === 0 && !sketchSession && !operationDraft && !measureSession && !mateSession && !holeMode) ||
+    sketchSession?.stage === 'pick';
   useEffect(() => {
     if (!pickingFace) return;
     const keyDown = (event) => {
@@ -1031,6 +1377,74 @@ export default function CadWorkspace({
     window.addEventListener('keydown', keyDown);
     return () => window.removeEventListener('keydown', keyDown);
   }, [pickingFace]);
+  // An open operation: Esc walks back one step (a sweep point, a loft
+  // section, the axis pick) or cancels; Enter finishes a path / the sections,
+  // else applies. A handle drag in the viewport handles its own keys first.
+  const canApply = Boolean(operationDraft && !draftStale && !draftProblem && operationPreview.ready);
+  useEffect(() => {
+    if (!operationDraft) return;
+    const keyDown = (event) => {
+      if (event.defaultPrevented || editableTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey)
+        return;
+      if (viewport.current?.isDragging?.()) return;
+      // A hole row (Phase K): ↑ / ↓ change the count in the direction stage
+      // and in Shape (2 … 100; Shape keeps the spacing).
+      const row = operationDraft.placement?.row;
+      if (
+        (event.key === 'ArrowUp' || event.key === 'ArrowDown') &&
+        !draftStale &&
+        ((row?.seed && operationDraft.placement.stage === 'place') ||
+          (operationDraft.placement?.stage === 'shape' && operationDraft.feature?.row))
+      ) {
+        event.preventDefault();
+        const next = changeRowCount(operationDraft, event.key === 'ArrowUp' ? 1 : -1, placementContext());
+        if (next !== operationDraft) setOperationDraft(next);
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        const back = draftStale ? null : stepBack(operationDraft, placementContext());
+        if (back) setOperationDraft(back);
+        else cancelOperation();
+      } else if (event.key === 'Enter') {
+        // A focused, enabled control activates itself on Enter.
+        const control = event.target instanceof HTMLElement ? event.target.closest('button, a, summary') : null;
+        if (control && !control.disabled) return;
+        const p = operationDraft.placement;
+        // Enter in a hole row's direction stage takes the default row;
+        // Hardware with chosen holes (Phase M) seats it in them.
+        if (
+          p?.stage === 'place' &&
+          (['sweep', 'loft'].includes(p.tool) || p.row?.seed || (p.tool === 'hardware' && p.holes?.length))
+        ) {
+          event.preventDefault();
+          finishOperationPlacement();
+        } else if (canApply) {
+          event.preventDefault();
+          applyOperation();
+        }
+      }
+    };
+    window.addEventListener('keydown', keyDown);
+    return () => window.removeEventListener('keydown', keyDown);
+  });
+  // Esc while measuring: drop the first point, else end the tool.
+  useEffect(() => {
+    if (!measureSession) return;
+    const keyDown = (event) => {
+      if (event.key !== 'Escape' || editableTarget(event.target)) return;
+      event.preventDefault();
+      if (viewport.current?.measureState?.().first) viewport.current.cancelMeasure();
+      else {
+        setMeasureSession(null);
+        setPanel(null);
+      }
+    };
+    window.addEventListener('keydown', keyDown);
+    return () => window.removeEventListener('keydown', keyDown);
+  }, [measureSession]);
+  // Mark coordinates and values for the Marks panel, as the model is shown.
+  const markPoses = useMemo(() => modelPoses(model, runtime.snapshot), [model, runtime.snapshot]);
   const rows = useMemo(() => {
     try {
       return runtime.ready ? buildCutList(model, runtime.snapshot) : [];
@@ -1070,7 +1484,7 @@ export default function CadWorkspace({
     }
   }
   return (
-    <ParameterContext.Provider value={parameterContext}>
+    <FieldContexts parameters={parameterContext} channel={fieldMeta}>
       <section className="cad-workspace" aria-label="Sketch Studio solid modeling">
         <header className="cad-header">
           <Link to="/" className="cad-brand" aria-label="Back to home" title="Back to home">
@@ -1380,6 +1794,25 @@ export default function CadWorkspace({
               >
                 Move holes
               </button>
+              <button
+                className="cad-measure-button"
+                aria-pressed={measuring}
+                disabled={!measuring && measureBlocked}
+                title="Click two points to measure and leave a dimension mark (D)"
+                onClick={() => (measuring ? endMeasure() : perform(startMeasure))}
+              >
+                Measure
+              </button>
+              {measuring && <button onClick={endMeasure}>Done measuring</button>}
+              {marks.length > 0 && (
+                <button
+                  aria-pressed={!hideMarks}
+                  title="Show or hide the dimension marks"
+                  onClick={() => setHideMarks(!hideMarks)}
+                >
+                  Show marks
+                </button>
+              )}
               {holeMode && (
                 <>
                   <label>
@@ -1532,14 +1965,17 @@ export default function CadWorkspace({
                   exploded={exploded}
                   section={section ? sectionDepth : null}
                   fitKey={fitKey}
+                  previewShown={displayPreview}
                   moveEnabled={moveMode && placeable}
                   transformMode={gizmo}
                   rotateSnap={rotateSnap}
                   rotateSpace={rotateSpace}
                   pivotPick={rotateAbout === 'picked'}
                   holeMode={!operationDraft && !exploded && !section && !busy ? holeMode : null}
-                  onPlaceHole={(point, normal, planar) => perform(() => placeHole(point, normal, planar))}
-                  onMoveHole={(id, point) => perform(() => moveHole(id, point))}
+                  onPlaceHole={(point, normal, planar, options) =>
+                    perform(() => placeHole(point, normal, planar, options))
+                  }
+                  onMoveHole={(id, point, index) => perform(() => moveHole(id, point, index))}
                   onCancelHole={() => {
                     setHoleMode(null);
                     setPanel(null);
@@ -1559,6 +1995,8 @@ export default function CadWorkspace({
                     })
                   }
                   sketchMode={sketchSession?.stage || (mateSession && mateSession.stage !== 'placed' ? 'pick' : null)}
+                  planes={{ visible: planesShown, offset: sketchSession?.stage === 'pick' ? planeDraft.offset : 0 }}
+                  onPickSketchPlane={(plane, offset) => perform(() => pickSketchPlane(plane, offset))}
                   sketchSupportId={sketchSession?.support?.instanceId || null}
                   pickHint={
                     mateSession?.stage === 'moving'
@@ -1568,6 +2006,20 @@ export default function CadWorkspace({
                         : undefined
                   }
                   onPickSketchFace={(info) => perform(() => (mateSession ? pickMateFace(info) : pickSketchFace(info)))}
+                  marks={marks}
+                  measureMode={measuring}
+                  selectedMarkId={selectedMarkId}
+                  hideMarks={hideMarks}
+                  onMeasure={addMark}
+                  onSelectMark={(id) => {
+                    setSelectedMarkId(id);
+                    setPanel('marks');
+                    setPropertiesOpen(true);
+                  }}
+                  placement={placementShown}
+                  onPlace={placeOperation}
+                  onPlacementDrag={dragOperation}
+                  onPlacementFinish={finishOperationPlacement}
                 />
                 {sketchSession?.stage === 'draw' && (
                   <CadSketcher
@@ -1590,43 +2042,11 @@ export default function CadWorkspace({
                 </div>
                 {operationDraft && (
                   <div className="cad-preview-badge">
-                    {displayPreview ? 'Operation preview — Apply to save' : 'Saved model — operation not applied'}
-                  </div>
-                )}
-                {!model.parts.length && !operationDraft && !sketchSession && (
-                  <div className="cad-empty">
-                    <Icon name="Solid" />
-                    {model.parameters.length ? (
-                      <h2>
-                        {model.parameters.length} parameter{model.parameters.length === 1 ? '' : 's'} ready · start a
-                        sketch to use them
-                      </h2>
-                    ) : (
-                      <h2>
-                        From a precise model
-                        <br />
-                        to the workshop.
-                      </h2>
-                    )}
-                    <p>Start with a sketch, a member, a board, or an example assembly.</p>
-                    <div>
-                      <button
-                        className="cad-primary"
-                        onClick={() => {
-                          setTab('Sketch');
-                          setPanel('sketch-plane');
-                          setPropertiesOpen(true);
-                        }}
-                      >
-                        Start a sketch
-                      </button>
-                      <button onClick={openDesignParameters}>Design parameters</button>
-                      <button onClick={() => addPart('member')}>Create tube member</button>
-                      <button onClick={() => perform(() => loadExample('table'))}>Welded table example</button>
-                      <button onClick={() => perform(() => loadExample('pump'))}>Pump bracket drawing study</button>
-                    </div>
-                    <p>Your existing 2D sketches remain in Freehand drafting.</p>
-                    <button onClick={() => setPanel('import-drafting')}>Import 2D profiles</button>
+                    {displayPreview
+                      ? placementShown?.cut
+                        ? 'Cut preview — Apply to save'
+                        : 'Operation preview — Apply to save'
+                      : 'Saved model — operation not applied'}
                   </div>
                 )}
               </div>
@@ -1702,8 +2122,17 @@ export default function CadWorkspace({
                       .slice(part.features.indexOf(feature) + 1)
                       .some((f) => !f.suppressed && ['transform', 'mirror', 'pattern'].includes(f.type))
                   }
+                  attachRow={feature?.type === 'hole' && Boolean(feature.row)}
                   onAdd={(hardware, attach) =>
                     perform(() => {
+                      // Not attached to a selected hole: place it with the mouse (Phase J).
+                      if (!attach) return beginOperation('hardware', null, { hardware });
+                      // A selected hole row (Phase M): Place with every hole of it chosen.
+                      if (feature.row)
+                        return beginOperation('hardware', null, {
+                          hardware,
+                          preselect: { instanceId: selectedId, featureId: feature.id },
+                        });
                       const created = createHardware(hardware);
                       const connection = attach
                         ? {
@@ -1724,7 +2153,6 @@ export default function CadWorkspace({
                       });
                       select(created.instance.id);
                       setMoveMode(!attach);
-                      setFitKey((v) => v + 1);
                     })
                   }
                 />
@@ -1764,7 +2192,7 @@ export default function CadWorkspace({
                     </label>
                   )}
                   <ValueField
-                    key={holeTemplate.diameter}
+                    key="diameter"
                     label="Hole diameter (mm)"
                     value={holeTemplate.diameter}
                     onChange={(diameter) => setHoleTemplate({ ...holeTemplate, diameter })}
@@ -1779,7 +2207,7 @@ export default function CadWorkspace({
                   </label>
                   {!holeTemplate.throughAll && (
                     <ValueField
-                      key={holeTemplate.depth}
+                      key="depth"
                       label="Hole depth (mm)"
                       value={holeTemplate.depth}
                       onChange={(depth) => setHoleTemplate({ ...holeTemplate, depth })}
@@ -1798,6 +2226,114 @@ export default function CadWorkspace({
                     Finish holes
                   </button>
                 </>
+              ) : panel === 'marks' ? (
+                <>
+                  <h3>Measure</h3>
+                  <p className="cad-help">
+                    Click two points on the model: corners, edge midpoints, edges and faces snap. Each pair leaves a
+                    dimension mark that moves with its parts. Mark points snap the move gizmo, sketches and hole
+                    placement; save a mark as a parameter to type =name in a size or position. D starts or stops
+                    measuring · Delete removes the selected mark.
+                  </p>
+                  {measuring ? (
+                    <button onClick={endMeasure}>Done measuring</button>
+                  ) : (
+                    <button className="cad-primary" disabled={measureBlocked} onClick={() => perform(startMeasure)}>
+                      Measure
+                    </button>
+                  )}
+                  {marks.length ? (
+                    <div className="cad-mark-list" role="list" aria-label="Marks">
+                      {marks.map((mark) => {
+                        const A = anchorWorld(mark.from, markPoses),
+                          B = anchorWorld(mark.to, markPoses);
+                        const value = A && B ? markValue(mark, A, B) : null;
+                        const where = (anchor, point) => {
+                          const target = model.instances.find((i) => i.id === anchor.instanceId);
+                          const name = anchor.instanceId
+                            ? target?.name || model.parts.find((p) => p.id === target?.partId)?.name || 'Part'
+                            : 'World';
+                          return `${name} (${point.map((v) => v.toFixed(2)).join(', ')})`;
+                        };
+                        return (
+                          <div
+                            key={mark.id}
+                            role="listitem"
+                            className={`cad-mark-row ${mark.id === selectedMarkId ? 'is-selected' : ''}`}
+                            onClick={() => setSelectedMarkId(mark.id)}
+                          >
+                            <div className="cad-mark-head">
+                              <strong>{value == null ? '—' : `${formatMm(value)} mm`}</strong>
+                              <select
+                                aria-label="Measure along"
+                                value={mark.along}
+                                onChange={(e) => changeMarkAlong(mark, e.target.value)}
+                              >
+                                {MARK_READINGS.map(([along, label]) => (
+                                  <option key={along} value={along}>
+                                    {label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            {value == null ? (
+                              <small>part hidden or missing</small>
+                            ) : (
+                              <small>
+                                From {where(mark.from, A)}
+                                <br />
+                                To {where(mark.to, B)}
+                              </small>
+                            )}
+                            <div className="cad-inline">
+                              <button
+                                disabled={value == null}
+                                onClick={() => setMarkParameter({ id: mark.id, name: freeMarkName() })}
+                              >
+                                Save as parameter
+                              </button>
+                              <button
+                                disabled={value == null}
+                                onClick={() =>
+                                  navigator.clipboard
+                                    ?.writeText(formatMm(value))
+                                    .catch(() => setError('Copying to the clipboard is not allowed here.'))
+                                }
+                              >
+                                Copy
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteMark(mark.id);
+                                }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                            {markParameter?.id === mark.id && value != null && (
+                              <label className="cad-field">
+                                Parameter name (Enter saves)
+                                <input
+                                  aria-label="Parameter name"
+                                  autoFocus
+                                  value={markParameter.name}
+                                  onChange={(e) => setMarkParameter({ ...markParameter, name: e.target.value })}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') saveMarkParameter(value);
+                                    if (e.key === 'Escape') setMarkParameter(null);
+                                  }}
+                                />
+                              </label>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p>No marks yet. Click Measure, then two points on the model.</p>
+                  )}
+                </>
               ) : panel === 'mate' && mateSession ? (
                 <>
                   <h3>Mate faces</h3>
@@ -1812,7 +2348,7 @@ export default function CadWorkspace({
                   </ol>
                   {mateSession.stage === 'placed' && (
                     <ValueField
-                      key={`mate-offset-${mateSession.offset}`}
+                      key="mate-offset"
                       label="Offset (mm)"
                       value={mateSession.offset}
                       onChange={changeMateOffset}
@@ -1830,21 +2366,25 @@ export default function CadWorkspace({
                     <button onClick={cancelMate}>Cancel mate</button>
                   </div>
                 </>
-              ) : panel === 'sketch-plane' ? (
+              ) : panel === 'sketch-pick' && sketchSession?.stage === 'pick' ? (
                 <>
-                  <h3>Sketch on a plane</h3>
+                  <h3>New sketch</h3>
                   <p className="cad-help">
-                    Choose a plane through the origin. The offset moves it along its own axis (XY → Z, XZ → Y, YZ → X).
+                    Click a flat face of a part, or one of the three origin planes in the view. The camera squares to it
+                    and the sketch bar opens.
                   </p>
+                  <h4>Exact plane</h4>
                   <label className="cad-field">
                     Plane
                     <select
                       aria-label="Sketch plane"
-                      value={sketchPlaneChoice.plane}
-                      onChange={(e) => setSketchPlaneChoice({ ...sketchPlaneChoice, plane: e.target.value })}
+                      value={planeDraft.plane}
+                      onChange={(e) => setPlaneDraft({ ...planeDraft, plane: e.target.value })}
                     >
                       {SKETCH_PLANES.map((plane) => (
-                        <option key={plane}>{plane}</option>
+                        <option key={plane} value={plane}>
+                          {plane} · {PLANE_NAMES[plane]}
+                        </option>
                       ))}
                     </select>
                   </label>
@@ -1853,29 +2393,27 @@ export default function CadWorkspace({
                     <input
                       aria-label="Plane offset (mm)"
                       type="number"
-                      value={sketchPlaneChoice.offset}
-                      onChange={(e) => setSketchPlaneChoice({ ...sketchPlaneChoice, offset: e.target.value })}
+                      value={planeDraft.offset}
+                      onChange={(e) => setPlaneDraft({ ...planeDraft, offset: e.target.value })}
                     />
+                    <small>moves each origin plane along its own axis (XY → Z, XZ → Y, YZ → X)</small>
                   </label>
-                  <button className="cad-primary cad-wide" onClick={() => perform(startPlaneSketch)}>
-                    Start sketch
-                  </button>
-                </>
-              ) : panel === 'sketch-pick' && sketchSession?.stage === 'pick' ? (
-                <>
-                  <h3>Sketch on a face</h3>
-                  <p className="cad-help">
-                    Click a flat face of any part. The view turns square to it and the face edges become snap targets.
-                    The sketch origin is the face corner at the lower left as you look at it.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setSketchSession(null);
-                      setPanel(null);
-                    }}
-                  >
-                    Cancel
-                  </button>
+                  <div className="cad-inline">
+                    <button
+                      className="cad-primary"
+                      onClick={() => perform(() => pickSketchPlane(planeDraft.plane, planeDraft.offset))}
+                    >
+                      Start sketch
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSketchSession(null);
+                        setPanel(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </>
               ) : panel === 'sketching' && sketchSession?.stage === 'draw' ? (
                 <>
@@ -1916,6 +2454,9 @@ export default function CadWorkspace({
                           <div className="cad-inline">
                             <button
                               className="cad-primary"
+                              // Enter extrudes a closed profile straight away.
+                              ref={extrudeButton}
+                              autoFocus
                               disabled={!finishedSketch.closed || !runtime.ready}
                               onClick={() => perform(() => startSketchOperation(done.id, 'extrude'))}
                             >
@@ -1948,8 +2489,8 @@ export default function CadWorkspace({
                   onShowPreview={setShowOperationPreview}
                   onSettings={changeSketchOperation}
                   onMode={(mode) =>
-                    changeSketchOperation(
-                      defaultSketchSettings({
+                    changeSketchOperation({
+                      ...defaultSketchSettings({
                         model: operationDraft.baseModel,
                         snapshot: runtime.snapshot,
                         sketch: operationDraft.baseModel.sketches.find(
@@ -1958,8 +2499,12 @@ export default function CadWorkspace({
                         mode,
                         selectedId: operationDraft.previousSelection,
                       }),
-                    )
+                      // Chosen by hand: drags no longer switch Extrude / Cut.
+                      inferOperation: false,
+                    })
                   }
+                  placementText={placementSummary(operationDraft, placementContext())}
+                  inferring={Boolean(placementShown?.inference?.active)}
                   onFit={() => setFitKey((v) => v + 1)}
                   onCancel={cancelOperation}
                   onApply={applyOperation}
@@ -1980,6 +2525,27 @@ export default function CadWorkspace({
                   onFit={() => setFitKey((v) => v + 1)}
                   onCancel={cancelOperation}
                   onApply={applyOperation}
+                  onApplyAgain={() => applyOperation(true)}
+                  placementText={placementSummary(operationDraft, placementContext())}
+                  rowDirection={cutRowDirection(operationDraft, placementContext())}
+                  onReplace={() => perform(() => changePlacement(replacePlacement(operationDraft)))}
+                  onFinishPlacement={finishOperationPlacement}
+                  chosenHoles={
+                    operationDraft.placement?.tool === 'hardware'
+                      ? chosenHoleRows(operationDraft, placementContext())
+                      : []
+                  }
+                  onRemoveHole={(key) =>
+                    perform(() => {
+                      assertDraftCurrent();
+                      changePlacement(removeChosenHole(operationDraft, key, placementContext()));
+                    })
+                  }
+                  onChangeAxis={() => setOperationDraft(startAxisPick(operationDraft))}
+                  onSweepOptions={(patch) =>
+                    performField(() => setOperationDraft(changeSweepOptions(operationDraft, patch, placementContext())))
+                  }
+                  onError={setError}
                 />
               ) : panel === 'import-drafting' ? (
                 <DraftingImport
@@ -2175,7 +2741,7 @@ export default function CadWorkspace({
                   </p>
                   {Object.entries(model.fabrication).map(([key, value]) => (
                     <ValueField
-                      key={`${key}-${value}`}
+                      key={key}
                       label={`${key} (mm)`}
                       value={value}
                       onChange={(v) => commit({ ...model, fabrication: { ...model.fabrication, [key]: v } })}
@@ -2239,7 +2805,7 @@ export default function CadWorkspace({
                 <>
                   <h3>{part.name}</h3>
                   <ValueField
-                    key={part.id + part.name}
+                    key={`${part.id}-name`}
                     label="Part name"
                     value={part.name}
                     onChange={(name) => changePart({ ...part, name: String(name) })}
@@ -2301,9 +2867,14 @@ export default function CadWorkspace({
                   {feature && (
                     <>
                       <h4 ref={featureHeading}>
-                        {feature.type} · feature {part.features.indexOf(feature) + 1}
+                        {feature.type}
+                        {feature.type === 'hole' && feature.row
+                          ? ` ×${rowCountLabel(feature.row, runtime.snapshot?.parameters)}`
+                          : ''}{' '}
+                        · feature {part.features.indexOf(feature) + 1}
                       </h4>
-                      {GUIDED_OPERATIONS.includes(feature.type) ? (
+                      {GUIDED_OPERATIONS.includes(feature.type) &&
+                      !['hardware', ...CUT_TOOLS].includes(feature.type) ? (
                         <>
                           {feature.type === 'extrude' && (
                             <ExtrudeSummary
@@ -2323,57 +2894,81 @@ export default function CadWorkspace({
                           </button>
                         </>
                       ) : (
-                        <FeatureForm
-                          key={feature.id}
-                          feature={feature}
-                          model={model}
-                          cutBounds={(() => {
-                            const previous = part.features
-                              .slice(0, part.features.indexOf(feature))
-                              .filter((f) => !f.suppressed)
-                              .at(-1);
-                            return runtime.snapshot?.parts.find((p) => p.id === part.id)?.features[previous?.id]
-                              ?.bounds;
-                          })()}
-                          onMoveCut={() => perform(() => startHoleTool('move'))}
-                          cutMetrics={
-                            runtime.ready
-                              ? runtime.snapshot?.parts.find((p) => p.id === part.id)?.features[feature.id]
-                              : null
-                          }
-                          onFocusCut={() =>
-                            perform(() => {
-                              const cut = runtime.snapshot.parts.find((p) => p.id === part.id)?.features[feature.id]
-                                ?.cut;
-                              const placement = runtime.snapshot.instances.find((i) => i.id === selectedId)?.placement;
-                              if (!cut || !placement) throw new Error('Rebuild this cut before focusing it.');
-                              setFocusTarget({
-                                position: mapPlacement(cut.position, placement),
-                                normal: mapPlacement(
-                                  cut.direction.map((n) => -n),
-                                  placement,
-                                  true,
-                                ),
-                                span:
-                                  Math.max(
-                                    20,
-                                    ...['diameter', 'width', 'height'].map((key) =>
-                                      numeric(feature[key] || 0, runtime.snapshot.parameters),
-                                    ),
-                                  ) * 4,
-                              });
-                            })
-                          }
-                          onChange={(f) =>
-                            changePart({
-                              ...part,
-                              features: part.features.map((old) => (old.id === feature.id ? f : old)),
-                            })
-                          }
-                        />
+                        <>
+                          {CUT_TOOLS.includes(feature.type) && (
+                            <button
+                              className="cad-primary cad-wide"
+                              disabled={!runtime.ready}
+                              onClick={() => perform(() => beginOperation(feature.type, feature))}
+                            >
+                              Edit {feature.type} with preview
+                            </button>
+                          )}
+                          <FeatureForm
+                            key={feature.id}
+                            feature={feature}
+                            model={model}
+                            cutBounds={(() => {
+                              const previous = part.features
+                                .slice(0, part.features.indexOf(feature))
+                                .filter((f) => !f.suppressed)
+                                .at(-1);
+                              return runtime.snapshot?.parts.find((p) => p.id === part.id)?.features[previous?.id]
+                                ?.bounds;
+                            })()}
+                            onMoveCut={() => perform(() => startHoleTool('move'))}
+                            cutMetrics={
+                              runtime.ready
+                                ? runtime.snapshot?.parts.find((p) => p.id === part.id)?.features[feature.id]
+                                : null
+                            }
+                            onFocusCut={() =>
+                              perform(() => {
+                                const cut = runtime.snapshot.parts.find((p) => p.id === part.id)?.features[feature.id]
+                                  ?.cut;
+                                const placement = runtime.snapshot.instances.find(
+                                  (i) => i.id === selectedId,
+                                )?.placement;
+                                if (!cut || !placement) throw new Error('Rebuild this cut before focusing it.');
+                                setFocusTarget({
+                                  position: mapPlacement(cut.position, placement),
+                                  normal: mapPlacement(
+                                    cut.direction.map((n) => -n),
+                                    placement,
+                                    true,
+                                  ),
+                                  span:
+                                    Math.max(
+                                      20,
+                                      ...['diameter', 'width', 'height'].map((key) =>
+                                        numeric(feature[key] || 0, runtime.snapshot.parameters),
+                                      ),
+                                    ) * 4,
+                                });
+                              })
+                            }
+                            onChange={(f) =>
+                              changePart({
+                                ...part,
+                                features: part.features.map((old) => (old.id === feature.id ? f : old)),
+                              })
+                            }
+                          />
+                        </>
+                      )}
+                      {soleFeature && (
+                        <p className="cad-help">
+                          {`This is the only active feature of ${part.name}: removing it removes the part and its ${partInstanceLabel}. To remove just this one, use Remove instance below.`}
+                        </p>
                       )}
                       <div className="cad-inline">
                         <button
+                          disabled={soleFeature}
+                          title={
+                            soleFeature
+                              ? 'The only active feature of a part cannot be suppressed; remove the part instead.'
+                              : undefined
+                          }
                           onClick={() =>
                             changePart({
                               ...part,
@@ -2385,27 +2980,83 @@ export default function CadWorkspace({
                         >
                           {feature.suppressed ? 'Enable' : 'Suppress'}
                         </button>
-                        <button
-                          onClick={() => {
-                            changePart({ ...part, features: part.features.filter((f) => f.id !== feature.id) });
-                            setFeatureId(null);
-                          }}
-                        >
-                          Remove feature
-                        </button>
+                        {soleFeature ? (
+                          <button
+                            className="cad-danger"
+                            onClick={() =>
+                              perform(() => {
+                                commit(removePart(model, part.id));
+                                select(null);
+                                setFeatureId(null);
+                              })
+                            }
+                          >
+                            {`Remove part · ${partInstanceLabel}`}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              changePart({ ...part, features: part.features.filter((f) => f.id !== feature.id) });
+                              setFeatureId(null);
+                            }}
+                          >
+                            Remove feature
+                          </button>
+                        )}
                       </div>
                     </>
                   )}
                   <button
                     className="cad-danger"
-                    onClick={() => {
-                      commit(removeInstance(model, instance.id));
-                      select(null);
-                    }}
+                    onClick={() =>
+                      perform(() => {
+                        // The last instance of an Add-hardware part takes its
+                        // definition with it, unless another part uses it as a
+                        // Boolean tool (docs/sketch-studio-remove-part.md §3.3).
+                        const lastHardware =
+                          part &&
+                          part.features.length === 1 &&
+                          part.features[0].type === 'hardware' &&
+                          partInstanceCount === 1 &&
+                          !model.parts.some(
+                            (p) => p.id !== part.id && p.features.some((f) => f.toolPartId === part.id),
+                          );
+                        commit(lastHardware ? removePart(model, part.id) : removeInstance(model, instance.id));
+                        select(null);
+                      })
+                    }
                   >
                     Remove instance
                   </button>
                 </>
+              ) : !model.parts.length && !sketchSession && !operationDraft && !mateSession && !measureSession ? (
+                // Empty model: the ways in (docs/sketch-studio-start-sketch.md §4.4).
+                <section className="cad-start" aria-label="Start">
+                  <h3>Start</h3>
+                  {model.parameters.length > 0 && (
+                    <p>
+                      {model.parameters.length} parameter{model.parameters.length === 1 ? '' : 's'} ready · start a
+                      sketch to use them
+                    </p>
+                  )}
+                  <button className="cad-primary" onClick={() => perform(startSketchPick)}>
+                    New sketch
+                  </button>
+                  <small>or click an origin plane in the view · S</small>
+                  <div className="cad-inline">
+                    <button onClick={() => perform(() => addPart('board'))}>Board / plate</button>
+                    <button onClick={() => perform(() => addPart('member'))}>Tube / member</button>
+                  </div>
+                  <button onClick={openDesignParameters}>Design parameters</button>
+                  <h4>Examples</h4>
+                  <div className="cad-inline">
+                    <button onClick={() => perform(() => loadExample('table'))}>Welded table example</button>
+                    <button onClick={() => perform(() => loadExample('pump'))}>Pump bracket drawing study</button>
+                    <button onClick={() => perform(() => loadExample('cover'))}>Rear cover example</button>
+                  </div>
+                  <button onClick={() => setPanel('import-drafting')}>Import 2D profiles</button>
+                  <p className="cad-help">Your 2D drawings stay in 2D drafting (top right).</p>
+                </section>
               ) : (
                 <>
                   <h3>Build accurately.</h3>
@@ -2425,7 +3076,7 @@ export default function CadWorkspace({
             {mateSession && mateSession.stage !== 'placed'
               ? 'Pick faces to mate'
               : sketchSession?.stage === 'pick'
-                ? 'Pick a flat face to sketch on'
+                ? 'Pick a face or plane to sketch on'
                 : sketchSession
                   ? 'Sketching — saved when you finish the sketch'
                   : operationDraft
@@ -2462,6 +3113,6 @@ export default function CadWorkspace({
           <span>{documentPersistence.isDirty ? 'Unsaved changes' : 'Saved'}</span>
         </footer>
       </section>
-    </ParameterContext.Provider>
+    </FieldContexts>
   );
 }

@@ -316,15 +316,21 @@
 }
 /* Match the rotate gizmo rings: X red, Y green, Z blue. */
 .cad-view-toolbar .cad-axis-x,
-.cad-gizmo-hud .cad-axis-x {
+.cad-gizmo-hud .cad-axis-x,
+.cad-measure-hud .cad-axis-x,
+.cad-placement-hud .cad-axis-x {
   color: #c62f2f;
 }
 .cad-view-toolbar .cad-axis-y,
-.cad-gizmo-hud .cad-axis-y {
+.cad-gizmo-hud .cad-axis-y,
+.cad-measure-hud .cad-axis-y,
+.cad-placement-hud .cad-axis-y {
   color: #2f8f2f;
 }
 .cad-view-toolbar .cad-axis-z,
-.cad-gizmo-hud .cad-axis-z {
+.cad-gizmo-hud .cad-axis-z,
+.cad-measure-hud .cad-axis-z,
+.cad-placement-hud .cad-axis-z {
   color: #2f5fc6;
 }
 /* Rotate controls: World/Local, snap presets, Rotate about (CadWorkspace.jsx). */
@@ -341,7 +347,8 @@
 .cad-view-toolbar .cad-segmented button + button {
   border-left-color: #dbe3ea;
 }
-.cad-view-toolbar .cad-segmented button[aria-pressed='true'] {
+.cad-view-toolbar .cad-segmented button[aria-pressed='true'],
+.cad-view-toolbar .cad-measure-button[aria-pressed='true'] {
   background: #d7e8f5;
   border-color: #246e9a;
   color: #14558f;
@@ -436,35 +443,27 @@
   padding: 7px 2px;
   text-transform: uppercase;
 }
-.cad-empty {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 430px;
-  max-width: 85%;
-  max-height: calc(100% - 24px);
-  overflow: auto;
-  background: #f8fafbee;
-  padding: 28px;
-  border: 1px solid #cdd7e0;
-  border-radius: 8px;
-  box-shadow: 0 10px 40px #1c354818;
-}
-.cad-empty h2 {
-  font-size: 25px;
-  line-height: 1.3;
-  margin: 14px 0;
-  letter-spacing: -0.5px;
-}
-.cad-empty p {
-  color: #748391;
-  font-size: 12px;
-}
-.cad-empty div {
+/* Start list: the Properties panel of an empty model (CadWorkspace.jsx). */
+.cad-start {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 6px;
+}
+.cad-start h3,
+.cad-start h4 {
+  margin-bottom: 0;
+}
+.cad-start p {
+  margin: 0;
+}
+.cad-start small {
+  color: #768594;
+  font-size: 11px;
+}
+.cad-start .cad-inline {
+  flex-wrap: wrap;
+  margin: 2px 0;
 }
 .cad-primary {
   background: #246e9a !important;
@@ -1003,8 +1002,12 @@
   font-size: 12px;
   margin: 4px 0 8px;
 }
-/* Move / rotate gizmo readout (CadViewport.jsx, gizmoHud.js) */
-.cad-gizmo-hud {
+/* Move / rotate gizmo readout (CadViewport.jsx, gizmoHud.js) and the Measure
+   and direct-placement readouts, which share its look. Each keeps its own
+   class: scripts and tests find the gizmo HUD by .cad-gizmo-hud alone. */
+.cad-gizmo-hud,
+.cad-measure-hud,
+.cad-placement-hud {
   position: absolute;
   z-index: 4;
   padding: 5px 8px;
@@ -1016,8 +1019,119 @@
   white-space: nowrap;
   pointer-events: none;
 }
-.cad-gizmo-hud[hidden] {
+.cad-gizmo-hud[hidden],
+.cad-measure-hud[hidden],
+.cad-placement-hud[hidden] {
   display: none;
+}
+.cad-measure-hud {
+  border-color: #8a3fc6;
+}
+/* Dimension mark labels over the 3D view (CadViewport.jsx, marks.js). */
+.cad-mark-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.cad-workspace .cad-mark-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  font:
+    12px/1 system-ui,
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 5px;
+  background: #fff;
+  border: 1px solid #8a3fc6;
+  color: #8a3fc6;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.cad-workspace .cad-mark-label:hover {
+  background: #f4ecfa;
+  border-color: #8a3fc6;
+}
+.cad-workspace .cad-mark-label.is-selected {
+  border-color: #e2541c;
+  color: #e2541c;
+}
+.cad-workspace .cad-mark-label[hidden] {
+  display: none;
+}
+/* Origin plane labels over the 3D view (CadViewport.jsx, originPlanes.js):
+   the mark-label chip in the tile blue. */
+.cad-plane-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.cad-workspace .cad-plane-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  font:
+    12px/1 system-ui,
+    sans-serif;
+  padding: 1px 5px;
+  background: #fff;
+  border: 1px solid #287fb3;
+  color: #287fb3;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.cad-workspace .cad-plane-label:hover,
+.cad-workspace .cad-plane-label.is-hovered {
+  background: #e3f0f8;
+  border-color: #246e9a;
+  color: #246e9a;
+}
+.cad-workspace .cad-plane-label[hidden] {
+  display: none;
+}
+/* Marks panel (CadWorkspace.jsx). */
+.cad-mark-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+}
+.cad-mark-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 6px;
+  border-bottom: 1px solid #d6dfe6;
+  border-left: 3px solid transparent;
+  font-size: 11px;
+  cursor: pointer;
+}
+.cad-mark-row.is-selected {
+  border-left-color: #e2541c;
+  background: #fbf1ec;
+}
+.cad-mark-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #8a3fc6;
+  font-size: 13px;
+}
+.cad-mark-row.is-selected .cad-mark-head {
+  color: #e2541c;
+}
+.cad-mark-head select {
+  width: auto;
+}
+.cad-mark-row small {
+  color: #6a7b8b;
+  overflow-wrap: anywhere;
+}
+.cad-mark-row .cad-inline {
+  flex-wrap: wrap;
+  margin: 0;
 }
 .cad-gizmo-value {
   font-weight: 600;
@@ -1030,4 +1144,48 @@
   margin-top: 2px;
   font-size: 11px;
   color: #6a7b8b;
+}
+/* Direct placement (placementLayer.js, OperationPanel.jsx): the readout by
+   the cursor, the placement line and the primary values in the panel. */
+.cad-placement-hud {
+  border-color: #2f9be6;
+}
+.cad-placement-line {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-left: 3px solid #2f9be6;
+  background: #eef6fc;
+  font-size: 12px;
+}
+.cad-placement-line p {
+  margin: 0 0 6px;
+}
+.cad-placement-line .cad-inline {
+  flex-wrap: wrap;
+  margin: 0;
+}
+.cad-primary-values {
+  margin: 8px 0;
+  min-width: 0;
+}
+.cad-exact-placement > summary {
+  cursor: pointer;
+  margin: 8px 0;
+  font-weight: 600;
+}
+/* The "axis" tag beside Revolve's dashed axis (placementLayer.js). */
+.cad-placement-label {
+  position: absolute;
+  z-index: 3;
+  transform: translate(-50%, -150%);
+  padding: 0 4px;
+  background: #fff;
+  border: 1px solid #e0861a;
+  border-radius: 3px;
+  color: #c26a10;
+  font-size: 11px;
+  pointer-events: none;
+}
+.cad-placement-label[hidden] {
+  display: none;
 }

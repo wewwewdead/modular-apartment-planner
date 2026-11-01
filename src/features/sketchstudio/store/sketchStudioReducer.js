@@ -205,8 +205,16 @@ function finalizeUndoableState(state, nextState, options = {}) {
 
 export default function sketchStudioReducer(state, action) {
   switch (action.type) {
-    case 'SET_CAD_MODEL':
-      return finalizeUndoableState(state, { ...state, document: { ...state.document, model: action.payload } });
+    case 'SET_CAD_MODEL': {
+      // meta (Phase L, docs/sketch-studio-live-fields.md §5): skipHistory folds
+      // a field's typing session into the entry its first commit pushed;
+      // revertSession (Esc after live edits) restores the value and drops that
+      // entry, so nothing of the session remains in the history.
+      const next = { ...state, document: { ...state.document, model: action.payload } };
+      if (action.meta?.revertSession)
+        return { ...next, history: { ...state.history, past: state.history.past.slice(0, -1) } };
+      return finalizeUndoableState(state, next, { skipHistory: action.meta?.skipHistory });
+    }
     case SKETCH_STUDIO_ACTIONS.SET_CANVAS_SIZE:
       return {
         ...state,

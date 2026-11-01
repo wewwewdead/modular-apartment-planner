@@ -24,6 +24,42 @@
   overflow-y: auto;
 }
 
+/*
+ * The sidebar's grab strip: 6px straddling the sidebar's right edge, on top of
+ * both neighbours. Shown as a 2px active-glow line on hover, focus and drag.
+ */
+.sidebarResizer {
+  position: relative;
+  grid-area: sidebar;
+  justify-self: end;
+  z-index: 6;
+  width: 6px;
+  margin-right: -3px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebarResizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+  background: transparent;
+  transition: background var(--duration-fast);
+}
+
+.sidebarResizer:hover::after,
+.sidebarResizer:focus-visible::after,
+.sidebarResizer[data-dragging='true']::after {
+  background: var(--color-active-glow);
+}
+
+.sidebarResizer:focus-visible {
+  outline: none;
+}
+
 .canvas {
   grid-area: canvas;
   min-width: 0;

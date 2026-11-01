@@ -14,7 +14,14 @@ export const GUIDED_OPERATIONS = [
   'pattern',
   'trim',
   'transform',
+  // Direct placement for cuts and hardware (Phase J, placementCuts.js).
+  'hole',
+  'pocket',
+  'hardware',
 ];
+// Operations whose first step is a click in the viewport (Place stage):
+// nothing exists until it lands.
+const PLACED_FIRST = [...PROFILE_OPERATIONS, 'hole', 'pocket', 'hardware'];
 export const OPERATION_HELP = {
   extrude:
     'Extend a closed profile along its sketch-plane normal. Choose Add, Cut, Intersect or Replace and inspect the preview.',
@@ -38,7 +45,16 @@ export const OPERATION_HELP = {
   pattern:
     'Make copies inside this part definition. Count includes the original; linear spacing or circular angle applies between consecutive copies.',
   trim: 'Split the part at a plane and retain one side. Positive keeps the side toward the normal arrow; negative keeps the opposite side.',
-  transform: 'Translate or rotate the geometry inside the part definition. All assembly instances update.',
+  transform:
+    'Translate or rotate the geometry inside the part definition with the gizmo on its ghost. All assembly instances update.',
+  hole: 'Drill a round hole square to the face you click: through all, or to a depth. It changes the part definition and every instance.',
+  // Phase K: the Hole tool placing a hole row (placementRows.js).
+  holeRow:
+    'Drill a straight row of identical holes: click the first and the last hole, then set the count and spacing. One feature; every hole follows the spacing, and the spacing can be a parameter.',
+  pocket:
+    'Cut a rectangular recess square to the face you click, oriented as the kernel builds it. It changes the part definition and every instance.',
+  hardware:
+    'Click the holes the hardware goes in, then press Enter: one part, seated in every chosen hole and concentric with each. Or click a flat face to seat a single one there (its seating plane on the face; bolts and studs point into it), or stand it on the ground.',
 };
 export const isClosedProfile = (s) => Boolean(s?.profile && !(s.profile.type === 'path' && s.profile.closed === false));
 const sketch = (name, profile, plane = 'XY', origin = [0, 0, 0]) => ({
@@ -122,7 +138,33 @@ export function createOperationDraft({
   bounds,
   references = [],
   existingFeature,
+  placement = null,
 }) {
+  // Direct placement (placementTool.js): a profile operation that starts in
+  // the Place stage has no target, sketch or feature until the first click.
+  // A selected square-ended tube keeps today's start (a copy of its hollow
+  // end section), shaped in place with the distance arrow.
+  const selected = model.parts.find((p) => p.id === partId);
+  if (
+    placement?.stage === 'place' &&
+    type === 'extrude' &&
+    selected &&
+    !existingFeature &&
+    memberEndSketch(selected, resolveParameters(model.parameters))
+  )
+    placement = { ...placement, stage: 'shape', mode: 'stored', memberEnd: true, inferOperation: false };
+  if (placement?.stage === 'place' && PLACED_FIRST.includes(type) && !existingFeature)
+    return {
+      baseModel: model,
+      partId: null,
+      newPart: null,
+      newInstance: null,
+      sketches: [],
+      references,
+      editing: false,
+      feature: null,
+      placement,
+    };
   let part = model.parts.find((p) => p.id === partId),
     newPart = null,
     newInstance = null;
@@ -141,6 +183,7 @@ export function createOperationDraft({
     sketches: [],
     references,
     editing: Boolean(existingFeature),
+    ...(placement ? { placement } : {}),
   };
   if (existingFeature)
     return {
@@ -217,7 +260,8 @@ export function createOperationDraft({
     feature.ruled = false;
   } else if (['union', 'subtract', 'intersect'].includes(type)) {
     feature.toolPartId = model.parts.find((p) => p.id !== part.id)?.id || '';
-    feature.position = [0, 0, 0];
+    // Placed with the tool gizmo: start at the target's centre so the volumes overlap.
+    feature.position = placement && bounds ? center.map((v) => Math.round(v * 1e6) / 1e6) : [0, 0, 0];
     feature.rotation = [0, 0, 0];
   } else if (['fillet', 'chamfer', 'shell'].includes(type)) {
     const kind = type === 'shell' ? 'faces' : 'edges';
@@ -247,7 +291,12 @@ export function createOperationDraft({
 
 export function operationModel(draft) {
   const source = draft.baseModel;
+  // Nothing placed yet: the saved model.
+  if (!draft.feature) return source;
   const used = new Set([draft.feature.sketchId, draft.feature.profileId, ...(draft.feature.sections || [])]);
+  // A hardware part seated in holes brings one concentric connection per
+  // hole (and, Phase M, one instance per hole: newInstance + extraInstances).
+  const connections = draft.connections?.length ? [...source.connections, ...draft.connections] : source.connections;
   const sketches = draft.sketches.filter((s) => used.has(s.id));
   return {
     ...source,
@@ -262,7 +311,12 @@ export function operationModel(draft) {
               : [...p.features, draft.feature],
           },
     ),
-    instances: [...source.instances, ...(draft.newInstance ? [draft.newInstance] : [])],
+    instances: [
+      ...source.instances,
+      ...(draft.newInstance ? [draft.newInstance] : []),
+      ...(draft.extraInstances || []),
+    ],
+    connections,
   };
 }
 

@@ -54,16 +54,19 @@ export default function CadSketcher({ viewport, session, snap, onSnapChange, onF
   const fieldRefs = useRef([]);
   const { frame } = session;
   // Snappable model edges in this plane (the picked face outline plus other
-  // model edges lying in it), collected when the sketch started.
+  // model edges lying in it), collected when the sketch started, and the 3D
+  // measure mark points projected onto the plane.
   const boundary = session.boundary;
+  const markPoints = session.markPoints;
   const targets = useMemo(
     () =>
       snapTargets({
         entities: state.entities,
         boundary,
         extraPoints: [...state.points, ...(state.chainStart ? [state.chainStart] : [])],
+        marks: markPoints || [],
       }),
-    [state.entities, state.points, state.chainStart, boundary],
+    [state.entities, state.points, state.chainStart, boundary, markPoints],
   );
   const latest = useRef({});
   useLayoutEffect(() => {
@@ -169,6 +172,7 @@ export default function CadSketcher({ viewport, session, snap, onSnapChange, onF
       gridBounds,
       gridStep: gridStep(Math.max(gridBounds[1][0] - gridBounds[0][0], gridBounds[1][1] - gridBounds[0][1]), snap),
       boundary,
+      markPoints,
       entities: state.entities,
       selectedId: state.selectedId,
       preview,

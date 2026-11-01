@@ -1,7 +1,10 @@
 import * as cad from 'replicad';
-import { hardwareDimensions } from './hardware.js';
+import { SCREW_KINDS, hardwareDimensions } from './hardware.js';
+import { screwGeometry } from './screwGeometry.js';
 
 export function hardwareGeometry(f, parameters, own) {
+  // Phase N: the 22 screw kinds (docs/sketch-studio-screw-library.md §4).
+  if (SCREW_KINDS[f.kind]) return screwGeometry(f, parameters, own);
   const d = hardwareDimensions(f, parameters);
   const round = (diameter, length, z = 0) => own(cad.makeCylinder(diameter / 2, length, [0, 0, z]));
   const hex = (acrossFlats, length) => {

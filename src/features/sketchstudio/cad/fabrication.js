@@ -1,6 +1,13 @@
 import { memberMetrics, numeric, resolveParameters, positive } from './model.js';
 import { hardwareNote, threadNote } from './hardware.js';
 
+// A hole row's drilling note counts its holes (Phase K): "4 × M6 …".
+const rowPrefix = (feature, parameters) => {
+  if (feature.type !== 'hole' || !feature.row) return '';
+  const count = numeric(feature.row.count, parameters);
+  return count > 1 ? `${count} × ` : '';
+};
+
 export function buildCutList(model, snapshot) {
   const parameters = resolveParameters(model.parameters);
   const quantities = new Map();
@@ -36,7 +43,7 @@ export function buildCutList(model, snapshot) {
             .filter((f) => f.holeSpec)
             .map(
               (f) =>
-                `${threadNote(f)}; drill Ø${numeric(f.diameter, parameters)} mm${f.holeSpec.mode === 'tap' ? '; thread depth unspecified' : ''}`,
+                `${rowPrefix(f, parameters)}${threadNote(f)}; drill Ø${numeric(f.diameter, parameters)} mm${f.holeSpec.mode === 'tap' ? '; thread depth unspecified' : ''}`,
             ),
           modifiedEnds
             ? 'Modified member: final stock length and cuts require the part STEP and detail drawing. Excluded from automatic linear stock allocation.'

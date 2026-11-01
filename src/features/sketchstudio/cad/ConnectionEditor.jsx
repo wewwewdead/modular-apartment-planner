@@ -114,7 +114,7 @@ export default function ConnectionEditor({ model, selectedId, onChange }) {
           ) : (
             c.type !== 'weld' && (
               <ValueField
-                key={String(c.offset)}
+                key="offset"
                 label="Offset (mm)"
                 value={c.offset}
                 onChange={(offset) => update({ ...c, offset })}

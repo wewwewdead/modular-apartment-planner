@@ -5,9 +5,10 @@ import initOpenCascade from 'replicad-opencascadejs';
 import { setOC } from 'replicad';
 import { createKernelSession } from './kernel.js';
 import { pumpBracketExample } from './pumpBracket.js';
-import { sheetSvg } from './drawings.js';
+import { annotationText, sheetSvg } from './drawings.js';
 import { sheetHoleFeatures } from './engineeringSheet.js';
-import { validateReferences } from './model.js';
+import { emptyModel, validateReferences } from './model.js';
+import { buildCutList } from './fabrication.js';
 const require = createRequire(import.meta.url);
 beforeAll(
   async () =>
@@ -112,6 +113,123 @@ describe('engineering drawing output', () => {
       expect(sheets[0].bounds[1][0]).toBeCloseTo(166, 5);
       expect(sheets[2].views[0].hatch.length).toBeGreaterThan(0);
       expect(sheetSvg(sheets[2], model, snapshot)).toContain('SECTION A-A');
+    } finally {
+      session.dispose();
+    }
+  });
+});
+
+// Phase K (docs/sketch-studio-hole-row.md §9): a hole row on the drawings —
+// one entry per centre with the feature's id, so callouts and chains keyed
+// by feature id read the row with no annotation schema change.
+describe('hole rows on drawings', () => {
+  // The bracket's five openings as ONE hole feature with a row.
+  const asRow = () => {
+    const model = pumpBracketExample();
+    const part = model.parts.find((p) => p.id === 'pump-bracket');
+    const first = part.features.find((f) => f.id === 'pump-opening-1');
+    part.features = part.features
+      .filter((f) => !/^pump-opening-[2-5]$/.test(f.id))
+      .map((f) => (f === first ? { ...f, row: { count: 5, pitch: '=holePitch', direction: [1, 0, 0] } } : f));
+    for (const sheet of model.sheets)
+      for (const a of sheet.annotations || []) if (a.featureIds) a.featureIds = ['pump-opening-1'];
+    return model;
+  };
+  it('a callout over a row reads "5 × Ø25 THRU"; a chain across it gives the pitch dimensions', () => {
+    const model = asRow();
+    const session = createKernelSession(model);
+    try {
+      const snapshot = session.snapshot(),
+        detail = session.drawings()[1];
+      const front = detail.views.find((v) => v.view === 'front');
+      const holes = sheetHoleFeatures(detail, model, snapshot, front).filter((h) => h.id === 'pump-opening-1');
+      expect(holes.map((h) => h.point[0])).toEqual([23, 53, 83, 113, 143]);
+      const svg = sheetSvg(detail, model, snapshot);
+      expect(svg).toContain('5 × Ø25 THRU');
+      expect(svg).toContain('>23</text>');
+      expect(svg.match(/>30<\/text>/g)).toHaveLength(4);
+      expect(svg).toContain('>166</text>');
+      expect(svg).not.toMatch(/NaN|undefined|Infinity/);
+    } finally {
+      session.dispose();
+    }
+    // The spacing is the parameter: 28 moves holes 2–5 and the chain follows.
+    model.parameters.find((p) => p.name === 'holePitch').value = 28;
+    const again = createKernelSession(model);
+    try {
+      const svg = sheetSvg(again.drawings()[1], model, again.snapshot());
+      expect(svg.match(/>28<\/text>/g)).toHaveLength(4);
+    } finally {
+      again.dispose();
+    }
+  });
+  it('the auto detail sheet keeps one hole note per feature: "4 × …; 4 holes, pitch 20.00"', () => {
+    const model = {
+      ...emptyModel(),
+      parts: [
+        {
+          id: 'p',
+          name: 'Plate',
+          features: [
+            { id: 'base', type: 'box', width: 100, depth: 80, height: 10 },
+            {
+              id: 'row',
+              type: 'hole',
+              diameter: 6,
+              depth: 5,
+              throughAll: true,
+              position: [20, 40, 10],
+              direction: [0, 0, -1],
+              row: { count: 4, pitch: 20, direction: [1, 0, 0] },
+            },
+          ],
+        },
+      ],
+      instances: [{ id: 'i', partId: 'p', position: [0, 0, 0], rotation: [0, 0, 0] }],
+    };
+    const session = createKernelSession(model);
+    try {
+      const snapshot = session.snapshot();
+      const sheet = session.drawings({ includeParts: true }).find((s) => s.id === 'detail-p');
+      const notes = sheet.annotations.filter((a) => a.type === 'hole');
+      expect(notes).toHaveLength(1);
+      const text = annotationText(notes[0], model, snapshot);
+      expect(text).toBe('4 × Ø6.00 through all; XYZ 20.00, 40.00, 10.00; 4 holes, pitch 20.00');
+      expect(sheetSvg(sheet, model, snapshot)).toContain('4 ×');
+    } finally {
+      session.dispose();
+    }
+  });
+  it('a tapped row counts its holes in the drilling note', () => {
+    const model = {
+      ...emptyModel(),
+      parts: [
+        {
+          id: 'p',
+          name: 'Plate',
+          features: [
+            { id: 'base', type: 'box', width: 100, depth: 80, height: 10 },
+            {
+              id: 'row',
+              type: 'hole',
+              diameter: 5,
+              depth: 5,
+              throughAll: true,
+              holeSpec: { mode: 'tap', size: 'M6', pitch: 1 },
+              position: [20, 40, 10],
+              direction: [0, 0, -1],
+              row: { count: 3, pitch: 25, direction: [1, 0, 0] },
+            },
+          ],
+        },
+      ],
+      instances: [{ id: 'i', partId: 'p', position: [0, 0, 0], rotation: [0, 0, 0] }],
+    };
+    const session = createKernelSession(model);
+    try {
+      const [row] = buildCutList(model, session.snapshot());
+      expect(row.note).toMatch(/^3 × /);
+      expect(row.note).toContain('drill Ø5 mm');
     } finally {
       session.dispose();
     }

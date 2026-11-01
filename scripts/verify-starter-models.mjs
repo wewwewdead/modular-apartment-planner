@@ -19,7 +19,8 @@ page.on('pageerror', (e) => errors.push(e.message));
 const { properties, current, savedWhen } = cadSteps(page);
 const shot = (name) => page.screenshot({ path: `${directory}/${name}.png` });
 const footer = page.locator('.cad-status');
-const welcome = page.locator('.cad-empty');
+// The Start list in the Properties panel of an empty model (Phase I).
+const welcome = page.locator('.cad-start');
 const treeItems = (name) => page.locator('.cad-tree-item', { hasText: name });
 
 const freshModel = async () => {
@@ -53,7 +54,7 @@ try {
     throw new Error('Side should carry 12 pilot + 20 shelf-pin holes.');
   await shot('01-cabinet-built');
   checks.push(
-    'Cabinet → Apply & build: welcome card gone, 8 definitions · 10 instances, Model current, result line shown',
+    'Cabinet → Apply & build: Start list gone, 8 definitions · 10 instances, Model current, result line shown',
   );
 
   // 2. Parts list on the assembly drawing.
@@ -106,17 +107,20 @@ try {
     checks.push(`${preset} → Apply & build: ${instances} instances, Model current`);
   }
 
-  // 5. Without building: the welcome card says the parameters are ready.
+  // 5. Without building: the Start list says the parameters are ready.
   await freshModel();
   await welcome.getByRole('button', { name: 'Design parameters', exact: true }).click();
   await properties.getByLabel('Build the starter model from these parameters', { exact: true }).uncheck();
   await properties.getByRole('button', { name: 'Apply', exact: true }).click();
-  await expect(welcome.getByRole('heading')).toHaveText('6 parameters ready · start a sketch to use them');
   await expect(properties.getByRole('status')).toHaveText(
-    '6 parameters added — next: Start a sketch or Design parameters → Build',
+    '6 parameters added — next: New sketch or Design parameters → Build',
   );
+  // Back to the default panel (a click on empty background): the Start list.
+  const box = await page.locator('.cad-viewport canvas').boundingBox();
+  await page.mouse.click(box.x + 40, box.y + 40);
+  await expect(welcome.locator('p').first()).toHaveText('6 parameters ready · start a sketch to use them');
   await shot('05-parameters-only');
-  checks.push('Apply without building: welcome card reads "6 parameters ready · start a sketch to use them"');
+  checks.push('Apply without building: the Start list reads "6 parameters ready · start a sketch to use them"');
 
   if (errors.length) throw new Error(errors.join('\n'));
   await writeFile(`${directory}/verification.json`, JSON.stringify({ status: 'passed', errors, checks }, null, 2));

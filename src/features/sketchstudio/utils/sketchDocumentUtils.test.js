@@ -4,6 +4,7 @@ import {
   normalizeCommittedSketchName,
   normalizeSketchDocument,
 } from './sketchDocumentUtils';
+import { emptyModel } from '../cad/model';
 
 describe('sketchDocumentUtils', () => {
   it('preserves non-empty names after trimming', () => {
@@ -163,5 +164,52 @@ describe('normalizeSketchDocument on a constraint-era (v2) document', () => {
     const normalized = normalizeSketchDocument({ ...legacyDocument, entities: [plainDimension] });
 
     expect(normalized.entities[0]).toBe(plainDimension);
+  });
+});
+
+describe('normalizeSketchDocument on a model saved with a featureless part', () => {
+  // Before Phase M.1 the 3D panel let "Remove feature" empty a part. Such a
+  // part fails the whole kernel build and cannot be selected, so it is dropped
+  // on load with its instance and marks; its sketch and the drawing stay.
+  const model = {
+    ...emptyModel(),
+    sketches: [
+      { id: 'orphan', name: 'Imported profile', plane: 'XY', profile: { type: 'rectangle', width: 10, height: 10 } },
+      { id: 'used', name: 'Profile', plane: 'XY', profile: { type: 'rectangle', width: 10, height: 10 } },
+    ],
+    parts: [
+      { id: 'hollow', name: 'Profile part', features: [], sourceEntityIds: ['rect-41'] },
+      { id: 'solid', name: 'Profile part', features: [{ id: 'f', type: 'extrude', sketchId: 'used', length: 18 }] },
+    ],
+    instances: [
+      { id: 'i-hollow', partId: 'hollow', position: [0, 1194, 1212], rotation: [-90, 0, 0], visible: true },
+      { id: 'i-solid', partId: 'solid', position: [0, 0, 0], rotation: [0, 0, 0], visible: true },
+    ],
+    marks: [
+      {
+        id: 'm',
+        from: { instanceId: 'i-hollow', local: [0, 0, 0] },
+        to: { instanceId: 'i-solid', local: [1, 0, 0] },
+        along: 'aligned',
+        offset: [0, 0, 0],
+      },
+    ],
+  };
+  const document = normalizeSketchDocument({
+    version: 4,
+    name: 'loren',
+    entities: [{ id: 'rect-41', type: 'rect', x: 0, y: 0, width: 10, height: 10 }],
+    model,
+  });
+
+  it('drops the featureless part with its instance and marks', () => {
+    expect(document.model.parts.map((p) => p.id)).toEqual(['solid']);
+    expect(document.model.instances.map((i) => i.id)).toEqual(['i-solid']);
+    expect(document.model.marks).toEqual([]);
+  });
+
+  it('keeps every sketch and the source drawing entity, so the profile can be extruded again', () => {
+    expect(document.model.sketches.map((s) => s.id)).toEqual(['orphan', 'used']);
+    expect(document.entities.some((e) => e.id === 'rect-41')).toBe(true);
   });
 });
