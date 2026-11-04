@@ -131,6 +131,31 @@ export function polygonSelfIntersects(points = []) {
   return false;
 }
 
+/**
+ * True when every turn of the polygon goes the same way (collinear vertices
+ * are ignored). Orientation-free. Moved here from roofPlaneGeometry.js (RT-3.1)
+ * so the roof attachment datum can ask the same question without importing
+ * the roof geometry module.
+ */
+export function isConvexPolygon(points = []) {
+  if (points.length < 3) return false;
+  let sign = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const a = points[index];
+    const b = points[(index + 1) % points.length];
+    const c = points[(index + 2) % points.length];
+    const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+    if (Math.abs(cross) < 1e-6) continue;
+    const nextSign = Math.sign(cross);
+    if (!sign) {
+      sign = nextSign;
+      continue;
+    }
+    if (nextSign !== sign) return false;
+  }
+  return true;
+}
+
 export function pointInPolygon(point, polygon) {
   let inside = false;
   const n = polygon.length;

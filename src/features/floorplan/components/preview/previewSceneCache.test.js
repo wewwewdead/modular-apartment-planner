@@ -168,6 +168,10 @@ vi.mock('three', () => {
 
 import { createPreviewSceneCache } from './previewSceneCache';
 import * as THREE from 'three';
+import { createFloor, createProject } from '@/domain/models';
+import { createRoofSystemForProject } from '@/domain/roofModels';
+import { createTrussSystem } from '@/domain/trussModels';
+import { buildPreviewScene } from '@/three/scene/buildPreviewScene';
 
 function createMockPalette() {
   const palette = {};
@@ -328,5 +332,76 @@ describe('createPreviewSceneCache', () => {
     cache.build(scene2, palette);
     expect(root.children.length).toBe(1);
     expect(root.children[0].name).toBe('floor-fA');
+  });
+
+  it('rebuilds the floor holding the roof truss when the roof slope changes, and only that floor', () => {
+    // The gable-end closures on that floor follow the roof underside (RT-2), so
+    // the roof is part of its key; a floor without the roof's trusses keeps its group.
+    const base = createProject('Closure cache');
+    const ground = base.floors[0];
+    const upper = createFloor('Level 2', 1);
+    const trussSystem = createTrussSystem('Trusses', {
+      id: 'ts_1',
+      floorId: ground.id,
+      baseElevation: 3000,
+      trussInstances: [
+        {
+          id: 'ti_1',
+          trussTypeId: 'truss_type_gable',
+          span: 7200,
+          rise: 1800,
+          spacing: 900,
+          count: 5,
+          startPoint: { x: 0, y: 0 },
+          endPoint: { x: 3600, y: 0 },
+        },
+      ],
+    });
+    const project = { ...base, floors: [ground, upper], trussSystems: [trussSystem] };
+    project.roofSystem = createRoofSystemForProject(project, { id: 'roof_1' });
+    expect(project.roofSystem?.trussAttachmentId).toBe('ts_1');
+
+    // The stubbed THREE here has no vector maths for sloped members, so the
+    // truss members are left out of what gets built; the floors' sourceKeys —
+    // what this asserts on — are buildPreviewScene's own, untouched.
+    const withoutMembers = (scene) => ({
+      ...scene,
+      floors: scene.floors.map((floor) => ({
+        ...floor,
+        objects: floor.objects.filter((object) => object.geometry !== 'segment3d'),
+      })),
+    });
+    const cache = createCache();
+    const scene1 = withoutMembers(buildPreviewScene(project));
+    const { root } = cache.build(scene1, palette);
+    const trussFloor1 = root.children.find((child) => child.name === `floor-${ground.id}`);
+    const upperFloor1 = root.children.find((child) => child.name === `floor-${upper.id}`);
+    const closureApex = (scene) =>
+      Math.max(
+        ...scene.floors
+          .find((floor) => floor.floorId === ground.id)
+          .objects.find((object) => object.id === 'ts_1-closure-start')
+          .points.map((point) => point.z),
+      );
+
+    // RT-3: an attached gable that follows its truss ignores pitch.slope (its
+    // underside is the chord top face), so the slope only reshapes the roof —
+    // and the closure under it — once it is set by hand (pitchSource 'manual').
+    const steeper = {
+      ...project,
+      roofSystem: {
+        ...project.roofSystem,
+        pitchSource: 'manual',
+        pitch: { ...project.roofSystem.pitch, slope: 60 },
+      },
+    };
+    const scene2 = withoutMembers(buildPreviewScene(steeper));
+    cache.build(scene2, palette);
+    const trussFloor2 = root.children.find((child) => child.name === `floor-${ground.id}`);
+    const upperFloor2 = root.children.find((child) => child.name === `floor-${upper.id}`);
+
+    expect(closureApex(scene2)).toBeGreaterThan(closureApex(scene1));
+    expect(trussFloor2).not.toBe(trussFloor1);
+    expect(upperFloor2).toBe(upperFloor1);
   });
 });

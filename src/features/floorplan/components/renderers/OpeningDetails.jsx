@@ -1,4 +1,11 @@
-function OpeningDetails({ element, stroke }) {
+import { PRESENTATION_GRAPHICS } from '@/sheets/standards';
+
+/**
+ * Frame and mullions of an opening in elevation. In presentation the frame is
+ * the charcoal powder-coat line the 3D model has — heavier than the fine
+ * drafting detail, so the glazing reads as framed.
+ */
+function OpeningDetails({ element, stroke, presentation = false }) {
   if (!['window', 'door'].includes(element.category)) return null;
   const width = element.right - element.left;
   const height = element.top - element.bottom;
@@ -25,6 +32,25 @@ function OpeningDetails({ element, stroke }) {
     if (type === 'casement' || type === 'sliding') lines.push([(left + right) / 2, top, (left + right) / 2, bottom]);
   } else if (element.openingType === 'double' || element.openingType === 'sliding') {
     lines.push([(left + right) / 2, top, (left + right) / 2, bottom]);
+  }
+  if (presentation) {
+    const PE = PRESENTATION_GRAPHICS.elevation;
+    const ink = element.category === 'door' ? 'rgba(255,255,255,0.28)' : PE.frameStroke;
+    return (
+      <g fill="none" stroke={ink} data-opening-frame="">
+        <rect
+          x={left}
+          y={top}
+          width={right - left}
+          height={bottom - top}
+          strokeWidth={element.category === 'door' ? 0.7 : PE.frameStrokeWidth}
+          vectorEffect="non-scaling-stroke"
+        />
+        {lines.map(([x1, y1, x2, y2], index) => (
+          <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
+        ))}
+      </g>
+    );
   }
   return (
     <g fill="none" stroke={stroke} strokeWidth={0.6}>

@@ -84,7 +84,14 @@ export const PREVIEW_PERF_ENABLED = readGate();
  * gap is measured between successive calls, so it reflects what the user
  * actually experienced rather than what the renderer was busy with.
  */
-export function createPreviewPerfRecorder({ renderer, progressive, getNavigationMode }) {
+export function createPreviewPerfRecorder({
+  renderer,
+  progressive,
+  getNavigationMode,
+  getCamera = null,
+  getViewPreset = null,
+  getScene = null,
+}) {
   const durations = new Float32Array(FRAME_HISTORY);
   const gaps = new Float32Array(FRAME_HISTORY);
   const walkSteps = new Float32Array(FRAME_HISTORY);
@@ -192,8 +199,64 @@ export function createPreviewPerfRecorder({ renderer, progressive, getNavigation
           frame: info.frame,
         },
         progressive: progressive.getStats(),
+        viewPreset: getViewPreset ? getViewPreset() : null,
         ...summarise(),
       };
+    },
+
+    /**
+     * Which camera the preview is looking through — the debug getter the verify
+     * script reads to prove an elevation preset is a true orthographic view.
+     */
+    camera() {
+      const camera = getCamera?.();
+      if (!camera) return null;
+      return {
+        type: camera.type,
+        isOrthographicCamera: Boolean(camera.isOrthographicCamera),
+        isPerspectiveCamera: Boolean(camera.isPerspectiveCamera),
+        zoom: camera.zoom,
+        fov: camera.isPerspectiveCamera ? camera.fov : null,
+      };
+    },
+
+    /**
+     * Every material in the scene, tagged, and every compiled program with
+     * its use count — what a script diffs frame to frame to catch a material
+     * being rebuilt (and its program relinked) on every drag frame.
+     */
+    materials() {
+      const scene = getScene?.();
+      if (!scene) return null;
+      const seen = new Map();
+      scene.traverse((node) => {
+        const list = Array.isArray(node.material) ? node.material : node.material ? [node.material] : [];
+        for (const material of list) {
+          if (seen.has(material.uuid)) continue;
+          const data = material.userData || {};
+          const flags = Object.keys(data)
+            .filter((key) => data[key] === true)
+            .join('+');
+          seen.set(material.uuid, {
+            uuid: material.uuid,
+            tag: `${material.type}${flags ? `[${flags}]` : ''}@${node.name || node.type}`,
+          });
+        }
+      });
+      return [...seen.values()];
+    },
+
+    programs() {
+      return (renderer.info.programs || []).map((program) => ({
+        id: program.id,
+        name: program.name,
+        usedTimes: program.usedTimes,
+        key: String(program.cacheKey || '')
+          .split(',')
+          .filter((part) => /^(preview|[A-Z_]+$|[A-Z_]+=)/.test(part) || /^\d+$/.test(part) === false)
+          .slice(0, 6)
+          .join(','),
+      }));
     },
 
     /** The raw ring, oldest first, for anyone who wants to plot it. */

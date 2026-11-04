@@ -388,25 +388,106 @@
   display: block;
 }
 
-/* Fixture palette */
-.fixturePalette {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  padding: var(--space-xs) var(--space-sm);
-  background: rgba(0, 0, 0, 0.02);
-  border-radius: var(--radius-md);
+/* Furniture: one trigger in the tool palette, nine types in a popover. */
+.paletteDivider {
+  width: 1px;
+  height: 22px;
+  margin: 0 var(--space-xs);
+  background: var(--color-divider);
   flex-shrink: 0;
 }
 
-.fixturePaletteLabel {
-  font-family: var(--font-heading);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+.furnitureCaret {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-top: 3px solid currentColor;
+  opacity: 0.55;
+}
+
+.toolPaletteBtn:has(.furnitureCaret) {
+  position: relative;
+}
+
+.furnitureMenu {
+  position: fixed;
+  z-index: 9998;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: repeat(3, 76px);
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-elevated);
+  box-shadow: var(--shadow-floating);
+  font-family: var(--font-ui);
+  animation: furnitureMenuIn 140ms var(--ease-tactile, ease-out) both;
+}
+
+@keyframes furnitureMenuIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.furnitureItem,
+.furnitureItemActive {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 62px;
+  padding: 6px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--color-text-secondary);
-  margin-right: 4px;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast),
+    border-color var(--duration-fast);
+}
+
+.furnitureItem:hover,
+.furnitureItem:focus-visible {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.06);
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+.furnitureItemActive {
+  background: var(--color-active-glow-subtle);
+  border-color: var(--color-active-glow-border);
+  color: var(--color-active-glow);
+}
+
+.furnitureItemActive:focus-visible {
+  outline: 2px solid var(--color-active-glow-border);
+  outline-offset: 1px;
+}
+
+.furnitureItemIcon {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.furnitureItemLabel {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
   white-space: nowrap;
 }
 
@@ -444,9 +525,6 @@
   .toolPalette {
     gap: 0;
   }
-  .fixturePalette {
-    gap: 0;
-  }
   .toolPaletteBtn {
     width: 30px;
     height: 30px;
@@ -468,12 +546,6 @@
   }
   .toolPalette {
     padding: 0 var(--space-xs);
-  }
-  .fixturePalette {
-    padding: 0 var(--space-xs);
-  }
-  .fixturePaletteLabel {
-    display: none;
   }
   .groupLabel {
     display: none;

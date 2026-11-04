@@ -22,6 +22,13 @@
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(243, 243, 240, 0.2));
 }
 
+/* Focused, the pane runs under the floating side panels: keep the header's
+   controls in the part of it that is actually visible. */
+.headerFocused {
+  padding-left: calc(14px + var(--focus-overlay-left, 0px));
+  padding-right: calc(14px + var(--focus-overlay-right, 0px));
+}
+
 .titleGroup {
   display: flex;
   flex-direction: column;
@@ -126,6 +133,30 @@
   transition:
     background var(--duration-fast),
     border-color var(--duration-fast);
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* The View menu: narrower than the floor and style menus — its labels are short. */
+.viewSelect {
+  composes: floorSelect;
+  flex: 0 1 96px;
+  min-width: 84px;
+  max-width: 120px;
+}
+
+.saveImageButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.saveImageButton:not(:disabled):hover {
+  background: white;
+  border-color: rgba(0, 0, 0, 0.12);
 }
 
 .button svg {

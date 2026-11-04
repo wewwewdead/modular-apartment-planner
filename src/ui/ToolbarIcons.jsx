@@ -590,3 +590,71 @@ export function BedIcon(props) {
     </I>
   );
 }
+
+export function ShowerIcon(props) {
+  return (
+    <I {...props}>
+      {/* Tray */}
+      <rect x="3" y="3" width="14" height="14" rx="1" {...p} />
+      {/* Drain */}
+      <circle cx="10" cy="10" r="1.6" {...p} strokeWidth={1.1} />
+      {/* Rose in the corner */}
+      <circle cx="6" cy="6" r="1" fill="currentColor" stroke="none" />
+      {/* Glass screen on the open side */}
+      <line x1="3" y1="17" x2="12" y2="17" {...p} strokeWidth={2} />
+    </I>
+  );
+}
+
+export function PlantIcon(props) {
+  return (
+    <I {...props}>
+      {/* Six leaves round a pot */}
+      {[0, 60, 120, 180, 240, 300].map((angle) => (
+        <path
+          key={angle}
+          d="M10 10 Q12.6 8.2 16.4 10 Q12.6 11.8 10 10 Z"
+          transform={`rotate(${angle} 10 10)`}
+          {...p}
+          strokeWidth={1.1}
+        />
+      ))}
+      <circle cx="10" cy="10" r="1.4" fill="currentColor" stroke="none" />
+    </I>
+  );
+}
+
+/** The Furniture popover's trigger: an armchair from above. */
+export function FurnitureIcon(props) {
+  return (
+    <I {...props}>
+      <rect x="3" y="5" width="14" height="11" rx="2" {...p} />
+      <path d="M3 8.5h14" {...p} />
+      <path d="M5.5 8.5v7.5M14.5 8.5v7.5" {...p} />
+      <path d="M7.5 3.5h5" {...p} strokeWidth={1.2} />
+    </I>
+  );
+}
+
+/** Presentation style: a plan with a tinted, shaded room. */
+export function PresentationStyleIcon(props) {
+  return (
+    <I {...props}>
+      <rect x="3" y="3" width="14" height="14" rx="1.2" {...p} strokeWidth={2.2} />
+      <rect x="5.5" y="5.5" width="9" height="9" rx="0.5" fill="currentColor" stroke="none" opacity={0.28} />
+      <path d="M10 3v6M10 13v4" {...p} strokeWidth={1.2} />
+    </I>
+  );
+}
+
+export function CameraIcon(props) {
+  return (
+    <I {...props}>
+      <path
+        d="M3 7a1.5 1.5 0 0 1 1.5-1.5h2L8 3.5h4l1.5 2h2A1.5 1.5 0 0 1 17 7v8a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 15z"
+        {...p}
+      />
+      <circle cx="10" cy="11" r="3" {...p} />
+    </I>
+  );
+}

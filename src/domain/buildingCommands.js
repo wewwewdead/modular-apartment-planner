@@ -199,11 +199,26 @@ function validationDelta(before, after) {
   };
 }
 
+/*
+ * Options for the command being executed right now (see
+ * `executeBuildingCommand`). Module state rather than a parameter because the
+ * eighty-odd command implementations all end in `commandSuccess`, and the one
+ * option there is applies to all of them alike. Commands are synchronous and
+ * never nested, so the slot is always this command's.
+ */
+let executionOptions = null;
+
 function commandSuccess(project, nextProject, command, domainChanges) {
   const syncedProject = syncCanonicalBuilding(nextProject);
-  const beforeIssues = validateBuildingCoordination(project);
-  const afterIssues = validateBuildingCoordination(syncedProject);
-  const validation = validationDelta(beforeIssues, afterIssues);
+  const deferValidation = Boolean(executionOptions?.deferValidation);
+  // Mid-drag, the store runs one coordination pass on release rather than two
+  // per frame here; the delta a panel would show for this command is not drawn
+  // before then anyway (see `createDragGesture` in the floorplan reducer).
+  const beforeIssues = deferValidation ? null : validateBuildingCoordination(project);
+  const afterIssues = deferValidation ? null : validateBuildingCoordination(syncedProject);
+  const validation = deferValidation
+    ? { issues: null, introduced: [], resolved: [], deferred: true }
+    : validationDelta(beforeIssues, afterIssues);
 
   return {
     ok: true,
@@ -213,12 +228,14 @@ function commandSuccess(project, nextProject, command, domainChanges) {
       domain: domainChanges,
       derived: [
         { kind: 'relationship_indexes_synchronized', buildingId: syncedProject.building.id },
-        {
-          kind: 'coordination_validation_recomputed',
-          issueCount: afterIssues.length,
-          introducedIssueIds: validation.introduced.map((entry) => entry.id),
-          resolvedIssueIds: validation.resolved.map((entry) => entry.id),
-        },
+        deferValidation
+          ? { kind: 'coordination_validation_deferred' }
+          : {
+              kind: 'coordination_validation_recomputed',
+              issueCount: afterIssues.length,
+              introducedIssueIds: validation.introduced.map((entry) => entry.id),
+              resolvedIssueIds: validation.resolved.map((entry) => entry.id),
+            },
         { kind: 'area_ledger_recomputed', ledger: deriveAreaLedger(syncedProject) },
       ],
     },
@@ -4777,7 +4794,26 @@ function addSlabOpening(project, command) {
 }
 
 /** Execute a pure, traceable mutation against the canonical project model. */
-export function executeBuildingCommand(project, command) {
+/**
+ * Run one building command against the project.
+ *
+ * `options.deferValidation` skips the before/after coordination validation a
+ * successful command normally reports. The floorplan store sets it for the
+ * commands a pointer drag issues every frame, where that validation was the
+ * single largest cost of moving a column or a wall; the store validates the
+ * settled project once when the drag ends.
+ */
+export function executeBuildingCommand(project, command, options = null) {
+  const previous = executionOptions;
+  executionOptions = options;
+  try {
+    return runBuildingCommand(project, command);
+  } finally {
+    executionOptions = previous;
+  }
+}
+
+function runBuildingCommand(project, command) {
   if (!project?.building) {
     return commandError(project, command, 'building-model-missing', 'Canonical building model is missing.');
   }

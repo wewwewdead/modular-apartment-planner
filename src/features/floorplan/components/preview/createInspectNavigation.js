@@ -3,7 +3,12 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { DEFAULT_PRESET_NAME, PRESETS } from './previewConfig';
 import { fitCameraToBox } from './previewCameraMath';
 
-export function createInspectNavigation({ camera, domElement, onChange }) {
+export function createInspectNavigation({ camera: initialCamera, domElement, onChange }) {
+  // The camera the controls drive. Swapped for an orthographic one while an
+  // elevation preset is up; OrbitControls supports both (it zooms an
+  // orthographic camera through `camera.zoom` rather than by dollying).
+  let camera = initialCamera;
+  const perspectiveCamera = initialCamera;
   const controls = new OrbitControls(camera, domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
@@ -34,19 +39,36 @@ export function createInspectNavigation({ camera, domElement, onChange }) {
     setBounds(bounds) {
       currentBounds = bounds ? bounds.clone() : null;
     },
+    getBounds() {
+      return currentBounds;
+    },
     setEnabled(enabled) {
       controls.enabled = enabled;
     },
     setLeftButtonRotateEnabled(enabled) {
       applyMouseBindings(enabled);
     },
+    /** Point the controls at a different camera (perspective ↔ orthographic). */
+    setCamera(nextCamera) {
+      if (!nextCamera || nextCamera === camera) return;
+      camera = nextCamera;
+      controls.object = nextCamera;
+      controls.update();
+    },
+    getCamera() {
+      return camera;
+    },
     resetView() {
       if (!currentBounds) return;
+      // Reset is always the default perspective view, whatever preset was up.
+      currentPreset = DEFAULT_PRESET_NAME;
+      if (camera !== perspectiveCamera) this.setCamera(perspectiveCamera);
       fitCameraToBox(camera, controls, currentBounds, currentPreset);
     },
     setProjectionPreset(presetName = DEFAULT_PRESET_NAME) {
       currentPreset = presetName in PRESETS ? presetName : DEFAULT_PRESET_NAME;
       if (!currentBounds) return;
+      if (camera !== perspectiveCamera) this.setCamera(perspectiveCamera);
       fitCameraToBox(camera, controls, currentBounds, currentPreset);
     },
     captureState() {

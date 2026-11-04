@@ -1,7 +1,7 @@
 import { createRoofPitch, normalizeRoofPitchDirection } from '@/domain/roofModels';
 import { deriveCustomRoofTopology } from '@/roof/customRoofTopology';
 import { add, dot, normalize, perpendicular, scale, subtract } from './point';
-import { pointInPolygon, polygonCentroid, signedPolygonArea } from './polygon';
+import { isConvexPolygon, pointInPolygon, polygonCentroid, signedPolygonArea } from './polygon';
 
 const EPSILON = 1e-6;
 
@@ -107,7 +107,7 @@ function interpolateAxisIntersection(start, end, startValue, endValue, limit) {
   };
 }
 
-function clipPolygonByAxis(points, origin, axis, limit, keepLessOrEqual) {
+export function clipPolygonByAxis(points, origin, axis, limit, keepLessOrEqual) {
   const input = uniqueSequentialPoints(points);
   if (input.length < 3) return [];
 
@@ -154,36 +154,10 @@ function collectAxisIntersections(points, origin, axis, limit) {
   return uniqueSequentialPoints(hits);
 }
 
-function clipPolygonToAxisBand(points, origin, axis, minLimit, maxLimit) {
+export function clipPolygonToAxisBand(points, origin, axis, minLimit, maxLimit) {
   if (maxLimit - minLimit <= EPSILON) return [];
   const highClipped = clipPolygonByAxis(points, origin, axis, maxLimit, true);
   return clipPolygonByAxis(highClipped, origin, axis, minLimit, false);
-}
-
-function isConvexPolygon(points = []) {
-  if (points.length < 3) return false;
-
-  const normalized = ensureCounterClockwise(points);
-  let sign = 0;
-
-  for (let index = 0; index < normalized.length; index += 1) {
-    const a = normalized[index];
-    const b = normalized[(index + 1) % normalized.length];
-    const c = normalized[(index + 2) % normalized.length];
-    const ab = subtract(b, a);
-    const bc = subtract(c, b);
-    const cross = ab.x * bc.y - ab.y * bc.x;
-    if (Math.abs(cross) < EPSILON) continue;
-
-    const nextSign = Math.sign(cross);
-    if (!sign) {
-      sign = nextSign;
-      continue;
-    }
-    if (nextSign !== sign) return false;
-  }
-
-  return true;
 }
 
 function offsetConvexPolygon(points = [], distance) {
@@ -225,18 +199,39 @@ function slopeRatio(source) {
   return Math.max(0, Number(source?.pitch?.slope ?? source?.slope ?? 0)) / 100;
 }
 
+// Shape-profile rises are SIGNED since RT-3 (spec §7.2): an attached roof
+// follows the truss top face from the start-heel datum, and its sloped tails
+// sit below it.
 function sampleShapeProfileRise(shapeProfile, ratio) {
   const points = (shapeProfile?.points || []).filter(
     (point) => Number.isFinite(point?.position) && Number.isFinite(point?.rise),
   );
   if (!points.length) return 0;
-  if (points.length === 1) return Math.max(0, points[0].rise);
+  if (points.length === 1) return points[0].rise;
 
   const ordered = [...points].sort((a, b) => a.position - b.position);
+  // Beyond the profile (a roof overhang of its own past the truss tails) the
+  // end segments continue: the roof keeps its slope out to its edge.
+  const first = ordered[0];
+  const second = ordered[1];
+  const last = ordered[ordered.length - 1];
+  const beforeLast = ordered[ordered.length - 2];
+  if (ratio < first.position - EPSILON) {
+    const run = second.position - first.position;
+    return Math.abs(run) <= EPSILON
+      ? first.rise
+      : first.rise + ((second.rise - first.rise) * (ratio - first.position)) / run;
+  }
+  if (ratio > last.position + EPSILON) {
+    const run = last.position - beforeLast.position;
+    return Math.abs(run) <= EPSILON
+      ? last.rise
+      : last.rise + ((last.rise - beforeLast.rise) * (ratio - last.position)) / run;
+  }
   const clampedRatio = clamp01(ratio);
-  if (clampedRatio <= ordered[0].position + EPSILON) return Math.max(0, ordered[0].rise);
+  if (clampedRatio <= ordered[0].position + EPSILON) return ordered[0].rise;
   if (clampedRatio >= ordered[ordered.length - 1].position - EPSILON) {
-    return Math.max(0, ordered[ordered.length - 1].rise);
+    return ordered[ordered.length - 1].rise;
   }
 
   for (let index = 0; index < ordered.length - 1; index += 1) {
@@ -245,15 +240,42 @@ function sampleShapeProfileRise(shapeProfile, ratio) {
     if (clampedRatio < start.position - EPSILON || clampedRatio > end.position + EPSILON) continue;
 
     const span = end.position - start.position;
-    if (Math.abs(span) <= EPSILON) return Math.max(0, end.rise);
+    if (Math.abs(span) <= EPSILON) return end.rise;
 
     const localRatio = (clampedRatio - start.position) / span;
-    return Math.max(0, start.rise + (end.rise - start.rise) * localRatio);
+    return start.rise + (end.rise - start.rise) * localRatio;
   }
 
-  return Math.max(0, ordered[ordered.length - 1].rise);
+  return ordered[ordered.length - 1].rise;
 }
 
+/**
+ * The slab's vertical thickness factor (1 / cos θ) at a profile position: the
+ * slope of the segment there; at a vertex the steeper of the two (the body
+ * stays at least `slabThickness` thick square to both faces).
+ */
+function sampleShapeProfileThicknessFactor(shapeProfile, ratio, axisSpan) {
+  const ordered = [...(shapeProfile?.points || [])]
+    .filter((point) => Number.isFinite(point?.position) && Number.isFinite(point?.rise))
+    .sort((a, b) => a.position - b.position);
+  if (ordered.length < 2 || axisSpan <= EPSILON) return 1;
+  const clampedRatio = clamp01(ratio);
+  let factor = 0;
+  for (let index = 0; index < ordered.length - 1; index += 1) {
+    const start = ordered[index];
+    const end = ordered[index + 1];
+    if (clampedRatio < start.position - 1e-9 || clampedRatio > end.position + 1e-9) continue;
+    const run = Math.max((end.position - start.position) * axisSpan, EPSILON);
+    factor = Math.max(factor, Math.sqrt(1 + ((end.rise - start.rise) / run) ** 2));
+  }
+  return factor || 1;
+}
+
+/**
+ * The peak of a shape profile, or null when there is no ridge: a flat profile
+ * or one whose peak is at an edge of the roof (the high side of a shed is an
+ * edge, not a ridge).
+ */
 function resolveShapeProfilePeakBand(shapeProfile) {
   const points = (shapeProfile?.points || []).filter(
     (point) => Number.isFinite(point?.position) && Number.isFinite(point?.rise),
@@ -262,12 +284,46 @@ function resolveShapeProfilePeakBand(shapeProfile) {
 
   const maxRise = Math.max(...points.map((point) => point.rise));
   const peakPoints = points.filter((point) => Math.abs(point.rise - maxRise) <= EPSILON);
-  if (!peakPoints.length || maxRise <= EPSILON) return null;
+  if (!peakPoints.length) return null;
+  const minPosition = Math.min(...peakPoints.map((point) => point.position));
+  const maxPosition = Math.max(...peakPoints.map((point) => point.position));
+  if (minPosition <= EPSILON || maxPosition >= 1 - EPSILON) return null;
 
+  return { maxRise, minPosition, maxPosition };
+}
+
+/**
+ * The underside run slope (a ratio) a shape profile was built at: the stored
+ * `slope` (RT-3.1, carried by `buildAttachedRoofShapeProfile`), else the
+ * first segment's rise over its run across `axisSpan`.
+ */
+function resolveShapeProfileSlope(shapeProfile, axisSpan) {
+  if (Number.isFinite(shapeProfile?.slope) && shapeProfile.slope > EPSILON) return shapeProfile.slope;
+  const ordered = [...(shapeProfile?.points || [])]
+    .filter((point) => Number.isFinite(point?.position) && Number.isFinite(point?.rise))
+    .sort((a, b) => a.position - b.position);
+  if (ordered.length < 2 || axisSpan <= EPSILON) return 0;
+  const run = (ordered[1].position - ordered[0].position) * axisSpan;
+  return run > EPSILON ? Math.abs(ordered[1].rise - ordered[0].rise) / run : 0;
+}
+
+/**
+ * RT-3.1 (spec §7.8.2): a hand-set slope on an attached gable/shed pivots on
+ * the start heel. Every signed rise of the truss profile (heel = 0) scales by
+ * `manualSlope / profileSlope`, so the ridge lands at `manualSlope × run` and
+ * the tails at `−manualSlope × overhang`. A profile with no slope of its own
+ * is returned unchanged.
+ */
+function scaleShapeProfileToSlope(shapeProfile, manualSlope, axisSpan) {
+  const profileSlope = resolveShapeProfileSlope(shapeProfile, axisSpan);
+  if (profileSlope <= EPSILON || !Number.isFinite(manualSlope)) return shapeProfile;
+  const factor = manualSlope / profileSlope;
+  if (Math.abs(factor - 1) <= 1e-12) return shapeProfile;
   return {
-    maxRise,
-    minPosition: Math.min(...peakPoints.map((point) => point.position)),
-    maxPosition: Math.max(...peakPoints.map((point) => point.position)),
+    ...shapeProfile,
+    slope: manualSlope,
+    maxRise: Number.isFinite(shapeProfile?.maxRise) ? shapeProfile.maxRise * factor : shapeProfile?.maxRise,
+    points: (shapeProfile?.points || []).map((point) => ({ ...point, rise: point.rise * factor })),
   };
 }
 
@@ -327,6 +383,7 @@ function buildHipRoofGeometry(
   direction,
   ridgeDirection,
   pitch,
+  outlineState = {},
 ) {
   const spanRange = axisRange(roofOutline, centroid, direction);
   const layoutRange = axisRange(roofOutline, centroid, ridgeDirection);
@@ -364,9 +421,13 @@ function buildHipRoofGeometry(
     return Math.max(0, ratio * Math.min(sideDistance(point), endDistance(point)));
   }
 
+  // RT-3 (spec §7.2): the body is `slabThickness` thick SQUARE to its plane;
+  // every hip plane has the same slope.
+  const verticalThickness = slabThickness * Math.sqrt(1 + ratio * ratio);
+
   function getSurfaceElevation(point, surface = 'top') {
     const rise = getRiseAtPoint(point);
-    return surface === 'bottom' ? baseElevation + rise : baseElevation + slabThickness + rise;
+    return surface === 'bottom' ? baseElevation + rise : baseElevation + verticalThickness + rise;
   }
 
   function createPlaneOutline(localPoints) {
@@ -535,8 +596,10 @@ function buildHipRoofGeometry(
     boundaryPolygon,
     roofOutline,
     roofOutlineWithElevations,
-    convexBoundary: false,
-    overhangApplied: false,
+    // The outline state ensureRoofOutline produced (the roof overhang IS applied
+    // to roofOutline here), so the panel hint reads the truth.
+    convexBoundary: Boolean(outlineState.convexBoundary),
+    overhangApplied: Boolean(outlineState.overhangApplied),
     pitch,
     centroid,
     direction,
@@ -572,11 +635,25 @@ function buildProfileDrivenRoofGeometry(
   ridgeDirection,
   pitch,
   shapeProfile,
+  options = {},
 ) {
-  const outlineRange = axisRange(roofOutline, centroid, direction);
+  const outlineState = options.outlineState || {};
+  // The profile spans the BOUNDARY (the truss tail-to-tail outline); a roof
+  // overhang of its own (`roofOutline` offset past it) continues the end slopes.
+  const roofRange = axisRange(roofOutline, centroid, direction);
+  const outlineRange = boundaryPolygon?.length >= 3 ? axisRange(boundaryPolygon, centroid, direction) : roofRange;
   const axisSpan = Math.max(0, outlineRange.max - outlineRange.min);
+  // Profile position 0 is the start-bearing side of the truss. It sits at the
+  // axis MINIMUM, except for an attached shed, whose pitch direction is the
+  // negated span axis (pitch directions point downhill app-wide).
+  const reverse = Boolean(options.reverse);
+  const axisAt = (position) =>
+    reverse ? outlineRange.max - axisSpan * position : outlineRange.min + axisSpan * position;
   const baseElevation = roofSystem?.baseElevation ?? 0;
   const slabThickness = roofSystem?.slabThickness ?? 0;
+  if (Number.isFinite(options.manualSlope)) {
+    shapeProfile = scaleShapeProfileToSlope(shapeProfile, options.manualSlope, axisSpan);
+  }
   const profilePoints = [...(shapeProfile?.points || [])]
     .filter((point) => Number.isFinite(point?.position) && Number.isFinite(point?.rise))
     .sort((a, b) => a.position - b.position);
@@ -585,35 +662,45 @@ function buildProfileDrivenRoofGeometry(
     return null;
   }
 
-  function getRiseAtPoint(point) {
-    if (!point) return 0;
+  function ratioAt(point) {
     const axisPosition = axisValue(point, centroid, direction);
-    const ratio = (axisPosition - outlineRange.min) / axisSpan;
-    return sampleShapeProfileRise(shapeProfile, ratio);
+    return reverse ? (outlineRange.max - axisPosition) / axisSpan : (axisPosition - outlineRange.min) / axisSpan;
   }
 
+  function getRiseAtPoint(point) {
+    if (!point) return 0;
+    return sampleShapeProfileRise(shapeProfile, ratioAt(point));
+  }
+
+  // RT-3 (spec §7.2): `slabThickness` is measured square to each segment.
   function getSurfaceElevation(point, surface = 'top') {
     const rise = getRiseAtPoint(point);
-    return surface === 'bottom' ? baseElevation + rise : baseElevation + slabThickness + rise;
+    if (surface === 'bottom') return baseElevation + rise;
+    const factor = point ? sampleShapeProfileThicknessFactor(shapeProfile, ratioAt(point), axisSpan) : 1;
+    return baseElevation + slabThickness * factor + rise;
   }
 
   const planes = [];
   for (let index = 0; index < profilePoints.length - 1; index += 1) {
     const start = profilePoints[index];
     const end = profilePoints[index + 1];
+    const bandA = axisAt(index === 0 ? Math.min(start.position, -1) : start.position);
+    const bandB = axisAt(index === profilePoints.length - 2 ? Math.max(end.position, 2) : end.position);
     const bandOutline = clipPolygonToAxisBand(
       roofOutline,
       centroid,
       direction,
-      outlineRange.min + axisSpan * start.position,
-      outlineRange.min + axisSpan * end.position,
+      Math.max(Math.min(bandA, bandB), roofRange.min - 1),
+      Math.min(Math.max(bandA, bandB), roofRange.max + 1),
     );
     if (bandOutline.length < 3) continue;
 
     const segmentRun = Math.max((end.position - start.position) * axisSpan, EPSILON);
     const segmentSlope = Math.max(0, Math.abs(end.rise - start.rise) / segmentRun) * 100;
+    // Downhill: against the way position grows when the segment rises.
+    const positionAxis = reverse ? scale(direction, -1) : direction;
     const segmentDirection =
-      end.rise > start.rise ? scale(direction, -1) : end.rise < start.rise ? direction : { x: 0, y: 0 };
+      end.rise > start.rise ? scale(positionAxis, -1) : end.rise < start.rise ? positionAxis : { x: 0, y: 0 };
 
     const planeType = segmentSlope <= EPSILON ? `${roofType}_crown` : `${roofType}_segment_${index + 1}`;
     planes.push(
@@ -638,9 +725,7 @@ function buildProfileDrivenRoofGeometry(
   const maxTopElevation = Math.max(...roofOutlineWithElevations.map((point) => point.topElevation));
 
   const peakBand = resolveShapeProfilePeakBand(shapeProfile);
-  const ridgeAxisValue = peakBand
-    ? outlineRange.min + axisSpan * ((peakBand.minPosition + peakBand.maxPosition) / 2)
-    : 0;
+  const ridgeAxisValue = peakBand ? axisAt((peakBand.minPosition + peakBand.maxPosition) / 2) : 0;
   const ridgeHits = peakBand
     ? uniquePoints(collectAxisIntersections(roofOutline, centroid, direction, ridgeAxisValue)).sort(
         (a, b) => axisValue(a, centroid, ridgeDirection) - axisValue(b, centroid, ridgeDirection),
@@ -659,8 +744,10 @@ function buildProfileDrivenRoofGeometry(
     boundaryPolygon,
     roofOutline,
     roofOutlineWithElevations,
-    convexBoundary: false,
-    overhangApplied: false,
+    // The outline state ensureRoofOutline produced (the roof overhang IS applied
+    // to roofOutline here), so the panel hint reads the truth.
+    convexBoundary: Boolean(outlineState.convexBoundary),
+    overhangApplied: Boolean(outlineState.overhangApplied),
     pitch,
     centroid,
     direction,
@@ -862,14 +949,21 @@ export function buildRoofPlaneGeometry(roofSystem) {
       direction,
       ridgeDirection,
       pitch,
+      { convexBoundary, overhangApplied },
     );
     if (hipGeometry) return hipGeometry;
   }
 
-  if (
-    ['box_gable', 'pyramid_hipped', 'domed', 'dropped_eaves'].includes(roofType) &&
-    attachedShapeProfile?.points?.length >= 2
-  ) {
+  // Every ATTACHED roof but hip and custom follows the truss profile (RT-3,
+  // spec §7.2): the box-gable family always did; an attached gable or shed
+  // does too, whatever its pitch source (RT-3.1, §7.8.2): a hand-set slope
+  // (pitchSource 'manual') scales the profile's rises about the start heel.
+  // Detached gable/shed keep the preset formula.
+  const attachedGableOrShed = ['gable', 'shed'].includes(roofType) && Boolean(roofSystem?.trussAttachmentId);
+  const followsTrussProfile =
+    attachedShapeProfile?.points?.length >= 2 &&
+    (['box_gable', 'pyramid_hipped', 'domed', 'dropped_eaves'].includes(roofType) || attachedGableOrShed);
+  if (followsTrussProfile) {
     const profileGeometry = buildProfileDrivenRoofGeometry(
       roofSystem,
       roofType,
@@ -880,6 +974,11 @@ export function buildRoofPlaneGeometry(roofSystem) {
       ridgeDirection,
       pitch,
       attachedShapeProfile,
+      {
+        reverse: roofType === 'shed',
+        outlineState: { convexBoundary, overhangApplied },
+        manualSlope: attachedGableOrShed && roofSystem?.pitchSource === 'manual' ? slopeRatio({ pitch }) : undefined,
+      },
     );
     if (profileGeometry) return profileGeometry;
   }
@@ -913,9 +1012,14 @@ export function buildRoofPlaneGeometry(roofSystem) {
     return 0;
   }
 
+  // RT-3 (spec §7.2): the body is `slabThickness` thick square to the plane
+  // (a 180 slab at 25 % is 185.6 deep plumb); a flat roof is unchanged.
+  const verticalThickness =
+    roofType === 'gable' || roofType === 'shed' ? slabThickness * Math.sqrt(1 + ratio * ratio) : slabThickness;
+
   function getSurfaceElevation(point, surface = 'top') {
     const rise = getRiseAtPoint(point);
-    return surface === 'bottom' ? baseElevation + rise : baseElevation + slabThickness + rise;
+    return surface === 'bottom' ? baseElevation + rise : baseElevation + verticalThickness + rise;
   }
 
   const planes = [];

@@ -692,3 +692,192 @@ describe('migration_28_to_29 wall facade backfill', () => {
     expect(project.version).toBe(23);
   });
 });
+
+describe('migration_29_to_30 roof covering and edge-kit backfill', () => {
+  const migrate = async (project) => (await import('../migrations/migration_29_to_30.js')).migrateV29toV30(project);
+
+  it('gives a pitched roof corrugated Shale Grey and every trim but the barge cap', async () => {
+    const result = await migrate({
+      id: 'p1',
+      version: 23,
+      floors: [],
+      roofSystem: { id: 'roof_1', roofType: 'gable' },
+    });
+
+    expect(result.roofSystem.covering).toMatchObject({
+      kind: 'metal_corrugated',
+      productId: 'corrugated_042',
+      coverWidth: 762,
+      ribHeight: 16,
+      finish: 'satin',
+      colour: { hex: '#BDBFBA', name: 'Shale Grey', catalogue: 'colorbond', solarAbsorptance: 0.44 },
+    });
+    expect(result.roofSystem.trims).toMatchObject({
+      fascia: { enabled: true, depth: 200, thickness: 25, drop: 0 },
+      barge: { enabled: true, depth: 200, thickness: 25 },
+      gutter: { enabled: true, profile: 'quad_115', width: 115, depth: 90 },
+      downpipes: { enabled: true, diameter: 90, maxSpacing: 12000 },
+      ridgeCap: { enabled: true, girth: 350 },
+      bargeCap: { enabled: false, girth: 250 },
+      soffit: { mode: 'boxed', thickness: 6, colour: { hex: '#E4E2D5', name: 'Surfmist' } },
+    });
+    expect(result.version).toBe(23);
+  });
+
+  it('keeps a flat roof a grey slab with every trim off', async () => {
+    const result = await migrate({
+      id: 'p1',
+      version: 23,
+      floors: [],
+      roofSystem: { id: 'roof_1', roofType: 'flat', slabThickness: 220 },
+    });
+
+    expect(result.roofSystem.covering).toMatchObject({
+      kind: 'concrete_slab',
+      thickness: 220,
+      finish: 'matte',
+      colour: { hex: '#B4B8BC', name: 'Preview grey', catalogue: 'custom' },
+    });
+    const trims = result.roofSystem.trims;
+    for (const key of ['fascia', 'barge', 'gutter', 'downpipes', 'ridgeCap', 'bargeCap']) {
+      expect(trims[key].enabled).toBe(false);
+    }
+    expect(trims.soffit.mode).toBe('open');
+  });
+
+  it('keeps stored values a newer build wrote', async () => {
+    const result = await migrate({
+      id: 'p1',
+      version: 23,
+      floors: [],
+      roofSystem: {
+        id: 'roof_1',
+        roofType: 'gable',
+        covering: {
+          kind: 'concrete_tile',
+          productId: 'concrete_tile_330',
+          finish: 'gloss',
+          colour: { hex: '#5E1D0E', name: 'Manor Red', catalogue: 'colorbond', solarAbsorptance: 0.69 },
+        },
+        trims: { fascia: { enabled: false, depth: 230 } },
+      },
+    });
+
+    expect(result.roofSystem.covering).toMatchObject({
+      kind: 'concrete_tile',
+      productId: 'concrete_tile_330',
+      finish: 'gloss',
+      colour: { hex: '#5E1D0E', name: 'Manor Red' },
+    });
+    expect(result.roofSystem.trims.fascia).toMatchObject({ enabled: false, depth: 230, thickness: 25 });
+    expect(result.roofSystem.trims.gutter.enabled).toBe(true);
+  });
+
+  it('leaves a project without a roof untouched', async () => {
+    const project = { id: 'p1', version: 23, floors: [], roofSystem: null };
+    expect(await migrate(project)).toBe(project);
+  });
+
+  it('backfills through a full deserialize from schema 29', async () => {
+    const { deserializeProject } = await import('../deserialize.js');
+    const { createProject } = await import('@/domain/models');
+    const payload = createProject('Pre-covering save');
+    payload.roofSystem = { id: 'roof_1', name: 'Roof', roofType: 'shed' };
+
+    const { project } = deserializeProject({ schemaVersion: 29, version: payload.version, data: payload });
+
+    expect(project.roofSystem.covering.kind).toBe('metal_corrugated');
+    expect(project.roofSystem.trims.fascia.enabled).toBe(true);
+    expect(project.version).toBe(23);
+  });
+});
+
+describe('migration_30_to_31 attached roof attachmentOffset reset (RT-3.1)', () => {
+  const migrate = async (project) => (await import('../migrations/migration_30_to_31.js')).migrateV30toV31(project);
+
+  async function gableTrussSystem() {
+    const { createTrussSystem } = await import('@/domain/trussModels');
+    return createTrussSystem('Gable System', {
+      id: 'ts_1',
+      floorId: 'floor_1',
+      baseElevation: 3000,
+      purlinSystem: { enabled: true, depth: 50, width: 75, spacing: 900 },
+      trussInstances: [
+        {
+          trussTypeId: 'truss_type_gable',
+          startPoint: { x: 0, y: 0 },
+          endPoint: { x: 6000, y: 0 },
+          span: 7200,
+          rise: 900,
+          spacing: 1200,
+          count: 6,
+          overhangs: { start: 300, end: 300 },
+        },
+      ],
+    });
+  }
+
+  it('zeroes an attached roof offset and re-derives its base from the truss datum', async () => {
+    const { getTrussRoofAttachmentElevation } = await import('@/truss/roofAttachment');
+    const trussSystem = await gableTrussSystem();
+    const datum = getTrussRoofAttachmentElevation(trussSystem);
+    const result = await migrate({
+      id: 'p1',
+      version: 23,
+      floors: [],
+      trussSystems: [trussSystem],
+      roofSystem: {
+        id: 'roof_1',
+        roofType: 'gable',
+        trussAttachmentId: 'ts_1',
+        pitchSource: 'manual',
+        attachmentOffset: -200,
+        baseElevation: datum - 200,
+        pitch: { slope: 32.5, overhang: 510, direction: { x: 0, y: 1 } },
+      },
+    });
+
+    expect(result.roofSystem.attachmentOffset).toBe(0);
+    expect(result.roofSystem.baseElevation).toBeCloseTo(datum, 6);
+    // Nothing else is rewritten: the manual slope and its source stay.
+    expect(result.roofSystem.pitchSource).toBe('manual');
+    expect(result.roofSystem.pitch.slope).toBe(32.5);
+    expect(result.version).toBe(23);
+  });
+
+  it('leaves a detached roof (no attachment, or a dangling one) untouched', async () => {
+    const detached = {
+      id: 'p1',
+      version: 23,
+      floors: [],
+      trussSystems: [await gableTrussSystem()],
+      roofSystem: { id: 'roof_1', roofType: 'gable', attachmentOffset: -200, baseElevation: 5800 },
+    };
+    expect(await migrate(detached)).toBe(detached);
+
+    const dangling = {
+      ...detached,
+      roofSystem: { ...detached.roofSystem, trussAttachmentId: 'ts_missing' },
+    };
+    expect(await migrate(dangling)).toBe(dangling);
+    expect(await migrate({ id: 'p1', version: 23, floors: [], roofSystem: null })).toMatchObject({
+      roofSystem: null,
+    });
+  });
+
+  it('migrates the playground on load: the hip roof sits on the trusses with no offset', async () => {
+    const { deserializeProject } = await import('../deserialize.js');
+    const { syncProjectStructures } = await import('@/domain/projectStateHelpers');
+    const { getRoofAttachmentElevation } = await import('@/truss/roofAttachment');
+    const demo = (await import('@/pages/playground-demo.json')).default;
+    // The demo is stored at schema 15 with the pre-RT-3 workaround offset.
+    expect(demo.schemaVersion).toBe(15);
+    expect(demo.data.roofSystem.attachmentOffset).toBe(-200);
+
+    const { project } = deserializeProject(demo);
+    expect(project.roofSystem.attachmentOffset).toBe(0);
+    const synced = syncProjectStructures(project);
+    expect(synced.roofSystem.attachmentOffset).toBe(0);
+    expect(synced.roofSystem.baseElevation).toBeCloseTo(getRoofAttachmentElevation(synced, synced.roofSystem), 6);
+  });
+});

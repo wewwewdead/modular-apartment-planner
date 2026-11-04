@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import { IS_DESKTOP_APP } from '@/platform/desktopApp';
-import { applyRenderStyleToPalette, createMaterialPalette, disposeMaterialPalette } from './materials';
+import {
+  PALETTE_LOOKS,
+  applyRenderStyleToPalette,
+  applyRoofAppearanceToPalette,
+  createMaterialPalette,
+  disposeMaterialPalette,
+} from './materials';
 import { UNLIT_LENS_EMISSIVE_INTENSITY, ensureOutlines } from './buildPreviewObjects';
 import { SOURCE_ONLY_LAYER } from './previewBatching';
 import { disposeScene } from './disposeScene';
@@ -8,13 +14,20 @@ import { freezeStaticMatrices } from './staticMatrices';
 import { createInspectNavigation } from './createInspectNavigation';
 import { createWalkNavigation } from './createWalkNavigation';
 import { createWalkPhysics } from './createWalkPhysics';
-import { CLICK_DISTANCE_THRESHOLD } from './previewConfig';
-import { createGrid, descriptorBoundsToWorldBox } from './previewCameraMath';
+import { CLICK_DISTANCE_THRESHOLD, PRESETS } from './previewConfig';
+import {
+  createGrid,
+  descriptorBoundsToWorldBox,
+  elevationCameraFrame,
+  fitOrthographicCamera,
+  isElevationPreset,
+  perspectiveFitDistance,
+} from './previewCameraMath';
 import { createSunSky, sunWorldDirection } from './createSunSky';
 import { ambientIrradiance, fixtureAdaptationScale } from './fixtureAdaptation';
 import { mixNumber, mixSrgbHex, nightfallBlend } from './twilightBlend';
 import { SKY_ENVIRONMENT_INTENSITY, STUDIO_ENVIRONMENT_INTENSITY, createEnvironment } from './createEnvironment';
-import { createGroundPlane } from './createGroundPlane';
+import { createGroundMaterial, createGroundPlane, disposeGroundMaterial } from './createGroundPlane';
 import { REFINE_PROFILES, createProgressiveRenderer } from './createProgressiveRenderer';
 import { canvasPixelRatio } from './previewResolution';
 import { FRAME_ACTION, nextFrameAction, shouldPresizeRefine, wantsAnotherFrame } from './refineSchedule';
@@ -113,8 +126,25 @@ const DAY_HEMISPHERE_INTENSITY = 0.18;
  */
 const DAY_FILL_INTENSITY = 0.35;
 
-/** The ground's own colour with no sun study to derive one from. */
-const DEFAULT_GROUND_COLOR = 0x9a958c;
+/**
+ * The ground's own colour with no sun study to derive one from: a light paving
+ * tone, so the white model stands on a plinth rather than in a hole, and the
+ * shadow pooling under it has something pale to darken.
+ */
+const DEFAULT_GROUND_COLOR = 0xc9c6c0;
+/** The ground as it was, for the detail editors' classic look. */
+const CLASSIC_GROUND_COLOR = 0x9a958c;
+
+/*
+ * The warm room behind every window (see `applyWindowGlow`). Emissive
+ * intensities: a trace with the lights off, a lived-in glow by day with them
+ * on, and lit windows after dark — at night the exposure is several stops up,
+ * so the night figure does not have to shout.
+ */
+const WINDOW_GLOW_UNLIT = 0.03;
+const WINDOW_GLOW_DAY = 0.35;
+const WINDOW_GLOW_NIGHT = 0.3;
+const WINDOW_GLOW_OPACITY = 0.6;
 
 /**
  * Low-discrepancy point on the sun's disc, for sample `index`.
@@ -142,8 +172,10 @@ function halton(index, base) {
   return result;
 }
 
-export function createPreviewViewport(container) {
-  const materialPalette = createMaterialPalette();
+export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MODEL } = {}) {
+  const materialPalette = createMaterialPalette({ look });
+  // The ground's own colour in this look (see DEFAULT_GROUND_COLOR).
+  const defaultGroundColor = look === PALETTE_LOOKS.CLASSIC ? CLASSIC_GROUND_COLOR : DEFAULT_GROUND_COLOR;
   const scene = new THREE.Scene();
   scene.background = null;
   /*
@@ -171,6 +203,24 @@ export function createPreviewViewport(container) {
   let style = renderStyleConfig(DEFAULT_RENDER_STYLE);
 
   const camera = new THREE.PerspectiveCamera(42, 1, 10, 100000);
+  /*
+   * The elevation presets look through a true orthographic camera — parallel
+   * verticals, no convergence — fitted to the model. Created once, switched in
+   * and out by `setActiveCamera`; the perspective camera stays the walk camera
+   * and the one every other view uses.
+   */
+  const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 10, 100000);
+  let activeCamera = camera;
+  // The preset on screen and the direction it looks from (target → camera), so
+  // an orbit that turns away from it can be noticed and the menu told.
+  let viewPresetName = 'free';
+  let presetDirection = null;
+  // While an elevation is up and no sun study is running, the studio key light
+  // comes over the viewer's left shoulder — see `elevationKeyLight`.
+  let elevationLightDirection = null;
+  let viewPresetHandler = null;
+  let renderStatusHandler = null;
+  let lastReportedConverged = null;
   const renderer = new THREE.WebGLRenderer({
     // Nothing is drawn to the default framebuffer except one full-screen quad,
     // which has no edges to antialias. The multisampling that matters is on the
@@ -208,7 +258,7 @@ export function createPreviewViewport(container) {
   renderer.domElement.style.display = 'block';
   container.appendChild(renderer.domElement);
 
-  const environment = createEnvironment(renderer);
+  const environment = createEnvironment(renderer, { look });
 
   const inspectNavigation = createInspectNavigation({
     camera,
@@ -278,6 +328,15 @@ export function createPreviewViewport(container) {
   let selectionOverlay = null;
   let gridHelper = null;
   let ground = null;
+  // The ground's and the grid's materials outlive the ground and grid, which
+  // are rebuilt with the world: see `createGroundMaterial` for why.
+  let groundMaterial = null;
+  let gridMaterials = null;
+
+  function disposeGridHelperGeometry(helper) {
+    helper.geometry?.dispose?.();
+    for (const child of helper.children) child.geometry?.dispose?.();
+  }
   let currentBounds = null;
   let pickHandler = null;
   let pickContext = { activeFloorId: null };
@@ -433,7 +492,7 @@ export function createPreviewViewport(container) {
   const emitCompassHeading = () => {
     if (!compassHeadingHandler) return;
 
-    camera.getWorldDirection(forwardVector);
+    activeCamera.getWorldDirection(forwardVector);
     horizontalForward.set(forwardVector.x, 0, forwardVector.z);
     if (horizontalForward.lengthSq() > 1e-6) {
       horizontalForward.normalize();
@@ -478,6 +537,8 @@ export function createPreviewViewport(container) {
       saveCurrentWalkPose();
     }
 
+    if (resolvedMode === 'walk') leaveViewPreset({ restorePerspective: true });
+
     navigationMode = resolvedMode;
     inspectNavigation.setEnabled(navigationMode === 'inspect');
     walkNavigation.setEnabled(navigationMode === 'walk');
@@ -488,6 +549,7 @@ export function createPreviewViewport(container) {
     // A walk that is about to start is a walk against whatever the world is now,
     // and the index is the cheapest thing in the building to rebuild.
     if (navigationMode === 'walk') walkPhysics.invalidateCollisions();
+    applyWindowGlow();
 
     if (navigationMode === 'inspect') {
       // Derive inspect state from walk camera so the view doesn't jump
@@ -519,14 +581,17 @@ export function createPreviewViewport(container) {
    */
   const lastCameraPosition = new THREE.Vector3();
   const lastCameraQuaternion = new THREE.Quaternion();
+  let lastCameraZoom = 1;
   let poseInitialised = false;
   let sceneDirty = true;
   let lastMovementAt = 0;
 
   const cameraHasMoved = () => {
+    const camera = activeCamera;
     if (!poseInitialised) {
       lastCameraPosition.copy(camera.position);
       lastCameraQuaternion.copy(camera.quaternion);
+      lastCameraZoom = camera.zoom;
       poseInitialised = true;
       return true;
     }
@@ -536,13 +601,17 @@ export function createPreviewViewport(container) {
     // rotation epsilon is the one OrbitControls itself settles at — anything
     // tighter and the controls would call themselves finished while this still
     // reported motion, and the image would never stop restarting.
+    // An orthographic camera zooms without moving, so its zoom is part of the
+    // pose; for the perspective camera it never changes.
     const moved =
       camera.position.distanceToSquared(lastCameraPosition) > 0.01 ||
-      1 - Math.abs(camera.quaternion.dot(lastCameraQuaternion)) > 1.25e-7;
+      1 - Math.abs(camera.quaternion.dot(lastCameraQuaternion)) > 1.25e-7 ||
+      Math.abs(camera.zoom - lastCameraZoom) > 1e-6;
 
     if (moved) {
       lastCameraPosition.copy(camera.position);
       lastCameraQuaternion.copy(camera.quaternion);
+      lastCameraZoom = camera.zoom;
     }
     return moved;
   };
@@ -562,7 +631,7 @@ export function createPreviewViewport(container) {
     emitCompassHeading();
     // Held in front of the camera rather than fixed in the world, so it has to
     // be repositioned after the camera has settled for this frame.
-    sunSky.followCamera(camera);
+    sunSky.followCamera(activeCamera);
 
     const moved = cameraHasMoved();
     const action = nextFrameAction({
@@ -591,7 +660,15 @@ export function createPreviewViewport(container) {
     const keepGoing = wantsAnotherFrame(action);
 
     if (axisIndicatorInstance) {
-      axisIndicatorInstance.render(renderer, camera);
+      axisIndicatorInstance.render(renderer, activeCamera);
+    }
+
+    // Tell the panel when the picture finishes (or restarts) refining — only on
+    // the change, so this costs nothing per frame. Save image waits on it.
+    const converged = progressive.isConverged();
+    if (renderStatusHandler && converged !== lastReportedConverged) {
+      lastReportedConverged = converged;
+      renderStatusHandler({ converged });
     }
 
     if (PREVIEW_PERF_ENABLED) {
@@ -641,7 +718,7 @@ export function createPreviewViewport(container) {
       shaderWarmupTimer = 0;
       let compiling = null;
       try {
-        compiling = renderer.compileAsync(scene, camera);
+        compiling = renderer.compileAsync(scene, activeCamera);
       } catch {
         return;
       }
@@ -654,6 +731,12 @@ export function createPreviewViewport(container) {
     const height = container.clientHeight || 1;
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
+    // The elevation keeps its scale and its framing: only the width of the
+    // frustum follows the new shape of the pane.
+    const halfHeight = (orthoCamera.top - orthoCamera.bottom) / 2;
+    orthoCamera.left = -halfHeight * (width / height);
+    orthoCamera.right = halfHeight * (width / height);
+    orthoCamera.updateProjectionMatrix();
     renderer.setSize(width, height, false);
     // After `renderer.setSize`, never before: the offscreen chain is sized from
     // the canvas's own pixel count rather than from CSS pixels, so the canvas
@@ -685,7 +768,7 @@ export function createPreviewViewport(container) {
       -(((clientY - rect.top) / rect.height) * 2 - 1),
     );
 
-    raycaster.setFromCamera(pointer, camera);
+    raycaster.setFromCamera(pointer, activeCamera);
     const hits = raycaster.intersectObject(worldRoot, true);
     const seenTargets = new Set();
     const targets = [];
@@ -774,6 +857,116 @@ export function createPreviewViewport(container) {
   renderer.domElement.addEventListener('pointercancel', handlePointerCancel);
   renderer.domElement.addEventListener('pointerleave', handlePointerCancel);
 
+  /**
+   * Look through `nextCamera` from now on: the render passes, the controls, the
+   * picker and the frame loop all follow. A deliberate view change, so it starts
+   * the refine over and pays GTAO's one recompile when the projection kind flips.
+   */
+  function setActiveCamera(nextCamera) {
+    if (nextCamera === activeCamera) return;
+    activeCamera = nextCamera;
+    inspectNavigation.setCamera(nextCamera);
+    progressive.setCamera(nextCamera);
+    poseInitialised = false;
+    invalidate();
+  }
+
+  /**
+   * Spend whatever orbit the damping still has in hand, now. A preset chosen a
+   * moment after a drag would otherwise be turned off its axis by the tail of
+   * that drag on the next update — and read as the user orbiting away from it.
+   */
+  function settleControls() {
+    const controls = inspectNavigation.controls;
+    const damping = controls.enableDamping;
+    controls.enableDamping = false;
+    controls.update();
+    controls.enableDamping = damping;
+  }
+
+  function emitViewPreset() {
+    viewPresetHandler?.(viewPresetName);
+  }
+
+  /**
+   * Back to the perspective camera, looking from where the elevation looked —
+   * stood back far enough to see what the elevation showed.
+   */
+  function restorePerspectiveFromOrtho() {
+    if (activeCamera !== orthoCamera) return;
+    const controls = inspectNavigation.controls;
+    const target = controls.target.clone();
+    const direction = orthoCamera.position.clone().sub(target);
+    if (direction.lengthSq() < 1e-6) direction.set(0, 0, 1);
+    direction.normalize();
+    const fitDistance =
+      currentBounds && !currentBounds.isEmpty()
+        ? perspectiveFitDistance(camera, currentBounds)
+        : orthoCamera.position.distanceTo(target);
+    const distance = fitDistance / Math.max(orthoCamera.zoom, 0.05);
+    camera.position.copy(target).addScaledVector(direction, distance);
+    camera.up.set(0, 1, 0);
+    camera.near = Math.max(10, distance / 200);
+    camera.far = distance * 10;
+    camera.updateProjectionMatrix();
+    setActiveCamera(camera);
+  }
+
+  /**
+   * The studio key light for an elevation: from in front of the face being
+   * drawn, high and from the viewer's left, the way an elevation is rendered —
+   * so the rear and the sides are not drawn in their own shade, and the soft
+   * shadows fall down and to the right like the 2D elevation's shadow band.
+   * Only the direction changes; the rig's intensities and calibration do not,
+   * and a running sun study always wins.
+   */
+  function elevationKeyLight(viewName) {
+    const frame = elevationCameraFrame(viewName);
+    if (!frame) return null;
+    return new THREE.Vector3()
+      .addScaledVector(frame.toCamera, 0.62)
+      .addScaledVector(frame.right, -0.42)
+      .add(new THREE.Vector3(0, 0.66, 0))
+      .normalize();
+  }
+
+  function setElevationLight(direction) {
+    const changed =
+      Boolean(direction) !== Boolean(elevationLightDirection) ||
+      (direction && elevationLightDirection && !direction.equals(elevationLightDirection));
+    elevationLightDirection = direction;
+    if (changed) applySun();
+  }
+
+  /** Forget the preset (the user has moved away from it, or asked for Free). */
+  function leaveViewPreset({ restorePerspective = false } = {}) {
+    presetDirection = null;
+    setElevationLight(null);
+    if (restorePerspective) restorePerspectiveFromOrtho();
+    if (viewPresetName !== 'free') {
+      viewPresetName = 'free';
+      emitViewPreset();
+    }
+  }
+
+  /*
+   * An orbit away from a preset is the user taking the camera back. Pan and
+   * zoom keep the direction and so keep the preset; a rotation does not, and
+   * out of an elevation it means "let me look round", which is a perspective
+   * camera's job — so the drag carries on through the perspective camera from
+   * the same direction. The controls re-read the camera's position every
+   * update, so swapping it mid-drag continues the orbit rather than jumping.
+   */
+  const presetOffset = new THREE.Vector3();
+  inspectNavigation.controls.addEventListener('change', () => {
+    if (!presetDirection) return;
+    presetOffset.copy(activeCamera.position).sub(inspectNavigation.controls.target);
+    if (presetOffset.lengthSq() < 1e-6) return;
+    presetOffset.normalize();
+    if (presetOffset.dot(presetDirection) > Math.cos(THREE.MathUtils.degToRad(0.5))) return;
+    leaveViewPreset({ restorePerspective: true });
+  });
+
   /** Scene bounding sphere, falling back to a sane box before a world exists. */
   function sceneSphere() {
     if (currentBounds && !currentBounds.isEmpty()) {
@@ -813,7 +1006,8 @@ export function createPreviewViewport(container) {
     walkPhysics.invalidateCollisions();
     if (!style.ground) return;
 
-    ground = createGroundPlane(currentBounds, groundLevelMm);
+    if (!groundMaterial) groundMaterial = createGroundMaterial();
+    ground = createGroundPlane(currentBounds, groundLevelMm, { material: groundMaterial });
     applyGroundColor();
     scene.add(ground.object);
   }
@@ -874,6 +1068,33 @@ export function createPreviewViewport(container) {
     });
   }
 
+  /**
+   * How brightly the room behind every window glows, and whether it shows.
+   *
+   * One uniform on one shared material, so this is free to call on every pass:
+   * nothing is rebuilt and nothing recompiles. The glow follows the lights — a
+   * faint warmth with them off, a lived-in amber by day with them on, and
+   * properly lit windows after dark — and a study running into the evening
+   * crosses from the day figure to the night one with the rest of the rig.
+   *
+   * In walk mode the pane would sit between the eye and the view out, so it
+   * goes away entirely there.
+   */
+  function applyWindowGlow() {
+    const glow = materialPalette.windowGlow;
+    if (!glow) return;
+    let intensity = WINDOW_GLOW_UNLIT;
+    if (interiorLighting.lightsOn) {
+      intensity = interiorLighting.night
+        ? WINDOW_GLOW_NIGHT
+        : mixNumber(WINDOW_GLOW_DAY, WINDOW_GLOW_NIGHT, nightfallAmount);
+    }
+    glow.emissiveIntensity = intensity;
+    const walking = navigationMode === 'walk';
+    glow.opacity = walking ? 0 : WINDOW_GLOW_OPACITY;
+    glow.visible = !walking;
+  }
+
   function applyGroundColor() {
     if (!ground) return;
     const sun = activeSunState();
@@ -887,11 +1108,11 @@ export function createPreviewViewport(container) {
       // means: the sun-derived ground is about a third brighter in linear terms
       // than the default one, and a step that size on the largest surface in the
       // frame is exactly what would give the crossover away.
-      if (nightfallAmount > 0) color.lerp(new THREE.Color(DEFAULT_GROUND_COLOR), nightfallAmount);
+      if (nightfallAmount > 0) color.lerp(new THREE.Color(defaultGroundColor), nightfallAmount);
       ground.setColor(color);
       return;
     }
-    ground.setColor(DEFAULT_GROUND_COLOR);
+    ground.setColor(defaultGroundColor);
   }
 
   function applyStyleToRenderer() {
@@ -968,7 +1189,11 @@ export function createPreviewViewport(container) {
       style.environmentIntensity * STUDIO_ENVIRONMENT_INTENSITY * NIGHT_ENVIRONMENT_SCALE;
 
     if (!sun?.enabled) {
-      baseLightDirection.set(0.52, 0.74, 0.3).normalize();
+      if (elevationLightDirection) {
+        baseLightDirection.copy(elevationLightDirection);
+      } else {
+        baseLightDirection.set(0.52, 0.74, 0.3).normalize();
+      }
       keyLight.intensity = 2.2;
       keyLight.color.setHex(0xffffff);
       fillLight.intensity = DAY_FILL_INTENSITY;
@@ -1084,6 +1309,7 @@ export function createPreviewViewport(container) {
     });
     fixtureIntensityScale = fixtureAdaptationScale(roomAmbient, nightAmbient);
     applyInteriorLighting();
+    applyWindowGlow();
 
     aimKeyLight(-1);
 
@@ -1119,6 +1345,9 @@ export function createPreviewViewport(container) {
       renderer,
       progressive,
       getNavigationMode: () => navigationMode,
+      getCamera: () => activeCamera,
+      getViewPreset: () => viewPresetName,
+      getScene: () => scene,
     });
     unpublishPerf = publishPreviewPerf(perf);
   }
@@ -1201,14 +1430,13 @@ export function createPreviewViewport(container) {
       // `dispose()` clears it on teardown, so nothing is leaked by holding on.
       if (selectionOverlay && !isSameRoot) {
         scene.remove(selectionOverlay);
-        disposeScene(selectionOverlay, { disposeMaterials: true });
+        disposeScene(selectionOverlay, { disposeMaterials: false });
         selectionOverlay = null;
       }
 
       if (gridHelper) {
         scene.remove(gridHelper);
-        gridHelper.geometry?.dispose?.();
-        gridHelper.material?.dispose?.();
+        disposeGridHelperGeometry(gridHelper);
       }
 
       worldRoot = nextRoot;
@@ -1219,7 +1447,8 @@ export function createPreviewViewport(container) {
       groundLevelMm = groundLevel;
       currentBounds = descriptorBoundsToWorldBox(bounds);
       inspectNavigation.setBounds(currentBounds);
-      gridHelper = createGrid(bounds, groundLevel);
+      gridHelper = createGrid(bounds, groundLevel, gridMaterials);
+      gridMaterials = gridHelper.userData.materials;
       gridHelper.visible = style.grid;
       scene.add(gridHelper);
       if (!isSameRoot) scene.add(worldRoot);
@@ -1256,6 +1485,20 @@ export function createPreviewViewport(container) {
      * takes the sun and the sky away so they are the only thing left lighting
      * the model.
      */
+    /**
+     * The project's roof covering, trim, soffit and gable-infill colours (see
+     * `applyRoofAppearanceToPalette`). Cheap enough to call on every project
+     * change: it mutates the shared palette materials in place, so nothing is
+     * rebuilt and batching keeps its instanced draws; only an 'unpainted'
+     * finish flipping a material to bare metal asks for a program update.
+     */
+    applyRoofAppearance(appearance) {
+      const { changed, recompile } = applyRoofAppearanceToPalette(materialPalette, appearance);
+      if (!changed) return;
+      // A metalness flip changes the program, so warm it before it is drawn.
+      if (recompile) scheduleShaderWarmup();
+      invalidate();
+    },
     setInteriorLighting({ lightsOn = true, night = false } = {}) {
       interiorLighting = { lightsOn: Boolean(lightsOn), night: Boolean(night) };
       // `applySun` re-derives the whole rig from the stored state — night
@@ -1276,16 +1519,90 @@ export function createPreviewViewport(container) {
         restoreWalkPose({ forceSpawn: true });
         return;
       }
+      presetDirection = null;
+      setElevationLight(null);
+      setActiveCamera(camera);
       inspectNavigation.resetView();
+      leaveViewPreset();
       requestRender();
     },
     fit() {
+      presetDirection = null;
+      setActiveCamera(camera);
       inspectNavigation.resetView();
+      leaveViewPreset();
       requestRender();
     },
+    /** One of the perspective direction presets (`previewConfig.PRESETS`). */
     setProjectionPreset(presetName) {
+      presetDirection = null;
+      setElevationLight(null);
+      settleControls();
+      setActiveCamera(camera);
       inspectNavigation.setProjectionPreset(presetName);
+      const direction = PRESETS[presetName];
+      presetDirection = direction ? direction.clone().normalize() : null;
+      viewPresetName = direction ? presetName : 'free';
       requestRender();
+    },
+    /**
+     * A true orthographic elevation (`elevation_front | _rear | _left | _right`),
+     * fitted to the model with a little air round it. The same axes the 2D
+     * elevations use, so "front" is the same face in both.
+     */
+    setOrthographicView(viewName) {
+      if (navigationMode !== 'inspect' || !isElevationPreset(viewName)) return false;
+      if (!currentBounds || currentBounds.isEmpty()) return false;
+      presetDirection = null;
+      settleControls();
+      const width = container.clientWidth || 1;
+      const height = container.clientHeight || 1;
+      fitOrthographicCamera(orthoCamera, null, currentBounds, viewName, { aspect: width / height });
+      setActiveCamera(orthoCamera);
+      inspectNavigation.controls.target.copy(currentBounds.getCenter(new THREE.Vector3()));
+      inspectNavigation.controls.update();
+      presetDirection = elevationCameraFrame(viewName).toCamera.clone();
+      viewPresetName = viewName;
+      setElevationLight(elevationKeyLight(viewName));
+      invalidate();
+      return true;
+    },
+    /** The View menu: `free`, an iso preset, or an elevation. */
+    setViewPreset(name) {
+      if (isElevationPreset(name)) return this.setOrthographicView(name);
+      if (name in PRESETS) {
+        this.setProjectionPreset(name);
+        return true;
+      }
+      leaveViewPreset({ restorePerspective: true });
+      requestRender();
+      return true;
+    },
+    getViewPreset() {
+      return viewPresetName;
+    },
+    setViewPresetHandler(handler) {
+      viewPresetHandler = typeof handler === 'function' ? handler : null;
+    },
+    setRenderStatusHandler(handler) {
+      renderStatusHandler = typeof handler === 'function' ? handler : null;
+      lastReportedConverged = null;
+      startRenderLoop();
+    },
+    /**
+     * The finished picture as a PNG data URL.
+     *
+     * Re-presents the accumulated image and reads the canvas back in the same
+     * task, before the compositor can clear it — which is what makes this work
+     * without `preserveDrawingBuffer`, and so without its per-frame cost. If
+     * nothing has been accumulated yet it draws one plain frame first.
+     */
+    captureImage() {
+      if (!progressive.repaint()) {
+        progressive.reset();
+        progressive.renderInteractive();
+      }
+      return renderer.domElement.toDataURL('image/png');
     },
     setInspectLeftButtonRotateEnabled(enabled) {
       inspectNavigation.setLeftButtonRotateEnabled(enabled);
@@ -1316,8 +1633,9 @@ export function createPreviewViewport(container) {
     setSelectionOverlay(nextOverlay) {
       if (selectionOverlay) {
         scene.remove(selectionOverlay);
-        // Overlay materials are clones, safe to dispose
-        disposeScene(selectionOverlay, { disposeMaterials: true });
+        // The overlay's tints are the palette's (selectionMaterials.js) and
+        // outlive it; only its geometry goes.
+        disposeScene(selectionOverlay, { disposeMaterials: false });
       }
       selectionOverlay = nextOverlay;
       if (selectionOverlay) {
@@ -1388,7 +1706,7 @@ export function createPreviewViewport(container) {
 
       if (selectionOverlay) {
         scene.remove(selectionOverlay);
-        disposeScene(selectionOverlay, { disposeMaterials: true });
+        disposeScene(selectionOverlay, { disposeMaterials: false });
         selectionOverlay = null;
       }
 
@@ -1405,8 +1723,7 @@ export function createPreviewViewport(container) {
 
       if (gridHelper) {
         scene.remove(gridHelper);
-        gridHelper.geometry?.dispose?.();
-        gridHelper.material?.dispose?.();
+        disposeGridHelperGeometry(gridHelper);
       }
 
       if (ground) {
@@ -1414,6 +1731,10 @@ export function createPreviewViewport(container) {
         ground.dispose();
         ground = null;
       }
+      disposeGroundMaterial(groundMaterial);
+      groundMaterial = null;
+      for (const material of Object.values(gridMaterials || {})) material?.dispose?.();
+      gridMaterials = null;
 
       scene.remove(sunSky.object);
       sunSky.dispose();
@@ -1429,7 +1750,7 @@ export function createPreviewViewport(container) {
     },
     materialPalette,
     getCamera() {
-      return camera;
+      return activeCamera;
     },
     getDomElement() {
       return renderer.domElement;

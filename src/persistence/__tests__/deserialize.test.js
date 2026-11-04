@@ -145,7 +145,10 @@ describe('deserializeProject', () => {
 
     it('migrates a v24 envelope with no ceilings up to the current schema', async () => {
       const { CURRENT_SCHEMA_VERSION } = await import('@/domain/projectVersion');
-      expect(CURRENT_SCHEMA_VERSION).toBe(29);
+      // 30 since RT-1: the roof covering + edge-kit backfill (migration_29_to_30).
+      // 31 since RT-3.1: attached roofs drop their stale attachmentOffset
+      // (migration_30_to_31), so the expected current schema moved to 31.
+      expect(CURRENT_SCHEMA_VERSION).toBe(31);
 
       const { createProject } = await import('@/domain/models');
       const payload = createProject('Pre-ceiling save');

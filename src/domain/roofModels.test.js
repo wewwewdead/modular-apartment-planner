@@ -181,3 +181,56 @@ describe('getRoofTopElevation', () => {
     expect(getRoofTopElevation(null)).toBe(0);
   });
 });
+
+describe('roof covering and edge-kit defaults', () => {
+  const boundary = [
+    { x: 0, y: 0 },
+    { x: 8000, y: 0 },
+    { x: 8000, y: 6000 },
+    { x: 0, y: 6000 },
+  ];
+
+  it('gives a new pitched roof corrugated Shale Grey and the edge kit on', () => {
+    const roofSystem = createRoofSystem('R', { roofType: 'gable', boundaryPolygon: boundary });
+    expect(roofSystem.covering).toMatchObject({
+      kind: 'metal_corrugated',
+      productId: 'corrugated_042',
+      finish: 'satin',
+      colour: { hex: '#BDBFBA', name: 'Shale Grey' },
+    });
+    expect(roofSystem.trims.fascia.enabled).toBe(true);
+    expect(roofSystem.trims.bargeCap.enabled).toBe(false);
+    expect(roofSystem.trims.soffit.mode).toBe('boxed');
+  });
+
+  it('turns every trim off on flat and custom roofs', () => {
+    for (const roofType of ['flat', 'custom']) {
+      const { trims, covering } = createRoofSystem('R', { roofType, boundaryPolygon: boundary });
+      expect(Object.values(trims).filter((entry) => entry?.enabled === true)).toEqual([]);
+      expect(trims.soffit.mode).toBe('open');
+      if (roofType === 'flat') expect(covering).toMatchObject({ kind: 'concrete_slab', thickness: 180 });
+    }
+  });
+
+  it('normalizes a legacy roof that carries neither field', async () => {
+    const { syncRoofSystemAttachment } = await import('./roofModels');
+    const legacy = { id: 'roof_old', roofType: 'shed', boundaryPolygon: boundary, pitch: { slope: 10 } };
+    const synced = syncRoofSystemAttachment({ floors: [], trussSystems: [] }, legacy);
+    expect(synced.covering.kind).toBe('metal_corrugated');
+    expect(synced.trims.gutter).toEqual({ enabled: true, profile: 'quad_115', width: 115, depth: 90 });
+  });
+
+  it('keeps what a roof already says, filling only what is missing', async () => {
+    const { syncRoofSystemAttachment } = await import('./roofModels');
+    const stored = {
+      id: 'roof_kept',
+      roofType: 'gable',
+      boundaryPolygon: boundary,
+      covering: { kind: 'clay_tile', colour: { hex: '#703731', name: 'RAL 3009 Oxide red', catalogue: 'ral' } },
+      trims: { fascia: { enabled: false } },
+    };
+    const synced = syncRoofSystemAttachment({ floors: [], trussSystems: [] }, stored);
+    expect(synced.covering).toMatchObject({ kind: 'clay_tile', colour: { hex: '#703731', catalogue: 'ral' } });
+    expect(synced.trims.fascia).toEqual({ enabled: false, depth: 200, thickness: 25, drop: 0 });
+  });
+});

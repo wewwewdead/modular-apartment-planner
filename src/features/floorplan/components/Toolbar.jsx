@@ -34,13 +34,6 @@ import {
   ParapetIcon,
   DrainIcon,
   OpeningIcon,
-  KitchenTopIcon,
-  ToiletIcon,
-  LavatoryIcon,
-  TableIcon,
-  TVIcon,
-  SofaIcon,
-  BedIcon,
   GridIcon,
   SnapIcon,
   DetectRoomsIcon,
@@ -51,7 +44,7 @@ import {
   ElectricalIcon,
 } from '@/ui/ToolbarIcons';
 import { siteSupportsSunStudy } from '@/analysis/sunStudyState';
-import { FIXTURE_TYPES } from '@/editor/tools';
+import FurnitureMenu from './FurnitureMenu';
 import Tooltip from './Tooltip';
 import styles from './Toolbar.module.css';
 
@@ -116,15 +109,13 @@ function Toolbar({
   const isRoofPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'roof';
   const isTrussPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'truss';
 
-  const fixtureItems = [
-    { fixtureType: FIXTURE_TYPES.KITCHEN_TOP, label: 'Kitchen Top', Icon: KitchenTopIcon },
-    { fixtureType: FIXTURE_TYPES.TOILET, label: 'Toilet', Icon: ToiletIcon },
-    { fixtureType: FIXTURE_TYPES.LAVATORY, label: 'Lavatory', Icon: LavatoryIcon },
-    { fixtureType: FIXTURE_TYPES.TABLE, label: 'Table', Icon: TableIcon },
-    { fixtureType: FIXTURE_TYPES.TV, label: 'TV', Icon: TVIcon },
-    { fixtureType: FIXTURE_TYPES.SOFA, label: 'Sofa', Icon: SofaIcon },
-    { fixtureType: FIXTURE_TYPES.BED, label: 'Bed', Icon: BedIcon },
-  ];
+  const armFixture = useCallback(
+    (fixtureType) => {
+      editorDispatch({ type: 'SET_TOOL', tool: TOOLS.FIXTURE });
+      editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { fixtureType, previewRotation: 0 } });
+    },
+    [editorDispatch],
+  );
 
   const setTool = (tool) => {
     editorDispatch({ type: 'SET_TOOL', tool });
@@ -465,33 +456,22 @@ function Toolbar({
             </Tooltip>
           ),
         )}
+        {modelTarget === 'floor' ? (
+          <>
+            <span className={styles.paletteDivider} aria-hidden="true" />
+            <FurnitureMenu
+              activeTool={activeTool}
+              armedFixtureType={armedFixtureType}
+              disabled={!isPlanView}
+              onArm={armFixture}
+            />
+          </>
+        ) : null}
       </div>
 
+      {/* Furniture lives in one popover (FurnitureMenu) rather than a button per type: the toolbar overflows. */}
       {/* Beam level lives on the canvas (BeamLevelChip): this end of the toolbar is off-screen at common widths. */}
       {/* Electrical device type lives on the canvas too (ElectricalDeviceChip), for the same reason. */}
-
-      {/* Fixtures palette */}
-      <div className={styles.fixturePalette}>
-        <span className={styles.fixturePaletteLabel}>Fixtures</span>
-        {fixtureItems.map(({ fixtureType, label, Icon }) => {
-          const isActive = activeTool === TOOLS.FIXTURE && armedFixtureType === fixtureType;
-          return (
-            <Tooltip key={fixtureType} label={label} shortcut="F">
-              <button
-                className={isActive ? styles.toolPaletteBtnActive : styles.toolPaletteBtn}
-                onClick={() => {
-                  editorDispatch({ type: 'SET_TOOL', tool: TOOLS.FIXTURE });
-                  editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { fixtureType, previewRotation: 0 } });
-                }}
-                disabled={!isPlanView}
-                aria-label={label}
-              >
-                <Icon className={styles.toolPaletteIcon} />
-              </button>
-            </Tooltip>
-          );
-        })}
-      </div>
 
       {/* Panel toggles & utility toggles */}
       <div className={styles.group}>

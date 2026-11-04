@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useEditor } from '@/features/floorplan/context/FloorplanContext';
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
 import { usePlanClipboardController } from '@/features/floorplan/hooks/usePlanClipboardController';
@@ -20,6 +20,9 @@ import { TOOLS } from '@/editor/tools';
 import { isTypingTarget } from '@/utils/keyboard';
 import CompassOverlay from '@/features/floorplan/components/CompassOverlay';
 import { CanvasZoomProvider } from './CanvasZoomContext';
+import { ZOOM_COMMIT_DELAY_MS, gestureTransform, panViewport, sameViewport, zoomViewportAbout } from './canvasGestures';
+import { PLAN_STYLES, PlanStyleProvider, persistPlanStylePreference } from './PlanStyleContext';
+import { savePlanImage } from '@/features/floorplan/utils/planImageExport';
 import FloorScene from './FloorScene';
 import GridRenderer from './GridRenderer';
 import RoofScene from './RoofScene';
@@ -57,6 +60,22 @@ export default function SvgCanvas() {
   const cursorChannelRef = useRef(null);
   const svgRectRef = useRef(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  /*
+   * Pan and wheel-zoom are drawn as a CSS transform on the <svg> for as long as
+   * the gesture lasts and committed to the store once it settles (see
+   * `canvasGestures.js`). `committedViewportRef` is the viewport the SVG is
+   * laid out for; `pendingViewportRef` the one on screen, the single truth for
+   * every gesture at once (a pan and the wheel notches folded into it);
+   * `inFlightViewportRef` one dispatched but not yet rendered, kept so a
+   * gesture that starts in that gap builds on it rather than on the stale
+   * committed view. `panGestureRef` holds only the pointer id the pan
+   * captured: the pan's position lives in the pending view, not in a delta.
+   */
+  const committedViewportRef = useRef(null);
+  const pendingViewportRef = useRef(null);
+  const inFlightViewportRef = useRef(null);
+  const panGestureRef = useRef(null);
+  const zoomCommitTimer = useRef(0);
 
   const { project, derived, dispatch, getFloor } = useProject();
   const editor = useEditor();
@@ -68,6 +87,8 @@ export default function SvgCanvas() {
     toolState,
     viewport,
     showGrid,
+    planStyle,
+    dragGestureMutating,
     snapEnabled,
     showFloorBelowUnderlay,
     activeFloorId,
@@ -84,6 +105,7 @@ export default function SvgCanvas() {
     sunStudy,
     dispatch: editorDispatch,
   } = editor;
+  committedViewportRef.current = viewport;
 
   // During a wall drag the committed floor never changes; overlay the live
   // preview geometry (dragged wall + healed neighbors) for everything below.
@@ -195,10 +217,153 @@ export default function SvgCanvas() {
    */
   const readSvgRect = useCallback(() => {
     if (!svgRectRef.current) {
-      svgRectRef.current = svgRef.current?.getBoundingClientRect() || null;
+      // The container's box, not the <svg>'s: the two coincide, but the <svg>
+      // carries a gesture transform while a pan or zoom is in progress and its
+      // own rect would move with it.
+      const svg = svgRef.current;
+      svgRectRef.current = (svg?.parentElement || svg)?.getBoundingClientRect() || null;
     }
     return svgRectRef.current;
   }, []);
+
+  // --- Pan / zoom gestures (compositor-side until they settle) ---
+
+  const applyGestureTransform = useCallback((pending) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const transform = pending ? gestureTransform(committedViewportRef.current, pending) : '';
+    svg.style.transform = transform;
+    svg.style.willChange = transform ? 'transform' : '';
+  }, []);
+
+  /** The view every gesture step builds on: what is on screen right now. */
+  const gestureBase = useCallback(
+    () => pendingViewportRef.current || inFlightViewportRef.current || committedViewportRef.current,
+    [],
+  );
+
+  /*
+   * A wheel burst's commit. While a pan is in progress it does nothing: the
+   * notches are already folded into the pan's pending view, and committing
+   * that mid-gesture would move the layout under a pan that is still going —
+   * the release commits the whole of it at once. The keydown flush hits this
+   * path on every auto-repeat of a held Space, which is exactly a pan.
+   */
+  const flushPendingZoom = useCallback(() => {
+    if (zoomCommitTimer.current) {
+      clearTimeout(zoomCommitTimer.current);
+      zoomCommitTimer.current = 0;
+    }
+    if (isPanning.current) return;
+    const pending = pendingViewportRef.current;
+    if (!pending) return;
+    pendingViewportRef.current = null;
+    inFlightViewportRef.current = pending;
+    editorDispatch({ type: 'ZOOM', zoom: pending.zoom, panX: pending.panX, panY: pending.panY });
+  }, [editorDispatch]);
+
+  /** One pan step to the pointer at (`clientX`, `clientY`), applied to the view on screen. */
+  const stepPan = useCallback(
+    (clientX, clientY) => {
+      const dx = clientX - lastPanPos.current.x;
+      const dy = clientY - lastPanPos.current.y;
+      lastPanPos.current = { x: clientX, y: clientY };
+      const base = gestureBase();
+      const next = panViewport(base, dx, dy);
+      if (next === base) return;
+      pendingViewportRef.current = next;
+      applyGestureTransform(next);
+    },
+    [applyGestureTransform, gestureBase],
+  );
+
+  /*
+   * The pan's commit: the absolute view on screen, not the distance dragged.
+   * Whatever else moved the viewport while the button was down — a wheel
+   * notch, a Reset centre point — is already in the pending view or was
+   * overruled by it, so the store ends up holding exactly the picture the user
+   * let go of. The release's own position is taken as a last step, because a
+   * move still queued for the next frame is dropped at release.
+   */
+  const commitPan = useCallback(
+    (e) => {
+      if (!isPanning.current) return;
+      if (moveFrame.current) {
+        cancelAnimationFrame(moveFrame.current);
+        moveFrame.current = 0;
+      }
+      pendingMoveEvent.current = null;
+      if (Number.isFinite(e?.clientX) && Number.isFinite(e?.clientY)) stepPan(e.clientX, e.clientY);
+      isPanning.current = false;
+      const gesture = panGestureRef.current;
+      panGestureRef.current = null;
+      const svg = svgRef.current;
+      if (gesture?.pointerId != null && svg?.hasPointerCapture?.(gesture.pointerId)) {
+        try {
+          svg.releasePointerCapture(gesture.pointerId);
+        } catch {
+          // Already released (the pointer went away with the window): nothing to undo.
+        }
+      }
+      const pending = pendingViewportRef.current;
+      pendingViewportRef.current = null;
+      if (zoomCommitTimer.current) {
+        clearTimeout(zoomCommitTimer.current);
+        zoomCommitTimer.current = 0;
+      }
+      if (!pending || sameViewport(pending, inFlightViewportRef.current || committedViewportRef.current)) {
+        // Nothing new to commit: show what is in flight, or nothing at all.
+        applyGestureTransform(inFlightViewportRef.current);
+        return;
+      }
+      inFlightViewportRef.current = pending;
+      editorDispatch({
+        type: 'SET_VIEWPORT',
+        viewport: { zoom: pending.zoom, panX: pending.panX, panY: pending.panY },
+      });
+    },
+    [applyGestureTransform, editorDispatch, stepPan],
+  );
+
+  /*
+   * The store's viewport changed, from a gesture's commit or from anywhere
+   * else. Either way the SVG is now laid out for it, so whatever was in flight
+   * has landed or been overtaken, and the transform is recomputed from
+   * scratch in this same paint (a layout effect runs before the browser paints
+   * the commit): a gesture still pending is shown relative to the new layout —
+   * its view is absolute, so the picture stays exactly where the user has it —
+   * and otherwise the transform comes off. There is deliberately no equality
+   * test here: a commit that lands as something other than what was predicted
+   * must not leave a transform on the canvas, or every later gesture builds on
+   * a view that is not the one on screen.
+   */
+  useLayoutEffect(() => {
+    inFlightViewportRef.current = null;
+    applyGestureTransform(pendingViewportRef.current);
+  }, [viewport, applyGestureTransform]);
+
+  // A release anywhere ends a pan; a press anywhere settles a pending zoom
+  // before whatever the press starts reads the viewport.
+  useEffect(() => {
+    const endPan = (e) => commitPan(e);
+    window.addEventListener('pointerup', endPan);
+    window.addEventListener('pointercancel', endPan);
+    window.addEventListener('blur', endPan);
+    window.addEventListener('pointerdown', flushPendingZoom, true);
+    return () => {
+      window.removeEventListener('pointerup', endPan);
+      window.removeEventListener('pointercancel', endPan);
+      window.removeEventListener('blur', endPan);
+      window.removeEventListener('pointerdown', flushPendingZoom, true);
+    };
+  }, [commitPan, flushPendingZoom]);
+
+  useEffect(
+    () => () => {
+      if (zoomCommitTimer.current) clearTimeout(zoomCommitTimer.current);
+    },
+    [],
+  );
 
   const getModelPos = useCallback(
     (e) => {
@@ -213,15 +378,32 @@ export default function SvgCanvas() {
 
   const handleMouseDown = useCallback(
     (e) => {
+      // A second pointer pressed while a pan holds the canvas (a pen or a
+      // finger beside the mouse) starts nothing: the pan owns the view.
+      if (isPanning.current) {
+        e.preventDefault();
+        return;
+      }
       // Opens a drag gesture for the store: everything this pointer-down goes on
       // to change collapses into one undo entry, and the whole-project
       // coordination pass waits for the release instead of running per frame.
       dispatch({ type: 'BEGIN_DRAG_GESTURE' });
+      flushPendingZoom();
       svgRectRef.current = null;
 
       if (e.button === 1 || (e.button === 0 && spaceHeld.current)) {
         isPanning.current = true;
         lastPanPos.current = { x: e.clientX, y: e.clientY };
+        panGestureRef.current = { pointerId: null };
+        // Captured, so the moves and the release keep coming to the canvas
+        // when the pointer leaves it — over the 3D pane, a panel, or off the
+        // window. The window listeners below stay as the fallback.
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          panGestureRef.current.pointerId = e.pointerId;
+        } catch {
+          // No capture for this pointer (it is already up): the window fallback ends the pan.
+        }
         e.preventDefault();
         return;
       }
@@ -232,16 +414,16 @@ export default function SvgCanvas() {
       }
       tool.onMouseDown(modelPos, e);
     },
-    [dispatch, getModelPos, modelTarget, pastePreview, placePaste, tool],
+    [dispatch, flushPendingZoom, getModelPos, modelTarget, pastePreview, placePaste, tool],
   );
 
   const processMouseMove = useCallback(
     (e) => {
       if (isPanning.current) {
-        const dx = e.clientX - lastPanPos.current.x;
-        const dy = e.clientY - lastPanPos.current.y;
-        editorDispatch({ type: 'PAN', dx, dy });
-        lastPanPos.current = { x: e.clientX, y: e.clientY };
+        // This move's own step, onto the view on screen — never the total
+        // since pointer-down onto the committed view, which double-counts
+        // whatever the store committed in between.
+        stepPan(e.clientX, e.clientY);
         return;
       }
       const modelPos = getModelPos(e);
@@ -253,7 +435,7 @@ export default function SvgCanvas() {
       }
       tool.onMouseMove(modelPos, e);
     },
-    [getModelPos, modelTarget, pastePreview, tool, updatePastePreview, editorDispatch],
+    [getModelPos, modelTarget, pastePreview, stepPan, tool, updatePastePreview],
   );
 
   /*
@@ -298,14 +480,14 @@ export default function SvgCanvas() {
       pendingMoveEvent.current = null;
 
       if (isPanning.current) {
-        isPanning.current = false;
+        commitPan(e);
         return;
       }
       if (modelTarget === 'floor' && pastePreview?.active) return;
       const modelPos = getModelPos(e);
       tool.onMouseUp(modelPos, e);
     },
-    [getModelPos, modelTarget, pastePreview, tool],
+    [commitPan, getModelPos, modelTarget, pastePreview, tool],
   );
 
   useDragGestureRelease(dispatch);
@@ -326,21 +508,37 @@ export default function SvgCanvas() {
     [getModelPos, modelTarget, pastePreview, tool],
   );
 
+  /*
+   * A wheel notch zooms the picture on the compositor and (re)arms a short
+   * timer; the store hears about the burst once, when the timer fires or a
+   * press settles it. Until then strokes and text scale with the picture —
+   * for the ninety milliseconds after the last notch — rather than every notch
+   * re-laying-out and re-rasterising the whole plan. Each notch builds on the
+   * view on screen: pending, else dispatched-but-unrendered, else committed —
+   * the same base a pan step uses, so a notch clicked mid-pan zooms the
+   * picture about the cursor and the pan carries on from there.
+   */
   const handleWheel = useCallback(
     (e) => {
       e.preventDefault();
       const rect = readSvgRect();
       if (!rect) return;
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      const direction = e.deltaY < 0 ? 1 : -1;
-      const factor = direction > 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
-      const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, viewport.zoom * factor));
-      const newPanX = mouseX - (mouseX - viewport.panX) * (newZoom / viewport.zoom);
-      const newPanY = mouseY - (mouseY - viewport.panY) * (newZoom / viewport.zoom);
-      editorDispatch({ type: 'ZOOM', zoom: newZoom, panX: newPanX, panY: newPanY });
+      const base = gestureBase();
+      const factor = e.deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
+      const next = zoomViewportAbout(base, factor, e.clientX - rect.left, e.clientY - rect.top, {
+        min: MIN_ZOOM,
+        max: MAX_ZOOM,
+      });
+      if (next === base) return;
+      pendingViewportRef.current = next;
+      applyGestureTransform(next);
+      if (zoomCommitTimer.current) clearTimeout(zoomCommitTimer.current);
+      zoomCommitTimer.current = 0;
+      // Mid-pan the notch simply joins the pan's pending view, and the pan's
+      // release commits both; a timer here would commit under a moving pan.
+      if (!isPanning.current) zoomCommitTimer.current = setTimeout(flushPendingZoom, ZOOM_COMMIT_DELAY_MS);
     },
-    [readSvgRect, viewport, editorDispatch],
+    [applyGestureTransform, flushPendingZoom, gestureBase, readSvgRect],
   );
 
   const handleResetCenterPoint = useCallback(() => {
@@ -351,6 +549,30 @@ export default function SvgCanvas() {
       viewport: { ...viewport, panX: rect.width / 2, panY: rect.height / 2 },
     });
   }, [editorDispatch, readSvgRect, viewport]);
+
+  const handleTogglePlanStyle = useCallback(() => {
+    const next = planStyle === PLAN_STYLES.PRESENTATION ? PLAN_STYLES.DRAFTING : PLAN_STYLES.PRESENTATION;
+    persistPlanStylePreference(next);
+    editorDispatch({ type: 'SET_PLAN_STYLE', planStyle: next });
+  }, [editorDispatch, planStyle]);
+
+  const [savingPlanImage, setSavingPlanImage] = useState(false);
+  const handleSavePlanImage = useCallback(async () => {
+    if (!svgRef.current || savingPlanImage) return;
+    setSavingPlanImage(true);
+    try {
+      const saved = await savePlanImage(svgRef.current, { zoom: viewport.zoom, projectName: project?.name });
+      editorDispatch({
+        type: 'SET_STATUS_MESSAGE',
+        message: saved ? 'Plan image saved.' : 'Nothing on the plan to save yet.',
+      });
+    } catch (error) {
+      console.error('Failed to save the plan image:', error);
+      editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'The plan image could not be saved.' });
+    } finally {
+      setSavingPlanImage(false);
+    }
+  }, [editorDispatch, project?.name, savingPlanImage, viewport.zoom]);
 
   const handleToggleFocus = useCallback(() => {
     editorDispatch({ type: 'TOGGLE_FOCUS_PANEL', panel: 'canvas' });
@@ -420,6 +642,7 @@ export default function SvgCanvas() {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (isTypingTarget(e.target)) return;
+      flushPendingZoom();
 
       if (e.key === ' ') {
         spaceHeld.current = true;
@@ -598,6 +821,7 @@ export default function SvgCanvas() {
     // active floor, so this listener was rebuilt with them either way.
     project,
     activeFloorId,
+    flushPendingZoom,
   ]);
 
   useEffect(() => {
@@ -621,12 +845,14 @@ export default function SvgCanvas() {
    * and the tiling does not shift as the rect moves with the pan — but the
    * browser still re-tiles everything the rect covers on every frame it moves,
    * and at the default zoom a 200 m square is on the order of a million stroked
-   * tiles. The margin is two major tiles of slack, so a frame that lands before
-   * the rect has caught up still has grid under it.
+   * tiles. The margin is a whole viewport of slack on every side: a pan is
+   * drawn on the compositor without re-laying-out the plan, so the grid has to
+   * be there already for as far as one drag can travel. Only the tiles on
+   * screen are ever rasterised, so the slack costs nothing until it shows.
    */
   const gridRect = useMemo(() => {
     const zoom = viewport.zoom || 1;
-    const margin = GRID_MAJOR * 2;
+    const margin = Math.max(GRID_MAJOR * 2, Math.max(canvasSize.width, canvasSize.height) / zoom);
     return {
       x: -viewport.panX / zoom - margin,
       y: -viewport.panY / zoom - margin,
@@ -740,6 +966,7 @@ export default function SvgCanvas() {
         <svg
           ref={svgRef}
           className={styles.svg}
+          data-plan-style={planStyle}
           style={{ cursor }}
           onPointerDown={handleMouseDown}
           onPointerMove={handleMouseMove}
@@ -747,94 +974,106 @@ export default function SvgCanvas() {
           onDoubleClick={handleDoubleClick}
         >
           <CanvasZoomProvider value={viewport.zoom}>
-            <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
-              {viewMode === 'plan' && showGrid && (
-                <>
-                  <GridRenderer />
-                  {showMinorGrid && (
+            {/* Geometry moving under the pointer — a drag that rewrites the
+                project, or a wall drag's live preview — tells the presentation
+                plan to skip its unions for the length of the gesture. */}
+            <PlanStyleProvider value={planStyle} dragging={dragGestureMutating || Boolean(wallDragPreview)}>
+              <g
+                className={planStyle === PLAN_STYLES.PRESENTATION ? styles.styleFadeA : styles.styleFadeB}
+                transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}
+              >
+                {viewMode === 'plan' && showGrid && (
+                  <>
+                    <GridRenderer />
+                    {showMinorGrid && (
+                      <rect
+                        x={gridRect.x}
+                        y={gridRect.y}
+                        width={gridRect.width}
+                        height={gridRect.height}
+                        fill="url(#grid-minor)"
+                        style={{ pointerEvents: 'none' }}
+                      />
+                    )}
                     <rect
                       x={gridRect.x}
                       y={gridRect.y}
                       width={gridRect.width}
                       height={gridRect.height}
-                      fill="url(#grid-minor)"
+                      fill="url(#grid-major)"
                       style={{ pointerEvents: 'none' }}
                     />
-                  )}
-                  <rect
-                    x={gridRect.x}
-                    y={gridRect.y}
-                    width={gridRect.width}
-                    height={gridRect.height}
-                    fill="url(#grid-major)"
-                    style={{ pointerEvents: 'none' }}
+                  </>
+                )}
+                {modelTarget === 'roof' ? (
+                  <RoofScene
+                    roofSystem={roofSystem}
+                    roofHiddenByPhase={roofHiddenByPhase}
+                    viewMode={viewMode}
+                    selectedId={selectedId}
+                    selectedType={selectedType}
+                    activeTool={activeTool}
+                    toolState={toolState}
+                    viewport={viewport}
+                    filteredProject={filteredProject}
+                    activeFloorId={activeFloorId}
+                    activeSectionCutId={activeSectionCutId}
                   />
-                </>
-              )}
-              {modelTarget === 'roof' ? (
-                <RoofScene
-                  roofSystem={roofSystem}
-                  roofHiddenByPhase={roofHiddenByPhase}
-                  viewMode={viewMode}
-                  selectedId={selectedId}
-                  selectedType={selectedType}
-                  activeTool={activeTool}
-                  toolState={toolState}
-                  viewport={viewport}
-                  filteredProject={filteredProject}
-                  activeFloorId={activeFloorId}
-                  activeSectionCutId={activeSectionCutId}
-                />
-              ) : modelTarget === 'truss' ? (
-                <TrussScene
-                  filteredFloor={filteredFloor}
-                  floorTrussSystems={floorTrussSystems}
-                  hasProjectTrusses={hasProjectTrusses}
-                  trussesHiddenByPhase={trussesHiddenByPhase}
-                  viewMode={viewMode}
-                  selectedId={selectedId}
-                  selectedType={selectedType}
-                  activeTool={activeTool}
-                  toolState={toolState}
-                  viewport={viewport}
-                  activeTrussContext={activeTrussContext}
-                  filteredProject={filteredProject}
-                  activeSectionCutId={activeSectionCutId}
-                />
-              ) : (
-                <FloorScene
-                  floor={floor}
-                  filteredFloor={filteredFloor}
-                  filteredProject={filteredProject}
-                  pickFloor={ceilingPickFloor}
-                  floorBelow={floorBelow}
-                  showFloorBelowUnderlay={showFloorBelowUnderlay}
-                  floorOverhangs={floorOverhangs}
-                  selectedOverhangEdge={selectedOverhangEdge}
-                  sunStudy={sunStudy}
-                  structuralLoadPath={derived?.structuralLoadPath}
-                  viewMode={viewMode}
-                  selectedId={selectedId}
-                  selectedType={selectedType}
-                  activeTool={activeTool}
-                  toolState={toolState}
-                  zoom={viewport.zoom}
-                  previewContent={previewContent}
-                  regionSelection={regionSelection}
-                  activeSectionCutId={activeSectionCutId}
-                  roofHiddenByPhase={roofHiddenByPhase}
-                  hasProjectRoof={hasProjectRoof}
-                  railingsHiddenByPhase={railingsHiddenByPhase}
-                  hasProjectRailings={hasProjectRailings}
-                />
-              )}
-            </g>
+                ) : modelTarget === 'truss' ? (
+                  <TrussScene
+                    filteredFloor={filteredFloor}
+                    floorTrussSystems={floorTrussSystems}
+                    hasProjectTrusses={hasProjectTrusses}
+                    trussesHiddenByPhase={trussesHiddenByPhase}
+                    viewMode={viewMode}
+                    selectedId={selectedId}
+                    selectedType={selectedType}
+                    activeTool={activeTool}
+                    toolState={toolState}
+                    viewport={viewport}
+                    activeTrussContext={activeTrussContext}
+                    filteredProject={filteredProject}
+                    activeSectionCutId={activeSectionCutId}
+                  />
+                ) : (
+                  <FloorScene
+                    floor={floor}
+                    filteredFloor={filteredFloor}
+                    filteredProject={filteredProject}
+                    pickFloor={ceilingPickFloor}
+                    floorBelow={floorBelow}
+                    showFloorBelowUnderlay={showFloorBelowUnderlay}
+                    floorOverhangs={floorOverhangs}
+                    selectedOverhangEdge={selectedOverhangEdge}
+                    sunStudy={sunStudy}
+                    structuralLoadPath={derived?.structuralLoadPath}
+                    viewMode={viewMode}
+                    selectedId={selectedId}
+                    selectedType={selectedType}
+                    activeTool={activeTool}
+                    toolState={toolState}
+                    zoom={viewport.zoom}
+                    previewContent={previewContent}
+                    regionSelection={regionSelection}
+                    activeSectionCutId={activeSectionCutId}
+                    roofHiddenByPhase={roofHiddenByPhase}
+                    hasProjectRoof={hasProjectRoof}
+                    railingsHiddenByPhase={railingsHiddenByPhase}
+                    hasProjectRailings={hasProjectRailings}
+                  />
+                )}
+              </g>
+            </PlanStyleProvider>
           </CanvasZoomProvider>
         </svg>
         <CanvasOverlayControls
           onResetCenter={handleResetCenterPoint}
           onToggleFocus={handleToggleFocus}
           isFocused={isCanvasFocused}
+          presentation={planStyle === PLAN_STYLES.PRESENTATION}
+          onSavePlanImage={viewMode === 'plan' && modelTarget === 'floor' ? handleSavePlanImage : null}
+          savingPlanImage={savingPlanImage}
+          onTogglePresentation={viewMode === 'plan' || viewMode.startsWith('elevation') ? handleTogglePlanStyle : null}
         />
         <CanvasStatusBar
           cursorChannelRef={cursorChannelRef}

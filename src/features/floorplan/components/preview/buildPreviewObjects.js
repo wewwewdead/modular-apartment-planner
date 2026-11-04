@@ -6,6 +6,7 @@ import {
   unitOutlineGeometry,
 } from './previewBatching';
 import { MAX_ACTIVE_FIXTURE_LIGHTS } from './previewPerf';
+import { selectionMaterialFor } from './selectionMaterials';
 import { freezeStaticMatrices } from './staticMatrices';
 
 /**
@@ -352,6 +353,43 @@ function createWallPanelObject(descriptor, materialPalette) {
   return mesh;
 }
 
+/**
+ * A flat panel standing on a vertical plane — the gable-end closure (RT-2).
+ *
+ * `plane` = `{origin: {x, y, elevation}, xAxis: {x, y}, up}`: the outline's
+ * `{x, z}` points are measured along the plan unit vector `xAxis` from `origin`
+ * and up from its elevation. Only a vertical plane is drawn (`up` is world up;
+ * every closure is), so the panel is a `THREE.Shape` extruded through its
+ * `thickness`, centred on the plane, turned to the plan axis the way a wall
+ * panel is. Holes (vents) are cut in the shape. One mesh, one draw call.
+ */
+function createVerticalPolygonObject(descriptor, materialPalette) {
+  const plane = descriptor.plane || {};
+  const origin = plane.origin || { x: 0, y: 0, elevation: 0 };
+  const xAxis = plane.xAxis || { x: 1, y: 0 };
+  const thickness = Math.max(descriptor.thickness || 1, 1);
+  const toShapePoint = (point) => ({ x: point.x, y: point.z });
+  const geometry = new THREE.ExtrudeGeometry(
+    createVerticalShape(
+      (descriptor.points || []).map(toShapePoint),
+      (descriptor.holes || []).map((hole) => hole.map(toShapePoint)),
+    ),
+    {
+      depth: thickness,
+      bevelEnabled: false,
+      curveSegments: 1,
+      steps: 1,
+    },
+  );
+  geometry.translate(0, 0, -thickness / 2);
+
+  const mesh = createMesh(geometry, materialPalette[descriptor.materialKey]);
+  mesh.position.copy(planPointToWorld(origin, origin.elevation || 0));
+  mesh.rotation.y = planAngleToWorldRotation(Math.atan2(xAxis.y, xAxis.x));
+  addOutline(mesh, materialPalette);
+  return mesh;
+}
+
 function createStairObject(descriptor, materialPalette) {
   const group = new THREE.Group();
   const risers = Math.max(1, descriptor.numberOfRisers || 1);
@@ -373,6 +411,32 @@ function createStairObject(descriptor, materialPalette) {
   return group;
 }
 
+/**
+ * The rotation that lays a box's local X along `direction`.
+ *
+ * Without `up` the box takes the shortest rotation from +X, which keeps a
+ * horizontal member's height vertical but leaves the roll of a sloped one to
+ * chance. With `up` (a world vector) the roll is pinned: local Y — the
+ * cross-section's `height` — goes to `up` made square to the member, local Z —
+ * the `width` — to `direction × up`. A barge board keeps its face plumb on a
+ * rake, a ridge strip lies flat on its slope, and RT-3's truss members keep
+ * their depth in the truss plane.
+ */
+function segmentQuaternion(direction, up) {
+  const along = direction.clone().normalize();
+  if (up && Number.isFinite(up.x) && Number.isFinite(up.y) && Number.isFinite(up.z)) {
+    const upAxis = new THREE.Vector3(up.x, up.y, up.z);
+    upAxis.addScaledVector(along, -upAxis.dot(along));
+    if (upAxis.lengthSq() > 1e-12) {
+      upAxis.normalize();
+      const side = new THREE.Vector3().crossVectors(along, upAxis);
+      const basis = new THREE.Matrix4().makeBasis(along, upAxis, side);
+      return new THREE.Quaternion().setFromRotationMatrix(basis);
+    }
+  }
+  return new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), along);
+}
+
 function createSegment3DObject(descriptor, materialPalette) {
   const start = new THREE.Vector3(descriptor.start.x, descriptor.start.y, descriptor.start.z);
   const end = new THREE.Vector3(descriptor.end.x, descriptor.end.y, descriptor.end.z);
@@ -383,16 +447,16 @@ function createSegment3DObject(descriptor, materialPalette) {
   const geometry = taggedBoxGeometry(length, crossSectionHeight, crossSectionWidth);
   const mesh = createMesh(geometry, materialPalette[descriptor.materialKey]);
   const midpoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-  const quaternion = new THREE.Quaternion().setFromUnitVectors(
-    new THREE.Vector3(1, 0, 0),
-    direction.clone().normalize(),
-  );
+  const quaternion = segmentQuaternion(direction, descriptor.up);
 
   mesh.position.copy(midpoint);
   mesh.quaternion.copy(quaternion);
   addOutline(mesh, materialPalette);
   return mesh;
 }
+
+// How far behind the glass the interior glow hangs, in millimetres.
+export const WINDOW_GLOW_SETBACK = 20;
 
 function createWindowObject(descriptor, materialPalette) {
   const group = new THREE.Group();
@@ -432,6 +496,25 @@ function createWindowObject(descriptor, materialPalette) {
   const glassMesh = createMesh(glassGeo, glassMaterial);
   glassMesh.castShadow = false;
   group.add(glassMesh);
+
+  // The warm room behind the glass: a pane a little way inside it, facing out.
+  // One-sided, so it is only ever seen through the glass from outside — from
+  // inside a room (a cutaway, a walk) it is culled and the window is a window.
+  // Untagged geometry and a transparent material, so it is never batched; no
+  // outline and no shadow, because it is light, not an object. Its brightness
+  // is one palette uniform driven by `applyInteriorLighting`.
+  if (materialPalette.windowGlow) {
+    const inward = descriptor.interiorSign === -1 ? -1 : 1;
+    const glowGeo = new THREE.PlaneGeometry(Math.max(innerW, 1), Math.max(innerH, 1));
+    const glowMesh = new THREE.Mesh(glowGeo, materialPalette.windowGlow);
+    glowMesh.castShadow = false;
+    glowMesh.receiveShadow = false;
+    glowMesh.position.z = inward * (glassThickness / 2 + WINDOW_GLOW_SETBACK);
+    // A plane faces +z; turn it round when the outside is -z.
+    if (inward === 1) glowMesh.rotation.y = Math.PI;
+    glowMesh.userData = { ...glowMesh.userData, windowGlow: true };
+    group.add(glowMesh);
+  }
 
   // Type-specific mullions
   const windowType = descriptor.windowType || 'standard';
@@ -724,7 +807,55 @@ function buildBedFixture(group, W, H, D, palette) {
   addBox(group, 'fixtureAccentCeramic', W * 0.32, H * 0.12, D * 0.16, W * 0.22, H * 0.66, -D * 0.36, palette);
 }
 
+/**
+ * A potted plant: a tapered pot, and a canopy of three overlapping low-poly
+ * blobs in the two leaf greens. The pot is a tagged cylinder and batches with
+ * every other pot; the canopy blobs are their own meshes (an icosahedron has
+ * no unit to batch on), three draw calls a plant, and carry no outline — the
+ * edge overlay of a faceted blob is noise, not drawing.
+ */
+const PLANT_CANOPY = [
+  { x: 0, z: 0, y: 0.69, r: 0.36, squash: 0.86, material: 'plantLeafDeep' },
+  { x: 0.13, z: 0.07, y: 0.93, r: 0.29, squash: 0.9, material: 'plantLeaf' },
+  { x: -0.11, z: -0.08, y: 1.04, r: 0.25, squash: 0.92, material: 'plantLeaf' },
+];
+
+function buildPlantFixture(group, W, H, D, palette) {
+  const size = Math.min(W, D);
+  const potH = size * 0.39;
+  const potR = size * 0.27;
+  addCylinder(group, 'plantPot', potR, potR * 0.78, potH, 20, 0, potH / 2, 0, palette);
+  // The canopy is laid out against the width, and stretched so its top lands
+  // on the descriptor's height whatever that turns out to be.
+  const heightScale = H / (size * 1.3);
+  for (const blob of PLANT_CANOPY) {
+    const mesh = createMesh(new THREE.IcosahedronGeometry(size * blob.r, 1), palette[blob.material]);
+    mesh.scale.set(1, blob.squash * heightScale, 1);
+    mesh.position.set(size * blob.x, size * blob.y * heightScale, size * blob.z);
+    group.add(mesh);
+  }
+}
+
+/**
+ * A shower: a glazed tray and, on its open side, a fixed glass screen. The
+ * tray batches with any other; the screen is glass and is drawn on its own.
+ */
+const SHOWER_TRAY_HEIGHT = 40;
+const SHOWER_SCREEN_HEIGHT = 1900;
+
+function buildShowerFixture(group, W, H, D, palette) {
+  addBox(group, 'shower', W, SHOWER_TRAY_HEIGHT, D, 0, SHOWER_TRAY_HEIGHT / 2, 0, palette);
+  const screenW = W * 0.68;
+  const screenH = Math.max(1, Math.min(SHOWER_SCREEN_HEIGHT, H - SHOWER_TRAY_HEIGHT));
+  const screen = createMesh(new THREE.BoxGeometry(Math.max(screenW, 1), screenH, 8), palette.railing_glass);
+  screen.castShadow = false;
+  screen.position.set(-W / 2 + screenW / 2, SHOWER_TRAY_HEIGHT + screenH / 2, D / 2 - 4);
+  group.add(screen);
+}
+
 const FIXTURE_BUILDERS = {
+  plant: buildPlantFixture,
+  shower: buildShowerFixture,
   kitchenTop: buildKitchenTopFixture,
   toilet: buildToiletFixture,
   lavatory: buildLavatoryFixture,
@@ -1480,6 +1611,7 @@ function createRailingObject(descriptor, materialPalette) {
 function createObjectForDescriptor(descriptor, materialPalette) {
   if (descriptor.geometry === 'prism') return createPrismObject(descriptor, materialPalette);
   if (descriptor.geometry === 'wallPanel') return createWallPanelObject(descriptor, materialPalette);
+  if (descriptor.geometry === 'verticalPolygon') return createVerticalPolygonObject(descriptor, materialPalette);
   if (descriptor.geometry === 'roofMesh') return createRoofMeshObject(descriptor, materialPalette);
   if (descriptor.geometry === 'stair') return createStairObject(descriptor, materialPalette);
   if (descriptor.geometry === 'segment3d') return createSegment3DObject(descriptor, materialPalette);
@@ -1714,27 +1846,25 @@ export function buildSelectionOverlay(meshMap, selection, materialPalette, accen
     // whatever the palette says about the drawing convention behind it.
     ensureOutlines(overlayObject, materialPalette);
 
-    // Apply highlight style: clone materials and tint them
+    // Highlight style: the palette's tinted copies for this accent, shared by
+    // every overlay built from this palette (see `selectionMaterials.js`).
+    const surfaceTint = (material) => {
+      applySelectedSurfaceStyle(material, accent);
+      material.depthFunc = THREE.LessEqualDepth;
+    };
+    const lineTint = (material) => {
+      material.color.copy(accent.outline);
+      material.opacity = 1;
+      material.depthFunc = THREE.LessEqualDepth;
+    };
     overlayObject.traverse((node) => {
-      if (node.material) {
-        if (Array.isArray(node.material)) {
-          node.material = node.material.map((mat) => {
-            const clone = mat.clone();
-            applySelectedSurfaceStyle(clone, accent);
-            clone.depthFunc = THREE.LessEqualDepth;
-            return clone;
-          });
-        } else {
-          node.material = node.material.clone();
-          applySelectedSurfaceStyle(node.material, accent);
-          node.material.depthFunc = THREE.LessEqualDepth;
-        }
-      }
-      if (node.isLineSegments && node.material) {
-        node.material = node.material.clone();
-        node.material.color.copy(accent.outline);
-        node.material.opacity = 1;
-        node.material.depthFunc = THREE.LessEqualDepth;
+      if (!node.material) return;
+      if (node.isLineSegments) {
+        node.material = selectionMaterialFor(materialPalette, node.material, `${accentName}:line`, lineTint);
+      } else if (Array.isArray(node.material)) {
+        node.material = node.material.map((mat) => selectionMaterialFor(materialPalette, mat, accentName, surfaceTint));
+      } else {
+        node.material = selectionMaterialFor(materialPalette, node.material, accentName, surfaceTint);
       }
       node.renderOrder = 1;
     });

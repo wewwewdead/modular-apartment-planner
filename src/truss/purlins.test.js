@@ -107,3 +107,28 @@ describe('createDetailPurlinMarker', () => {
     expect(midZ).toBeCloseTo(200, 6);
   });
 });
+
+describe('purlins seat on the top-chord top face (RT-3, spec §7.4)', () => {
+  it('offsets each attachment along the run normal by tc / 2 + depth / 2', () => {
+    const purlinSystem = createPurlinSystem({ enabled: true, spacing: 900, startOffset: 0, endOffset: 0, depth: 50 });
+    const attachments = buildTrussPurlinAttachments(GABLE_PROFILE, purlinSystem);
+    for (const attachment of attachments) {
+      // The normal points up out of the roof on both slopes.
+      expect(attachment.normal.z).toBeGreaterThan(0);
+      const dx = attachment.localPoint.x - attachment.chordPoint.x;
+      const dz = attachment.localPoint.z - attachment.chordPoint.z;
+      expect(Math.hypot(dx, dz)).toBeCloseTo(45 + 25, 6);
+      // …square to the chord.
+      expect(dx * attachment.tangent.x + dz * attachment.tangent.z).toBeCloseTo(0, 6);
+    }
+    // On a flat chord the purlin centre is straight above: centre-line z + 45 + 25.
+    const flat = buildTrussPurlinAttachments(FLAT_PROFILE, purlinSystem);
+    expect(flat[0].localPoint.z).toBeCloseTo(90 + 900 + 45 + 70, 6);
+  });
+
+  it('labels the members purlins under sheet and battens under tiles', () => {
+    expect(createPurlinSystem({}).role).toBe('purlin');
+    expect(createPurlinSystem({ role: 'batten' }).role).toBe('batten');
+    expect(createPurlinSystem({}, 'batten').role).toBe('batten');
+  });
+});

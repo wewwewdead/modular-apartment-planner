@@ -220,9 +220,29 @@ function validateBeams(project, graph) {
 /**
  * Deterministic coordination checks only. These results never imply structural
  * capacity or safety and always retain the professional-review requirement.
+ *
+ * The default-options result is memoised per project object. A building
+ * command validates the project before and after itself, the store validates
+ * the settled project again, and the preliminary package validates it once
+ * more — four full passes over one unchanged object per edit. Projects are
+ * never mutated in place, so the first answer stands for all of them. Issue
+ * lists are read and spread, never written into, so sharing one is safe.
  */
+const validationCache = new WeakMap();
+
 export function validateBuildingCoordination(project, options = {}) {
   if (!project?.building) return [];
+  const hasOptions = Boolean(options) && Object.keys(options).length > 0;
+  if (!hasOptions) {
+    const cached = validationCache.get(project);
+    if (cached) return cached;
+  }
+  const issues = computeBuildingCoordination(project, options || {});
+  if (!hasOptions) validationCache.set(project, issues);
+  return issues;
+}
+
+function computeBuildingCoordination(project, options) {
   const graph = deriveBuildingGraph(project);
   const tolerance = options.columnAlignmentTolerance ?? STRUCTURAL_ALIGNMENT_TOLERANCE;
   return [

@@ -47,19 +47,19 @@ function createFadeTexture() {
 }
 
 /**
- * @param {THREE.Box3} bounds  World bounds of the model.
- * @param {number} groundLevel Elevation of the ground, in millimetres.
+ * The ground's material, made once per viewport and handed to every ground
+ * that viewport builds (see `createGroundPlane`'s `material` option).
+ *
+ * The ground is rebuilt with the world — every drag frame, during a drag — and
+ * a material that went with it took its shader program along: this is the only
+ * material compiled with its parameters, so disposing it destroyed the program
+ * and the next ground linked it again, on the main thread, every frame. It also
+ * left the renderer's async shader warm-up polling a material that no longer
+ * existed. Shared, it compiles once and dies with the viewport.
  */
-export function createGroundPlane(bounds, groundLevel) {
-  const size = bounds && !bounds.isEmpty() ? bounds.getSize(new THREE.Vector3()) : new THREE.Vector3();
-  const modelRadius = Math.max(Math.hypot(size.x, size.z) / 2, 4000);
-  const radius = Math.max(modelRadius * GROUND_RADIUS_FACTOR, MIN_GROUND_RADIUS_MM);
-
-  const geometry = new THREE.CircleGeometry(radius, 96);
-  geometry.rotateX(-Math.PI / 2);
-
-  const material = new THREE.MeshStandardMaterial({
-    color: 0x9a958c,
+export function createGroundMaterial() {
+  return new THREE.MeshStandardMaterial({
+    color: 0xc9c6c0,
     roughness: 0.96,
     metalness: 0,
     alphaMap: createFadeTexture(),
@@ -67,6 +67,30 @@ export function createGroundPlane(bounds, groundLevel) {
     depthWrite: false,
     side: THREE.FrontSide,
   });
+}
+
+export function disposeGroundMaterial(material) {
+  if (!material) return;
+  material.alphaMap?.dispose();
+  material.dispose();
+}
+
+/**
+ * @param {THREE.Box3} bounds  World bounds of the model.
+ * @param {number} groundLevel Elevation of the ground, in millimetres.
+ * @param {{ material?: THREE.Material }} [options] A shared material to draw
+ *   with; the ground then leaves it alone on `dispose()`. Without one the
+ *   ground makes and owns its own.
+ */
+export function createGroundPlane(bounds, groundLevel, { material: sharedMaterial = null } = {}) {
+  const size = bounds && !bounds.isEmpty() ? bounds.getSize(new THREE.Vector3()) : new THREE.Vector3();
+  const modelRadius = Math.max(Math.hypot(size.x, size.z) / 2, 4000);
+  const radius = Math.max(modelRadius * GROUND_RADIUS_FACTOR, MIN_GROUND_RADIUS_MM);
+
+  const geometry = new THREE.CircleGeometry(radius, 96);
+  geometry.rotateX(-Math.PI / 2);
+
+  const material = sharedMaterial || createGroundMaterial();
 
   const mesh = new THREE.Mesh(geometry, material);
   // A couple of millimetres below datum: slabs are often modelled *at* ground
@@ -87,8 +111,7 @@ export function createGroundPlane(bounds, groundLevel) {
 
     dispose() {
       geometry.dispose();
-      material.alphaMap?.dispose();
-      material.dispose();
+      if (!sharedMaterial) disposeGroundMaterial(material);
     },
   };
 }

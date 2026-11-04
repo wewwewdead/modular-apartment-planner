@@ -13,6 +13,9 @@ import {
   FIXTURE_SOFA_DEPTH,
   FIXTURE_BED_WIDTH,
   FIXTURE_BED_DEPTH,
+  FIXTURE_SHOWER_WIDTH,
+  FIXTURE_SHOWER_DEPTH,
+  FIXTURE_PLANT_WIDTH,
   OUTLET_MOUNT_HEIGHT,
   GFCI_MOUNT_HEIGHT,
   SWITCH_MOUNT_HEIGHT,
@@ -63,6 +66,21 @@ export const FIXTURE_TYPES = {
   TV: 'tv',
   SOFA: 'sofa',
   BED: 'bed',
+  SHOWER: 'shower',
+  PLANT: 'plant',
+};
+
+/** Display names, shared by the Furniture popover, the properties panel and the 3D inspector. */
+export const FIXTURE_LABELS = {
+  [FIXTURE_TYPES.KITCHEN_TOP]: 'Kitchen Top',
+  [FIXTURE_TYPES.TOILET]: 'Toilet',
+  [FIXTURE_TYPES.LAVATORY]: 'Lavatory',
+  [FIXTURE_TYPES.TABLE]: 'Table',
+  [FIXTURE_TYPES.TV]: 'TV',
+  [FIXTURE_TYPES.SOFA]: 'Sofa',
+  [FIXTURE_TYPES.BED]: 'Bed',
+  [FIXTURE_TYPES.SHOWER]: 'Shower',
+  [FIXTURE_TYPES.PLANT]: 'Plant',
 };
 
 export const FIXTURE_DEFAULTS = {
@@ -73,6 +91,8 @@ export const FIXTURE_DEFAULTS = {
   [FIXTURE_TYPES.TV]: { width: FIXTURE_TV_WIDTH, depth: FIXTURE_TV_DEPTH },
   [FIXTURE_TYPES.SOFA]: { width: FIXTURE_SOFA_WIDTH, depth: FIXTURE_SOFA_DEPTH },
   [FIXTURE_TYPES.BED]: { width: FIXTURE_BED_WIDTH, depth: FIXTURE_BED_DEPTH },
+  [FIXTURE_TYPES.SHOWER]: { width: FIXTURE_SHOWER_WIDTH, depth: FIXTURE_SHOWER_DEPTH },
+  [FIXTURE_TYPES.PLANT]: { width: FIXTURE_PLANT_WIDTH, depth: FIXTURE_PLANT_WIDTH },
 };
 
 // Surface-mounted wall devices (outlets/switches). Distinct from the

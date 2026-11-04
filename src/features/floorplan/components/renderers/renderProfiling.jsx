@@ -86,6 +86,17 @@ function ensureStore() {
 
   window[GLOBAL_KEY] = {
     flush,
+    /** The counters as data, for scripts: one row per profiled component. */
+    snapshot() {
+      return [...entries.values()].map((entry) => ({
+        component: entry.name,
+        renders: entry.renders,
+        commits: entry.commits,
+        totalActualMs: entry.totalActualDuration,
+        avgActualMs: entry.commits ? entry.totalActualDuration / entry.commits : 0,
+        maxActualMs: entry.maxActualDuration,
+      }));
+    },
     reset() {
       entries.clear();
       if (flushTimerId != null) {

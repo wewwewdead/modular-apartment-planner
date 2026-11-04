@@ -26,6 +26,7 @@ const TrussScene = memo(function TrussScene({
         <TrussRenderer
           floor={filteredFloor}
           trussSystems={floorTrussSystems}
+          roofSystem={filteredProject?.roofSystem || null}
           selectedId={selectedId}
           selectedType={selectedType}
         />

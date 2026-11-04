@@ -1,8 +1,12 @@
 import { memo } from 'react';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
-import { DRAWING_GRAPHICS } from '@/sheets/standards';
+import { DRAWING_GRAPHICS, PRESENTATION_GRAPHICS } from '@/sheets/standards';
+import { isPresentationStyle, usePlanStyle } from './PlanStyleContext';
 
 function BeamRenderer({ beams, columns }) {
+  // A beam is overhead, so on a presentation plan it is only a fine dashed
+  // trace: a filled beam would paint over the solid walls it sits on.
+  const presentation = isPresentationStyle(usePlanStyle());
   return (
     <g className="beams">
       {(beams || []).map((beam) => {
@@ -19,10 +23,22 @@ function BeamRenderer({ beams, columns }) {
             data-type="beam"
             data-placement-role={isRoofRingBeam ? 'roof_ring' : 'floor'}
             points={points}
-            fill={DRAWING_GRAPHICS.plan.objectFill}
-            stroke={isRoofRingBeam ? '#9a5b16' : DRAWING_GRAPHICS.plan.secondaryStroke}
+            fill={presentation ? 'none' : DRAWING_GRAPHICS.plan.objectFill}
+            stroke={
+              presentation
+                ? PRESENTATION_GRAPHICS.plan.beamStroke
+                : isRoofRingBeam
+                  ? '#9a5b16'
+                  : DRAWING_GRAPHICS.plan.secondaryStroke
+            }
             strokeWidth={DRAWING_GRAPHICS.plan.secondaryStrokeWidth}
-            strokeDasharray={isRoofRingBeam ? '10 4' : DRAWING_GRAPHICS.plan.hiddenDash}
+            strokeDasharray={
+              presentation
+                ? PRESENTATION_GRAPHICS.plan.beamDash
+                : isRoofRingBeam
+                  ? '10 4'
+                  : DRAWING_GRAPHICS.plan.hiddenDash
+            }
             vectorEffect="non-scaling-stroke"
           />
         );

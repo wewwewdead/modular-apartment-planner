@@ -1,7 +1,84 @@
 import { memo } from 'react';
 import { windowOutlineOnWall, wallDirection } from '@/geometry/wallGeometry';
 import { perpendicular, scale, add } from '@/geometry/point';
-import { DRAWING_GRAPHICS } from '@/sheets/standards';
+import { DRAWING_GRAPHICS, PRESENTATION_GRAPHICS } from '@/sheets/standards';
+import { isPresentationStyle, usePlanStyle } from './PlanStyleContext';
+
+function offsetLine(info, perp, distance) {
+  const offset = scale(perp, distance);
+  const a = add(info.start, offset);
+  const b = add(info.end, offset);
+  return { x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+}
+
+/**
+ * Presentation window: the wall opens to a white gap carrying a frame line at
+ * each wall face, a pale glazing band down the middle with a fine glass line,
+ * and a jamb tick at each end. Opening variants keep their geometry, drawn in
+ * the frame ink as fine solid lines.
+ */
+function PresentationWindow({ win, info, wall }) {
+  const g = PRESENTATION_GRAPHICS.plan;
+  const dir = wallDirection(wall);
+  const perp = perpendicular(dir);
+  const half = wall.thickness / 2;
+  const band = (wall.thickness * g.glazingBand) / 2;
+  const faceA = offsetLine(info, perp, half);
+  const faceB = offsetLine(info, perp, -half);
+  const bandA = offsetLine(info, perp, band);
+  const bandB = offsetLine(info, perp, -band);
+  const centre = offsetLine(info, perp, 0);
+  const type = win.type || 'standard';
+  const angleDeg = (info.angle * 180) / Math.PI;
+  const flipSign = win.openDirection === 'right' ? -1 : 1;
+  const fine = { stroke: g.frameStroke, strokeWidth: g.swingStrokeWidth, vectorEffect: 'non-scaling-stroke' };
+  const frame = { stroke: g.frameStroke, strokeWidth: g.frameStrokeWidth, vectorEffect: 'non-scaling-stroke' };
+
+  return (
+    <>
+      <polygon
+        data-window-glazing=""
+        points={`${bandA.x1},${bandA.y1} ${bandA.x2},${bandA.y2} ${bandB.x2},${bandB.y2} ${bandB.x1},${bandB.y1}`}
+        fill={g.glazingFill}
+        stroke="none"
+      />
+      <line {...centre} {...fine} />
+      <line {...faceA} {...frame} />
+      <line {...faceB} {...frame} />
+      <line x1={faceA.x1} y1={faceA.y1} x2={faceB.x1} y2={faceB.y1} {...frame} />
+      <line x1={faceA.x2} y1={faceA.y2} x2={faceB.x2} y2={faceB.y2} {...frame} />
+      {type === 'casement' ? (
+        <g transform={`translate(${info.start.x},${info.start.y}) rotate(${angleDeg})`}>
+          <path
+            d={`M ${win.width * 0.3} 0 A ${win.width * 0.3} ${win.width * 0.3} 0 0 ${flipSign > 0 ? 0 : 1} 0 ${
+              flipSign * -win.width * 0.3
+            }`}
+            fill="none"
+            {...fine}
+          />
+          <line x1={0} y1={0} x2={0} y2={flipSign * -win.width * 0.3} {...fine} />
+        </g>
+      ) : null}
+      {type === 'awning' ? (
+        <g transform={`translate(${info.start.x},${info.start.y}) rotate(${angleDeg})`}>
+          <path
+            d={`M 0 0 A ${win.width / 2} ${win.width * 0.25} 0 0 ${win.openDirection === 'left' ? 1 : 0} ${win.width} 0`}
+            fill="none"
+            {...fine}
+          />
+        </g>
+      ) : null}
+      {type === 'jalousie'
+        ? [1, 2, 3, 4, 5].map((i) => {
+            const along = add(info.start, scale(dir, (win.width * i) / 6));
+            const a = add(along, scale(perp, -half * 0.7));
+            const b = add(along, scale(perp, half * 0.7));
+            return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} {...fine} />;
+          })
+        : null}
+    </>
+  );
+}
 
 function StandardWindow({ info, wall }) {
   const dir = wallDirection(wall);
@@ -209,6 +286,7 @@ function JalousieWindow({ win, info, wall }) {
 }
 
 function WindowRenderer({ windows, walls }) {
+  const presentation = isPresentationStyle(usePlanStyle());
   return (
     <g className="windows">
       {windows.map((win) => {
@@ -226,11 +304,17 @@ function WindowRenderer({ windows, walls }) {
               fill="white"
               stroke="none"
             />
-            {type === 'standard' && <StandardWindow info={info} wall={wall} />}
-            {type === 'casement' && <CasementWindow win={win} info={info} />}
-            {type === 'awning' && <AwningWindow win={win} info={info} />}
-            {type === 'fixed' && <FixedWindow info={info} />}
-            {type === 'jalousie' && <JalousieWindow win={win} info={info} wall={wall} />}
+            {presentation ? (
+              <PresentationWindow win={win} info={info} wall={wall} />
+            ) : (
+              <>
+                {type === 'standard' && <StandardWindow info={info} wall={wall} />}
+                {type === 'casement' && <CasementWindow win={win} info={info} />}
+                {type === 'awning' && <AwningWindow win={win} info={info} />}
+                {type === 'fixed' && <FixedWindow info={info} />}
+                {type === 'jalousie' && <JalousieWindow win={win} info={info} wall={wall} />}
+              </>
+            )}
           </g>
         );
       })}

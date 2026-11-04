@@ -25,6 +25,16 @@ import { slabArea } from '@/geometry/slabGeometry';
 import { stairRun, stairTotalRise } from '@/geometry/stairGeometry';
 import { railingLength } from '@/geometry/railingGeometry';
 import { wallLength } from '@/geometry/wallGeometry';
+import { FIXTURE_LABELS } from '@/editor/tools';
+import { ROOF_COVERING_KIND_LABELS, normalizeRoofCovering } from '@/domain/roofCoveringCatalog';
+import { describeRoofTrims } from '@/roof/roofEdgeKit';
+import { buildEndClosureLayout, describeEndClosures } from '@/truss/endClosures';
+
+/** "Corrugated metal · Shale Grey" — what the roof is clad in, read through the normalizer. */
+function roofCoveringRow(roofSystem) {
+  const covering = normalizeRoofCovering(roofSystem.covering, roofSystem.roofType || 'flat', roofSystem.slabThickness);
+  return { label: 'Covering', value: `${ROOF_COVERING_KIND_LABELS[covering.kind]} · ${covering.colour.name}` };
+}
 
 const INSPECTABLE_TYPES = new Set([
   'wall',
@@ -68,14 +78,7 @@ const TYPE_LABELS = {
   ceiling: 'Ceiling',
 };
 
-const FIXTURE_TYPE_LABELS = {
-  kitchenTop: 'Kitchen Top',
-  toilet: 'Toilet',
-  lavatory: 'Lavatory',
-  table: 'Table',
-  tv: 'TV',
-  sofa: 'Sofa',
-};
+const FIXTURE_TYPE_LABELS = FIXTURE_LABELS;
 
 const ELECTRICAL_DEVICE_TYPE_LABELS = {
   outlet: 'Outlet',
@@ -302,6 +305,10 @@ function rowsForObject(selectedType, object, floor, roofSystem = null) {
                 mmRow('Overhang', object.pitch?.overhang),
                 ...(object.roofType === 'gable' ? [mmRow('Ridge Offset', object.pitch?.ridgeOffset)] : []),
               ]),
+        roofCoveringRow(object),
+        // Every fascia, gutter or soffit clicked in 3D lands here: the kit is
+        // part of the roof, not an object of its own.
+        { label: 'Trims', value: describeRoofTrims(object) },
       ];
     case 'parapet': {
       const resolvedParapet = resolveParapetLine(object, roofSystem) || object;
@@ -330,6 +337,8 @@ function rowsForObject(selectedType, object, floor, roofSystem = null) {
       ];
     case 'trussSystem': {
       const purlinTotalLength = getTrussSystemPurlinTotalLength(object);
+      // Gable ends (RT-2): what closes each end, and the cladding area net of vents.
+      const closureLayout = buildEndClosureLayout(object, null, roofSystem);
       return [
         { label: 'Floor', value: floor?.name || 'Unassigned' },
         mmRow('Base Elev.', object.baseElevation),
@@ -359,6 +368,8 @@ function rowsForObject(selectedType, object, floor, roofSystem = null) {
           value:
             roofSystem?.trussAttachmentId === object.id ? roofSystem.name || 'Active Roof Source' : 'Not Roof Source',
         },
+        { label: 'End closures', value: describeEndClosures(closureLayout) },
+        areaRow('Gable infill', closureLayout.totalAreaM2 * 1_000_000),
       ];
     }
     case 'trussInstance': {

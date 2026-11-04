@@ -3,9 +3,20 @@ import { CURRENT_PROJECT_VERSION } from './projectVersion';
 import { getDefaultActiveFloorId, getFloorTopElevation, getProjectFloor } from './floorModels';
 import { deriveBeamSupportedInstanceGeometry } from '@/truss/beamSupports';
 import { normalizePlanLengthScale, normalizePlanOffset, normalizeRotationDegrees } from '@/truss/systemTransform';
+import { normalizeRoofColour } from './roofCoveringCatalog';
 
 const TRUSS_FAMILIES = new Set(['shed', 'gable', 'flat']);
-const TRUSS_SHAPES = new Set(['shed', 'gable', 'flat', 'hip', 'box_gable', 'pyramid_hipped', 'domed', 'dropped_eaves']);
+const TRUSS_SHAPES = new Set([
+  'shed',
+  'gable',
+  'flat',
+  'hip',
+  'box_gable',
+  'pyramid_hipped',
+  'domed',
+  'dropped_eaves',
+  'scissor',
+]);
 const TRUSS_ATTACHED_ROOF_TYPES = new Set([
   'flat',
   'shed',
@@ -16,6 +27,8 @@ const TRUSS_ATTACHED_ROOF_TYPES = new Set([
   'domed',
   'dropped_eaves',
 ]);
+// A scissor truss attaches a plain GABLE roof (its type's attachedRoofType):
+// this set holds ROOF types, and 'scissor' is not one.
 const DEFAULT_SUPPORT_LENGTH = 12000;
 const DEFAULT_SPACING = 1200;
 const DEFAULT_COUNT = 5;
@@ -35,6 +48,170 @@ export const TRUSS_MATERIALS = ['timber', 'metal'];
 export const TRUSS_SUPPORT_MODES = {
   BEAM_PAIR: 'beam_pair',
 };
+
+// --- End closures (RT-2) ---------------------------------------------------
+// What closes the ends of a truss system: the gable triangle at the first and
+// last copy along the layout axis (`start` / `end`), and the tall side strips
+// along the bearing lines where a profile stands up there (`spanStart` /
+// `spanEnd`: a shed's high side, a flat truss's depth). Every side defaults to
+// INFILL, old saves included (spec §4.3, §9.2): nobody wants an open gable by
+// default; 'open' is for exposed-truss designs. The cladding colour is one per
+// system (`endClosures.colour`), because the preview paints every infill with
+// the one `gableInfill` palette material (spec §4.3 amendment).
+export const TRUSS_END_CLOSURE_SIDES = Object.freeze(['start', 'end', 'spanStart', 'spanEnd']);
+export const TRUSS_END_CLOSURE_MODES = Object.freeze(['infill', 'open']);
+export const TRUSS_END_CLOSURE_PRESETS = Object.freeze(['fiber_cement', 'plywood', 'mixed_board', 'chb']);
+export const TRUSS_END_CLOSURE_PRESET_LABELS = Object.freeze({
+  fiber_cement: 'fibre cement',
+  plywood: 'plywood',
+  mixed_board: 'mixed board',
+  chb: 'CHB',
+});
+export const TRUSS_END_CLOSURE_VENT_SHAPES = Object.freeze(['rect', 'round', 'triangle']);
+export const DEFAULT_END_CLOSURE_COLOUR = Object.freeze({
+  hex: '#E9E5DD',
+  name: 'Wall',
+  catalogue: 'custom',
+  solarAbsorptance: null,
+});
+const DEFAULT_END_CLOSURE_VENT = Object.freeze({
+  enabled: false,
+  shape: 'rect',
+  width: 600,
+  height: 300,
+  sillOffset: 300,
+});
+
+function finiteAtLeast(value, fallback, min) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(min, number) : fallback;
+}
+
+function normalizeEndClosureVent(vent = {}) {
+  const source = vent && typeof vent === 'object' ? vent : {};
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : DEFAULT_END_CLOSURE_VENT.enabled,
+    shape: TRUSS_END_CLOSURE_VENT_SHAPES.includes(source.shape) ? source.shape : DEFAULT_END_CLOSURE_VENT.shape,
+    width: finiteAtLeast(source.width, DEFAULT_END_CLOSURE_VENT.width, 50),
+    height: finiteAtLeast(source.height, DEFAULT_END_CLOSURE_VENT.height, 50),
+    sillOffset: finiteAtLeast(source.sillOffset, DEFAULT_END_CLOSURE_VENT.sillOffset, 0),
+  };
+}
+
+export function normalizeTrussEndClosure(closure = {}) {
+  const source = closure && typeof closure === 'object' ? closure : {};
+  return {
+    mode: TRUSS_END_CLOSURE_MODES.includes(source.mode) ? source.mode : 'infill',
+    assemblyPreset: TRUSS_END_CLOSURE_PRESETS.includes(source.assemblyPreset) ? source.assemblyPreset : 'fiber_cement',
+    vent: normalizeEndClosureVent(source.vent),
+  };
+}
+
+export function normalizeTrussEndClosures(endClosures = {}) {
+  const source = endClosures && typeof endClosures === 'object' ? endClosures : {};
+  return {
+    ...Object.fromEntries(TRUSS_END_CLOSURE_SIDES.map((side) => [side, normalizeTrussEndClosure(source[side])])),
+    colour: normalizeRoofColour(source.colour, DEFAULT_END_CLOSURE_COLOUR),
+  };
+}
+
+// --- Member sizes, heel, labels (RT-3) --------------------------------------
+// A truss is a profile with real members (spec §4.4, §7.1). Sizes are per
+// SYSTEM: every instance in a system shares one set. `width` is the member's
+// thickness ACROSS the truss plane (along the layout axis), `depth` its size IN
+// the plane. A preset sets all three members; webs go one size down where the
+// family has one (90 → 70, 2x6 → 2x4). Metal presets only set sizes: the
+// instance `material` ('timber' | 'metal') keeps its own meaning.
+function memberSet(chordWidth, chordDepth, webWidth, webDepth) {
+  return Object.freeze({
+    topChord: Object.freeze({ width: chordWidth, depth: chordDepth }),
+    bottomChord: Object.freeze({ width: chordWidth, depth: chordDepth }),
+    web: Object.freeze({ width: webWidth, depth: webDepth }),
+  });
+}
+
+export const TRUSS_MEMBER_PRESETS = Object.freeze({
+  au_70x35: Object.freeze({ label: '70 × 35 MGP', family: 'timber', ...memberSet(35, 70, 35, 70) }),
+  au_90x35: Object.freeze({ label: '90 × 35 MGP', family: 'timber', ...memberSet(35, 90, 35, 70) }),
+  au_90x45: Object.freeze({ label: '90 × 45 MGP', family: 'timber', ...memberSet(45, 90, 45, 70) }),
+  au_120x45: Object.freeze({ label: '120 × 45 MGP', family: 'timber', ...memberSet(45, 120, 45, 90) }),
+  au_140x45: Object.freeze({ label: '140 × 45 MGP', family: 'timber', ...memberSet(45, 140, 45, 120) }),
+  na_2x4: Object.freeze({ label: '2x4 (38 × 89)', family: 'timber', ...memberSet(38, 89, 38, 89) }),
+  na_2x6: Object.freeze({ label: '2x6 (38 × 140)', family: 'timber', ...memberSet(38, 140, 38, 89) }),
+  na_2x8: Object.freeze({ label: '2x8 (38 × 184)', family: 'timber', ...memberSet(38, 184, 38, 140) }),
+  metal_c75: Object.freeze({ label: 'C75 × 40 × 1.0', family: 'metal', ...memberSet(40, 75, 40, 75) }),
+  metal_c100: Object.freeze({ label: 'C100 × 50 × 1.2', family: 'metal', ...memberSet(50, 100, 40, 75) }),
+});
+export const TRUSS_MEMBER_PRESET_KEYS = Object.freeze([...Object.keys(TRUSS_MEMBER_PRESETS), 'custom']);
+export const DEFAULT_TRUSS_MEMBER_PRESET = 'au_90x35';
+export const TRUSS_MEMBER_KEYS = Object.freeze(['topChord', 'bottomChord', 'web']);
+export const TRUSS_MEMBER_LABELS = Object.freeze({ topChord: 'TC', bottomChord: 'BC', web: 'W' });
+const MIN_MEMBER_SIZE = 10;
+const MAX_MEMBER_SIZE = 600;
+const MAX_RAISED_HEEL = 1200;
+export const DEFAULT_TRUSS_LABEL_PREFIX = 'T';
+export const TRUSS_PURLIN_ROLES = Object.freeze(['purlin', 'batten']);
+
+function clampMemberSize(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(MAX_MEMBER_SIZE, Math.max(MIN_MEMBER_SIZE, number));
+}
+
+/** The member sizes a preset sets (`custom` and unknown keys fall back to the default preset). */
+export function getTrussMemberPresetSizes(presetKey = DEFAULT_TRUSS_MEMBER_PRESET) {
+  const preset = TRUSS_MEMBER_PRESETS[presetKey] || TRUSS_MEMBER_PRESETS[DEFAULT_TRUSS_MEMBER_PRESET];
+  return Object.fromEntries(TRUSS_MEMBER_KEYS.map((key) => [key, { ...preset[key] }]));
+}
+
+/** `memberSizes` with every member filled: stored numbers win, the preset fills the gaps. */
+export function normalizeTrussMemberSizes(memberSizes = null) {
+  const source = memberSizes && typeof memberSizes === 'object' ? memberSizes : {};
+  const preset = TRUSS_MEMBER_PRESET_KEYS.includes(source.preset) ? source.preset : DEFAULT_TRUSS_MEMBER_PRESET;
+  const fallback = getTrussMemberPresetSizes(preset);
+  return {
+    ...Object.fromEntries(
+      TRUSS_MEMBER_KEYS.map((key) => [
+        key,
+        {
+          width: clampMemberSize(source[key]?.width, fallback[key].width),
+          depth: clampMemberSize(source[key]?.depth, fallback[key].depth),
+        },
+      ]),
+    ),
+    preset,
+  };
+}
+
+/** `heel.raised` = the raised ("energy") heel height; 0 is a standard heel. */
+export function normalizeTrussHeel(heel = null) {
+  const raised = Number(heel?.raised);
+  return { raised: Number.isFinite(raised) ? Math.min(MAX_RAISED_HEEL, Math.max(0, raised)) : 0 };
+}
+
+export function normalizeTrussLabelPrefix(prefix = DEFAULT_TRUSS_LABEL_PREFIX) {
+  if (typeof prefix !== 'string') return DEFAULT_TRUSS_LABEL_PREFIX;
+  const trimmed = prefix.trim().slice(0, 6);
+  return trimmed || DEFAULT_TRUSS_LABEL_PREFIX;
+}
+
+/**
+ * The profile options a system hands every `buildTrussProfile` call: its
+ * member sizes and heel. Callers without a system get the same defaults.
+ */
+export function getTrussProfileOptions(trussSystem = null) {
+  return {
+    memberSizes: normalizeTrussMemberSizes(trussSystem?.memberSizes),
+    heel: normalizeTrussHeel(trussSystem?.heel),
+  };
+}
+
+const TILE_COVERING_KINDS = new Set(['concrete_tile', 'clay_tile', 'slate', 'shingle']);
+
+/** Purlins under sheet, battens under tiles (a label only; spec §7.4). */
+export function defaultPurlinRoleForCovering(coveringKind = null) {
+  return TILE_COVERING_KINDS.has(coveringKind) ? 'batten' : 'purlin';
+}
 
 function normalizePhaseId(phaseId = null) {
   return typeof phaseId === 'string' && phaseId ? phaseId : null;
@@ -114,9 +291,10 @@ const DEFAULT_TRUSS_TYPE_DEFS = [
     defaultRise: 900,
     defaultPitch: 0,
     attachedRoofType: 'flat',
+    // 'warren' is the alternating layout flat trusses always had (spec §7.3).
     webPattern: {
-      key: 'flat_pratt',
-      label: 'Flat Pratt',
+      key: 'warren',
+      label: 'Warren',
       panelCount: 6,
       diagonalMode: 'alternating',
     },
@@ -206,6 +384,25 @@ const DEFAULT_TRUSS_TYPE_DEFS = [
       diagonalMode: 'fink',
     },
   },
+  {
+    // Scissor (RT-3, spec §7.3): the bottom chord rises to
+    // `rise × scissorBottomPitchRatio` at mid-span; its roof is a plain gable.
+    id: 'truss_type_scissor',
+    name: 'Scissor Truss',
+    family: 'gable',
+    shape: 'scissor',
+    material: 'timber',
+    defaultSpan: 7200,
+    defaultRise: 1800,
+    defaultPitch: 50,
+    attachedRoofType: 'gable',
+    webPattern: {
+      key: 'fink',
+      label: 'Fink',
+      panelCount: 6,
+      diagonalMode: 'fink',
+    },
+  },
 ];
 
 function clonePoint(point) {
@@ -267,9 +464,16 @@ export function normalizeTrussMaterial(material = DEFAULT_TRUSS_MATERIAL) {
   return TRUSS_MATERIALS.includes(normalized) ? normalized : DEFAULT_TRUSS_MATERIAL;
 }
 
-export function createPurlinSystem(options = {}) {
+export function createPurlinSystem(options = {}, defaultRole = 'purlin') {
   return {
     enabled: Boolean(options.enabled),
+    // Label only: 'purlin' under sheet, 'batten' under tiles (spec §7.4). A
+    // stored role wins; a missing one takes the covering's default.
+    role: TRUSS_PURLIN_ROLES.includes(options.role)
+      ? options.role
+      : TRUSS_PURLIN_ROLES.includes(defaultRole)
+        ? defaultRole
+        : 'purlin',
     spacing: isFiniteNumber(options.spacing) ? Math.max(100, options.spacing) : DEFAULT_PURLIN_SPACING,
     startOffset: isFiniteNumber(options.startOffset) ? Math.max(0, options.startOffset) : DEFAULT_PURLIN_START_OFFSET,
     endOffset: isFiniteNumber(options.endOffset) ? Math.max(0, options.endOffset) : DEFAULT_PURLIN_END_OFFSET,
@@ -283,8 +487,20 @@ export function createPurlinSystem(options = {}) {
   };
 }
 
-function normalizePurlinSystem(purlinSystem = {}) {
-  return createPurlinSystem(purlinSystem);
+function normalizePurlinSystem(purlinSystem = {}, project = null) {
+  const coveringKind = project?.roofSystem?.covering?.kind || null;
+  return createPurlinSystem(purlinSystem || {}, defaultPurlinRoleForCovering(coveringKind));
+}
+
+const DEFAULT_SCISSOR_BOTTOM_PITCH_RATIO = 0.5;
+
+function normalizeWebPatternKey(key = null) {
+  return typeof key === 'string' && key ? key : null;
+}
+
+function normalizeScissorRatio(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(0.9, Math.max(0, number)) : DEFAULT_SCISSOR_BOTTOM_PITCH_RATIO;
 }
 
 export function createTrussNode(x = 0, z = 0, options = {}) {
@@ -397,6 +613,9 @@ export function createTrussInstance(options = {}) {
     supportOffsetAlongAxis: normalizeSupportOffsetAlongAxis(options.supportOffsetAlongAxis),
     roofAttachmentId:
       typeof options.roofAttachmentId === 'string' && options.roofAttachmentId ? options.roofAttachmentId : null,
+    // RT-3: null = the truss type's default web pattern (src/truss/webPatterns.js).
+    webPatternKey: normalizeWebPatternKey(options.webPatternKey),
+    scissorBottomPitchRatio: normalizeScissorRatio(options.scissorBottomPitchRatio),
   };
 }
 
@@ -435,6 +654,8 @@ export function normalizeTrussInstance(instance = {}, floorId = null, catalog = 
     supportOffsetAlongAxis: normalizeSupportOffsetAlongAxis(instance?.supportOffsetAlongAxis),
     roofAttachmentId:
       typeof instance?.roofAttachmentId === 'string' && instance.roofAttachmentId ? instance.roofAttachmentId : null,
+    webPatternKey: normalizeWebPatternKey(instance?.webPatternKey),
+    scissorBottomPitchRatio: normalizeScissorRatio(instance?.scissorBottomPitchRatio),
   };
 }
 
@@ -454,6 +675,10 @@ export function createTrussSystem(name = 'Truss System', options = {}) {
     planOffset: clonePlanOffset(options.planOffset),
     planLengthScale: normalizePlanLengthScale(options.planLengthScale),
     purlinSystem: normalizePurlinSystem(options.purlinSystem),
+    endClosures: normalizeTrussEndClosures(options.endClosures),
+    memberSizes: normalizeTrussMemberSizes(options.memberSizes),
+    heel: normalizeTrussHeel(options.heel),
+    labelPrefix: normalizeTrussLabelPrefix(options.labelPrefix),
     trussInstances,
   };
 }
@@ -505,7 +730,11 @@ export function normalizeTrussSystem(trussSystem = {}, project = null, catalog =
     planRotationOffsetDegrees: normalizeRotationDegrees(trussSystem?.planRotationOffsetDegrees),
     planOffset: clonePlanOffset(trussSystem?.planOffset),
     planLengthScale: normalizePlanLengthScale(trussSystem?.planLengthScale),
-    purlinSystem: normalizePurlinSystem(trussSystem?.purlinSystem),
+    purlinSystem: normalizePurlinSystem(trussSystem?.purlinSystem, project),
+    endClosures: normalizeTrussEndClosures(trussSystem?.endClosures),
+    memberSizes: normalizeTrussMemberSizes(trussSystem?.memberSizes),
+    heel: normalizeTrussHeel(trussSystem?.heel),
+    labelPrefix: normalizeTrussLabelPrefix(trussSystem?.labelPrefix),
     trussInstances,
   };
 }

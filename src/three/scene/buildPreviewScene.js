@@ -4,13 +4,15 @@ import {
   buildStairElevationContexts,
 } from './objectBuilders';
 import { buildRoofPreviewObjects } from '@/geometry/roof3dGeometry';
+import { resolveRoofEdgeKitContext } from '@/roof/roofEdgeKit';
 import {
   getDefaultActiveFloorId,
   getFloorElevation,
   getFloorStackBounds,
   getOrderedFloors,
 } from '@/domain/floorModels';
-import { buildTrussPreviewObjects } from '@/geometry/trussGeometry';
+import { buildTrussPreviewObjects, buildTrussSystemGeometry } from '@/geometry/trussGeometry';
+import { buildEndClosureObjects } from '@/truss/endClosures';
 import { buildCeilingPreviewObjects } from '@/geometry/ceilingGeometry';
 
 function mergeBounds(current, next) {
@@ -82,7 +84,22 @@ export function buildPreviewScene(project, options = {}) {
 
   const floorDescriptors = floors.map((floor, index) => {
     const floorTrussSystems = (project?.trussSystems || []).filter((trussSystem) => trussSystem.floorId === floor.id);
-    const trussObjects = floorTrussSystems.flatMap((trussSystem) => buildTrussPreviewObjects(trussSystem));
+    // The gable-end closures are part of their truss system's objects, so they
+    // live (and phase-filter) with it. Their top edge follows the underside of
+    // the roof the system carries, which is why the roof is in this floor's key.
+    const trussObjects = floorTrussSystems.flatMap((trussSystem) => {
+      const systemGeometry = buildTrussSystemGeometry(trussSystem);
+      return [
+        ...buildTrussPreviewObjects(trussSystem, systemGeometry),
+        ...buildEndClosureObjects(trussSystem, systemGeometry, project?.roofSystem || null),
+      ];
+    });
+    // Only a floor that holds the roof's own truss system reads the roof: every
+    // other floor keeps its cached group when the roof changes.
+    const roofSource =
+      project?.roofSystem && floorTrussSystems.some((entry) => entry.id === project.roofSystem.trussAttachmentId)
+        ? project.roofSystem
+        : null;
     const floorCeilings = (project?.ceilings || []).filter((ceiling) => ceiling.floorId === floor.id);
     const ceilingObjects = floorCeilings.flatMap((ceiling) =>
       buildCeilingPreviewObjects(ceiling, project, {
@@ -145,6 +162,9 @@ export function buildPreviewScene(project, options = {}) {
         assemblyDetail,
         systems: project?.building?.systems,
         trussSystems: floorTrussSystems,
+        // The end closures' top edge is the attached roof's underside (RT-2):
+        // a roof slope or thickness change has to rebuild them.
+        roofSystem: roofSource,
         ceilings: floorCeilings,
         stairSources,
         landingSources,
@@ -153,7 +173,11 @@ export function buildPreviewScene(project, options = {}) {
   });
 
   if (project?.roofSystem) {
-    const roofObjects = buildRoofPreviewObjects(project.roofSystem).map((descriptor) => ({
+    // The edge kit reads two things from outside the roof: the attached truss
+    // system (its bearing line is where the soffit stops) and the bottom of the
+    // floor stack (where the downpipes end). Both go in the roof's sourceKey.
+    const roofEdgeKitContext = resolveRoofEdgeKitContext(project, project.roofSystem);
+    const roofObjects = buildRoofPreviewObjects(project.roofSystem, roofEdgeKitContext).map((descriptor) => ({
       ...descriptor,
       metadata: {
         ...(descriptor.metadata || {}),
@@ -168,7 +192,11 @@ export function buildPreviewScene(project, options = {}) {
       visible: !options.visibleFloorIds || (topFloor ? visibleFloorIds.has(topFloor.id) : true),
       objects: roofObjects,
       bounds: boundsFromObjects(roofObjects),
-      sourceKey: { roofSystem: project.roofSystem },
+      sourceKey: {
+        roofSystem: project.roofSystem,
+        trussSystem: roofEdgeKitContext.trussSystem,
+        groundElevation: roofEdgeKitContext.groundElevation,
+      },
     });
   }
 

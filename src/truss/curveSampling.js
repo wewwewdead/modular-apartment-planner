@@ -89,7 +89,8 @@ function evaluateSineArchPoint(curve, x) {
 
   return {
     x,
-    z: rise * Math.sin(Math.PI * clamp(ratio, 0, 1)),
+    // `zOffset` lifts the arch to the member centre-line (RT-3 profiles).
+    z: (Number(curve?.zOffset) || 0) + rise * Math.sin(Math.PI * clamp(ratio, 0, 1)),
   };
 }
 

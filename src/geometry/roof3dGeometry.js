@@ -1,6 +1,8 @@
 import { wallLength, wallOutline } from './wallGeometry';
 import { buildRoofPlaneGeometry } from './roofPlaneGeometry';
 import { resolveParapetLine } from './roofPlanGeometry';
+import { normalizeRoofCovering, roofMaterialKeyForCovering } from '@/domain/roofCoveringCatalog';
+import { buildRoofEdgeKitObjects } from '@/roof/roofEdgeKit';
 
 function createBoundsFromPoints(points, baseElevation, topElevation) {
   if (!points?.length) {
@@ -136,10 +138,25 @@ function createBoxDescriptor(id, kind, center, size, baseElevation, rotation = 0
   };
 }
 
-export function buildRoofPreviewObjects(roofSystem) {
+/**
+ * The roof as preview descriptors: its body, parapets, drains, openings, and
+ * the edge kit (fascia, barge, gutters, downpipes, capping, soffit).
+ *
+ * `context` is what the kit reads from outside the roof —
+ * `resolveRoofEdgeKitContext(project)`: the bearing outline the overhang is
+ * measured to, and the ground floor the downpipes run down to. Without it the
+ * roof's own boundary stands in for the bearing line and no downpipes are
+ * drawn.
+ */
+export function buildRoofPreviewObjects(roofSystem, context = {}) {
   if (!roofSystem || (roofSystem.boundaryPolygon || []).length < 3) return [];
 
   const roofGeometry = buildRoofPlaneGeometry(roofSystem);
+  // The body is drawn in the palette family of what it is clad in; the
+  // project's actual colour reaches that material at runtime.
+  const bodyMaterialKey = roofMaterialKeyForCovering(
+    normalizeRoofCovering(roofSystem.covering, roofSystem.roofType || 'flat', roofSystem.slabThickness).kind,
+  );
   const roofOutline = roofGeometry.roofOutlineWithElevations || [];
   const slab =
     (roofSystem.roofType || 'flat') === 'flat'
@@ -151,7 +168,7 @@ export function buildRoofPreviewObjects(roofSystem) {
           roofSystem.slabThickness ?? 0,
           {
             sourceId: roofSystem.id,
-            materialKey: 'roof',
+            materialKey: bodyMaterialKey,
             holes: (roofSystem.roofOpenings || []).map((opening) => opening.boundaryPoints || []),
           },
         )
@@ -174,7 +191,7 @@ export function buildRoofPreviewObjects(roofSystem) {
           roofOutline,
           {
             sourceId: roofSystem.id,
-            materialKey: 'roof',
+            materialKey: bodyMaterialKey,
           },
         );
 
@@ -255,5 +272,5 @@ export function buildRoofPreviewObjects(roofSystem) {
       ),
     );
 
-  return [slab, ...parapets, ...drains, ...openings];
+  return [slab, ...parapets, ...drains, ...openings, ...buildRoofEdgeKitObjects(roofSystem, roofGeometry, context)];
 }

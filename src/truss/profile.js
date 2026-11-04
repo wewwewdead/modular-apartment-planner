@@ -3,8 +3,34 @@ import {
   createTrussNode,
   deriveTrussPitchFromRise,
   deriveTrussRiseFromPitch,
+  getTrussRun,
+  normalizeTrussHeel,
+  normalizeTrussMemberSizes,
   resolveTrussType,
 } from '@/domain/trussModels';
+import { WEB_PATTERNS, parseWebNodeRef, resolveWebPatternKey } from './webPatterns';
+
+/*
+ * Truss profiles (RT-3, docs/roof-truss-industrial.md §7.1).
+ *
+ * Truss-local frame: x along the span from the start bearing, z up from the
+ * bearing surface (`trussSystem.baseElevation`). Every shape is first built in
+ * LINE space — today's profile line, 0 at the heels and `rise` at the ridge,
+ * with the overhang tails continuing the slope of the run they extend — and
+ * then given real members by `applyMemberGeometry`:
+ *
+ * - the bottom chord's bottom face sits on the bearing, so its centre-line is
+ *   at z = bc / 2 (bc = bottom-chord depth);
+ * - the top chord's UNDERSIDE is u(x) = bc + h_r + line(x) (h_r = raised heel),
+ *   its centre-line u(x) + tc / (2 cos θ) and its TOP FACE u(x) + tc / cos θ,
+ *   both as true perpendicular offsets of the underside (mitred at kinks, plumb
+ *   at the tail tips).
+ *
+ * `rise` keeps its stored meaning: the rise of the underside line over the run.
+ * The returned `roofOutline` is the TOP FACE, tails included — the closure top
+ * edge and the attached roof both follow it. `undersideOutline` is u(x),
+ * `lineOutline` the bare profile line.
+ */
 
 const EPSILON = 1e-6;
 
@@ -83,6 +109,27 @@ function createBottomPoints(metrics) {
   }));
 }
 
+/**
+ * Line-space z of the two overhang tail tips: each tail continues the slope of
+ * the run it extends (spec §7.1). A flat run gives a level tail.
+ */
+function continueOutlineTails(structuralOutline = [], metrics) {
+  const points = structuralOutline;
+  if (!points.length) return { start: 0, end: 0 };
+  const first = points[0];
+  const second = points[1] || first;
+  const last = points[points.length - 1];
+  const beforeLast = points[points.length - 2] || last;
+  const startRun = second.x - first.x;
+  const endRun = last.x - beforeLast.x;
+  const startSlope = Math.abs(startRun) > EPSILON ? (second.z - first.z) / startRun : 0;
+  const endSlope = Math.abs(endRun) > EPSILON ? (last.z - beforeLast.z) / endRun : 0;
+  return {
+    start: first.z - metrics.overhangStart * startSlope,
+    end: last.z + metrics.overhangEnd * endSlope,
+  };
+}
+
 function buildProfileFromStructuralOutline(metrics, structuralOutline, options = {}) {
   const webMode = options.webMode || (metrics.family === 'gable' ? 'gable' : 'alternating');
   const bottomPoints = createBottomPoints(metrics);
@@ -100,13 +147,10 @@ function buildProfileFromStructuralOutline(metrics, structuralOutline, options =
     };
   });
 
+  const tails = continueOutlineTails(structuralOutline, metrics);
   const overhangPoints = [
-    { x: -metrics.overhangStart, z: structuralOutline[0]?.z || 0, kind: 'overhang' },
-    {
-      x: metrics.span + metrics.overhangEnd,
-      z: structuralOutline[structuralOutline.length - 1]?.z || 0,
-      kind: 'overhang',
-    },
+    { x: -metrics.overhangStart, z: tails.start, kind: 'overhang' },
+    { x: metrics.span + metrics.overhangEnd, z: tails.end, kind: 'overhang' },
   ];
 
   const topNodes = createLocalNodeMap(topPoints, 'top');
@@ -151,11 +195,11 @@ function buildProfileFromStructuralOutline(metrics, structuralOutline, options =
   return {
     nodes: [...overhangNodes, ...topNodes, ...bottomNodes],
     members,
-    roofOutline: [
-      { x: -metrics.overhangStart, z: structuralOutline[0]?.z || 0 },
+    roofOutline: uniqueOutlinePoints([
+      { x: -metrics.overhangStart, z: tails.start },
       ...structuralOutline,
-      { x: metrics.span + metrics.overhangEnd, z: structuralOutline[structuralOutline.length - 1]?.z || 0 },
-    ],
+      { x: metrics.span + metrics.overhangEnd, z: tails.end },
+    ]),
     bottomOutline: bottomPoints,
     topChordRuns: options.topChordRuns || [
       {
@@ -229,9 +273,11 @@ function buildGableProfile(metrics) {
   }
 
   const bottomPoints = createBottomPoints(metrics);
+  // The tails continue the rafter slope past the heel (they used to run level).
+  const halfSpan = Math.max(metrics.span / 2, EPSILON);
   const overhangPoints = [
-    { x: -metrics.overhangStart, z: 0, kind: 'overhang' },
-    { x: metrics.span + metrics.overhangEnd, z: 0, kind: 'overhang' },
+    { x: -metrics.overhangStart, z: (-metrics.overhangStart * metrics.rise) / halfSpan, kind: 'overhang' },
+    { x: metrics.span + metrics.overhangEnd, z: (-metrics.overhangEnd * metrics.rise) / halfSpan, kind: 'overhang' },
   ];
 
   const topNodes = createLocalNodeMap(topPoints, 'top');
@@ -265,7 +311,11 @@ function buildGableProfile(metrics) {
   return {
     nodes: [...overhangNodes, ...topNodes, ...bottomNodes],
     members,
-    roofOutline: [{ x: -metrics.overhangStart, z: 0 }, ...topPoints, { x: metrics.span + metrics.overhangEnd, z: 0 }],
+    roofOutline: uniqueOutlinePoints([
+      { x: overhangPoints[0].x, z: overhangPoints[0].z },
+      ...topPoints,
+      { x: overhangPoints[1].x, z: overhangPoints[1].z },
+    ]),
     bottomOutline: bottomPoints,
     topChordRuns: [
       { id: 'left', side: 'left', points: topPoints.slice(0, midpoint + 1) },
@@ -287,7 +337,11 @@ function buildShedProfile(metrics) {
 
   const bottomPoints = createBottomPoints(metrics);
   const overhangPoints = [
-    { x: -metrics.overhangStart, z: 0, kind: 'overhang' },
+    {
+      x: -metrics.overhangStart,
+      z: metrics.span > EPSILON ? -metrics.rise * (metrics.overhangStart / metrics.span) : 0,
+      kind: 'overhang',
+    },
     {
       x: metrics.span + metrics.overhangEnd,
       z: metrics.span > EPSILON ? metrics.rise * ((metrics.span + metrics.overhangEnd) / metrics.span) : metrics.rise,
@@ -325,11 +379,11 @@ function buildShedProfile(metrics) {
   return {
     nodes: [...overhangNodes, ...topNodes, ...bottomNodes],
     members,
-    roofOutline: [
-      { x: -metrics.overhangStart, z: 0 },
+    roofOutline: uniqueOutlinePoints([
+      { x: -metrics.overhangStart, z: overhangPoints[0].z },
       ...topPoints,
       { x: metrics.span + metrics.overhangEnd, z: overhangPoints[1].z },
-    ],
+    ]),
     bottomOutline: bottomPoints,
     topChordRuns: [{ id: 'main', side: 'main', points: topPoints }],
   };
@@ -485,46 +539,365 @@ function buildDomedProfile(metrics) {
   });
 }
 
+// --- Member geometry (RT-3) -----------------------------------------------
+
+function sortedOutline(points = []) {
+  return uniqueOutlinePoints(
+    [...points]
+      .filter((point) => Number.isFinite(point?.x) && Number.isFinite(point?.z))
+      .map((point) => ({ x: point.x, z: point.z }))
+      .sort((a, b) => a.x - b.x),
+  ).filter((point, index, list) => index === 0 || point.x - list[index - 1].x > EPSILON);
+}
+
+function segmentSlope(a, b) {
+  const run = b.x - a.x;
+  return Math.abs(run) > EPSILON ? (b.z - a.z) / run : 0;
+}
+
+/**
+ * The polyline `distance` above an x-monotone polyline, measured square to
+ * each segment: segment i moves up by `distance / cos θ_i`; interior vertices
+ * are the mitre (the intersection of the two moved lines), the two end
+ * vertices stay plumb above their x (a plumb-cut tail).
+ */
+export function offsetTrussOutline(points = [], distance = 0) {
+  const outline = sortedOutline(points);
+  if (outline.length < 2 || Math.abs(distance) <= EPSILON) return outline;
+  const lift = (a, b) => distance * Math.sqrt(1 + segmentSlope(a, b) ** 2);
+  const result = [{ x: outline[0].x, z: outline[0].z + lift(outline[0], outline[1]) }];
+  for (let index = 1; index < outline.length - 1; index += 1) {
+    const previous = outline[index - 1];
+    const point = outline[index];
+    const next = outline[index + 1];
+    const slopeA = segmentSlope(previous, point);
+    const slopeB = segmentSlope(point, next);
+    const liftA = lift(previous, point);
+    const liftB = lift(point, next);
+    if (Math.abs(slopeA - slopeB) <= 1e-9) {
+      result.push({ x: point.x, z: point.z + liftA });
+      continue;
+    }
+    // point.z + slopeA·dx + liftA = point.z + slopeB·dx + liftB
+    const dx = (liftB - liftA) / (slopeA - slopeB);
+    const x = Math.min(next.x, Math.max(previous.x, point.x + dx));
+    const z = x <= point.x ? point.z + slopeA * (x - point.x) + liftA : point.z + slopeB * (x - point.x) + liftB;
+    result.push({ x, z });
+  }
+  const last = outline[outline.length - 1];
+  result.push({ x: last.x, z: last.z + lift(outline[outline.length - 2], last) });
+  return sortedOutline(result);
+}
+
+/** z of an x-monotone outline at x (clamped to the end points). */
+export function sampleTrussOutlineZ(points = [], x = 0) {
+  return sampleOutlineAtX(sortedOutline(points), x).z;
+}
+
+/** Slope angle (radians) of the outline segment that starts at, or contains, x heading +x. */
+function outlineAngleAt(points, x) {
+  const outline = sortedOutline(points);
+  for (let index = 0; index < outline.length - 1; index += 1) {
+    if (x < outline[index + 1].x - EPSILON) return Math.atan(segmentSlope(outline[index], outline[index + 1]));
+  }
+  return outline.length >= 2 ? Math.atan(segmentSlope(outline[outline.length - 2], outline[outline.length - 1])) : 0;
+}
+
+/** Slope angle (radians) of the outline segment that ends at, or contains, x heading −x. */
+function outlineAngleBefore(points, x) {
+  const outline = sortedOutline(points);
+  for (let index = outline.length - 1; index > 0; index -= 1) {
+    if (x > outline[index - 1].x + EPSILON) return Math.atan(segmentSlope(outline[index - 1], outline[index]));
+  }
+  return outline.length >= 2 ? Math.atan(segmentSlope(outline[0], outline[1])) : 0;
+}
+
+function resolveMemberSizes(options = {}) {
+  const memberSizes = normalizeTrussMemberSizes(options.memberSizes);
+  const heel = normalizeTrussHeel(options.heel);
+  return {
+    memberSizes,
+    tc: memberSizes.topChord.depth,
+    bc: memberSizes.bottomChord.depth,
+    wb: memberSizes.web.depth,
+    raisedHeel: heel.raised,
+  };
+}
+
+const TOP_KINDS = new Set(['top_chord', 'ridge', 'high_point', 'overhang']);
+
+/**
+ * Line-space profile → profile with real members (see the header comment).
+ * Webs that would lie flat on the bearing line (a zero-rise hip slice) are
+ * dropped: there is no depth between the chords for them.
+ */
+function applyMemberGeometry(lineProfile, metrics, sizes) {
+  const { tc, bc, raisedHeel } = sizes;
+  const lineOutline = sortedOutline(lineProfile.roofOutline || []);
+  const undersideOutline = lineOutline.map((point) => ({ x: point.x, z: point.z + bc + raisedHeel }));
+  const centreOutline = offsetTrussOutline(undersideOutline, tc / 2);
+  const topFace = offsetTrussOutline(undersideOutline, tc);
+  const lineNodes = new Map((lineProfile.nodes || []).map((node) => [node.id, node]));
+
+  const nodes = (lineProfile.nodes || []).map((node) => ({
+    ...node,
+    z: TOP_KINDS.has(node.kind) ? sampleTrussOutlineZ(centreOutline, node.x) : node.z + bc / 2,
+  }));
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+
+  const members = (lineProfile.members || [])
+    .filter((member) => {
+      if (member.memberType !== 'web' || raisedHeel > EPSILON) return true;
+      const start = lineNodes.get(member.startNodeId);
+      const end = lineNodes.get(member.endNodeId);
+      if (!start || !end) return false;
+      const topNode = TOP_KINDS.has(start.kind) ? start : TOP_KINDS.has(end.kind) ? end : null;
+      const bottomNode = topNode === start ? end : start;
+      if (!topNode || TOP_KINDS.has(bottomNode.kind)) return true;
+      // A web whose top end sits ON the bottom line has no truss depth to span.
+      return topNode.z - bottomNode.z > EPSILON;
+    })
+    .map((member) => ({ ...member }));
+
+  if (raisedHeel > EPSILON) {
+    [0, metrics.span].forEach((x, index) => {
+      const top = nodes.find(
+        (node) => node.kind !== 'overhang' && TOP_KINDS.has(node.kind) && Math.abs(node.x - x) <= 1,
+      );
+      const bottom = nodes.find((node) => node.kind === 'bottom_chord' && Math.abs(node.x - x) <= 1);
+      if (!top || !bottom) return;
+      members.push({
+        ...createTrussMember(bottom.id, top.id, { id: `heel_stud_${index}`, memberType: 'web' }),
+        role: 'heel_stud',
+      });
+    });
+  }
+
+  for (const member of members) {
+    const start = nodeMap.get(member.startNodeId);
+    const end = nodeMap.get(member.endNodeId);
+    member.length = start && end ? distance2d(start, end) : 0;
+  }
+
+  const topChordRuns = (lineProfile.topChordRuns || []).map((run) => ({
+    ...run,
+    points: (run.points || []).map((point) => ({
+      ...point,
+      x: point.x,
+      z: sampleTrussOutlineZ(centreOutline, point.x),
+    })),
+    ...(run.measurementCurve
+      ? { measurementCurve: { ...run.measurementCurve, zOffset: bc + raisedHeel + tc / 2 } }
+      : {}),
+  }));
+
+  const run = getTrussRun(metrics.span, metrics.family);
+  const pitchDegrees = metrics.family === 'flat' ? 0 : (Math.atan(metrics.rise / Math.max(run, 1)) * 180) / Math.PI;
+
+  return {
+    nodes,
+    members,
+    roofOutline: topFace,
+    undersideOutline,
+    centreOutline,
+    lineOutline,
+    bottomOutline: (lineProfile.bottomOutline || []).map((point) => ({ ...point })),
+    topChordRuns,
+    derivedMetrics: {
+      memberSizes: sizes.memberSizes,
+      topChordDepth: tc,
+      bottomChordDepth: bc,
+      webDepth: sizes.wb,
+      raisedHeel,
+      heelAngle: outlineAngleAt(undersideOutline, 0),
+      endHeelAngle: Math.abs(outlineAngleBefore(undersideOutline, metrics.span)),
+      heelHeight: sampleTrussOutlineZ(topFace, 0),
+      heelHeightEnd: sampleTrussOutlineZ(topFace, metrics.span),
+      overallHeight: Math.max(...topFace.map((point) => point.z)),
+      outToOut: metrics.span + metrics.overhangStart + metrics.overhangEnd,
+      pitchDegrees,
+    },
+  };
+}
+
+// --- Named web patterns (RT-3, §7.3) -----------------------------------------
+
+function scissorBottomLine(metrics, ratio) {
+  return [
+    { x: 0, z: 0 },
+    { x: metrics.span / 2, z: Math.max(0, metrics.rise * ratio) },
+    { x: metrics.span, z: 0 },
+  ];
+}
+
+/**
+ * Rebuild a base line profile's nodes and members from a named web pattern.
+ * The top line (kinks, tails) and the top-chord runs come from `base`, so a
+ * gable end frame keeps exactly its truss's outline and purlin seats.
+ */
+function buildPatternLineProfile(base, metrics, shape, patternKey, options = {}) {
+  const built = WEB_PATTERNS[patternKey].build(metrics);
+  const span = metrics.span;
+  const topLine = sortedOutline(base.roofOutline || []);
+  const structuralTop = topLine.filter((point) => point.x >= -EPSILON && point.x <= span + EPSILON);
+  const bottomLine =
+    shape === 'scissor'
+      ? scissorBottomLine(metrics, options.scissorBottomPitchRatio ?? 0.5)
+      : [
+          { x: 0, z: 0 },
+          { x: span, z: 0 },
+        ];
+  const maxTop = Math.max(...structuralTop.map((point) => point.z));
+
+  const topKind = (x, z) => {
+    if (metrics.family === 'gable' && maxTop > EPSILON && z >= maxTop - EPSILON) return 'ridge';
+    if (shape === 'shed' && Math.abs(x - span) <= EPSILON) return 'high_point';
+    return 'top_chord';
+  };
+
+  const patternTopXs = [0, ...(built.topFractions || []).map((f) => f * span), span];
+  const patternBottomXs = [0, ...(built.bottomFractions || []).map((f) => f * span), span];
+  // Only real kinks (a change of slope) become extra chord points.
+  const topKinkXs = structuralTop
+    .slice(1, -1)
+    .filter(
+      (point, index) =>
+        Math.abs(segmentSlope(structuralTop[index], point) - segmentSlope(point, structuralTop[index + 2])) > 1e-9,
+    )
+    .map((point) => point.x);
+  const bottomKinkXs = bottomLine.slice(1, -1).map((point) => point.x);
+
+  const topNodes = patternTopXs.map((x, index) => {
+    const z = sampleOutlineAtX(topLine, x).z;
+    return createTrussNode(x, z, { id: `top_${index}`, kind: topKind(x, z) });
+  });
+  topKinkXs.forEach((x, index) => {
+    if (topNodes.some((node) => Math.abs(node.x - x) <= 1)) return;
+    const z = sampleOutlineAtX(topLine, x).z;
+    topNodes.push(createTrussNode(x, z, { id: `top_k${index}`, kind: topKind(x, z) }));
+  });
+  const bottomNodes = patternBottomXs.map((x, index) =>
+    createTrussNode(x, sampleOutlineAtX(bottomLine, x).z, { id: `bottom_${index}`, kind: 'bottom_chord' }),
+  );
+  bottomKinkXs.forEach((x, index) => {
+    if (bottomNodes.some((node) => Math.abs(node.x - x) <= 1)) return;
+    bottomNodes.push(
+      createTrussNode(x, sampleOutlineAtX(bottomLine, x).z, { id: `bottom_k${index}`, kind: 'bottom_chord' }),
+    );
+  });
+  const overhangNodes = (base.nodes || [])
+    .filter((node) => node.kind === 'overhang')
+    .map((node) => createTrussNode(node.x, node.z, { id: node.id, kind: 'overhang' }));
+
+  const sortedTop = [...topNodes].sort((a, b) => a.x - b.x);
+  const sortedBottom = [...bottomNodes].sort((a, b) => a.x - b.x);
+  const startTail = overhangNodes.find((node) => node.x < -EPSILON);
+  const endTail = overhangNodes.find((node) => node.x > span + EPSILON);
+  const members = [];
+  const seen = new Set();
+  const push = (startId, endId, memberType) => {
+    if (!startId || !endId || startId === endId) return;
+    const key = [startId, endId].sort().join('|');
+    if (seen.has(key)) return;
+    seen.add(key);
+    addMember(members, startId, endId, memberType, members.length);
+  };
+
+  if (startTail) push(startTail.id, sortedTop[0].id, 'topChord');
+  for (let index = 0; index < sortedTop.length - 1; index += 1) {
+    push(sortedTop[index].id, sortedTop[index + 1].id, 'topChord');
+  }
+  if (endTail) push(sortedTop[sortedTop.length - 1].id, endTail.id, 'topChord');
+  for (let index = 0; index < sortedBottom.length - 1; index += 1) {
+    push(sortedBottom[index].id, sortedBottom[index + 1].id, 'bottomChord');
+  }
+
+  const resolveRef = (ref) => {
+    const parsed = parseWebNodeRef(ref);
+    if (!parsed) return null;
+    return parsed.chord === 'top' ? topNodes[parsed.index] : bottomNodes[parsed.index];
+  };
+  for (const [refA, refB] of built.webs || []) {
+    const a = resolveRef(refA);
+    const b = resolveRef(refB);
+    if (!a || !b || distance2d(a, b) <= EPSILON) continue;
+    push(a.id, b.id, 'web');
+  }
+
+  return {
+    ...base,
+    nodes: [...overhangNodes, ...topNodes, ...bottomNodes],
+    members,
+    bottomOutline: sortedBottom.map((node) => ({ x: node.x, z: node.z, kind: 'bottom_chord' })),
+  };
+}
+
+function buildBaseLineProfile(metrics, shape, options) {
+  switch (shape) {
+    case 'flat':
+      return buildFlatProfile(metrics);
+    case 'hip':
+      return Number.isFinite(options?.layoutOffset) && Number.isFinite(options?.supportLength)
+        ? buildHipSliceProfile(metrics, options)
+        : buildHipProfile(metrics);
+    case 'box_gable':
+      return buildBoxGableProfile(metrics);
+    case 'pyramid_hipped':
+      return buildPyramidHippedProfile(metrics);
+    case 'domed':
+      return buildDomedProfile(metrics);
+    case 'dropped_eaves':
+      return buildDroppedEavesProfile(metrics);
+    case 'shed':
+      return buildShedProfile(metrics);
+    case 'scissor':
+    case 'gable':
+    default:
+      return buildGableProfile(metrics);
+  }
+}
+
+/**
+ * A truss profile with real members.
+ *
+ * `options`: `{memberSizes, heel}` from the truss SYSTEM
+ * (`getTrussProfileOptions(trussSystem)`; defaults = AU 90 × 35, standard
+ * heel), `{layoutOffset, supportLength}` for a hip slice, and `webPatternKey`
+ * to force a pattern (the gable end frame passes 'gable_studs').
+ */
 export function buildTrussProfile(instance, catalog, options = {}) {
   const trussType = resolveTrussType(instance?.trussTypeId, catalog);
   const metrics = resolveTrussMetrics(instance, trussType);
   const shape = metrics.shape || trussType.shape || metrics.family;
+  const sizes = resolveMemberSizes(options || {});
 
-  let profile;
-  switch (shape) {
-    case 'flat':
-      profile = buildFlatProfile(metrics);
-      break;
-    case 'hip':
-      profile =
-        Number.isFinite(options?.layoutOffset) && Number.isFinite(options?.supportLength)
-          ? buildHipSliceProfile(metrics, options)
-          : buildHipProfile(metrics);
-      break;
-    case 'box_gable':
-      profile = buildBoxGableProfile(metrics);
-      break;
-    case 'pyramid_hipped':
-      profile = buildPyramidHippedProfile(metrics);
-      break;
-    case 'domed':
-      profile = buildDomedProfile(metrics);
-      break;
-    case 'dropped_eaves':
-      profile = buildDroppedEavesProfile(metrics);
-      break;
-    case 'shed':
-      profile = buildShedProfile(metrics);
-      break;
-    case 'gable':
-    default:
-      profile = buildGableProfile(metrics);
-      break;
-  }
+  const base = buildBaseLineProfile(metrics, shape, options);
+  const webPatternKey =
+    shape === 'hip'
+      ? null
+      : resolveWebPatternKey(shape, instance?.webPatternKey, trussType.webPattern?.key, options?.webPatternKey);
+  const ratio = Number(instance?.scissorBottomPitchRatio);
+  const lineProfile = webPatternKey
+    ? buildPatternLineProfile(base, metrics, shape, webPatternKey, {
+        scissorBottomPitchRatio: Number.isFinite(ratio) ? ratio : 0.5,
+      })
+    : base;
+  const { derivedMetrics, ...profile } = applyMemberGeometry(lineProfile, metrics, sizes);
 
   return {
     trussType,
-    metrics,
+    metrics: { ...metrics, ...derivedMetrics },
+    webPatternKey,
     ...profile,
   };
+}
+
+/**
+ * The roof-support line of a profile: the top-chord top face raised by the
+ * purlins (`purlinDepth`, square to the slope), tails included. An attached
+ * roof's underside follows it (spec §7.2).
+ */
+export function buildTrussRoofSupportOutline(profile, purlinDepth = 0) {
+  const tc = Number(profile?.metrics?.topChordDepth) || 0;
+  return offsetTrussOutline(profile?.undersideOutline || profile?.roofOutline || [], tc + Math.max(0, purlinDepth));
 }

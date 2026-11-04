@@ -315,3 +315,82 @@ describe('board overhang in the bill', () => {
     expect(setback.get('plywood_board')).toMatchObject({ inputs: { openingsDeducted: true } });
   });
 });
+
+describe('roof quantities', () => {
+  async function projectWithRoof(roofType) {
+    const { createRoofSystem } = await import('./roofModels');
+    const project = createProject('Roofed');
+    project.roofSystem = createRoofSystem('Roof', {
+      id: 'roof_1',
+      roofType,
+      baseElevation: 3000,
+      boundaryPolygon: [
+        { x: 0, y: 0 },
+        { x: 10000, y: 0 },
+        { x: 10000, y: 8000 },
+        { x: 0, y: 8000 },
+      ],
+      pitch: { slope: 25, overhang: 300, direction: { x: 0, y: 1 } },
+    });
+    return project;
+  }
+
+  const itemById = (takeoff, id) => takeoff.items.find((entry) => entry.id === id);
+
+  it('measures a preset gable roof from the roof schedule instead of reporting nothing', async () => {
+    // Preset roofs store no planes, so the old plane sum said 0 m² here.
+    const takeoff = deriveQuantityTakeoff(await projectWithRoof('gable'));
+    const roofing = itemById(takeoff, 'roofing');
+    // 10.6 × 8.6 m outline at 25 %: the true area is the plan area × √(1 + 0.25²).
+    expect(roofing.quantity).toBeCloseTo(10.6 * 8.6 * Math.sqrt(1 + 0.25 * 0.25), 2);
+    expect(roofing.inputs.source).toBe('roof_schedule_net_surface_area');
+  });
+
+  it('lists the edge kit under the roof category', async () => {
+    const takeoff = deriveQuantityTakeoff(await projectWithRoof('gable'));
+    expect(itemById(takeoff, 'roof_fascia')).toMatchObject({ category: 'roof', unit: 'lm', rateKey: 'roofFascia' });
+    expect(itemById(takeoff, 'roof_fascia').quantity).toBeCloseTo(2 * 10.6, 3);
+    expect(itemById(takeoff, 'roof_gutter').quantity).toBeCloseTo(2 * 10.6, 3);
+    expect(itemById(takeoff, 'roof_barge').quantity).toBeGreaterThan(4 * 4.3);
+    expect(itemById(takeoff, 'roof_downpipes')).toMatchObject({ quantity: 2, unit: 'ea' });
+    expect(itemById(takeoff, 'roof_ridge_cap').quantity).toBeCloseTo(10.6, 3);
+    expect(itemById(takeoff, 'roof_soffit').quantity).toBeCloseTo(2 * 10.6 * 0.3, 3);
+  });
+
+  it('bills the gable-end infill of every truss system, vents deducted', async () => {
+    const { createTrussSystem } = await import('./trussModels');
+    const project = createProject('Gable ends');
+    const instance = {
+      trussTypeId: 'truss_type_gable',
+      span: 7200,
+      rise: 1800,
+      spacing: 900,
+      count: 5,
+      startPoint: { x: 0, y: 0 },
+      endPoint: { x: 3600, y: 0 },
+    };
+    project.trussSystems = [
+      createTrussSystem('A', { id: 'ts_a', floorId: project.floors[0].id, trussInstances: [instance] }),
+      createTrussSystem('B', {
+        id: 'ts_b',
+        floorId: project.floors[0].id,
+        endClosures: { start: { vent: { enabled: true, width: 600, height: 300 } }, end: { mode: 'open' } },
+        trussInstances: [instance],
+      }),
+    ];
+    const infill = itemById(deriveQuantityTakeoff(project), 'roof_gable_infill');
+    expect(infill).toMatchObject({ category: 'roof', unit: 'm²', rateKey: 'gableInfill' });
+    // Two gables, one more less a 0.18 m² vent, one open. RT-3: each gable is
+    // the 6.48 m² triangle standing on a heel strip bc + tc / cos θ = 190.62
+    // tall (90 × 35 chords at θ = atan 0.5): 7.2 × 0.19062 + 6.48 = 7.8525 m².
+    const gable = 7.2 * (0.09 + 0.09 * Math.hypot(1, 0.5)) + 6.48;
+    expect(infill.quantity).toBeCloseTo(3 * gable - 0.18, 4);
+    expect(infill.inputs.source).toBe('truss_end_closures');
+  });
+
+  it('gives a flat roof its slab area and no trims', async () => {
+    const takeoff = deriveQuantityTakeoff(await projectWithRoof('flat'));
+    expect(itemById(takeoff, 'roofing').quantity).toBeCloseTo(80, 3);
+    expect(itemById(takeoff, 'roof_fascia')).toBeUndefined();
+  });
+});

@@ -219,4 +219,129 @@ export function Status({ children, tone = 'info' }) {
   return <div className={tone === 'warning' ? styles.statusWarning : styles.status}>{children}</div>;
 }
 
+const HEX_COLOUR = /^#?[0-9a-fA-F]{6}$/;
+
+function normalizeHex(value) {
+  const trimmed = String(value || '').trim();
+  if (!HEX_COLOUR.test(trimmed)) return null;
+  return `#${trimmed.replace('#', '').toUpperCase()}`;
+}
+
+/**
+ * A colour: the system picker and the hex beside it (the pair RoomProperties
+ * introduced), plus a swatch strip of named catalogue colours with a toggle
+ * between catalogues.
+ *
+ * `value` is `{hex, name, catalogue, solarAbsorptance}`. Picking a swatch hands
+ * back the swatch whole — its name, catalogue and solar absorptance; picking
+ * in the system picker or typing a hex is a custom colour named by its hex.
+ * `catalogues` is `{key: {label, colours: [{name, hex, sa}]}}`.
+ *
+ * The hex text keeps its own draft so a half-typed value stays on screen; it
+ * commits the moment it is a whole six-digit hex, and reverts on blur if it
+ * never became one.
+ */
+export function ColourField({ label, value, onChange, catalogues = null, id }) {
+  const hex = normalizeHex(value?.hex) || '#000000';
+  const catalogueKeys = Object.keys(catalogues || {});
+  const [draft, setDraft] = useState(hex);
+  const [lastHex, setLastHex] = useState(hex);
+  if (hex !== lastHex) {
+    setLastHex(hex);
+    setDraft(hex);
+  }
+  const [activeCatalogue, setActiveCatalogue] = useState(
+    catalogueKeys.includes(value?.catalogue) ? value.catalogue : catalogueKeys[0] || null,
+  );
+
+  const commitCustom = (nextHex) => {
+    const normalized = normalizeHex(nextHex);
+    if (!normalized) return false;
+    if (normalized !== hex || value?.catalogue !== 'custom') {
+      onChange({ hex: normalized, name: normalized, catalogue: 'custom', solarAbsorptance: null });
+    }
+    return true;
+  };
+
+  const colours = activeCatalogue ? catalogues[activeCatalogue]?.colours || [] : [];
+
+  return (
+    <div data-colour-field={id || label}>
+      {/* A div, not Field's <label>: a label holding the picker would open the
+          system colour dialog on any click along the row. */}
+      <div className={styles.field}>
+        <span className={styles.fieldLabel}>{label}</span>
+        <span className={styles.colourControls}>
+          <input
+            type="color"
+            className={styles.colourPicker}
+            value={hex.toLowerCase()}
+            onChange={(event) => commitCustom(event.target.value)}
+            aria-label={`${label} picker`}
+          />
+          <input
+            type="text"
+            className={styles.colourHex}
+            value={draft}
+            spellCheck={false}
+            aria-label={`${label} hex`}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              commitCustom(event.target.value);
+            }}
+            onBlur={() => setDraft(hex)}
+          />
+          <span className={styles.colourName} title={value?.name || hex}>
+            {value?.catalogue === 'custom' ? 'Custom' : value?.name || ''}
+          </span>
+        </span>
+      </div>
+      {catalogueKeys.length ? (
+        <div className={styles.swatchBlock}>
+          {catalogueKeys.length > 1 ? (
+            <div className={styles.swatchToggle} role="group" aria-label={`${label} catalogue`}>
+              {catalogueKeys.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={key === activeCatalogue ? styles.swatchToggleButtonActive : styles.swatchToggleButton}
+                  aria-pressed={key === activeCatalogue}
+                  onClick={() => setActiveCatalogue(key)}
+                >
+                  {catalogues[key].label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <div className={styles.swatchStrip}>
+            {colours.map((colour) => {
+              const selected = value?.catalogue === activeCatalogue && value?.name === colour.name;
+              return (
+                <button
+                  key={colour.name}
+                  type="button"
+                  className={selected ? styles.swatchActive : styles.swatch}
+                  style={{ background: colour.hex }}
+                  title={`${colour.name} ${colour.hex}`}
+                  aria-label={colour.name}
+                  aria-pressed={selected}
+                  data-swatch={colour.name}
+                  onClick={() =>
+                    onChange({
+                      hex: colour.hex,
+                      name: colour.name,
+                      catalogue: activeCatalogue,
+                      solarAbsorptance: Number.isFinite(colour.sa) ? colour.sa : null,
+                    })
+                  }
+                />
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export { styles as panelKitStyles };

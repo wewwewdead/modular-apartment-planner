@@ -1,8 +1,10 @@
 import { memo } from 'react';
 import { getSlabRenderData } from '@/geometry/slabGeometry';
-import { DRAWING_GRAPHICS } from '@/sheets/standards';
+import { DRAWING_GRAPHICS, PRESENTATION_GRAPHICS } from '@/sheets/standards';
+import { isPresentationStyle, usePlanStyle } from './PlanStyleContext';
 
 function SlabRenderer({ slab, selectedId }) {
+  const presentation = isPresentationStyle(usePlanStyle());
   const renderData = getSlabRenderData(slab);
   if (!renderData) return null;
 
@@ -11,8 +13,14 @@ function SlabRenderer({ slab, selectedId }) {
       <polygon
         points={renderData.points}
         fill={DRAWING_GRAPHICS.plan.slabEdge.fill}
-        stroke={DRAWING_GRAPHICS.plan.slabEdge.stroke}
-        strokeWidth={selectedId === slab.id ? 1.1 : DRAWING_GRAPHICS.plan.slabEdge.strokeWidth}
+        stroke={presentation ? PRESENTATION_GRAPHICS.plan.slabEdgeStroke : DRAWING_GRAPHICS.plan.slabEdge.stroke}
+        strokeWidth={
+          selectedId === slab.id
+            ? 1.1
+            : presentation
+              ? PRESENTATION_GRAPHICS.plan.slabEdgeStrokeWidth
+              : DRAWING_GRAPHICS.plan.slabEdge.strokeWidth
+        }
         strokeDasharray={slab.id === selectedId ? '120 60' : undefined}
         vectorEffect="non-scaling-stroke"
       />

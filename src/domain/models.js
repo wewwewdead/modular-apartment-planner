@@ -373,6 +373,9 @@ export function createRoom(name = 'Room', points = [], color = ROOM_COLOR) {
     area,
     useCategory: null,
     spaceType: null,
+    // Presentation floor tint (`roomZones.js`). Null is "Auto": resolved from
+    // the space type, the use category and the name.
+    zone: null,
     unitInstanceId: null,
     spaceRequirementId: null,
   };

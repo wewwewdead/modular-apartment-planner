@@ -1,12 +1,15 @@
 import { memo } from 'react';
 import { getSectionCutRenderData } from '@/geometry/sectionCutGeometry';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
+import { isPresentationStyle, usePlanStyle } from './PlanStyleContext';
 
 function estimateLabelWidth(value = '') {
   return Math.max(300, String(value).length * 96);
 }
 
 function SectionCutRenderer({ sectionCut, selectedId }) {
+  // Same face as the rest of the presentation plan's text.
+  const presentation = isPresentationStyle(usePlanStyle());
   const renderData = getSectionCutRenderData(sectionCut);
   if (!renderData) return null;
 
@@ -84,7 +87,7 @@ function SectionCutRenderer({ sectionCut, selectedId }) {
         fill={stroke}
         fontSize={138}
         fontWeight={600}
-        fontFamily="var(--font-blueprint)"
+        fontFamily={presentation ? 'var(--font-ui)' : 'var(--font-blueprint)'}
         opacity={opacity}
       >
         {renderData.label}

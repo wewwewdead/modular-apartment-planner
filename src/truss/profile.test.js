@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildTrussProfile, resolveTrussMetrics } from './profile';
 import { createTrussInstance } from '@/domain/trussModels';
+import { WEB_PATTERNS } from './webPatterns';
 
 function nodeKindCounts(profile) {
   return profile.nodes.reduce((acc, node) => {
@@ -65,10 +66,11 @@ describe('resolveTrussMetrics', () => {
     expect(metrics.rise).toBeCloseTo(2000, 6);
     expect(metrics.pitch).toBeCloseTo(50, 6);
 
-    // Geometry (ridge height) is driven by the pitch-implied rise.
+    // Geometry (ridge height) is driven by the pitch-implied rise. RT-3: rise
+    // is measured on the top chord's UNDERSIDE line (0 at the heels), so the
+    // ridge of the bare profile line — not the member centre-line — is 2000.
     const profile = buildTrussProfile(instance);
-    const ridge = profile.nodes.find((node) => node.kind === 'ridge');
-    expect(ridge.z).toBeCloseTo(2000, 6);
+    expect(Math.max(...profile.lineOutline.map((point) => point.z))).toBeCloseTo(2000, 6);
   });
 
   it('resolves a legacy inconsistent rise/pitch pair by trusting rise', () => {
@@ -101,62 +103,151 @@ describe('resolveTrussMetrics', () => {
   });
 });
 
-describe('buildTrussProfile - gable', () => {
+describe('buildTrussProfile - gable (RT-3 member geometry, spec §7.7)', () => {
+  // 25 % pitch: rise 1800 over a 7200 run (span 14400), 300 overhangs, the
+  // default AU 90 × 35 chords. θ = atan(0.25) = 14.04°, 90 / cos θ = 92.77.
   const instance = createTrussInstance({
     trussTypeId: 'truss_type_gable',
-    span: 8000,
-    rise: 2000,
+    span: 14400,
+    rise: 1800,
     overhangs: { start: 300, end: 300 },
   });
   const profile = buildTrussProfile(instance);
+  const slopeFace = 90 / Math.cos(Math.atan(0.25));
 
-  it('produces the expected node and member counts', () => {
-    // panelCount 6 -> top chord has 7 points (one is the ridge), bottom chord 7 points,
-    // plus 2 overhang nodes = 16 nodes total.
-    expect(profile.nodes).toHaveLength(16);
-    expect(profile.members).toHaveLength(25);
+  it('derives the heel height = bc + tc / cos θ', () => {
+    expect(profile.metrics.heelHeight).toBeCloseTo(90 + slopeFace, 6);
+    expect(profile.metrics.heelHeight).toBeGreaterThan(182.7);
+    expect(profile.metrics.heelHeight).toBeLessThan(182.9);
+    expect(profile.metrics.pitchDegrees).toBeCloseTo(14.036, 2);
+    expect(profile.metrics.outToOut).toBe(15000);
   });
 
-  it('classifies nodes: exactly one ridge, 2 overhangs, 7 bottom chord', () => {
-    const counts = nodeKindCounts(profile);
-    expect(counts.ridge).toBe(1);
-    expect(counts.overhang).toBe(2);
-    expect(counts.bottom_chord).toBe(7);
-    expect(counts.top_chord).toBe(6);
+  it('continues the slope over the tails: start tail underside = 90 − 300 × 0.25', () => {
+    expect(profile.undersideOutline[0]).toEqual({ x: -300, z: 15 });
+    expect(profile.undersideOutline[profile.undersideOutline.length - 1].z).toBeCloseTo(15, 6);
+    const tail = profile.nodes.find((node) => node.kind === 'overhang' && node.x < 0);
+    // The tail node is on the chord centre-line, half the plumb depth above the underside.
+    expect(tail.z).toBeCloseTo(15 + slopeFace / 2, 6);
+    // The top face (roofOutline) is plumb-cut at the tail tip.
+    expect(profile.roofOutline[0].x).toBeCloseTo(-300, 6);
+    expect(profile.roofOutline[0].z).toBeCloseTo(15 + slopeFace, 6);
   });
 
-  it('has the documented member-type breakdown', () => {
-    const counts = memberTypeCounts(profile);
-    expect(counts.topChord).toBe(8);
-    expect(counts.bottomChord).toBe(6);
-    expect(counts.web).toBe(11);
-  });
-
-  it('places the ridge at mid-span and is left/right symmetric', () => {
+  it('puts the ridge top face at bc + rise + tc / cos θ', () => {
+    expect(profile.metrics.overallHeight).toBeCloseTo(90 + 1800 + slopeFace, 6);
     const ridge = profile.nodes.find((node) => node.kind === 'ridge');
-    expect(ridge.x).toBeCloseTo(4000, 6);
-    expect(ridge.z).toBeCloseTo(2000, 6);
-
-    // The structural roof outline (excluding the flat overhang tails) is symmetric about x=4000.
-    const structural = profile.roofOutline.filter((point) => point.kind);
-    for (const point of structural) {
-      const mirror = structural.find((entry) => Math.abs(entry.x - (8000 - point.x)) < 1e-6);
-      expect(mirror).toBeDefined();
-      expect(mirror.z).toBeCloseTo(point.z, 6);
-    }
+    expect(ridge.x).toBeCloseTo(7200, 6);
+    expect(ridge.z).toBeCloseTo(90 + 1800 + slopeFace / 2, 6);
   });
 
-  it('exposes two top-chord runs (left and right)', () => {
-    expect(profile.topChordRuns).toHaveLength(2);
+  it('sits the bottom chord on the bearing: bottom nodes at bc / 2', () => {
+    const bottom = profile.nodes.filter((node) => node.kind === 'bottom_chord');
+    expect(bottom.length).toBeGreaterThan(0);
+    for (const node of bottom) expect(node.z).toBeCloseTo(45, 6);
+    // The bottom outline is the bearing face itself.
+    for (const point of profile.bottomOutline) expect(point.z).toBeCloseTo(0, 6);
+  });
+
+  it('defaults a gable to Fink: 4 webs on t0.25–b1/3–t0.5–b2/3–t0.75', () => {
+    expect(profile.webPatternKey).toBe('fink');
+    const nodeMap = new Map(profile.nodes.map((node) => [node.id, node]));
+    const webs = profile.members.filter((member) => member.memberType === 'web');
+    expect(webs).toHaveLength(4);
+    const xs = webs.map((member) =>
+      [nodeMap.get(member.startNodeId).x, nodeMap.get(member.endNodeId).x].map((x) => Math.round(x)),
+    );
+    expect(xs).toEqual([
+      [3600, 4800],
+      [4800, 7200],
+      [7200, 9600],
+      [9600, 10800],
+    ]);
+    const counts = memberTypeCounts(profile);
+    expect(counts.topChord).toBe(6);
+    expect(counts.bottomChord).toBe(3);
+    expect(nodeKindCounts(profile)).toEqual({ overhang: 2, top_chord: 4, ridge: 1, bottom_chord: 4 });
+  });
+
+  it('carries member lengths', () => {
+    const bottom = profile.members.filter((member) => member.memberType === 'bottomChord');
+    expect(bottom.reduce((sum, member) => sum + member.length, 0)).toBeCloseTo(14400, 6);
+  });
+
+  it('exposes two top-chord runs (left and right) on the chord centre-line', () => {
     expect(profile.topChordRuns.map((run) => run.side).sort()).toEqual(['left', 'right']);
+    const left = profile.topChordRuns.find((run) => run.side === 'left');
+    expect(left.points[0].z).toBeCloseTo(90 + slopeFace / 2, 6);
+  });
+});
+
+describe('buildTrussProfile - web patterns (§7.3)', () => {
+  const webs = (webPatternKey, extra = {}) =>
+    buildTrussProfile(
+      createTrussInstance({ trussTypeId: 'truss_type_gable', span: 7200, rise: 1800, webPatternKey, ...extra }),
+    ).members.filter((member) => member.memberType === 'web');
+
+  it('counts the webs of each named gable pattern', () => {
+    expect(webs('king_post')).toHaveLength(1);
+    expect(webs('queen_post')).toHaveLength(2);
+    expect(webs('fink')).toHaveLength(4);
+    expect(webs('howe')).toHaveLength(5);
+    expect(webs('fan')).toHaveLength(6);
+    expect(webs('double_fink')).toHaveLength(8);
+    expect(webs('double_howe')).toHaveLength(9);
   });
 
-  it('bottom chord spans exactly from 0 to the span with panelCount even steps', () => {
-    const bottom = profile.nodes.filter((node) => node.kind === 'bottom_chord').sort((a, b) => a.x - b.x);
-    expect(bottom[0].x).toBeCloseTo(0, 6);
-    expect(bottom[bottom.length - 1].x).toBeCloseTo(8000, 6);
-    // All bottom-chord nodes are at z = 0.
-    for (const node of bottom) expect(node.z).toBeCloseTo(0, 6);
+  it('draws gable studs every 600 on a 7200 span: 11 verticals at 600 … 6600', () => {
+    const profile = buildTrussProfile(
+      createTrussInstance({ trussTypeId: 'truss_type_gable', span: 7200, rise: 1800 }),
+      undefined,
+      { webPatternKey: 'gable_studs' },
+    );
+    const nodeMap = new Map(profile.nodes.map((node) => [node.id, node]));
+    const studs = profile.members.filter((member) => member.memberType === 'web');
+    expect(studs).toHaveLength(11);
+    const xs = studs.map((member) => {
+      const a = nodeMap.get(member.startNodeId);
+      const b = nodeMap.get(member.endNodeId);
+      expect(a.x).toBeCloseTo(b.x, 6);
+      return Math.round(a.x);
+    });
+    expect(xs).toEqual([600, 1200, 1800, 2400, 3000, 3600, 4200, 4800, 5400, 6000, 6600]);
+    // The frame keeps the truss outline exactly (same top face as the Fink copy).
+    const fink = buildTrussProfile(createTrussInstance({ trussTypeId: 'truss_type_gable', span: 7200, rise: 1800 }));
+    expect(profile.roofOutline).toEqual(fink.roofOutline);
+  });
+
+  it('ignores a pattern from another family and falls back to the type default', () => {
+    expect(webs('warren')).toHaveLength(4);
+  });
+
+  it('a raised heel of 300 adds two heel studs and lifts the heel', () => {
+    const profile = buildTrussProfile(
+      createTrussInstance({ trussTypeId: 'truss_type_gable', span: 7200, rise: 1800 }),
+      undefined,
+      { heel: { raised: 300 } },
+    );
+    const studs = profile.members.filter((member) => member.role === 'heel_stud');
+    expect(studs).toHaveLength(2);
+    const slopeFace = 90 / Math.cos(Math.atan(0.5));
+    expect(profile.metrics.heelHeight).toBeCloseTo(90 + 300 + slopeFace, 6);
+  });
+
+  it('a scissor truss lifts its bottom chord to rise × ratio at mid-span', () => {
+    const profile = buildTrussProfile(
+      createTrussInstance({ trussTypeId: 'truss_type_scissor', span: 7200, rise: 1800, scissorBottomPitchRatio: 0.5 }),
+    );
+    const mid = profile.nodes.find((node) => node.kind === 'bottom_chord' && Math.abs(node.x - 3600) < 1);
+    expect(mid.z).toBeCloseTo(1800 * 0.5 + 45, 6);
+    expect(profile.webPatternKey).toBe('fink');
+    expect(profile.members.filter((member) => member.memberType === 'web')).toHaveLength(4);
+  });
+
+  it('keeps every pattern listed', () => {
+    expect(Object.keys(WEB_PATTERNS)).toEqual(
+      expect.arrayContaining(['king_post', 'fink', 'howe', 'mono_howe', 'mono_fan', 'warren', 'pratt', 'gable_studs']),
+    );
   });
 });
 
@@ -169,9 +260,16 @@ describe('buildTrussProfile - flat', () => {
     expect(counts.top_chord).toBe(7);
   });
 
-  it('holds the top chord at a constant rise', () => {
+  it('holds the top chord at a constant height: bc + rise + tc / 2 (RT-3: chords now have depth)', () => {
     const top = profile.nodes.filter((node) => node.id.startsWith('top_'));
-    for (const node of top) expect(node.z).toBeCloseTo(900, 6);
+    for (const node of top) expect(node.z).toBeCloseTo(90 + 900 + 45, 6);
+    expect(profile.metrics.overallHeight).toBeCloseTo(90 + 900 + 90, 6);
+  });
+
+  it('draws Warren (the old alternating layout) plus two end posts', () => {
+    expect(profile.webPatternKey).toBe('warren');
+    // 5 interior verticals + 2 end posts + 6 diagonals.
+    expect(profile.members.filter((member) => member.memberType === 'web')).toHaveLength(13);
   });
 });
 
@@ -185,7 +283,47 @@ describe('buildTrussProfile - shed', () => {
     for (let i = 1; i < top.length; i += 1) {
       expect(top[i].z).toBeGreaterThanOrEqual(top[i - 1].z - 1e-6);
     }
-    // High point reaches the full rise.
-    expect(top[top.length - 1].z).toBeCloseTo(1200, 6);
+    // The underside line reaches the full rise above the heel; the high point
+    // (a centre-line node since RT-3) sits half a plumb chord depth above it.
+    const plumb = 90 / Math.cos(Math.atan(0.2));
+    expect(top[top.length - 1].z).toBeCloseTo(90 + 1200 + plumb / 2, 6);
+  });
+
+  it('slopes both tails with the run (the start tail drops below the heel)', () => {
+    const shed = buildTrussProfile(
+      createTrussInstance({
+        trussTypeId: 'truss_type_shed',
+        span: 6000,
+        rise: 1200,
+        overhangs: { start: 500, end: 500 },
+      }),
+    );
+    expect(shed.undersideOutline[0].z).toBeCloseTo(90 - 500 * 0.2, 6);
+    expect(shed.undersideOutline[shed.undersideOutline.length - 1].z).toBeCloseTo(90 + 1200 + 500 * 0.2, 6);
+  });
+
+  it('draws Mono Fan with the high-end post', () => {
+    expect(profile.webPatternKey).toBe('mono_fan');
+    // 3 interior verticals + the high-end post + 4 alternating diagonals.
+    expect(profile.members.filter((member) => member.memberType === 'web')).toHaveLength(8);
+  });
+});
+
+describe('buildTrussProfile - outline shapes', () => {
+  it('keeps the box gable panel layout and slopes its tails', () => {
+    const profile = buildTrussProfile(
+      createTrussInstance({ trussTypeId: 'truss_type_box_gable', span: 8400, rise: 1800 }),
+    );
+    expect(profile.webPatternKey).toBeNull();
+    expect(profile.undersideOutline[0].z).toBeLessThan(90);
+  });
+
+  it('builds a gable end frame on a box gable that keeps its crown', () => {
+    const instance = createTrussInstance({ trussTypeId: 'truss_type_box_gable', span: 8400, rise: 1800 });
+    const frame = buildTrussProfile(instance, undefined, { webPatternKey: 'gable_studs' });
+    const typical = buildTrussProfile(instance);
+    expect(frame.webPatternKey).toBe('gable_studs');
+    expect(frame.roofOutline).toEqual(typical.roofOutline);
+    expect(frame.members.every((member) => member.memberType !== 'web' || member.length > 0)).toBe(true);
   });
 });

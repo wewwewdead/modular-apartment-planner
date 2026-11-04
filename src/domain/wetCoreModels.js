@@ -1,6 +1,6 @@
 import { DESIGN_CONFIDENCE } from './trustModels';
 
-export const WET_FIXTURE_TYPES = Object.freeze(new Set(['kitchenTop', 'toilet', 'lavatory']));
+export const WET_FIXTURE_TYPES = Object.freeze(new Set(['kitchenTop', 'toilet', 'lavatory', 'shower']));
 
 export function createPlumbingShaft(options) {
   return {

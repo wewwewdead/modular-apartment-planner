@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { TOOLS } from '@/editor/tools';
 
@@ -108,5 +108,75 @@ describe('Toolbar electrical device group', () => {
     }
     // The Electrical tool button itself stays — only the device palette moved.
     expect(container.querySelector('[aria-label="Electrical"]')).not.toBeNull();
+  });
+});
+
+describe('Toolbar furniture popover', () => {
+  afterEach(() => {
+    editorState.activeTool = TOOLS.BEAM;
+    editorState.toolState = { beamPlacementMode: 'roof_ring' };
+    editorState.dispatch.mockClear();
+  });
+
+  it('puts every fixture type behind one Furniture button instead of a button each', () => {
+    const container = renderToolbar();
+
+    expect(container.querySelectorAll('[aria-label="Furniture"]')).toHaveLength(1);
+    for (const label of ['Kitchen Top', 'Toilet', 'Lavatory', 'Table', 'TV', 'Sofa', 'Bed']) {
+      expect(container.querySelector(`[aria-label="${label}"]`), label).toBeNull();
+    }
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  it('opens a grid of the nine types and arms the one chosen', () => {
+    const container = renderToolbar();
+    const trigger = container.querySelector('[aria-label="Furniture"]');
+    expect(trigger.getAttribute('aria-haspopup')).toBe('menu');
+
+    act(() => {
+      fireEvent.click(trigger);
+    });
+    const items = [...document.querySelectorAll('[role="menuitemradio"]')];
+    expect(items.map((item) => item.textContent)).toEqual([
+      'Sofa',
+      'Table',
+      'TV',
+      'Bed',
+      'Kitchen Top',
+      'Toilet',
+      'Lavatory',
+      'Shower',
+      'Plant',
+    ]);
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+
+    act(() => {
+      fireEvent.click(items.find((item) => item.textContent === 'Plant'));
+    });
+    expect(editorState.dispatch).toHaveBeenCalledWith({ type: 'SET_TOOL', tool: TOOLS.FIXTURE });
+    expect(editorState.dispatch).toHaveBeenCalledWith({
+      type: 'UPDATE_TOOL_STATE',
+      payload: { fixtureType: 'plant', previewRotation: 0 },
+    });
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  it('shows the armed type as a pressed trigger and a checked item', () => {
+    editorState.activeTool = TOOLS.FIXTURE;
+    editorState.toolState = { fixtureType: 'shower' };
+    const container = renderToolbar();
+    const trigger = container.querySelector('[aria-label="Furniture"]');
+
+    expect(trigger.getAttribute('aria-pressed')).toBe('true');
+    expect(trigger.getAttribute('data-armed-fixture')).toBe('shower');
+    act(() => {
+      fireEvent.click(trigger);
+    });
+    const checked = document.querySelector('[role="menuitemradio"][aria-checked="true"]');
+    expect(checked.textContent).toBe('Shower');
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Escape' });
+    });
+    expect(document.querySelector('[role="menu"]')).toBeNull();
   });
 });

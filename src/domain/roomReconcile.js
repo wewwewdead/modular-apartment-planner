@@ -1,5 +1,6 @@
 import { ENDPOINT_MERGE_TOLERANCE } from './defaults';
 import { createRoom } from './models';
+import { suggestRoomName } from './roomZones';
 import { detectRooms } from '@/geometry/roomDetection';
 import { intersectionArea } from '@/geometry/polygonBoolean';
 import { pointInPolygon, polygonArea, polygonCentroid } from '@/geometry/polygon';
@@ -19,6 +20,15 @@ import { nearestPointOnSegment, segmentIntersection } from '@/geometry/line';
  */
 
 export const MATCH_OVERLAP_RATIO = 0.4;
+
+/** "Bedroom", then "Bedroom 2", "Bedroom 3" — never two rooms with the same suggested name. */
+function uniqueRoomName(base, rooms) {
+  const taken = new Set(rooms.map((room) => room?.name));
+  if (!taken.has(base)) return base;
+  let index = 2;
+  while (taken.has(`${base} ${index}`)) index += 1;
+  return `${base} ${index}`;
+}
 
 function polygonTouchesSegment(points, segment, tolerance) {
   if (!points || points.length < 3 || !segment) return false;
@@ -115,6 +125,7 @@ export function reconcileFloorRooms(floor, { changedWalls = null, phaseId = null
   });
 
   let newRoomCounter = previousRooms.length;
+  const newNames = [];
   const reconciled = scopedDetected.map((polygon, polygonIndex) => {
     const roomIndex = roomForPolygon.get(polygonIndex);
     if (roomIndex != null) {
@@ -127,7 +138,12 @@ export function reconcileFloorRooms(floor, { changedWalls = null, phaseId = null
       };
     }
     newRoomCounter += 1;
-    const room = createRoom(`Room ${newRoomCounter}`, polygon.points);
+    // Named after what stands in it when that says anything (a bed, a WC, a
+    // stair), numbered otherwise. Only new rooms: a matched room kept its name above.
+    const suggested = suggestRoomName(polygon.points, floor);
+    const name = suggested ? uniqueRoomName(suggested, [...previousRooms, ...newNames]) : `Room ${newRoomCounter}`;
+    newNames.push({ name });
+    const room = createRoom(name, polygon.points);
     room.phaseId = phaseId;
     return room;
   });

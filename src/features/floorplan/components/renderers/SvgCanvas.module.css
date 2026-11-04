@@ -108,11 +108,18 @@
   composes: chipCodeBtn chipBtnActive;
 }
 
+/*
+ * `overflow: visible` because a pan is drawn by translating this element on
+ * the compositor (see canvasGestures.js): the plan beyond the box has to be
+ * painted already for it to slide into view. The container clips instead.
+ */
 .svg {
   width: 100%;
   height: 100%;
   display: block;
   touch-action: none;
+  overflow: visible;
+  transform-origin: 0 0;
 }
 
 .statusBar {
@@ -168,6 +175,11 @@
   z-index: 5;
 }
 
+/* Focused, the floating properties panel covers the pane's right edge. */
+.overlayControlsFocused {
+  right: calc(8px + var(--focus-overlay-right, 0px));
+}
+
 .overlayBtn {
   width: 28px;
   height: 28px;
@@ -204,6 +216,64 @@
   color: var(--color-text-primary);
   box-shadow: var(--shadow-sm, 0 1px 4px rgba(0, 0, 0, 0.16));
   border-color: rgba(0, 0, 0, 0.16);
+}
+
+/* A toggle that is on: the accent ink, so the state reads without hovering. */
+.overlayBtnOn {
+  opacity: 1;
+  background: var(--color-active-glow-subtle);
+  color: var(--color-active-glow);
+  border-color: var(--color-active-glow-border);
+}
+
+.overlayBtnOn:hover {
+  background: rgba(45, 95, 142, 0.15);
+  color: var(--color-active-glow);
+}
+
+/*
+ * Switching plan style swaps whole element sets, so there are no fills to
+ * transition — instead the world fades in over a short, quiet beat. Two
+ * identical animations under two names: changing the class restarts it.
+ */
+.styleFadeA,
+.styleFadeB {
+  animation-duration: 180ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+.styleFadeA {
+  animation-name: planStyleFadeA;
+}
+
+.styleFadeB {
+  animation-name: planStyleFadeB;
+}
+
+@keyframes planStyleFadeA {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes planStyleFadeB {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .styleFadeA,
+  .styleFadeB {
+    animation: none;
+  }
 }
 
 .overlayBtn:active {

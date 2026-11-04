@@ -3,8 +3,46 @@
  * Rendered once inside SvgCanvas before FixtureRenderer.
  */
 import { memo } from 'react';
+import { PRESENTATION_GRAPHICS } from '@/sheets/standards';
+import { useCanvasZoom } from './CanvasZoomContext';
+import { isPresentationStyle, usePlanStyle } from './PlanStyleContext';
+
+// The drafting fixture shadow: world units for a render with no zoom (sheets,
+// exports), screen pixels on the canvas — see `shadowOffsets`.
+const DRAFTING_FIXTURE_SHADOW = { dy: 30, blur: 25, dyPx: 2.5, blurPx: 2.5 };
+
+/**
+ * A fixture's shadow is a couple of screen pixels at any zoom. In world units
+ * it scaled with the zoom, so zoomed in on a sofa the browser blurred a kernel
+ * a hundred pixels wide for every fixture on every frame.
+ */
+function shadowOffsets(shadow, zoom) {
+  if (!zoom) return { dy: shadow.dy, blur: shadow.blur };
+  return { dy: shadow.dyPx / zoom, blur: shadow.blurPx / zoom };
+}
+
+/**
+ * The presentation plan's furniture is flat-filled — its depth is in the
+ * shapes and in this one shared shadow, a touch deeper than the drafting one so
+ * a bed reads as standing on the floor.
+ */
+function PresentationFixtureDefs({ zoom }) {
+  const { color } = PRESENTATION_GRAPHICS.plan.fixtureShadow;
+  const { dy, blur } = shadowOffsets(PRESENTATION_GRAPHICS.plan.fixtureShadow, zoom);
+  return (
+    <defs>
+      <filter id="fixture-shadow" x="-25%" y="-25%" width="150%" height="160%" colorInterpolationFilters="sRGB">
+        <feDropShadow dx="0" dy={dy} stdDeviation={blur} floodColor={color} />
+      </filter>
+    </defs>
+  );
+}
 
 function FixtureDefs() {
+  const presentation = isPresentationStyle(usePlanStyle());
+  const zoom = useCanvasZoom();
+  const draftingShadow = shadowOffsets(DRAFTING_FIXTURE_SHADOW, zoom);
+  if (presentation) return <PresentationFixtureDefs zoom={zoom} />;
   return (
     <defs>
       {/* Fixture gradients */}
@@ -45,7 +83,7 @@ function FixtureDefs() {
 
       {/* Drop shadow filter */}
       <filter id="fixture-shadow" x="-10%" y="-10%" width="130%" height="130%">
-        <feDropShadow dx="0" dy="30" stdDeviation="25" floodColor="rgba(0,0,0,0.10)" />
+        <feDropShadow dx="0" dy={draftingShadow.dy} stdDeviation={draftingShadow.blur} floodColor="rgba(0,0,0,0.10)" />
       </filter>
     </defs>
   );

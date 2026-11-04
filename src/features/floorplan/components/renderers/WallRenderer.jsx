@@ -2,8 +2,16 @@ import { memo } from 'react';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { wallDirection, wallLength, wallOutline } from '@/geometry/wallGeometry';
 import { add, perpendicular, scale } from '@/geometry/point';
-import { DRAWING_GRAPHICS } from '@/sheets/standards';
+import { DRAWING_GRAPHICS, PRESENTATION_GRAPHICS } from '@/sheets/standards';
 import { wallOutboardOffset } from '@/domain/wallFit';
+import {
+  WALL_TIERS,
+  cachedWallTierRegions,
+  hasCachedWallTierRegions,
+  regionsToPath,
+  wallTier,
+} from '@/geometry/planPresentationGeometry';
+import { isPresentationStyle, usePlanDragActive, usePlanStyle } from './PlanStyleContext';
 import {
   WALL_BOARD_MATERIALS,
   deriveWallAssemblyLayers,
@@ -27,6 +35,8 @@ const BOARD_COLORS = {
  * this is drawn for every wall on every frame, and the corner detail is the
  * exception rather than the rule.
  */
+const EMPTY_COLUMNS = Object.freeze([]);
+
 function shiftedOutline(wall, offset, thickness, overhangStart = 0, overhangEnd = 0) {
   const direction = wallDirection(wall);
   const normal = perpendicular(direction);
@@ -40,7 +50,113 @@ function shiftedOutline(wall, offset, thickness, overhangStart = 0, overhangEnd 
   });
 }
 
+/**
+ * The drawn axis of a wall built off it, as a hidden-weight dashed line. Kept in
+ * both styles: it is meaning, not decoration.
+ */
+function DrawnAxisLine({ wall, renderData }) {
+  return (
+    <line
+      data-type="wall-drawn-axis"
+      data-wall-id={wall.id}
+      x1={renderData.wall.start.x}
+      y1={renderData.wall.start.y}
+      x2={renderData.wall.end.x}
+      y2={renderData.wall.end.y}
+      stroke={DRAWING_GRAPHICS.plan.hiddenStroke}
+      strokeWidth={DRAWING_GRAPHICS.plan.hiddenStrokeWidth}
+      strokeDasharray={DRAWING_GRAPHICS.plan.hiddenDash}
+      vectorEffect="non-scaling-stroke"
+      pointerEvents="none"
+    />
+  );
+}
+
+function tierPaint(tier) {
+  const g = PRESENTATION_GRAPHICS.plan;
+  return tier === WALL_TIERS.SOLID
+    ? { fill: g.wallSolidFill, stroke: g.wallSolidStroke, strokeWidth: g.wallSolidStrokeWidth }
+    : { fill: g.wallPartitionFill, stroke: g.wallPartitionStroke, strokeWidth: g.wallPartitionStrokeWidth };
+}
+
+/**
+ * Presentation walls: each tier drawn once, as one unioned outline, so corners
+ * and tees have no seams — partitions first, solid last so structure wins where
+ * they meet. The per-wall polygons stay in the markup, invisible, carrying the
+ * `data-id` / `data-type` hooks scripts and tests read; hit-testing is
+ * geometric and never needed them painted.
+ *
+ * While a drag is rewriting the walls the union is not recomputed per frame:
+ * if the arrays on screen are not the ones last unioned, every wall is drawn
+ * on its own with the tier colours, which costs exactly what drafting costs.
+ * The next settled render puts the union back.
+ */
+function PresentationWalls({ walls, columns }) {
+  const dragging = usePlanDragActive();
+  const unionReady = !dragging || hasCachedWallTierRegions(walls, columns);
+  const regions = unionReady ? cachedWallTierRegions(walls, columns) : null;
+
+  return (
+    <g className="walls" data-wall-render={regions ? 'union' : 'per-wall'}>
+      {walls.map((wall) => {
+        const renderData = getWallRenderData(wall, columns || []);
+        const points = renderData.outline.map((p) => `${p.x},${p.y}`).join(' ');
+        const assembly = resolveWallAssembly(wall);
+        const tier = wallTier(wall);
+        const paint = regions ? null : tierPaint(tier);
+        return (
+          <g key={wall.id} data-wall-system={assembly.system} data-wall-preset={assembly.preset} data-wall-tier={tier}>
+            <polygon
+              data-id={wall.id}
+              data-type="wall"
+              points={points}
+              fill={paint ? paint.fill : 'none'}
+              stroke={paint ? paint.stroke : 'none'}
+              strokeWidth={paint ? paint.strokeWidth : undefined}
+              vectorEffect={paint ? 'non-scaling-stroke' : undefined}
+              pointerEvents="none"
+            />
+          </g>
+        );
+      })}
+      {regions ? (
+        <>
+          <path
+            data-type="wall-union"
+            data-wall-tier={WALL_TIERS.PARTITION}
+            d={regionsToPath(regions.partition)}
+            fillRule="evenodd"
+            strokeLinejoin="miter"
+            {...tierPaint(WALL_TIERS.PARTITION)}
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+          />
+          <path
+            data-type="wall-union"
+            data-wall-tier={WALL_TIERS.SOLID}
+            d={regionsToPath(regions.solid)}
+            fillRule="evenodd"
+            strokeLinejoin="miter"
+            {...tierPaint(WALL_TIERS.SOLID)}
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+          />
+        </>
+      ) : null}
+      {walls.map((wall) => {
+        if (!wallOutboardOffset(wall)) return null;
+        return (
+          <DrawnAxisLine key={`${wall.id}:axis`} wall={wall} renderData={getWallRenderData(wall, columns || [])} />
+        );
+      })}
+    </g>
+  );
+}
+
 function WallRenderer({ walls, columns, doors = [], windows = [] }) {
+  const style = usePlanStyle();
+  if (isPresentationStyle(style)) return <PresentationWalls walls={walls} columns={columns || EMPTY_COLUMNS} />;
+
   return (
     <g className="walls">
       {walls.map((wall) => {

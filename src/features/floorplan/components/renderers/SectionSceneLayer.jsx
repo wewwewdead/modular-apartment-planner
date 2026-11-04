@@ -22,6 +22,20 @@ const SECTION_STYLE_MAP = {
     strokeWidth: DRAWING_GRAPHICS.section.cutStrokeWidth,
     opacity: 1,
   },
+  // Fascia and gutter cut at an eave (the roof edge kit).
+  roofTrim_cut: {
+    fill: DRAWING_GRAPHICS.section.cutFill,
+    stroke: DRAWING_GRAPHICS.section.cutStroke,
+    strokeWidth: DRAWING_GRAPHICS.section.cutStrokeWidth,
+    opacity: 1,
+  },
+  // A gable-end closure cut where the section crosses an end truss (RT-2).
+  gableInfill_cut: {
+    fill: DRAWING_GRAPHICS.section.cutFill,
+    stroke: DRAWING_GRAPHICS.section.cutStroke,
+    strokeWidth: DRAWING_GRAPHICS.section.cutStrokeWidth,
+    opacity: 1,
+  },
   slab_projection: {
     fill: DRAWING_GRAPHICS.section.projectionFill,
     stroke: DRAWING_GRAPHICS.section.projectionStroke,

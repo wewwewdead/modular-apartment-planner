@@ -11,6 +11,10 @@ import { clearProjectPhaseReferences } from '@/domain/phaseAssignments';
 import { sortPhases } from '@/domain/phaseModels';
 import { getRoofAttachmentElevation } from '@/domain/roofModels';
 import { DEFAULT_ZOOM } from '@/domain/defaults';
+import {
+  normalizePlanStyle,
+  readPlanStylePreference,
+} from '@/features/floorplan/components/renderers/PlanStyleContext';
 import { syncWallAttachmentPoints } from '@/geometry/wallColumnGeometry';
 import {
   HISTORY_LIMIT,
@@ -270,6 +274,10 @@ function createInitialEditorState(activeFloorId = null) {
     modelViewport,
     sheetViewport,
     showGrid: true,
+    // Drafting line drawing or rendered presentation plan. A viewing
+    // preference like showGrid, remembered per browser in localStorage
+    // (`floorplan.plan.style`) — never part of the project.
+    planStyle: readPlanStylePreference(),
     snapEnabled: true,
     // Draws the floor below the active one as a muted ghost under the plan, so a
     // cantilever or setback is visible while you draw. A viewing state like
@@ -474,7 +482,11 @@ function reduceProjectState(state, action) {
     }
 
     case 'EXECUTE_BUILDING_COMMAND': {
-      const result = executeBuildingCommand(state.project, action.command);
+      // A drag issues one command per frame; its coordination validation is
+      // deferred to END_DRAG_GESTURE, which validates the settled project once.
+      const result = executeBuildingCommand(state.project, action.command, {
+        deferValidation: Boolean(state.gesture?.active),
+      });
       if (!result.ok) {
         return {
           ...state,
@@ -1629,6 +1641,11 @@ function reduceEditorState(editorState, action) {
 
     case 'TOGGLE_GRID':
       return { ...editorState, showGrid: !editorState.showGrid };
+
+    case 'SET_PLAN_STYLE': {
+      const planStyle = normalizePlanStyle(action.planStyle);
+      return planStyle === editorState.planStyle ? editorState : { ...editorState, planStyle };
+    }
 
     case 'TOGGLE_FLOOR_BELOW_UNDERLAY':
       return { ...editorState, showFloorBelowUnderlay: !editorState.showFloorBelowUnderlay };

@@ -1,6 +1,85 @@
 import { memo } from 'react';
 import { doorOutlineOnWall } from '@/geometry/wallGeometry';
-import { DRAWING_GRAPHICS } from '@/sheets/standards';
+import { DRAWING_GRAPHICS, PRESENTATION_GRAPHICS } from '@/sheets/standards';
+import { isPresentationStyle, usePlanStyle } from './PlanStyleContext';
+
+/*
+ * Presentation doors: a filled leaf of real thickness and a thin SOLID swing
+ * arc, as a rendered plan draws them. The dashed arc is a drafting convention
+ * for "this moves"; on a presentation plan it reads as noise.
+ */
+function PresentationLeaf({ x, y, width, height }) {
+  const g = PRESENTATION_GRAPHICS.plan;
+  return (
+    <rect
+      data-door-leaf=""
+      x={Math.min(x, x + width)}
+      y={Math.min(y, y + height)}
+      width={Math.abs(width)}
+      height={Math.abs(height)}
+      fill={g.doorLeafFill}
+      stroke="none"
+    />
+  );
+}
+
+function PresentationArc({ d }) {
+  const g = PRESENTATION_GRAPHICS.plan;
+  return (
+    <path
+      data-door-swing=""
+      d={d}
+      fill="none"
+      stroke={g.swingStroke}
+      strokeWidth={g.swingStrokeWidth}
+      vectorEffect="non-scaling-stroke"
+    />
+  );
+}
+
+function PresentationSwingDoor({ door, info }) {
+  const flipSign = door.openDirection === 'right' ? -1 : 1;
+  const angleDeg = (info.angle * 180) / Math.PI;
+  const t = PRESENTATION_GRAPHICS.plan.doorLeafThickness;
+  const w = door.width;
+  return (
+    <g transform={`translate(${info.start.x},${info.start.y}) rotate(${angleDeg})`}>
+      {/* Centred on the hinge: the path the leaf's free edge actually sweeps. */}
+      <PresentationArc d={`M ${w} 0 A ${w} ${w} 0 0 ${flipSign > 0 ? 0 : 1} 0 ${flipSign * -w}`} />
+      <PresentationLeaf x={0} y={0} width={t} height={flipSign * -w} />
+    </g>
+  );
+}
+
+function PresentationDoubleDoor({ door, info }) {
+  const flipSign = door.openDirection === 'right' ? -1 : 1;
+  const angleDeg = (info.angle * 180) / Math.PI;
+  const t = PRESENTATION_GRAPHICS.plan.doorLeafThickness;
+  const half = door.width / 2;
+  // Hinged at both jambs, meeting in the middle when closed.
+  return (
+    <g transform={`translate(${info.center.x},${info.center.y}) rotate(${angleDeg})`}>
+      <PresentationArc d={`M 0 0 A ${half} ${half} 0 0 ${flipSign > 0 ? 0 : 1} ${-half} ${flipSign * -half}`} />
+      <PresentationArc d={`M 0 0 A ${half} ${half} 0 0 ${flipSign > 0 ? 1 : 0} ${half} ${flipSign * -half}`} />
+      <PresentationLeaf x={-half} y={0} width={t} height={flipSign * -half} />
+      <PresentationLeaf x={half} y={0} width={-t} height={flipSign * -half} />
+    </g>
+  );
+}
+
+function PresentationSlidingDoor({ door, info }) {
+  const angleDeg = (info.angle * 180) / Math.PI;
+  const t = PRESENTATION_GRAPHICS.plan.doorLeafThickness;
+  const w = door.width;
+  // Two panels on parallel tracks, lapping a little in the middle.
+  const panel = w * 0.5 + Math.min(60, w * 0.05);
+  return (
+    <g transform={`translate(${info.start.x},${info.start.y}) rotate(${angleDeg})`}>
+      <PresentationLeaf x={0} y={-t} width={panel} height={t} />
+      <PresentationLeaf x={w - panel} y={0} width={panel} height={t} />
+    </g>
+  );
+}
 
 function SwingDoor({ door, info }) {
   const flipSign = door.openDirection === 'right' ? -1 : 1;
@@ -117,6 +196,7 @@ function SlidingDoor({ door, info }) {
 }
 
 function DoorRenderer({ doors, walls }) {
+  const presentation = isPresentationStyle(usePlanStyle());
   return (
     <g className="doors">
       {doors.map((door) => {
@@ -134,9 +214,19 @@ function DoorRenderer({ doors, walls }) {
               fill="white"
               stroke="none"
             />
-            {type === 'double' && <DoubleDoor door={door} info={info} />}
-            {type === 'sliding' && <SlidingDoor door={door} info={info} />}
-            {type === 'swing' && <SwingDoor door={door} info={info} />}
+            {presentation ? (
+              <>
+                {type === 'double' && <PresentationDoubleDoor door={door} info={info} />}
+                {type === 'sliding' && <PresentationSlidingDoor door={door} info={info} />}
+                {type === 'swing' && <PresentationSwingDoor door={door} info={info} />}
+              </>
+            ) : (
+              <>
+                {type === 'double' && <DoubleDoor door={door} info={info} />}
+                {type === 'sliding' && <SlidingDoor door={door} info={info} />}
+                {type === 'swing' && <SwingDoor door={door} info={info} />}
+              </>
+            )}
           </g>
         );
       })}

@@ -25,10 +25,14 @@ import StructuralGridOverlay from './StructuralGridOverlay';
 import { deriveConceptualLoadPath } from '@/domain/structuralCoordination';
 import WetCoreOverlay from './WetCoreOverlay';
 
+// The sheet axonometric is a presentation image: the same white-model render
+// the live preview shows, not the flat shaded box. The plans on a sheet stay
+// drafting — that is a PDF exporter constraint, not a choice.
 const SHEET_PREVIEW_OPTIONS = {
   width: 1600,
   height: 1000,
   preset: 'iso_northeast',
+  style: 'realistic',
 };
 const sheetPreviewCache = new Map();
 
@@ -40,6 +44,7 @@ function getSheetPreviewCacheKey(source) {
     SHEET_PREVIEW_OPTIONS.width,
     SHEET_PREVIEW_OPTIONS.height,
     SHEET_PREVIEW_OPTIONS.preset,
+    SHEET_PREVIEW_OPTIONS.style,
   ].join(':');
 }
 
@@ -55,6 +60,7 @@ function renderSheetPreviewImage(source) {
             width: SHEET_PREVIEW_OPTIONS.width,
             height: SHEET_PREVIEW_OPTIONS.height,
             preset: SHEET_PREVIEW_OPTIONS.preset,
+            style: SHEET_PREVIEW_OPTIONS.style,
           });
 
           return imageUrl ? { status: 'ready', imageUrl } : { status: 'empty', imageUrl: null };
@@ -194,6 +200,7 @@ function ThreePreviewViewportContent({ source }) {
 
   return (
     <image
+      data-sheet-preview-style={SHEET_PREVIEW_OPTIONS.style}
       href={previewState.imageUrl}
       x={bounds.minX}
       y={bounds.minY}

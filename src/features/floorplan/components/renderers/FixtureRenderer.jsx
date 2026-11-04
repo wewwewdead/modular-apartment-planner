@@ -1,5 +1,7 @@
 import { memo } from 'react';
 import { fixtureOutline } from '@/geometry/fixtureGeometry';
+import { PresentationFixtureSymbol } from './PresentationFixtureSymbols';
+import { isPresentationStyle, usePlanStyle } from './PlanStyleContext';
 
 // Stroke hierarchy constants
 const PRIMARY = { stroke: '#6B5E4F', strokeWidth: 1.2 };
@@ -368,18 +370,82 @@ function FixtureDetails({ fixture }) {
         </g>
       );
     }
+    case 'shower': {
+      const inset = Math.min(width, depth) * 0.07;
+      return (
+        <g transform={transform}>
+          <rect
+            x={-hw + inset}
+            y={-hd + inset}
+            width={Math.max(1, width - inset * 2)}
+            height={Math.max(1, depth - inset * 2)}
+            rx={Math.min(width, depth) * 0.04}
+            fill="none"
+            {...SECONDARY}
+            {...NSS}
+          />
+          <circle cx={0} cy={0} r={Math.min(width, depth) * 0.05} fill="none" {...PRIMARY} {...NSS} />
+          <line x1={-hw} y1={hd} x2={hw - width * 0.32} y2={hd} {...PRIMARY} {...NSS} fill="none" />
+        </g>
+      );
+    }
+    case 'plant': {
+      const size = Math.min(width, depth);
+      return (
+        <g transform={transform}>
+          <circle cx={0} cy={0} r={size * 0.3} fill="none" {...SECONDARY} {...NSS} />
+          {[0, 60, 120, 180, 240, 300].map((angle) => (
+            <path
+              key={angle}
+              d={`M 0 0 Q ${size * 0.25} ${-size * 0.12} ${size * 0.48} 0 Q ${size * 0.25} ${size * 0.12} 0 0 Z`}
+              transform={`rotate(${angle})`}
+              fill="none"
+              {...SECONDARY}
+              {...NSS}
+            />
+          ))}
+        </g>
+      );
+    }
     default:
       return null;
   }
 }
 
-function FixtureRenderer({ fixtures }) {
+// Flat fills for the two types that have no gradient in the drafting defs, so a
+// sheet or export never carries a dangling paint-server reference.
+const DRAFTING_FLAT_FILLS = {
+  shower: '#EAF3F8',
+  plant: '#E6EFE0',
+};
+
+function PresentationFixtures({ fixtures }) {
   return (
     <g className="fixtures">
       {fixtures.map((fixture) => {
         const outline = fixtureOutline(fixture);
         const points = outline.map((p) => `${p.x},${p.y}`).join(' ');
-        const gradFill = `url(#grad-${fixture.fixtureType})`;
+        return (
+          <g key={fixture.id} filter="url(#fixture-shadow)">
+            {/* The hook scripts and tests read; the symbol below is what shows. */}
+            <polygon data-id={fixture.id} data-type="fixture" points={points} fill="none" stroke="none" />
+            <PresentationFixtureSymbol fixture={fixture} />
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+function FixtureRenderer({ fixtures }) {
+  const presentation = isPresentationStyle(usePlanStyle());
+  if (presentation) return <PresentationFixtures fixtures={fixtures} />;
+  return (
+    <g className="fixtures">
+      {fixtures.map((fixture) => {
+        const outline = fixtureOutline(fixture);
+        const points = outline.map((p) => `${p.x},${p.y}`).join(' ');
+        const gradFill = DRAFTING_FLAT_FILLS[fixture.fixtureType] || `url(#grad-${fixture.fixtureType})`;
         return (
           <g key={fixture.id} filter="url(#fixture-shadow)">
             <polygon

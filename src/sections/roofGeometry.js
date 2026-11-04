@@ -2,6 +2,66 @@ import { subtractPolygons } from '@/geometry/polygonBoolean';
 import { triangulate } from '@/geometry/triangulate';
 import { sectionCutPointAtAlong } from '@/geometry/sectionCutGeometry';
 import { buildSectionPrism, projectSectionSurface, sectionCutIntervals, sectionPlanPoint } from './geometry';
+import { buildRoofEdgeKitLayout } from '@/roof/roofEdgeKit';
+
+function offsetPlan(point, direction, amount) {
+  return { x: point.x + direction.x * amount, y: point.y + direction.y * amount };
+}
+
+/**
+ * Fascia and gutter where the cut crosses an eave: cut rectangles only, in the
+ * `roofTrim` category. Barge boards run along the cut's view on a gable and
+ * are left to the elevation; downpipes and the soffit are not cut.
+ */
+function buildRoofTrimSectionRects(roof, geometry, cut) {
+  const kit = buildRoofEdgeKitLayout(roof, geometry, {});
+  const rects = [];
+  for (const fascia of kit.fascias) {
+    if (Math.abs(fascia.topEnd.y - fascia.topStart.y) > 1) continue;
+    const { run } = fascia;
+    const outline = [
+      run.start,
+      run.end,
+      offsetPlan(run.end, run.inward, fascia.thickness),
+      offsetPlan(run.start, run.inward, fascia.thickness),
+    ];
+    rects.push(
+      ...buildSectionPrism({
+        id: `roof-trim-${fascia.id}`,
+        category: 'roofTrim',
+        sourceId: roof.id,
+        cut,
+        outline,
+        bottom: fascia.topStart.y - fascia.depth,
+        top: fascia.topStart.y,
+      }).filter((element) => element.renderMode === 'cut'),
+    );
+  }
+  for (const gutter of kit.gutters) {
+    const start = { x: gutter.start.x, y: gutter.start.z };
+    const end = { x: gutter.end.x, y: gutter.end.z };
+    const across = { x: -gutter.run.inward.x, y: -gutter.run.inward.y };
+    const half = gutter.width / 2;
+    const outline = [
+      offsetPlan(start, across, -half),
+      offsetPlan(end, across, -half),
+      offsetPlan(end, across, half),
+      offsetPlan(start, across, half),
+    ];
+    rects.push(
+      ...buildSectionPrism({
+        id: `roof-trim-${gutter.id}`,
+        category: 'roofTrim',
+        sourceId: roof.id,
+        cut,
+        outline,
+        bottom: gutter.bottom,
+        top: gutter.top,
+      }).filter((element) => element.renderMode === 'cut'),
+    );
+  }
+  return rects;
+}
 
 export function buildRoofSectionSurfaces(roof, geometry, cut) {
   const holes = (roof.roofOpenings || [])
@@ -81,5 +141,5 @@ export function buildRoofSectionSurfaces(roof, geometry, cut) {
       );
     }
   }
-  return { rectElements: [], polygonElements: [...cuts, ...faces] };
+  return { rectElements: buildRoofTrimSectionRects(roof, geometry, cut), polygonElements: [...cuts, ...faces] };
 }

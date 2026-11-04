@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import styles from './Tooltip.module.css';
 
-export default function Tooltip({ label, shortcut, children }) {
+export default function Tooltip({ label, shortcut, children, suppressed = false }) {
   const wrapperRef = useRef(null);
   const [pos, setPos] = useState(null);
 
@@ -28,6 +28,7 @@ export default function Tooltip({ label, shortcut, children }) {
     <span ref={wrapperRef} className={styles.wrapper} onPointerEnter={handleEnter} onPointerLeave={handleLeave}>
       {children}
       {pos &&
+        !suppressed &&
         createPortal(
           <span
             className={pos.below ? styles.tooltipBelow : styles.tooltipAbove}

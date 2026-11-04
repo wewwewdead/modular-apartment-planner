@@ -1,8 +1,16 @@
 import { memo } from 'react';
 import { getLandingRenderData } from '@/geometry/landingGeometry';
-import { DRAWING_GRAPHICS } from '@/sheets/standards';
+import { DRAWING_GRAPHICS, PRESENTATION_GRAPHICS } from '@/sheets/standards';
+import { isPresentationStyle, usePlanStyle } from './PlanStyleContext';
 
 function LandingRenderer({ landings }) {
+  // A landing is part of the stair: the same light grey in presentation.
+  const presentation = isPresentationStyle(usePlanStyle());
+  const fill = presentation ? PRESENTATION_GRAPHICS.plan.stairFill : DRAWING_GRAPHICS.plan.objectFill;
+  const stroke = presentation ? PRESENTATION_GRAPHICS.plan.stairStroke : DRAWING_GRAPHICS.plan.objectStroke;
+  const strokeWidth = presentation
+    ? PRESENTATION_GRAPHICS.plan.treadStrokeWidth
+    : DRAWING_GRAPHICS.plan.objectStrokeWidth;
   return (
     <g className="landings">
       {(landings || []).map((landing) => {
@@ -17,9 +25,9 @@ function LandingRenderer({ landings }) {
             data-id={landing.id}
             data-type="landing"
             points={points}
-            fill={DRAWING_GRAPHICS.plan.objectFill}
-            stroke={DRAWING_GRAPHICS.plan.objectStroke}
-            strokeWidth={DRAWING_GRAPHICS.plan.objectStrokeWidth}
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={strokeWidth}
             vectorEffect="non-scaling-stroke"
           />
         );

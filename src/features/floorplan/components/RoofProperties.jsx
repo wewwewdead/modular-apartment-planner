@@ -23,8 +23,30 @@ import { buildRoofScheduleSummary } from '@/roof/roofSchedule';
 import { isRoofAccessOpening, isSkylightRoofOpening, normalizeRoofOpeningType } from '@/roof/openings';
 import { polygonArea } from '@/geometry/polygon';
 import { resolveTrussSystemRoofAttachmentType } from '@/truss/roofAttachment';
+import { buildTrussProfile } from '@/truss/profile';
+import { getTrussProfileOptions } from '@/domain/trussModels';
 import { wallLength } from '@/geometry/wallGeometry';
 import RoofScheduleSummary from './RoofScheduleSummary';
+import RoofCoveringSections from './properties/RoofCoveringSections';
+import { Readout, Status, panelKitStyles } from './properties/PanelKit';
+import { formatSlopeReadout } from '@/domain/roofCoveringCatalog';
+
+/**
+ * The attached trusses' pitch (%, the underside run slope) from the system's
+ * first instance — derived on every read, never stored (spec §8.3).
+ */
+function resolveAttachedTrussPitch(trussSystem) {
+  const firstInstance = trussSystem?.trussInstances?.[0] || null;
+  if (!firstInstance) return null;
+  const pitch = Number(
+    buildTrussProfile(firstInstance, undefined, getTrussProfileOptions(trussSystem))?.metrics?.pitch,
+  );
+  return Number.isFinite(pitch) ? pitch : null;
+}
+
+function formatPercent(value) {
+  return `${Number(value.toFixed(1))} %`;
+}
 
 function selectRoofTool(editorDispatch, tool) {
   editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'roof' });
@@ -148,6 +170,14 @@ export function RoofSystemProperties({
   const supportsAttachedSlopeOverride = Boolean(isAttachedToTruss && roofType !== 'flat' && roofType !== 'custom');
   const followsAttachedTrussBoundary = isAttachedToTruss;
   const followsAttachedTrussPitch = supportsAttachedSlopeOverride && pitchSource !== 'manual';
+  // RT-3.1: a hand-set slope on an attached gable/shed pivots on the bearings,
+  // so one that differs from the trusses leaves the purlins near the ridge.
+  const attachedTrussPitch =
+    supportsAttachedSlopeOverride && pitchSource === 'manual' && (roofType === 'gable' || roofType === 'shed')
+      ? resolveAttachedTrussPitch(attachedTruss)
+      : null;
+  const manualSlopeMismatch =
+    attachedTrussPitch !== null && Math.abs((Number(pitch.slope) || 0) - attachedTrussPitch) > 0.05;
 
   const addRoofPlane = () => {
     const nextPlane = createRoofPlane(
@@ -335,6 +365,15 @@ export function RoofSystemProperties({
               </select>
             </div>
           )}
+          {manualSlopeMismatch && (
+            <div data-manual-slope-warning>
+              <Status tone="warning">
+                Hand-set slope {formatPercent(Number(pitch.slope) || 0)} differs from the trusses (
+                {formatPercent(attachedTrussPitch)}): the roof pivots on the bearings and leaves the purlins near the
+                ridge. Reset slope seats it.
+              </Status>
+            </div>
+          )}
           <InputField
             label="Roof Slope"
             type="number"
@@ -344,6 +383,9 @@ export function RoofSystemProperties({
             readOnly={followsAttachedTrussPitch}
             onChange={(value) => updatePitch({ slope: Math.max(0, value) })}
           />
+          <div className={panelKitStyles.gutter}>
+            <Readout label="Pitch" value={formatSlopeReadout(pitch.slope || 0)} />
+          </div>
           <InputField
             label="Slope Dir."
             type="number"
@@ -403,6 +445,7 @@ export function RoofSystemProperties({
           )}
         </>
       )}
+      <RoofCoveringSections project={project} roofSystem={roofSystem} updateRoof={updateRoof} u={u} />
       <div className={styles.subtitle}>Geometry</div>
       <InputField label="Boundary Vertices" value={(roofSystem.boundaryPolygon || []).length} readOnly />
       {roofType !== 'flat' && roofType !== 'custom' && (
@@ -459,7 +502,7 @@ export function RoofSystemProperties({
         Add sheet viewports with source `Roof Schedule` or `Roof Drainage` to place roof quantities and drainage
         graphics on sheets and exports.
       </div>
-      <RoofScheduleSummary roofSystem={roofSystem} u={u} />
+      <RoofScheduleSummary roofSystem={roofSystem} u={u} project={project} />
     </div>
   );
 }

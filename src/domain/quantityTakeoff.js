@@ -1,5 +1,9 @@
 import { polygonArea } from '@/geometry/polygon';
 import { wallLength } from '@/geometry/wallGeometry';
+import { buildRoofEdgeKitQuantities, resolveRoofEdgeKitContext } from '@/roof/roofEdgeKit';
+import { buildEndClosureLayout } from '@/truss/endClosures';
+import { buildProjectTrussQuantities } from '@/truss/trussSchedule';
+import { buildRoofScheduleSummary } from '@/roof/roofSchedule';
 import { WALL_BOARD_MATERIALS, boardLayerUSpan, deriveWallFramingLayout, resolveWallAssembly } from './wallAssemblies';
 import {
   deriveWallDetailTakeoff,
@@ -29,6 +33,16 @@ export const QUANTITY_RATE_KEYS = Object.freeze([
   'floorFinish',
   'paint',
   'roofing',
+  'roofFascia',
+  'roofBarge',
+  'roofGutter',
+  'roofDownpipe',
+  'roofRidgeCap',
+  'roofSoffit',
+  'gableInfill',
+  'truss',
+  'trussTimber',
+  'purlin',
   'door',
   'window',
   'plumbingFixture',
@@ -406,12 +420,36 @@ function deriveGeometry(project) {
     ).length;
   }
 
+  // Custom roofs are authored as planes, so their area is the plane sum. Every
+  // preset roof (flat, shed, gable, hip and the truss-driven shapes) stores no
+  // planes at all — it used to report 0 m² — and takes the roof schedule's net
+  // surface area, which is the same surface the 3D draws, openings deducted.
+  const roofSystem = project.roofSystem || null;
   let roofingAreaMm2 = 0;
-  for (const plane of project.roofSystem?.roofPlanes || []) {
-    const projectedArea = polygonArea(plane.boundaryPoints || []);
-    const slopeRatio = Math.max(0, Number(plane.slope) || 0) / 100;
-    roofingAreaMm2 += projectedArea * Math.sqrt(1 + slopeRatio * slopeRatio);
+  if (roofSystem && (roofSystem.roofType || 'flat') !== 'custom') {
+    const schedule = buildRoofScheduleSummary(roofSystem);
+    // A flat roof is flat whatever pitch it still stores; the schedule's surface
+    // factor reads `pitch.slope` for its one plane, so take the plan area.
+    roofingAreaMm2 = (roofSystem.roofType || 'flat') === 'flat' ? schedule.netPlanArea : schedule.netSurfaceArea;
+  } else {
+    for (const plane of roofSystem?.roofPlanes || []) {
+      const projectedArea = polygonArea(plane.boundaryPoints || []);
+      const slopeRatio = Math.max(0, Number(plane.slope) || 0) / 100;
+      roofingAreaMm2 += projectedArea * Math.sqrt(1 + slopeRatio * slopeRatio);
+    }
   }
+  const roofTrims = roofSystem
+    ? buildRoofEdgeKitQuantities(roofSystem, resolveRoofEdgeKitContext(project, roofSystem))
+    : { fasciaLm: 0, bargeLm: 0, gutterLm: 0, downpipeCount: 0, ridgeCapLm: 0, soffitM2: 0 };
+  // Gable-end infill (RT-2): every built closure once, vents deducted — the
+  // same panels the 3D draws, out of the same layout.
+  const gableInfillM2 = (project.trussSystems || []).reduce(
+    (sum, trussSystem) => sum + buildEndClosureLayout(trussSystem, null, roofSystem).totalAreaM2,
+    0,
+  );
+  // Trusses (RT-3, spec §7.5): count, timber by section, purlins — off the
+  // truss schedule, which measures the built members.
+  const trussQuantities = buildProjectTrussQuantities(project);
 
   return {
     columnVolumeM3: cubicMeters(columnVolumeMm3),
@@ -435,6 +473,17 @@ function deriveGeometry(project) {
     floorFinishAreaM2: squareMeters(floorFinishAreaMm2),
     floorFinishUsedSlabFallback,
     roofingAreaM2: squareMeters(roofingAreaMm2),
+    roofingAreaSource: roofSystem && (roofSystem.roofType || 'flat') !== 'custom' ? 'roof_schedule' : 'roof_planes',
+    fasciaLm: roofTrims.fasciaLm,
+    bargeLm: roofTrims.bargeLm,
+    gutterLm: roofTrims.gutterLm,
+    downpipeCount: roofTrims.downpipeCount,
+    ridgeCapLm: roofTrims.ridgeCapLm,
+    soffitM2: roofTrims.soffitM2,
+    gableInfillM2,
+    trussCount: trussQuantities.trussCount,
+    trussTimberLm: trussQuantities.trussTimberLm,
+    purlinLm: trussQuantities.purlinLm,
     doorCount,
     windowCount,
     plumbingFixtureCount,
@@ -655,7 +704,81 @@ export function deriveQuantityTakeoff(project, options = {}) {
         unit: 'm²',
         provenance: QUANTITY_PROVENANCE.CONFIGURED_ASSEMBLY,
         rateKey: 'roofing',
-        inputs: { source: 'roof_planes_and_configured_slopes' },
+        inputs: {
+          source:
+            geometry.roofingAreaSource === 'roof_schedule'
+              ? 'roof_schedule_net_surface_area'
+              : 'roof_planes_and_configured_slopes',
+        },
+      },
+      profile,
+      scenarioId,
+    ),
+    // The roof-edge kit, measured off the same runs the 3D draws.
+    ...[
+      ['roof_fascia', 'Fascia', geometry.fasciaLm, 'lm', 'roofFascia'],
+      ['roof_barge', 'Barge boards', geometry.bargeLm, 'lm', 'roofBarge'],
+      ['roof_gutter', 'Eave gutter', geometry.gutterLm, 'lm', 'roofGutter'],
+      ['roof_downpipes', 'Downpipes', geometry.downpipeCount, 'ea', 'roofDownpipe'],
+      ['roof_ridge_cap', 'Ridge capping', geometry.ridgeCapLm, 'lm', 'roofRidgeCap'],
+      ['roof_soffit', 'Eaves soffit lining', geometry.soffitM2, 'm²', 'roofSoffit'],
+      ['roof_gable_infill', 'Gable infill', geometry.gableInfillM2, 'm²', 'gableInfill', 'truss_end_closures'],
+    ].map(([id, label, quantity, unit, rateKey, source = 'roof_edge_kit']) =>
+      item(
+        {
+          id,
+          category: 'roof',
+          label,
+          quantity,
+          unit,
+          provenance: QUANTITY_PROVENANCE.EXACT_GEOMETRY,
+          rateKey,
+          inputs: { source },
+        },
+        profile,
+        scenarioId,
+      ),
+    ),
+    item(
+      {
+        id: 'truss_count',
+        category: 'roof',
+        label: 'Roof trusses',
+        quantity: geometry.trussCount,
+        unit: 'ea',
+        provenance: QUANTITY_PROVENANCE.EXACT_GEOMETRY,
+        rateKey: 'truss',
+        inputs: { source: 'truss_schedule' },
+      },
+      profile,
+      scenarioId,
+    ),
+    ...geometry.trussTimberLm.map((section) =>
+      item(
+        {
+          id: `truss_timber_${section.key}`,
+          category: 'roof',
+          label: `Truss timber ${section.label}`,
+          quantity: section.lengthM,
+          unit: 'lm',
+          provenance: QUANTITY_PROVENANCE.EXACT_GEOMETRY,
+          rateKey: 'trussTimber',
+          inputs: { source: 'truss_schedule', section: section.key },
+        },
+        profile,
+        scenarioId,
+      ),
+    ),
+    item(
+      {
+        id: 'truss_purlins',
+        category: 'roof',
+        label: 'Purlins / battens',
+        quantity: geometry.purlinLm,
+        unit: 'lm',
+        provenance: QUANTITY_PROVENANCE.EXACT_GEOMETRY,
+        rateKey: 'purlin',
+        inputs: { source: 'truss_schedule' },
       },
       profile,
       scenarioId,

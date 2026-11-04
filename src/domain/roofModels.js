@@ -12,6 +12,7 @@ import {
   ROOF_SLAB_THICKNESS,
 } from './defaults';
 import { getOrderedFloors } from './floorModels';
+import { normalizeRoofCovering, normalizeRoofTrims } from './roofCoveringCatalog';
 import { CURRENT_PROJECT_VERSION } from './projectVersion';
 import { polygonArea } from '@/geometry/polygon';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
@@ -103,21 +104,34 @@ export function getRoofTypeLabel(roofType = 'flat') {
   }
 }
 
+// RT-3 (spec §7.2): rises are SIGNED. The attached profile is the truss top
+// face + purlins measured from the start heel, so a sloped overhang tail sits
+// below the datum (a negative rise); only `maxRise` is a maximum.
 function normalizeAttachedShapeProfile(shapeProfile = null, roofType = null) {
   const points = (shapeProfile?.points || [])
     .map((point) => ({
       position: Math.max(0, Math.min(1, Number(point?.position) || 0)),
-      rise: Math.max(0, Number(point?.rise) || 0),
+      rise: Number(point?.rise) || 0,
     }))
     .filter((point) => Number.isFinite(point.position) && Number.isFinite(point.rise))
     .sort((a, b) => a.position - b.position);
 
   if (points.length < 2) return null;
 
+  const totalSpan = Math.max(0, Number(shapeProfile?.totalSpan) || 0);
+  // RT-3.1 (spec §7.8.2): `slope` is the truss underside run slope as a ratio
+  // (rise / run), the reference a manual slope scales the rises against. Old
+  // profiles derive it from the first two points (null when that is impossible).
+  const firstRun = (points[1].position - points[0].position) * totalSpan;
+  const derivedSlope = firstRun > 1e-9 ? Math.abs(points[1].rise - points[0].rise) / firstRun : null;
+
   return {
     shape: normalizeRoofType(shapeProfile?.shape ?? roofType ?? 'flat'),
-    totalSpan: Math.max(0, Number(shapeProfile?.totalSpan) || 0),
-    maxRise: Math.max(0, Number(shapeProfile?.maxRise) || Math.max(...points.map((point) => point.rise))),
+    totalSpan,
+    maxRise: Number.isFinite(shapeProfile?.maxRise)
+      ? shapeProfile.maxRise
+      : Math.max(...points.map((point) => point.rise)),
+    slope: Number.isFinite(shapeProfile?.slope) ? Math.max(0, shapeProfile.slope) : derivedSlope,
     points,
   };
 }
@@ -616,6 +630,10 @@ export function createRoofSystem(name = 'Roof', options = {}) {
     valleys: normalizeRelationships(options.valleys || [], createValley),
     hips: normalizeRelationships(options.hips || [], createHip),
   };
+  // The covering and the edge kit default by roof type: pitched roofs come
+  // finished in corrugated Shale Grey, flat and custom ones start bare.
+  roofSystem.covering = normalizeRoofCovering(options.covering, roofSystem.roofType, roofSystem.slabThickness);
+  roofSystem.trims = normalizeRoofTrims(options.trims, roofSystem.roofType);
 
   const collections = normalizeRoofSystemCollections(roofSystem);
   return {
@@ -697,6 +715,12 @@ export function syncRoofSystemAttachment(project, roofSystem) {
     valleys: normalizeRelationships(roofSystem.valleys || [], createValley),
     hips: normalizeRelationships(roofSystem.hips || [], createHip),
   };
+  baseRoofSystem.covering = normalizeRoofCovering(
+    roofSystem.covering,
+    normalizedRoofType,
+    baseRoofSystem.slabThickness,
+  );
+  baseRoofSystem.trims = normalizeRoofTrims(roofSystem.trims, normalizedRoofType);
 
   return {
     ...baseRoofSystem,

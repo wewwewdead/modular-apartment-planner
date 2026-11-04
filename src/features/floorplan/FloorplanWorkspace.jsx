@@ -303,6 +303,10 @@ function EditorShell({
         // column from it, so the grid tracks collapse either way.
         '--layout-sidebar-width': isSidebarCollapsed || isFocused ? '0px' : `${sidebarWidth}px`,
         '--layout-properties-width': isPropertiesCollapsed || isFocused ? '0px' : 'var(--properties-width)',
+        // How much of a focused pane the floating panels cover, so a pane can
+        // keep its own edge controls out from under them.
+        '--focus-overlay-left': isFocused && !isSidebarCollapsed ? `${sidebarWidth}px` : '0px',
+        '--focus-overlay-right': isFocused && !isPropertiesCollapsed ? 'var(--properties-width)' : '0px',
       }}
     >
       {!isToolbarHidden && (

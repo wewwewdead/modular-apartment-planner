@@ -7,6 +7,11 @@ function pointString(point) {
   return `${point.x},${-point.z}`;
 }
 
+// Hairline CAD weights (screen px, non-scaling): chords are the profile line,
+// webs and studs the lighter frame line (memory wall-detail-dimension-rendering).
+const CHORD_LINE = 1.1;
+const WEB_LINE = 0.85;
+
 function TrussDetailRenderer({ trussSystem, trussInstanceId = null, showTitle = true }) {
   const scene = buildTrussDetailScene(trussSystem, trussInstanceId);
   if (!scene) {
@@ -29,7 +34,6 @@ function TrussDetailRenderer({ trussSystem, trussInstanceId = null, showTitle = 
 
   const titleX = (scene.bounds.minX + scene.bounds.maxX) / 2;
   const titleY = -scene.bounds.maxZ + 260;
-  const profile = scene.instanceGeometry;
 
   return (
     <g className="truss-detail">
@@ -46,36 +50,27 @@ function TrussDetailRenderer({ trussSystem, trussInstanceId = null, showTitle = 
           {scene.title}
         </text>
       )}
-      <polyline
-        points={profile.roofOutline.map(pointString).join(' ')}
-        fill="none"
-        stroke={DRAWING_GRAPHICS.section.cutStroke}
-        strokeWidth={1.8}
-        vectorEffect="non-scaling-stroke"
-      />
-      <polyline
-        points={profile.bottomOutline.map(pointString).join(' ')}
-        fill="none"
-        stroke={DRAWING_GRAPHICS.section.cutStroke}
-        strokeWidth={1.3}
-        vectorEffect="non-scaling-stroke"
-      />
-      {scene.lineSegments.map((segment) => (
-        <line
-          key={segment.id}
-          x1={segment.start.x}
-          y1={-segment.start.z}
-          x2={segment.end.x}
-          y2={-segment.end.z}
-          stroke={
-            segment.memberType === 'web'
-              ? DRAWING_GRAPHICS.section.projectionStroke
-              : DRAWING_GRAPHICS.section.cutStroke
-          }
-          strokeWidth={segment.memberType === 'web' ? 0.95 : 1.45}
-          vectorEffect="non-scaling-stroke"
-        />
-      ))}
+      {/* RT-3: every member drawn with its depth — two parallel edges — webs first so the chords read on top. */}
+      {[...(scene.memberOutlines || [])]
+        .sort((a, b) => (a.memberType === 'web' ? 0 : 1) - (b.memberType === 'web' ? 0 : 1))
+        .map((outline) => (
+          <polygon
+            key={outline.id}
+            data-member-type={outline.memberType}
+            points={outline.points.map(pointString).join(' ')}
+            fill={
+              outline.memberType === 'web' ? DRAWING_GRAPHICS.section.projectionFill : DRAWING_GRAPHICS.section.cutFill
+            }
+            stroke={
+              outline.memberType === 'web'
+                ? DRAWING_GRAPHICS.section.projectionStroke
+                : DRAWING_GRAPHICS.section.cutStroke
+            }
+            strokeWidth={outline.memberType === 'web' ? WEB_LINE : CHORD_LINE}
+            strokeLinejoin="miter"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
       {(scene.purlinMarkers || []).map((marker) => (
         <line
           key={marker.id}

@@ -7,6 +7,8 @@ import FloorPreviewLayer from './FloorPreviewLayer';
 import FloorSelectionLayer from './FloorSelectionLayer';
 import FloorUnderlayLayer from './FloorUnderlayLayer';
 import OverhangIndicatorLayer from './OverhangIndicatorLayer';
+import PlanCardShadow from './PlanCardShadow';
+import { isPresentationStyle, usePlanStyle } from './PlanStyleContext';
 import SectionRenderer from './SectionRenderer';
 import ShadowOverlay from './ShadowOverlay';
 import DaylightOverlay from './DaylightOverlay';
@@ -17,6 +19,8 @@ import WetCoreOverlay from './WetCoreOverlay';
 import ApartmentDesignOverlay from './ApartmentDesignOverlay';
 import { useDaylightStudy } from '../../context/DaylightStudyContext';
 import { RenderProfilerScope, useRenderProfile } from './renderProfiling';
+
+const EMPTY = Object.freeze([]);
 
 const FloorScene = memo(function FloorScene({
   floor,
@@ -54,6 +58,7 @@ const FloorScene = memo(function FloorScene({
   // sidebar panel is looking at the same study, and the grid variant costs a
   // worker run nobody wants to pay for twice.
   const daylight = useDaylightStudy();
+  const presentation = isPresentationStyle(usePlanStyle());
 
   useRenderProfile('FloorScene', {
     viewMode,
@@ -83,6 +88,17 @@ const FloorScene = memo(function FloorScene({
           <>
             <SitePlanOverlay site={filteredProject.building?.site} />
             <ShadowOverlay study={daylight.sunStudy} />
+            {/* The presentation plan's white card, beneath the ghost of the
+                floor below so a cantilever still reads through it — the card is
+                the ground this floor stands on, not a lid over the floor under. */}
+            {presentation ? (
+              <PlanCardShadow
+                walls={filteredFloor.walls || EMPTY}
+                columns={filteredFloor.columns || EMPTY}
+                rooms={filteredFloor.rooms || EMPTY}
+                slabs={filteredFloor.slabs || EMPTY}
+              />
+            ) : null}
             {/* The floor below, immediately under the plan being edited — above
                 the grid and the site it stands on, below everything on this
                 floor. Anything drawn over it belongs to the active floor, which

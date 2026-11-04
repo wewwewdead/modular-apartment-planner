@@ -191,7 +191,8 @@ export const REFINE_PROFILES = Object.freeze({
   walk: Object.freeze({ supersample: 1, maxSamples: 12, jitterSunDisc: false }),
 });
 
-export function createProgressiveRenderer({ renderer, scene, camera, onBeforeSample = null }) {
+export function createProgressiveRenderer({ renderer, scene, camera: initialCamera, onBeforeSample = null }) {
+  let camera = initialCamera;
   // Device pixels of the default framebuffer — the size everything offscreen is
   // measured against, and the size the finished image is presented at.
   const canvasSize = renderer.getDrawingBufferSize(new THREE.Vector2());
@@ -274,6 +275,10 @@ export function createProgressiveRenderer({ renderer, scene, camera, onBeforeSam
 
   let style = null;
   let refineProfile = REFINE_PROFILES.inspect;
+  // Which sample the refine budget is measured on. Normally the first; after a
+  // projection switch the first one also pays GTAO's recompile, and measuring
+  // the budget on it would starve that view of samples for no reason.
+  let budgetSample = 1;
   let sampleIndex = 0;
   let targetSamples = MIN_SAMPLES;
   let lastFrameMs = 8;
@@ -336,8 +341,18 @@ export function createProgressiveRenderer({ renderer, scene, camera, onBeforeSam
     // spread the same offsets over four times the area and quietly soften the
     // settled image.
     // Clip space spans 2 units across the viewport, so one pixel is 2 / width.
-    camera.projectionMatrix.elements[8] += (offsetX * 2) / Math.max(renderSize.x, 1);
-    camera.projectionMatrix.elements[9] += (offsetY * 2) / Math.max(renderSize.y, 1);
+    const dx = (offsetX * 2) / Math.max(renderSize.x, 1);
+    const dy = (offsetY * 2) / Math.max(renderSize.y, 1);
+    if (camera.isOrthographicCamera) {
+      // No perspective divide: clip x is m0·x + m12, so the shift goes in the
+      // translation column. In the perspective case it rides on z (column 2),
+      // which the divide by w = -z turns into a constant screen offset.
+      camera.projectionMatrix.elements[12] += dx;
+      camera.projectionMatrix.elements[13] += dy;
+    } else {
+      camera.projectionMatrix.elements[8] += dx;
+      camera.projectionMatrix.elements[9] += dy;
+    }
     camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
   }
 
@@ -413,6 +428,31 @@ export function createProgressiveRenderer({ renderer, scene, camera, onBeforeSam
       if (resolved === refineProfile) return;
       refineProfile = resolved;
       targetSamples = MIN_SAMPLES;
+      this.reset();
+    },
+
+    /**
+     * Render through a different camera — the orthographic one an elevation
+     * preset uses, or back to the perspective one. GTAO reconstructs view
+     * positions differently for the two projections, which is a shader define,
+     * so the switch costs one recompile of that pass: a deliberate view change,
+     * never a per-frame one.
+     */
+    setCamera(nextCamera) {
+      if (!nextCamera || nextCamera === camera) return;
+      camera = nextCamera;
+      renderPass.camera = nextCamera;
+      gtaoPass.camera = nextCamera;
+      const perspective = nextCamera.isPerspectiveCamera ? 1 : 0;
+      if (gtaoPass.gtaoMaterial && gtaoPass.gtaoMaterial.defines.PERSPECTIVE_CAMERA !== perspective) {
+        gtaoPass.gtaoMaterial.defines.PERSPECTIVE_CAMERA = perspective;
+        gtaoPass.gtaoMaterial.needsUpdate = true;
+        budgetSample = 2;
+      }
+      if (gtaoPass.depthRenderMaterial) {
+        gtaoPass.depthRenderMaterial.uniforms.cameraNear.value = nextCamera.near;
+        gtaoPass.depthRenderMaterial.uniforms.cameraFar.value = nextCamera.far;
+      }
       this.reset();
     },
 
@@ -566,7 +606,8 @@ export function createProgressiveRenderer({ renderer, scene, camera, onBeforeSam
       hasAccumulation = true;
       lastFrameMs = performance.now() - startedAt;
 
-      if (sampleIndex === 1) {
+      if (sampleIndex === budgetSample) {
+        budgetSample = 1;
         const affordable = Math.floor(REFINE_BUDGET_MS / Math.max(lastFrameMs, 1));
         targetSamples = THREE.MathUtils.clamp(
           affordable,

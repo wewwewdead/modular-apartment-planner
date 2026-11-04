@@ -1,4 +1,5 @@
-import { projectElevationDepth, projectElevationHorizontal } from '@/elevations/projection';
+import { projectElevationDepth, projectElevationEdge, projectElevationHorizontal } from '@/elevations/projection';
+import { buildRoofEdgeKitLayout } from '@/roof/roofEdgeKit';
 import { isRoofAccessOpening, isSkylightRoofOpening } from '@/roof/openings';
 import { buildRoofPlaneGeometry } from './roofPlaneGeometry';
 import { getParapetRenderData } from './roofPlanGeometry';
@@ -311,7 +312,125 @@ function buildRoofOpeningSilhouette(opening, roofGeometry, view) {
   );
 }
 
-export function buildRoofElevationElements(roofSystem, view) {
+function planOf(worldPoint) {
+  return { x: worldPoint.x, y: worldPoint.z };
+}
+
+/**
+ * Fascia and barge boards as thin filled shapes under the roof silhouette: a
+ * rectangle on an eave seen face-on, a parallelogram on a rake. A board seen
+ * end-on has no width to draw and is left to the silhouette.
+ */
+function buildTrimBoardPolygons(boards, view, roofSystem) {
+  return boards
+    .map((board) => {
+      const along = {
+        x: board.topEnd.x - board.topStart.x,
+        y: board.topEnd.y - board.topStart.y,
+        z: board.topEnd.z - board.topStart.z,
+      };
+      const length = Math.hypot(along.x, along.y, along.z) || 1;
+      // The board's depth is measured square to its length within its plumb
+      // plane (world up with its along-the-board part removed), the way the
+      // 3D builder hangs it.
+      const a = { x: along.x / length, y: along.y / length, z: along.z / length };
+      const up = { x: -a.y * a.x, y: 1 - a.y * a.y, z: -a.y * a.z };
+      const upLength = Math.hypot(up.x, up.y, up.z) || 1;
+      const drop = (point) => ({
+        x: point.x - (up.x / upLength) * board.depth,
+        y: point.y - (up.y / upLength) * board.depth,
+        z: point.z - (up.z / upLength) * board.depth,
+      });
+      const edge = projectElevationEdge(view, planOf(board.topStart), planOf(board.topEnd));
+      if (!edge || edge.right - edge.left < 1) return null;
+      const corners = [board.topStart, board.topEnd, drop(board.topEnd), drop(board.topStart)];
+      return {
+        id: `roof-trim-elevation-${board.id}-${view.key}`,
+        category: 'roofSystem',
+        style: 'roofFascia',
+        points: corners.map((point) => ({ x: projectHorizontal(view, planOf(point)), z: point.y })),
+        depth: edge.depth,
+        depthSlope: edge.depthSlope,
+        depthIntercept: edge.depthIntercept,
+        sourceId: roofSystem.id,
+      };
+    })
+    .filter(Boolean);
+}
+
+/** Gutters as a line pair (top and sole); seen end-on, the gutter's own profile box. */
+function buildGutterElements(gutters, view, roofSystem) {
+  const lines = [];
+  const polygons = [];
+  for (const gutter of gutters) {
+    const startPlan = planOf(gutter.start);
+    const endPlan = planOf(gutter.end);
+    const x1 = projectHorizontal(view, startPlan);
+    const x2 = projectHorizontal(view, endPlan);
+    const depth = average([projectDepth(view, startPlan), projectDepth(view, endPlan)]);
+    if (Math.abs(x2 - x1) >= 1) {
+      for (const [key, z] of [
+        ['top', gutter.top],
+        ['sole', gutter.bottom],
+      ]) {
+        const line = createSceneLine(
+          `roof-gutter-elevation-${gutter.id}-${key}-${view.key}`,
+          'roofSystem',
+          'roofGutter',
+          { x: x1, z },
+          { x: x2, z },
+          depth,
+          roofSystem.id,
+        );
+        if (line) lines.push(line);
+      }
+      continue;
+    }
+    const half = gutter.width / 2;
+    polygons.push({
+      id: `roof-gutter-elevation-${gutter.id}-end-${view.key}`,
+      category: 'roofSystem',
+      style: 'roofGutter',
+      points: [
+        { x: x1 - half, z: gutter.top },
+        { x: x1 + half, z: gutter.top },
+        { x: x1 + half, z: gutter.bottom },
+        { x: x1 - half, z: gutter.bottom },
+      ],
+      depth: Math.min(projectDepth(view, startPlan), projectDepth(view, endPlan)),
+      sourceId: roofSystem.id,
+    });
+  }
+  return { lines, polygons };
+}
+
+/** Downpipes as vertical double lines, gutter sole to just above the ground floor. */
+function buildDownpipeLines(downpipes, view, roofSystem) {
+  return downpipes.flatMap((pipe) => {
+    const x = projectHorizontal(view, pipe.position);
+    const depth = projectDepth(view, pipe.position);
+    return [-1, 1]
+      .map((side) =>
+        createSceneLine(
+          `roof-downpipe-elevation-${pipe.id}-${side < 0 ? 'a' : 'b'}-${view.key}`,
+          'roofSystem',
+          'roofGutter',
+          { x: x + (side * pipe.diameter) / 2, z: pipe.top },
+          { x: x + (side * pipe.diameter) / 2, z: pipe.bottom },
+          depth,
+          roofSystem.id,
+        ),
+      )
+      .filter(Boolean);
+  });
+}
+
+/**
+ * `context` is the edge kit's view of the world outside the roof
+ * (`resolveRoofEdgeKitContext`); without it the downpipes, which need to know
+ * where the ground floor is, are left out.
+ */
+export function buildRoofElevationElements(roofSystem, view, context = null) {
   if (!roofSystem || (roofSystem.boundaryPolygon || []).length < 3 || !view) {
     return {
       elements: [],
@@ -365,9 +484,20 @@ export function buildRoofElevationElements(roofSystem, view) {
     ),
   ].filter(Boolean);
 
+  const kit = buildRoofEdgeKitLayout(roofSystem, roofGeometry, context || {});
+  const trimPolygons = buildTrimBoardPolygons([...kit.fascias, ...kit.barges], view, roofSystem);
+  const gutterElements = buildGutterElements(kit.gutters, view, roofSystem);
+  const downpipeLines = buildDownpipeLines(kit.downpipes, view, roofSystem);
+
   return {
     elements: [],
-    polygonElements: [roofPolygon, ...parapetPolygons, ...roofOpeningPolygons].filter(Boolean),
-    lineElements: [...roofSilhouetteLines, ...roofRelationshipLines],
+    polygonElements: [
+      roofPolygon,
+      ...parapetPolygons,
+      ...roofOpeningPolygons,
+      ...trimPolygons,
+      ...gutterElements.polygons,
+    ].filter(Boolean),
+    lineElements: [...roofSilhouetteLines, ...roofRelationshipLines, ...gutterElements.lines, ...downpipeLines],
   };
 }

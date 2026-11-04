@@ -151,8 +151,9 @@ function buildSectionSceneFromFloors(floors, sectionCut, title = null, roofSyste
     roofDiagnostics = roofElements.diagnostics || roofDiagnostics;
   }
 
-  const trussElements = buildTrussSectionElements(project?.trussSystems || [], sectionCut);
+  const trussElements = buildTrussSectionElements(project?.trussSystems || [], sectionCut, roofSystem);
   lineElements.push(...(trussElements.lineElements || []));
+  polygonElements.push(...(trussElements.polygonElements || []));
 
   const sortedRectElements = rectElements.sort((a, b) => {
     if (a.renderMode !== b.renderMode) return a.renderMode === 'cut' ? -1 : 1;

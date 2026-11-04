@@ -10,7 +10,12 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { RENDER_STYLES, renderStyleConfig } from './renderStyle';
-import { applyRenderStyleToPalette, createMaterialPalette } from './materials';
+import {
+  PALETTE_LOOKS,
+  applyRenderStyleToPalette,
+  applyRoofAppearanceToPalette,
+  createMaterialPalette,
+} from './materials';
 
 /** Relative luminance in linear light — how much of the light a surface sends back. */
 function reflectance(material) {
@@ -183,5 +188,130 @@ describe('detail assignment', () => {
     expect(palette.window.userData.detailFamily).toBeUndefined();
     expect(palette.outline).toBeInstanceOf(THREE.LineBasicMaterial);
     expect(palette.outline.userData.detailFamily).toBeUndefined();
+  });
+});
+
+describe('the white model', () => {
+  it('frames its openings in charcoal', () => {
+    // A dark powder coat: the frame line that makes a white facade read.
+    expect(reflectance(palette.windowFrame)).toBeLessThan(0.1);
+  });
+
+  it('puts a warm, transparent, emissive glow behind the glass', () => {
+    const glow = palette.windowGlow;
+    expect(glow.transparent).toBe(true);
+    expect(glow.depthWrite).toBe(false);
+    expect(glow.emissiveIntensity).toBeGreaterThan(0);
+    // Warm: more red than blue in what it gives off.
+    expect(glow.emissive.r).toBeGreaterThan(glow.emissive.b);
+    expect(glow.userData.ownedByPalette).toBe(true);
+  });
+
+  it('keeps the plants to a small fixed set of shared instances', () => {
+    // Like the corten tones: each distinct material is another instanced draw
+    // call, so the count is the budget — two leaf greens and a pot.
+    const tones = ['plantLeaf', 'plantLeafDeep', 'plantPot'];
+    expect(new Set(tones.map((key) => palette[key].uuid)).size).toBe(3);
+    expect(Object.keys(palette).filter((key) => key.startsWith('plant'))).toEqual(tones);
+  });
+});
+
+describe('the roof covering family and the edge kit', () => {
+  const ROOF_KEYS = ['roof_metal', 'roof_tile', 'roof_membrane', 'roof_slab', 'roofRidgeCap'];
+  const KIT_KEYS = ['roofTrim', 'roofGutter', 'roofDownpipe', 'roofSoffit', 'gableInfill'];
+
+  it('exists in both looks, with surface detail', () => {
+    for (const look of [PALETTE_LOOKS.WHITE_MODEL, PALETTE_LOOKS.CLASSIC]) {
+      const built = createMaterialPalette({ look });
+      for (const key of [...ROOF_KEYS, ...KIT_KEYS, 'roof']) {
+        expect(built[key], `${look} ${key}`).toBeInstanceOf(THREE.MeshStandardMaterial);
+        expect(built[key].userData.detailFamily, key).toBeTruthy();
+      }
+    }
+  });
+
+  it('keeps `roof` as an alias of `roof_slab`, and the trims as one instance', () => {
+    expect(palette.roof).toBe(palette.roof_slab);
+    expect(palette.roofGutter).toBe(palette.roofTrim);
+    expect(palette.roofDownpipe).toBe(palette.roofTrim);
+  });
+
+  it('keeps the classic panes on the grey the roof always had', () => {
+    const classic = createMaterialPalette({ look: PALETTE_LOOKS.CLASSIC });
+    for (const key of ROOF_KEYS) expect(classic[key].color.getHex(), key).toBe(0xa2a7ab);
+  });
+
+  it('paints painted steel as paint, not as a mirror', () => {
+    expect(palette.roof_metal.metalness).toBe(0);
+    expect(palette.roof_metal.roughness).toBe(0.5);
+    expect(palette.roof_tile.roughness).toBe(0.85);
+    expect(palette.roof_slab.roughness).toBe(0.9);
+  });
+
+  it('applies the project colours to every roof key and leaves the walls alone', () => {
+    const live = createMaterialPalette();
+    const wallHex = live.wall.color.getHex();
+    const result = applyRoofAppearanceToPalette(live, {
+      covering: { kind: 'metal_corrugated', hex: '#5E1D0E', finish: 'gloss' },
+      trims: { hex: '#323233' },
+      soffit: { hex: '#E4E2D5' },
+      closures: [{ hex: '#E9E5DD' }],
+    });
+    expect(result.changed).toBe(true);
+    expect(result.recompile).toBe(false);
+    for (const key of [...ROOF_KEYS, 'roof']) expect(live[key].color.getHex(), key).toBe(0x5e1d0e);
+    for (const key of ['roofTrim', 'roofGutter', 'roofDownpipe']) expect(live[key].color.getHex()).toBe(0x323233);
+    expect(live.roofSoffit.color.getHex()).toBe(0xe4e2d5);
+    expect(live.gableInfill.color.getHex()).toBe(0xe9e5dd);
+    expect(live.roof_metal.roughness).toBe(0.3);
+    expect(live.wall.color.getHex()).toBe(wallHex);
+    // The same appearance again changes nothing, so the viewport can skip a redraw.
+    expect(
+      applyRoofAppearanceToPalette(live, {
+        covering: { kind: 'metal_corrugated', hex: '#5E1D0E', finish: 'gloss' },
+        trims: { hex: '#323233' },
+        soffit: { hex: '#E4E2D5' },
+        closures: [{ hex: '#E9E5DD' }],
+      }).changed,
+    ).toBe(false);
+  });
+
+  it('turns an unpainted sheet into bare metal, and asks for a program update only then', () => {
+    const live = createMaterialPalette();
+    const versionBefore = live.roof_metal.version;
+    const result = applyRoofAppearanceToPalette(live, {
+      covering: { kind: 'metal_corrugated', hex: '#A5A8A6', finish: 'unpainted' },
+      trims: { hex: '#A5A8A6' },
+      soffit: { hex: '#E4E2D5' },
+      closures: [],
+    });
+    expect(result.recompile).toBe(true);
+    expect(live.roof_metal.metalness).toBe(1);
+    expect(live.roof_metal.roughness).toBe(0.4);
+    expect(live.roof_metal.version).toBeGreaterThan(versionBefore);
+    // Tiles and slabs are never metal; fibre cement neither.
+    expect(live.roof_tile.metalness).toBe(0);
+    expect(live.roofSoffit.metalness).toBe(0);
+  });
+
+  it('paints the gable infill alone when a project has trusses but no roof', () => {
+    const live = createMaterialPalette();
+    const roofHex = live.roof_metal.color.getHex();
+    applyRoofAppearanceToPalette(live, { covering: null, trims: null, soffit: null, closures: [{ hex: '#5E1D0E' }] });
+    expect(live.gableInfill.color.getHex()).toBe(0x5e1d0e);
+    expect(live.roof_metal.color.getHex()).toBe(roofHex);
+    expect(live.roof_metal.metalness).toBe(0);
+  });
+
+  it('keeps a matte tile at its own roughness', () => {
+    const live = createMaterialPalette();
+    applyRoofAppearanceToPalette(live, {
+      covering: { kind: 'concrete_tile', hex: '#703731', finish: 'matte' },
+      trims: { hex: '#703731' },
+      soffit: { hex: '#E4E2D5' },
+      closures: [],
+    });
+    expect(live.roof_tile.roughness).toBe(0.85);
+    expect(live.roof_metal.roughness).toBe(0.75);
   });
 });

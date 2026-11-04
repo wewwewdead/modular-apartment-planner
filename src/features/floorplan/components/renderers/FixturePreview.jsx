@@ -28,6 +28,8 @@ function FixturePreview({ toolState, activeTool }) {
     tv: 'rgba(51,51,51,0.20)',
     sofa: 'rgba(200,184,168,0.25)',
     bed: 'rgba(200,210,225,0.25)',
+    shower: 'rgba(180,210,230,0.25)',
+    plant: 'rgba(106,163,90,0.25)',
   };
 
   return (

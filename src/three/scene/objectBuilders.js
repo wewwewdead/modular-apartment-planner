@@ -34,7 +34,18 @@ const FIXTURE_3D_HEIGHTS = {
   tv: 750,
   sofa: 800,
   bed: 550,
+  // Tray plus the glass screen standing on it.
+  shower: 1940,
 };
+
+/** A plant stands about a third taller than it is wide. */
+const PLANT_HEIGHT_PER_WIDTH = 1.3;
+
+function fixture3dHeight(fixture) {
+  if (fixture.fixtureType === 'plant')
+    return Math.max(200, Math.min(fixture.width, fixture.depth) * PLANT_HEIGHT_PER_WIDTH);
+  return FIXTURE_3D_HEIGHTS[fixture.fixtureType] || 750;
+}
 
 const DOOR_INSERT_THICKNESS_MIN = 35;
 const DOOR_INSERT_THICKNESS_MAX = 70;
@@ -751,7 +762,37 @@ function buildDoorObjects(wallContexts) {
     });
 }
 
-function buildWindowObjects(wallContexts) {
+/**
+ * The middle of the floor's walls — a cheap stand-in for "inside" that is good
+ * enough to tell which face of a window looks into the building.
+ */
+function wallEndpointCentre(walls = []) {
+  if (!walls.length) return null;
+  let x = 0;
+  let y = 0;
+  for (const wall of walls) {
+    x += wall.start.x + wall.end.x;
+    y += wall.start.y + wall.end.y;
+  }
+  return { x: x / (walls.length * 2), y: y / (walls.length * 2) };
+}
+
+/**
+ * +1 when the window's local +z (the plan perpendicular `(-sin a, cos a)` of
+ * its wall) points into the building, -1 when it points out. The preview hangs
+ * the warm interior glow on that side of the glass, so from outside the sky
+ * reflection is in front and the room is behind it.
+ */
+function windowInteriorSign(opening, centre) {
+  if (!centre || !opening.centerPoint) return 1;
+  const angle = opening.angle || 0;
+  const dx = centre.x - opening.centerPoint.x;
+  const dy = centre.y - opening.centerPoint.y;
+  return -Math.sin(angle) * dx + Math.cos(angle) * dy >= 0 ? 1 : -1;
+}
+
+function buildWindowObjects(wallContexts, floor = null) {
+  const centre = wallEndpointCentre(floor?.walls || []);
   return wallContexts
     .flatMap((context) => context.openings)
     .filter((opening) => opening.kind === 'window')
@@ -760,6 +801,7 @@ function buildWindowObjects(wallContexts) {
       desc.geometry = 'window';
       desc.windowType = opening.type || 'standard';
       desc.openDirection = opening.openDirection || 'left';
+      desc.interiorSign = windowInteriorSign(opening, centre);
       return desc;
     });
 }
@@ -805,7 +847,7 @@ function buildFixtureObjects(floor, floorLevel) {
       { x: fixture.x, y: fixture.y },
       {
         x: fixture.width,
-        y: FIXTURE_3D_HEIGHTS[fixture.fixtureType] || 750,
+        y: fixture3dHeight(fixture),
         z: fixture.depth,
       },
       fixtureBase,
@@ -926,7 +968,7 @@ export function buildFloorPreviewObjects(floor, options = {}) {
     ...buildStairObjects(floor, floorLevel, landings, landingElevationMap),
     ...buildLandingObjects(floor, floorLevel, landingElevationMap),
     ...buildDoorObjects(wallContexts),
-    ...buildWindowObjects(wallContexts),
+    ...buildWindowObjects(wallContexts, floor),
     ...buildFixtureObjects(floor, floorLevel),
     ...buildElectricalDeviceObjects(floor, floorLevel),
     ...buildRailingObjects(floor, floorLevel, landingElevationMap, crossFloorStairContexts),

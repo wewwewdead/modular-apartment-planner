@@ -2,6 +2,11 @@ import InputField from './InputField';
 import styles from './PropertiesPanel.module.css';
 import { useEditorState, useToolSettings } from '@/features/floorplan/context/FloorplanContext';
 import PhaseSelector from './PhaseSelector';
+import { Readout, panelKitStyles } from './properties/PanelKit';
+import TrussEndClosuresSection from './properties/TrussEndClosuresSection';
+import { TrussMembersSection, TrussProfileSection, TrussPurlinRoleSection } from './properties/TrussMembersSection';
+import TrussScheduleSummary from './TrussScheduleSummary';
+import { formatSlopeReadout } from '@/domain/roofCoveringCatalog';
 import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { buildTrussSystemGeometry, getTrussSystemPurlinTotalLength } from '@/geometry/trussGeometry';
 import { distance } from '@/geometry/point';
@@ -351,6 +356,15 @@ export function TrussSystemProperties({
         readOnly
       />
       <InputField label="Roof Fit" value={formatRoofMappingLabel(roofAttachmentType, hasMixedRoofMapping)} readOnly />
+      <TrussEndClosuresSection
+        trussSystem={trussSystem}
+        systemGeometry={systemGeometry}
+        roofSystem={roofSystem}
+        updateSystem={updateSystem}
+        u={u}
+        colourShared={(project.trussSystems || [])[0]?.id !== trussSystem.id}
+      />
+      <TrussMembersSection trussSystem={trussSystem} updateSystem={updateSystem} u={u} />
       <div className={styles.subtitle}>Purlins</div>
       <div
         style={{
@@ -368,6 +382,7 @@ export function TrussSystemProperties({
           onChange={(e) => updatePurlins({ enabled: e.target.checked })}
         />
       </div>
+      <TrussPurlinRoleSection trussSystem={trussSystem} roofSystem={roofSystem} updatePurlins={updatePurlins} />
       {purlinSystem.enabled && (
         <>
           <InputField
@@ -457,6 +472,7 @@ export function TrussSystemProperties({
           </div>
         </>
       )}
+      <TrussScheduleSummary trussSystem={trussSystem} systemGeometry={systemGeometry} roofSystem={roofSystem} u={u} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
         <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Draw Type</label>
         <select
@@ -742,6 +758,24 @@ export function TrussInstanceProperties({ project, trussSystem, trussInstance, d
             rise: deriveTrussRiseFromPitch(nextPitch, trussInstance.span, trussType.family),
           });
         }}
+      />
+      {trussType.family !== 'flat' ? (
+        <div className={panelKitStyles.gutter}>
+          {/* Derived from rise, the truss's geometric source of truth. */}
+          <Readout
+            label="Pitch angle"
+            value={formatSlopeReadout(
+              deriveTrussPitchFromRise(trussInstance.rise, trussInstance.span, trussType.family),
+            )}
+          />
+        </div>
+      ) : null}
+      <TrussProfileSection
+        trussSystem={trussSystem}
+        trussInstance={trussInstance}
+        updateInstance={updateInstance}
+        roofSystem={project?.roofSystem || null}
+        u={u}
       />
       <InputField
         label="Spacing"

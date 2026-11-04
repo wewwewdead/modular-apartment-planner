@@ -86,6 +86,106 @@ export const DRAWING_GRAPHICS = {
   },
 };
 
+/**
+ * The rendered-plan look the interactive canvas draws by default: tinted zones,
+ * solid structural walls, shaded furniture, on a white card. Never used by the
+ * sheets or the exporters — they render without a plan-style provider, which
+ * means drafting (see `PlanStyleContext`).
+ *
+ * Hierarchy is the whole idea. Solid walls are the darkest thing on the plan;
+ * partitions are visibly lighter and thinner; zone tints are muted and sit
+ * behind everything; text is confident but quiet.
+ */
+export const PRESENTATION_GRAPHICS = {
+  plan: {
+    wallSolidFill: '#2b2f36',
+    wallSolidStroke: '#1a1d22',
+    wallSolidStrokeWidth: 0.6,
+    wallPartitionFill: '#ffffff',
+    wallPartitionStroke: '#2b2f36',
+    wallPartitionStrokeWidth: 1,
+    columnFill: '#2b2f36',
+    zoneFill: {
+      private: '#f4dfbd',
+      wet: '#bfe0f3',
+      circulation: '#dcdfe3',
+      shared: '#d9e8d4',
+      outdoor: '#e7eadf',
+      unassigned: '#f1efe9',
+    },
+    zoneShadow: 'rgba(28,32,40,0.10)',
+    zoneShadowDepth: 160,
+    cardFill: '#ffffff',
+    // On the canvas the card's shadow is a screen-space soft edge (`dyPx`,
+    // `blurPx` at any zoom); the world-unit pair is for a render with no zoom.
+    cardShadow: { color: 'rgba(24,28,36,0.16)', dy: 160, blur: 220, dyPx: 12, blurPx: 18 },
+    stairFill: '#e6e8eb',
+    stairStroke: '#8a929c',
+    treadStroke: '#6b7280',
+    treadStrokeWidth: 0.6,
+    arrowStroke: '#2b2f36',
+    arrowStrokeWidth: 1.2,
+    stairLabelSize: 115,
+    doorLeafFill: '#2b2f36',
+    doorLeafThickness: 45,
+    swingStroke: '#7b8591',
+    swingStrokeWidth: 0.7,
+    glazingFill: '#cfe6f5',
+    glazingBand: 0.34,
+    frameStroke: '#2b2f36',
+    frameStrokeWidth: 0.9,
+    slabEdgeStroke: '#9aa3ad',
+    slabEdgeStrokeWidth: 0.7,
+    beamStroke: '#bcc3ca',
+    beamDash: '4 3',
+    gridMinor: '#f1efe9',
+    gridMajor: '#e2dfd6',
+    // Furniture: one warm ink for edges, a soft white for highlights, a single
+    // shared drop shadow. Fills are flat — the shading is in the shapes.
+    fixtureInk: '#6e6457',
+    fixtureInkSoft: '#a39888',
+    fixtureEdgeWidth: 0.8,
+    fixtureDetailWidth: 0.5,
+    fixtureShadow: { color: 'rgba(0,0,0,0.14)', dy: 40, blur: 35, dyPx: 3, blurPx: 3 },
+  },
+  annotation: {
+    dimensionStroke: '#3a4049',
+    dimensionExtension: '#7b8591',
+    dimensionStrokeWidth: 0.8,
+    dimensionExtensionWidth: 0.6,
+    arrowLength: 70,
+    arrowHalfWidthRatio: 0.4,
+    arrowFilled: true,
+    text: '#1c2128',
+    textMuted: '#5b6671',
+    fontFamily: 'var(--font-ui)',
+    dimensionTextWeight: 600,
+    roomNameWeight: 700,
+    roomNameTransform: 'uppercase',
+    roomNameTracking: '0.04em',
+    chipFill: 'rgba(255,255,255,0.92)',
+    chipRadiusPx: 4,
+  },
+  // The SVG elevations in presentation: the same white-model palette as the 3D.
+  elevation: {
+    wallFill: '#f2f0eb',
+    wallStroke: '#4a525c',
+    accentFill: '#dcd9d3',
+    accentStroke: '#4a525c',
+    roofFill: '#c9ccd0',
+    glazingFill: '#bcd8ea',
+    frameStroke: '#2f3338',
+    frameStrokeWidth: 1.2,
+    doorFill: '#5a3f2b',
+    railingStroke: '#2f3338',
+    groundFill: '#e4e5e8',
+    groundDepth: 600,
+    groundStroke: '#9aa3ad',
+    shadowFill: 'rgba(28,32,40,0.08)',
+    shadowOffset: 250,
+  },
+};
+
 export function snapToGrid(value, grid = SHEET_TOKENS.viewportGrid) {
   return Math.round(value / grid) * grid;
 }

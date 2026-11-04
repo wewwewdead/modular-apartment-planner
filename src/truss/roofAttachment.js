@@ -1,7 +1,13 @@
 import { getFloorStackBounds } from '@/domain/floorModels';
-import { getProjectTrussSystem, getTrussTypeAttachedRoofType, resolveTrussType } from '@/domain/trussModels';
+import {
+  getProjectTrussSystem,
+  getTrussProfileOptions,
+  getTrussTypeAttachedRoofType,
+  resolveTrussType,
+} from '@/domain/trussModels';
+import { isConvexPolygon } from '@/geometry/polygon';
 import { buildTrussSystemGeometry } from '@/geometry/trussGeometry';
-import { buildTrussProfile, resolveTrussMetrics } from './profile';
+import { buildTrussProfile, buildTrussRoofSupportOutline, resolveTrussMetrics, sampleTrussOutlineZ } from './profile';
 import {
   buildSystemBoundary,
   collectSystemCopyPlanPoints,
@@ -12,19 +18,50 @@ import {
 
 const EPSILON = 1e-6;
 
-export function getTrussRoofAttachmentElevation(trussSystem) {
+function resolvePurlinDepth(trussSystem) {
+  return trussSystem?.purlinSystem?.enabled ? Math.max(Number(trussSystem?.purlinSystem?.depth || 0), 0) : 0;
+}
+
+/**
+ * Where an attached roof's underside meets the trusses (spec §7.2): the top
+ * chord's top face plus the purlins, at the start heel (x = 0):
+ * `baseElevation + bc + h_r + tc / cos θ + purlinDepth / cos θ`. The profile-
+ * driven roof measures its signed rises from this datum.
+ *
+ * A HIP roof is still the preset formula, which measures its rise from the
+ * ROOF OUTLINE edge (rise 0 there). That edge is the truss tail tip pushed a
+ * further `roofOverhang` out when the roof's own overhang is applied (RT-3.1,
+ * spec §7.8.1), so the hip datum is the support line extrapolated down the
+ * tail to x = −(overhangStart + roofOverhang). Every other type ignores
+ * `roofOverhang`.
+ */
+export function getTrussRoofAttachmentElevation(trussSystem, { roofOverhang = 0 } = {}) {
   const baseElevation = Number.isFinite(trussSystem?.baseElevation) ? trussSystem.baseElevation : 0;
-  const roofSupportOffset = resolveTrussSystemRoofSupportOffset(trussSystem);
-  const purlinDepth = trussSystem?.purlinSystem?.enabled
-    ? Math.max(Number(trussSystem?.purlinSystem?.depth || 0), 0)
-    : 0;
-  return baseElevation + roofSupportOffset + purlinDepth;
+  return baseElevation + resolveTrussSystemRoofSupportOffset(trussSystem, undefined, roofOverhang);
+}
+
+/**
+ * The roof's own overhang as `buildRoofPlaneGeometry` applies it
+ * (`ensureRoofOutline`): only on a convex boundary, never on flat/custom.
+ */
+function resolveAppliedRoofOverhang(roofSystem, boundaryPolygon) {
+  const overhang = Number(roofSystem?.pitch?.overhang);
+  if (!Number.isFinite(overhang) || overhang <= EPSILON) return 0;
+  if (roofSystem?.roofType === 'flat' || roofSystem?.roofType === 'custom') return 0;
+  return isConvexPolygon(boundaryPolygon || []) ? overhang : 0;
+}
+
+/** Only a hip roof's datum reads the roof overhang; skip the boundary build otherwise. */
+function trussSystemDatumReadsRoofOverhang(trussSystem, catalog) {
+  const firstInstance = trussSystem?.trussInstances?.[0] || null;
+  return Boolean(firstInstance) && resolveTrussType(firstInstance.trussTypeId, catalog)?.shape === 'hip';
 }
 
 export function getRoofAttachmentElevation(project, roofSystem = project?.roofSystem || null) {
-  const attachedTrussSystem = getAttachedTrussSystem(project, roofSystem);
-  if (attachedTrussSystem) {
-    return getTrussRoofAttachmentElevation(attachedTrussSystem);
+  if (getAttachedTrussSystem(project, roofSystem)) {
+    // One rule with the normalizer (syncRoofSystemAttachment), so an offset the
+    // reducer stores against this elevation re-derives the same base.
+    return resolveRoofAttachmentContext(project, roofSystem).attachmentElevation;
   }
 
   return getFloorStackBounds(project).maxElevation;
@@ -35,35 +72,87 @@ export function getAttachedTrussSystem(project, roofSystem = project?.roofSystem
   return getProjectTrussSystem(project, roofSystem.trussAttachmentId);
 }
 
-function resolveTrussSystemRoofSupportOffset(trussSystem, catalog) {
-  const firstInstance = trussSystem?.trussInstances?.[0] || null;
-  if (!firstInstance) return 0;
-  const profile = buildTrussProfile(firstInstance, catalog);
-  return Math.max(Number(profile?.roofOutline?.[0]?.z || 0), 0);
+/**
+ * z of a support line at x; before its first point the first segment is
+ * extrapolated (a hip datum past the tail tip — the tail continues the run,
+ * so the extension is exact). `sampleTrussOutlineZ` clamps at the ends.
+ */
+function sampleSupportLineZ(support, x) {
+  const ordered = (support || [])
+    .filter((point) => Number.isFinite(point?.x) && Number.isFinite(point?.z))
+    .sort((a, b) => a.x - b.x);
+  const first = ordered[0];
+  const second = ordered.find((point) => point.x > (first?.x ?? 0) + EPSILON);
+  if (first && second && x < first.x - EPSILON) {
+    return first.z + ((second.z - first.z) * (x - first.x)) / (second.x - first.x);
+  }
+  return sampleTrussOutlineZ(support, x);
 }
 
-function buildAttachedRoofShapeProfile(trussInstance, catalog) {
+function resolveTrussSystemRoofSupportOffset(trussSystem, catalog, roofOverhang = 0) {
+  const firstInstance = trussSystem?.trussInstances?.[0] || null;
+  if (!firstInstance) return 0;
+  const profile = buildTrussProfile(firstInstance, catalog, getTrussProfileOptions(trussSystem));
+  const support = buildTrussRoofSupportOutline(profile, resolvePurlinDepth(trussSystem));
+  const datumX =
+    profile?.trussType?.shape === 'hip'
+      ? -((profile.metrics?.overhangStart || 0) + Math.max(0, Number(roofOverhang) || 0))
+      : 0;
+  return sampleSupportLineZ(support, datumX);
+}
+
+/** Drop interior points that lie on the straight line through their neighbours. */
+function dropCollinear(points) {
+  if (points.length <= 2) return points;
+  const result = [points[0]];
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const previous = result[result.length - 1];
+    const point = points[index];
+    const next = points[index + 1];
+    const run = next.x - previous.x;
+    const expected =
+      Math.abs(run) <= EPSILON ? previous.z : previous.z + ((next.z - previous.z) * (point.x - previous.x)) / run;
+    if (Math.abs(point.z - expected) > 1e-6) result.push(point);
+  }
+  result.push(points[points.length - 1]);
+  return result;
+}
+
+/**
+ * The attached roof's underside across the span (spec §7.2): the chord top
+ * face + purlins, tails included, as SIGNED rises from the start-heel datum
+ * (`getTrussRoofAttachmentElevation`). A tail below the heel is a negative rise.
+ */
+function buildAttachedRoofShapeProfile(trussInstance, catalog, trussSystem = null) {
   if (!trussInstance) return null;
 
-  const profile = buildTrussProfile(trussInstance, catalog);
-  const roofOutline = (profile?.roofOutline || []).filter(
-    (point) => Number.isFinite(point?.x) && Number.isFinite(point?.z),
+  const profile = buildTrussProfile(trussInstance, catalog, getTrussProfileOptions(trussSystem));
+  const support = dropCollinear(
+    buildTrussRoofSupportOutline(profile, resolvePurlinDepth(trussSystem)).filter(
+      (point) => Number.isFinite(point?.x) && Number.isFinite(point?.z),
+    ),
   );
-  if (roofOutline.length < 2) return null;
+  if (support.length < 2) return null;
 
-  const minX = Math.min(...roofOutline.map((point) => point.x));
-  const maxX = Math.max(...roofOutline.map((point) => point.x));
+  const minX = Math.min(...support.map((point) => point.x));
+  const maxX = Math.max(...support.map((point) => point.x));
   const totalSpan = Math.max(maxX - minX, EPSILON);
-  const maxRise = Math.max(...roofOutline.map((point) => Math.max(0, point.z)));
+  const datum = sampleTrussOutlineZ(support, 0);
+  const points = support.map((point) => ({
+    position: (point.x - minX) / totalSpan,
+    rise: point.z - datum,
+  }));
+  const pitchPercent = Number(profile?.metrics?.pitch);
 
   return {
-    shape: profile?.trussType?.shape || null,
-    points: roofOutline.map((point) => ({
-      position: (point.x - minX) / totalSpan,
-      rise: Math.max(0, point.z),
-    })),
+    // The ROOF shape (a scissor truss carries a plain gable roof).
+    shape: profile?.trussType?.attachedRoofType || profile?.trussType?.shape || null,
+    points,
     totalSpan,
-    maxRise,
+    maxRise: Math.max(...points.map((point) => point.rise)),
+    // RT-3.1 (spec §7.8.2): the underside run slope as a ratio, the reference
+    // a manual roof slope scales these rises against.
+    slope: Number.isFinite(pitchPercent) ? Math.max(0, pitchPercent) / 100 : null,
   };
 }
 
@@ -130,7 +219,7 @@ export function deriveRoofStateFromTrussSystem(trussSystem, catalog, sourceSyste
   return {
     roofType: roofAttachmentType,
     baseElevation: getTrussRoofAttachmentElevation(trussSystem),
-    attachedShapeProfile: buildAttachedRoofShapeProfile(trussInstance, catalog),
+    attachedShapeProfile: buildAttachedRoofShapeProfile(trussInstance, catalog, trussSystem),
     pitch: {
       slope: pitchSlope,
       direction: {
@@ -152,13 +241,20 @@ export function resolveRoofAttachmentContext(project, roofSystem = null, catalog
   if (attachedTrussSystem) {
     const systemGeometry = buildTrussSystemGeometry(attachedTrussSystem);
     const derivedRoofState = deriveRoofStateFromTrussSystem(attachedTrussSystem, catalog, systemGeometry);
+    const derivedBoundaryPolygon = derivedRoofState
+      ? deriveRoofBoundaryFromTrussSystem(attachedTrussSystem, systemGeometry)
+      : null;
+    // RT-3.1: a hip datum sits at the ROOF outline edge (see
+    // getTrussRoofAttachmentElevation), so it reads the roof's applied overhang.
+    const roofOverhang =
+      derivedRoofState && trussSystemDatumReadsRoofOverhang(attachedTrussSystem, catalog)
+        ? resolveAppliedRoofOverhang({ ...roofSystem, roofType: 'hip' }, derivedBoundaryPolygon)
+        : 0;
     return {
-      attachmentElevation: getTrussRoofAttachmentElevation(attachedTrussSystem),
+      attachmentElevation: getTrussRoofAttachmentElevation(attachedTrussSystem, { roofOverhang }),
       attachedTrussSystem,
       derivedRoofState,
-      derivedBoundaryPolygon: derivedRoofState
-        ? deriveRoofBoundaryFromTrussSystem(attachedTrussSystem, systemGeometry)
-        : null,
+      derivedBoundaryPolygon,
     };
   }
 

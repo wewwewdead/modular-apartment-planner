@@ -89,6 +89,13 @@ export const FIXTURE_SOFA_WIDTH = 2000;
 export const FIXTURE_SOFA_DEPTH = 900;
 export const FIXTURE_BED_WIDTH = 1400;
 export const FIXTURE_BED_DEPTH = 2000;
+export const FIXTURE_SHOWER_WIDTH = 900;
+export const FIXTURE_SHOWER_DEPTH = 900;
+// A potted plant comes in two sizes — a 500 mm pot plant and an 800 mm floor
+// plant. Width is the canopy diameter; the plan symbol and the 3D canopy both
+// scale from it.
+export const FIXTURE_PLANT_WIDTH = 500;
+export const FIXTURE_PLANT_LARGE_WIDTH = 800;
 
 export const ELECTRICAL_SYMBOL_SIZE = 300; // mm (plan footprint of a device symbol)
 // Physical faceplate every view agrees on: drawn true-size in plan, extruded in

@@ -213,6 +213,31 @@ export function applyProceduralDetail(material, familyName) {
     return material;
   }
 
+  installDetailHook(material);
+  return material;
+}
+
+/**
+ * A clone of a detailed material that keeps the detail shader, and so keeps
+ * sharing the one program every detailed material compiles.
+ *
+ * `Material.clone` copies neither the compile hook nor the cache key (both live
+ * on the instance), so a plain clone compiled a program of its own — and its
+ * JSON copy of `userData` carried the source's live uniforms object as dead
+ * data, which made `applyProceduralDetail` think it was already patched.
+ */
+export function cloneWithProceduralDetail(material) {
+  const clone = material.clone();
+  const family = material.userData?.detailFamily;
+  if (!family) return clone;
+  delete clone.userData.detailUniforms;
+  clone.userData.detailFamily = { ...family };
+  clone.userData.detailScale = material.userData.detailScale ?? 1;
+  installDetailHook(clone);
+  return clone;
+}
+
+function installDetailHook(material) {
   material.onBeforeCompile = (shader) => {
     const params = material.userData.detailFamily;
     const scale = material.userData.detailScale ?? 1;
@@ -241,7 +266,6 @@ export function applyProceduralDetail(material, familyName) {
   // program; the per-material uniform values are what differ.
   material.customProgramCacheKey = () => 'preview-procedural-detail-v1';
   material.needsUpdate = true;
-  return material;
 }
 
 function syncDetailUniforms(material) {
@@ -262,8 +286,8 @@ function syncDetailUniforms(material) {
  *
  * Uniform-only, so it takes effect on the next frame with no recompilation.
  */
-export function setDetailScale(materialPalette, scale) {
-  Object.values(materialPalette || {}).forEach((material) => {
+export function setDetailScale(materialPalette, scale, extraMaterials = []) {
+  [...Object.values(materialPalette || {}), ...extraMaterials].forEach((material) => {
     if (!material?.userData?.detailFamily) return;
     material.userData.detailScale = scale;
     syncDetailUniforms(material);

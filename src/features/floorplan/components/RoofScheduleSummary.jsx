@@ -1,5 +1,6 @@
 import styles from './PropertiesPanel.module.css';
 import { buildRoofScheduleSummary } from '@/roof/roofSchedule';
+import { buildRoofEdgeKitQuantities, resolveRoofEdgeKitContext } from '@/roof/roofEdgeKit';
 
 function formatLength(mm, u) {
   return `${u.toDisplay(mm)} ${u.suffix}`;
@@ -9,8 +10,28 @@ function formatArea(area) {
   return `${(area / 1_000_000).toFixed(2)} m²`;
 }
 
-export default function RoofScheduleSummary({ roofSystem, u }) {
+function formatMetres(lm) {
+  return `${lm.toFixed(2)} m`;
+}
+
+/**
+ * `project` is optional: with it the edge kit is measured against the real
+ * bearing line (an attached roof's soffit stops at the trusses' bearings) and
+ * the ground floor (downpipes); without it the roof's own boundary stands in.
+ */
+export default function RoofScheduleSummary({ roofSystem, u, project = null }) {
   const schedule = buildRoofScheduleSummary(roofSystem);
+  const kit = buildRoofEdgeKitQuantities(roofSystem, project ? resolveRoofEdgeKitContext(project, roofSystem) : {});
+  const kitMetrics = [
+    { key: 'kit-fascia', label: 'Fascia', value: formatMetres(kit.fasciaLm), show: kit.fasciaLm > 0 },
+    { key: 'kit-barge', label: 'Barge Boards', value: formatMetres(kit.bargeLm), show: kit.bargeLm > 0 },
+    { key: 'kit-gutter', label: 'Eave Gutter', value: formatMetres(kit.gutterLm), show: kit.gutterLm > 0 },
+    { key: 'kit-downpipes', label: 'Downpipes', value: String(kit.downpipeCount), show: kit.downpipeCount > 0 },
+    { key: 'kit-ridge', label: 'Ridge Capping', value: formatMetres(kit.ridgeCapLm), show: kit.ridgeCapLm > 0 },
+    { key: 'kit-soffit', label: 'Soffit Lining', value: `${kit.soffitM2.toFixed(2)} m²`, show: kit.soffitM2 > 0 },
+  ]
+    .filter((metric) => metric.show)
+    .map((metric) => ({ ...metric, meta: 'edge kit' }));
   const metrics = [
     { key: 'net-surface-area', label: 'Net Roof Area', value: formatArea(schedule.netSurfaceArea) },
     { key: 'net-plan-area', label: 'Projected Area', value: formatArea(schedule.netPlanArea) },
@@ -31,6 +52,7 @@ export default function RoofScheduleSummary({ roofSystem, u }) {
     { key: 'skylights', label: 'Skylights', value: String(schedule.skylightCount) },
     { key: 'access-openings', label: 'Roof Hatches', value: String(schedule.accessOpeningCount || 0) },
     { key: 'openings', label: 'Other Openings', value: String(schedule.roofOpeningCount) },
+    ...kitMetrics,
   ];
 
   return (

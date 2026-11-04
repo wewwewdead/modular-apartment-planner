@@ -60,7 +60,23 @@ export const STUDIO_ENVIRONMENT_INTENSITY = 0.2;
  */
 export const SKY_ENVIRONMENT_INTENSITY = 0.25;
 
-function createStudioBackdropTexture() {
+// The studio sweep each look stands in front of: the light, nearly flat one
+// for the white model, and the earlier, darker one the detail editors keep.
+const BACKDROP_STOPS = {
+  white_model: [
+    [0, 'rgb(246, 247, 249)'],
+    [0.5, 'rgb(232, 234, 237)'],
+    [1, 'rgb(214, 217, 221)'],
+  ],
+  classic: [
+    [0, 'rgb(232, 236, 241)'],
+    [0.46, 'rgb(214, 220, 228)'],
+    [0.52, 'rgb(196, 202, 210)'],
+    [1, 'rgb(150, 156, 164)'],
+  ],
+};
+
+function createStudioBackdropTexture(look = 'white_model') {
   if (typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas');
   canvas.width = 8;
@@ -68,13 +84,13 @@ function createStudioBackdropTexture() {
   const context = canvas.getContext('2d');
   if (!context) return null;
 
-  // A seamless-paper sweep: pale at the top, settling to a slightly cooler,
-  // darker floor. The model reads against it without competing with it.
+  // A seamless-paper sweep, light and nearly flat: near-white at the top,
+  // settling to a soft grey floor with no horizon line to read as one. A white
+  // model wants a light studio behind it; a dark sweep makes it a cut-out.
   const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
-  gradient.addColorStop(0, 'rgb(232, 236, 241)');
-  gradient.addColorStop(0.46, 'rgb(214, 220, 228)');
-  gradient.addColorStop(0.52, 'rgb(196, 202, 210)');
-  gradient.addColorStop(1, 'rgb(150, 156, 164)');
+  for (const [offset, color] of BACKDROP_STOPS[look] || BACKDROP_STOPS.white_model) {
+    gradient.addColorStop(offset, color);
+  }
   context.fillStyle = gradient;
   context.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -84,7 +100,7 @@ function createStudioBackdropTexture() {
   return texture;
 }
 
-export function createEnvironment(renderer) {
+export function createEnvironment(renderer, { look = 'white_model' } = {}) {
   const pmremGenerator = new THREE.PMREMGenerator(renderer);
   let studioTarget = null;
   let skyTarget = null;
@@ -107,7 +123,7 @@ export function createEnvironment(renderer) {
 
     /** The flat backdrop that goes with the studio environment. */
     studioBackdrop() {
-      if (!backdropTexture) backdropTexture = createStudioBackdropTexture();
+      if (!backdropTexture) backdropTexture = createStudioBackdropTexture(look);
       return backdropTexture;
     },
 

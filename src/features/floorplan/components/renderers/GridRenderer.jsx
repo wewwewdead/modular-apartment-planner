@@ -1,5 +1,7 @@
 import { memo } from 'react';
 import { GRID_MINOR, GRID_MAJOR } from '@/domain/defaults';
+import { PRESENTATION_GRAPHICS } from '@/sheets/standards';
+import { isPresentationStyle, usePlanStyle } from './PlanStyleContext';
 
 /*
  * Two sibling patterns, not one nested inside the other.
@@ -12,13 +14,18 @@ import { GRID_MINOR, GRID_MAJOR } from '@/domain/defaults';
  * anchored in user space, so the minor lines still land under the major ones.
  */
 function GridRenderer() {
+  // Presentation keeps the grid (the Toggle Grid button still governs it) but
+  // pales it, so the plan's card and tints are what the eye lands on.
+  const presentation = isPresentationStyle(usePlanStyle());
+  const minor = presentation ? PRESENTATION_GRAPHICS.plan.gridMinor : 'var(--color-grid-minor)';
+  const major = presentation ? PRESENTATION_GRAPHICS.plan.gridMajor : 'var(--color-grid-major)';
   return (
     <defs>
       <pattern id="grid-minor" width={GRID_MINOR} height={GRID_MINOR} patternUnits="userSpaceOnUse">
         <path
           d={`M ${GRID_MINOR} 0 L 0 0 0 ${GRID_MINOR}`}
           fill="none"
-          stroke="var(--color-grid-minor)"
+          stroke={minor}
           strokeWidth={1}
           vectorEffect="non-scaling-stroke"
         />
@@ -27,7 +34,7 @@ function GridRenderer() {
         <path
           d={`M ${GRID_MAJOR} 0 L 0 0 0 ${GRID_MAJOR}`}
           fill="none"
-          stroke="var(--color-grid-major)"
+          stroke={major}
           strokeWidth={2}
           vectorEffect="non-scaling-stroke"
         />

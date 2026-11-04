@@ -14,7 +14,14 @@ function normalize2d(vector) {
   };
 }
 
-function buildChordAttachments(run, spacing, startOffset, endOffset, side) {
+/** The run's normal on the roof side (z up), from its unit tangent. */
+export function upwardNormal(tangent) {
+  const unit = normalize2d(tangent || { x: 1, z: 0 });
+  const normal = { x: -unit.z, z: unit.x };
+  return normal.z < 0 || (normal.z === 0 && normal.x < 0) ? { x: -normal.x, z: -normal.z } : normal;
+}
+
+function buildChordAttachments(run, spacing, startOffset, endOffset, side, seatOffset = 0) {
   if (!(run?.points || []).length || spacing <= EPSILON) return [];
 
   const chordLength = getTopChordRunLength(run);
@@ -30,11 +37,20 @@ function buildChordAttachments(run, spacing, startOffset, endOffset, side) {
     const sample = sampleTopChordRun(run, distanceAlong);
     if (!sample) continue;
 
+    // RT-3 (spec §7.4): the run is the chord CENTRE-line; the purlin sits on
+    // the chord's top face, so its centre is tc/2 + depth/2 out along the
+    // run's normal.
+    const normal = upwardNormal(sample.tangent);
     attachments.push({
       id: `${side}_${index}`,
       side,
-      localPoint: sample.point,
+      chordPoint: sample.point,
+      localPoint: {
+        x: sample.point.x + normal.x * seatOffset,
+        z: sample.point.z + normal.z * seatOffset,
+      },
       tangent: sample.tangent,
+      normal,
       distanceAlong: sample.distanceAlong,
     });
   }
@@ -60,6 +76,9 @@ export function buildTrussPurlinAttachments(profile, purlinSystem = {}) {
   const startOffset = Math.max(Number(purlinSystem.startOffset || 0), 0);
   const endOffset = Math.max(Number(purlinSystem.endOffset || 0), 0);
   if (spacing <= EPSILON) return [];
+  const chordDepth = Math.max(Number(profile?.metrics?.topChordDepth) || 0, 0);
+  const purlinDepth = Math.max(Number(purlinSystem.depth) || 0, 0);
+  const seatOffset = chordDepth / 2 + purlinDepth / 2;
 
   const topChordRuns = (profile?.topChordRuns || []).filter((run) => (run.points || []).length >= 2);
 
@@ -74,12 +93,13 @@ export function buildTrussPurlinAttachments(profile, purlinSystem = {}) {
       startOffset,
       endOffset,
       'main',
+      seatOffset,
     );
   }
 
   return dedupeAttachments(
     topChordRuns.flatMap((run, index) =>
-      buildChordAttachments(run, spacing, startOffset, endOffset, run.side || run.id || `run_${index + 1}`),
+      buildChordAttachments(run, spacing, startOffset, endOffset, run.side || run.id || `run_${index + 1}`, seatOffset),
     ),
   );
 }

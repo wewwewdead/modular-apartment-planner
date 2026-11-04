@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { applyProceduralDetail, setDetailScale } from './proceduralDetail';
+import { disposeSelectionMaterials, selectionMaterialsOf } from './selectionMaterials';
 
 /**
  * The preview's material library.
@@ -56,7 +57,19 @@ const DETAIL_ASSIGNMENTS = {
   ceilingDiffuser: 'metal',
   ceilingOpeningHousing: 'metal',
   slab: 'concrete',
+  // The roof family is keyed by what the roof is clad in; `roof` is kept as an
+  // alias of `roof_slab` (same instance) so nothing that still names it breaks.
   roof: 'concrete',
+  roof_metal: 'metal',
+  roof_tile: 'concrete',
+  roof_membrane: 'smooth',
+  roof_slab: 'concrete',
+  roofRidgeCap: 'metal',
+  roofTrim: 'smooth',
+  roofGutter: 'smooth',
+  roofDownpipe: 'smooth',
+  roofSoffit: 'plaster',
+  gableInfill: 'fibreCement',
   parapet: 'plaster',
   drain: 'metal',
   trussChord: 'timber',
@@ -89,6 +102,10 @@ const DETAIL_ASSIGNMENTS = {
   fixtureAccentWood: 'timber',
   railing_handrail: 'metal',
   railing_guardrail: 'metal',
+  shower: 'smooth',
+  plantLeaf: 'fabric',
+  plantLeafDeep: 'fabric',
+  plantPot: 'smooth',
 };
 
 /** Dielectric: paint, plaster, timber, ceramic, fabric, concrete. */
@@ -134,7 +151,54 @@ function glass(parameters) {
   });
 }
 
-export function createMaterialPalette() {
+/**
+ * Which look a palette is built in.
+ *
+ * `white_model` is the presentation look every model view uses. `classic` is
+ * the palette as it was before it — kept, key for key, for the wall and
+ * ceiling detail editors' panes, which are working drawings of one assembly
+ * and are not to change appearance with the presentation work.
+ */
+export const PALETTE_LOOKS = Object.freeze({ WHITE_MODEL: 'white_model', CLASSIC: 'classic' });
+
+/** The previous values of every key the white model changed. */
+const CLASSIC_SURFACES = {
+  wall: { color: 0xcfc8ba, roughness: 0.9 },
+  roof: { color: 0xa2a7ab, roughness: 0.9 },
+  // The covering family took over from `roof`; the detail editors' panes keep
+  // the grey `roof` always had, whichever covering a project names.
+  roof_metal: { color: 0xa2a7ab, roughness: 0.9 },
+  roof_tile: { color: 0xa2a7ab, roughness: 0.9 },
+  roof_membrane: { color: 0xa2a7ab, roughness: 0.9 },
+  roof_slab: { color: 0xa2a7ab, roughness: 0.9 },
+  roofRidgeCap: { color: 0xa2a7ab, roughness: 0.9 },
+  parapet: { color: 0xa0a5aa, roughness: 0.9 },
+  column: { color: 0x94989b, roughness: 0.93 },
+  beam: { color: 0x898d91, roughness: 0.92 },
+  stair: { color: 0x9a9d9f, roughness: 0.93 },
+  landing: { color: 0x9d9fa2, roughness: 0.93 },
+  door: { color: 0xb9854f, roughness: 0.7 },
+  windowFrame: { color: 0xe8eaed, roughness: 0.38 },
+  window: { color: 0xb6d4e8, opacity: 0.28, envMapIntensity: 2.2 },
+  railing_handrail: { color: 0x9ea4a9, roughness: 0.3 },
+  railing_guardrail: { color: 0xa3abb2, roughness: 0.5 },
+};
+
+function applyClassicLook(palette) {
+  for (const [key, values] of Object.entries(CLASSIC_SURFACES)) {
+    const material = palette[key];
+    if (!material) continue;
+    if (values.color !== undefined) material.color.setHex(values.color);
+    if (values.roughness !== undefined) material.roughness = values.roughness;
+    if (values.opacity !== undefined) material.opacity = values.opacity;
+    if (values.envMapIntensity !== undefined) material.envMapIntensity = values.envMapIntensity;
+  }
+  // No warm room behind the glass: without the material, no glow pane is built.
+  palette.windowGlow.dispose();
+  delete palette.windowGlow;
+}
+
+export function createMaterialPalette({ look = PALETTE_LOOKS.WHITE_MODEL } = {}) {
   const palette = {
     // Wall-mounted devices are real fittings, not a systems overlay — opaque
     // ivory plastic, unlike the translucent systemElectrical conduit material.
@@ -143,8 +207,10 @@ export function createMaterialPalette() {
     systemWater: surface({ color: 0x369bd7, roughness: 0.48, transparent: true, opacity: 0.68 }),
     systemMechanical: surface({ color: 0x68b783, roughness: 0.58, transparent: true, opacity: 0.62 }),
 
-    // Painted render over blockwork: warm off-white, almost fully diffuse.
-    wall: surface({ color: 0xcfc8ba, roughness: 0.9 }),
+    // Painted render over blockwork: a warm white plaster, almost fully
+    // diffuse — the "white model" the presentation board is built in. Still a
+    // shade below the ceiling board, which stays the lightest thing in a room.
+    wall: surface({ color: 0xe9e5dd, roughness: 0.88 }),
     // Fibre cement sheet. Pale, neutral, and noticeably smoother than anything
     // cast — it is pressed and sanded, so it keeps a faint satin sheen that a
     // poured surface never has. That sheen plus the flat, even tone is the
@@ -204,8 +270,29 @@ export function createMaterialPalette() {
     // light that hits it; painting it near-white to match everything else is
     // what made a slab and a cladding sheet the same material on screen.
     slab: surface({ color: 0x8b8d8c, roughness: 0.96 }),
-    roof: surface({ color: 0xa2a7ab, roughness: 0.9 }),
-    parapet: surface({ color: 0xa0a5aa, roughness: 0.9 }),
+    // The roof body, one material per covering family. `roof_slab` is the old
+    // `roof`: a notch lighter than the slab, so a flat roof reads as a finished
+    // surface. The others start in the default covering's Shale Grey; the real
+    // colour and finish are the project's, applied at runtime by
+    // `applyRoofAppearanceToPalette` (one roof per project, so mutating the
+    // shared instances is enough and nothing recompiles).
+    roof_slab: surface({ color: 0xb4b8bc, roughness: 0.9 }),
+    // Painted steel is a paint film, not a mirror: dielectric, satin.
+    roof_metal: surface({ color: 0xbdbfba, roughness: 0.5 }),
+    roof_tile: surface({ color: 0xbdbfba, roughness: 0.85 }),
+    roof_membrane: surface({ color: 0xbdbfba, roughness: 0.6 }),
+    // Ridge and barge capping: the covering's own sheet folded over the ridge.
+    roofRidgeCap: surface({ color: 0xbdbfba, roughness: 0.5 }),
+    // Fascia, barge board, gutter and downpipe share one trim colour — and one
+    // instance (`roofGutter` and `roofDownpipe` alias it below), so the whole
+    // edge kit is a single instanced material.
+    roofTrim: surface({ color: 0xbdbfba, roughness: 0.55 }),
+    // Fibre cement eaves lining, painted.
+    roofSoffit: surface({ color: 0xe4e2d5, roughness: 0.88 }),
+    // Gable-end infill cladding (RT-2 draws it; the key is here so the palette
+    // and its runtime appearance hook are complete).
+    gableInfill: surface({ color: 0xe9e5dd, roughness: 0.8 }),
+    parapet: surface({ color: 0xd9d6cf, roughness: 0.9 }),
     drain: metal({ color: 0x8d979f, roughness: 0.45 }),
     roofOpening: glass({ color: 0xbcd9ec, opacity: 0.24, roughness: 0.06 }),
 
@@ -219,17 +306,52 @@ export function createMaterialPalette() {
     trussPurlin_timber: surface({ color: 0xa5835a, roughness: 0.78 }),
     trussPurlin_metal: metal({ color: 0xaab5be, roughness: 0.34 }),
 
-    // Fair-face precast: cleaner and lighter than an in-situ slab, still clearly
-    // the same substance.
-    column: surface({ color: 0x94989b, roughness: 0.93 }),
-    beam: surface({ color: 0x898d91, roughness: 0.92 }),
-    stair: surface({ color: 0x9a9d9f, roughness: 0.93 }),
-    landing: surface({ color: 0x9d9fa2, roughness: 0.93 }),
+    // The RC frame, plastered over: one step below the wall so it reads as a
+    // frame line rather than a grey cage, and still darker than a fibre cement
+    // sheet, which is a finish hung on it.
+    column: surface({ color: 0xd5d2cb, roughness: 0.9 }),
+    beam: surface({ color: 0xd1cec7, roughness: 0.9 }),
+    stair: surface({ color: 0xd2cfc8, roughness: 0.9 }),
+    landing: surface({ color: 0xd2cfc8, roughness: 0.9 }),
 
-    door: surface({ color: 0xb9854f, roughness: 0.7 }),
-    // Powder-coated aluminium frame: a dielectric coat, not bare metal.
-    windowFrame: surface({ color: 0xe8eaed, roughness: 0.38 }),
-    window: glass({ color: 0xb6d4e8, opacity: 0.28 }),
+    // Dark stained timber — the one warm accent on a white model.
+    door: surface({ color: 0x5a3f2b, roughness: 0.62 }),
+    // Charcoal powder-coated aluminium: a dielectric coat, not bare metal.
+    windowFrame: surface({ color: 0x2f3338, roughness: 0.5 }),
+    // More sky in the glass: a deeper tint and a stronger reflection.
+    window: glass({ color: 0x9fc3dc, opacity: 0.4, envMapIntensity: 2.8 }),
+    /**
+     * The warm, dim room behind the glass.
+     *
+     * There is no interior to see through a window from outside, and a
+     * transmissive glass would only blur one that is not there. A pane just
+     * behind the glazing that glows faintly warm is what a photograph of a lived
+     * in building shows instead. Emissive, so its strength is one uniform —
+     * `applyInteriorLighting` turns it up at night and down with the lights,
+     * without a recompile — and transparent, so it is never batched and never
+     * writes depth.
+     */
+    windowGlow: new THREE.MeshStandardMaterial({
+      color: 0x2b2826,
+      emissive: 0xffc98a,
+      emissiveIntensity: 0.35,
+      roughness: 1,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.6,
+      depthWrite: false,
+      // Seen from outside only: the pane faces out, and from inside a room it
+      // is culled rather than read as a tan board in the window.
+      side: THREE.FrontSide,
+    }),
+    // A shower tray: glazed ceramic, smoother than any fixture body.
+    shower: surface({ color: 0xe6eef3, roughness: 0.2 }),
+    // Potted plants. A FIXED set of three shared materials — two leaf greens
+    // and the pot — because every distinct material is another instanced draw
+    // call (see `previewBatching`).
+    plantLeaf: surface({ color: 0x5f9a4c, roughness: 0.8 }),
+    plantLeafDeep: surface({ color: 0x3f7a3a, roughness: 0.85 }),
+    plantPot: surface({ color: 0x4a4a4a, roughness: 0.7 }),
 
     fixture_kitchenTop: surface({ color: 0xd8c5a4, roughness: 0.55 }),
     fixture_toilet: surface({ color: 0xe6f0f5, roughness: 0.2 }),
@@ -245,8 +367,9 @@ export function createMaterialPalette() {
     fixtureAccentWood: surface({ color: 0x9c7a58, roughness: 0.72 }),
 
     railing_glass: glass({ color: 0xbcd9ec, opacity: 0.22 }),
-    railing_handrail: metal({ color: 0x9ea4a9, roughness: 0.3 }),
-    railing_guardrail: metal({ color: 0xa3abb2, roughness: 0.5 }),
+    // Thin dark rails, as the reference draws them.
+    railing_handrail: metal({ color: 0x2f3338, roughness: 0.4 }),
+    railing_guardrail: metal({ color: 0x3a3f45, roughness: 0.5 }),
 
     outline: new THREE.LineBasicMaterial({
       color: 0x25303d,
@@ -269,9 +392,19 @@ export function createMaterialPalette() {
     outlinesEnabled: true,
   };
 
+  palette.roof = palette.roof_slab;
+  palette.roofGutter = palette.roofTrim;
+  palette.roofDownpipe = palette.roofTrim;
+
   Object.entries(DETAIL_ASSIGNMENTS).forEach(([key, family]) => {
     if (palette[key]) applyProceduralDetail(palette[key], family);
   });
+  // Owned by the palette like every material here, and flagged so nothing
+  // downstream mistakes it for a per-object material it may dispose or clone.
+  palette.windowGlow.userData.ownedByPalette = true;
+
+  if (look === PALETTE_LOOKS.CLASSIC) applyClassicLook(palette);
+  palette.look = look;
 
   return palette;
 }
@@ -283,15 +416,103 @@ export function createMaterialPalette() {
  * recompiled, so the Shaded/Realistic toggle is instant even on a large scene.
  */
 export function applyRenderStyleToPalette(materialPalette, styleConfig) {
-  setDetailScale(materialPalette, styleConfig.detailStrength);
+  // The selection overlay's tinted copies follow the palette's relief setting.
+  setDetailScale(materialPalette, styleConfig.detailStrength, selectionMaterialsOf(materialPalette));
   // Read by the next scene build to decide whether to cut edge geometry at all.
   // Turning it back on does not retrofit the world that was built without it —
   // `ensureOutlines` does, from the viewport, once the palette says yes.
   materialPalette.outlinesEnabled = styleConfig.outlines !== false;
 }
 
+/** Roughness of a painted covering by finish (spec §5.1). */
+export const ROOF_FINISH_ROUGHNESS = Object.freeze({ matte: 0.75, satin: 0.5, gloss: 0.3, unpainted: 0.4 });
+
+const ROOF_COVERING_KEYS = ['roof_metal', 'roof_tile', 'roof_membrane', 'roof_slab', 'roofRidgeCap'];
+const ROOF_TRIM_KEYS = ['roofTrim', 'roofGutter', 'roofDownpipe'];
+/** The base roughness of the non-metal covering families, which a 'matte' finish keeps. */
+const ROOF_MATTE_ROUGHNESS = { roof_tile: 0.85, roof_membrane: 0.6, roof_slab: 0.9 };
+
+function hexNumber(hex) {
+  if (typeof hex !== 'string') return null;
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  return match ? parseInt(match[1], 16) : null;
+}
+
+function setMaterialAppearance(material, hex, roughness, metal, result) {
+  if (!material) return;
+  let changed = false;
+  if (hex !== null && material.color.getHex() !== hex) {
+    material.color.setHex(hex);
+    changed = true;
+  }
+  if (Number.isFinite(roughness) && material.roughness !== roughness) {
+    material.roughness = roughness;
+    changed = true;
+  }
+  if (typeof metal === 'boolean') {
+    const metalness = metal ? 1 : 0;
+    if (material.metalness !== metalness) {
+      material.metalness = metalness;
+      material.envMapIntensity = metal ? 1.15 : 1;
+      // A metalness flip is the one change that needs a program update; colour
+      // and roughness are plain uniforms.
+      material.needsUpdate = true;
+      result.recompile = true;
+      changed = true;
+    }
+  }
+  if (changed) result.changed = true;
+}
+
+/**
+ * Put the project's roof covering, trim, soffit and gable-infill colours on the
+ * palette. `appearance` is `{covering: {kind, hex, finish}, trims: {hex},
+ * soffit: {hex}, closures: [{hex}]}` (see `resolveRoofAppearance`).
+ *
+ * A runtime mutation of shared instances, like the window glow and the ground
+ * colour: nothing is rebuilt, nothing recompiles unless an 'unpainted' finish
+ * flips a material to bare metal, and batching keeps working because the
+ * instanced draws hold the same material objects. One roof per project is what
+ * makes this enough — a second roof would need per-roof keys.
+ *
+ * Returns `{changed, recompile}` so the caller can skip a redraw, and warm
+ * shaders only when a metalness flip asked for a new program.
+ */
+export function applyRoofAppearanceToPalette(materialPalette, appearance) {
+  const result = { changed: false, recompile: false };
+  if (!materialPalette || !appearance) return result;
+  const finish = appearance.covering?.finish;
+  const unpainted = finish === 'unpainted';
+  const finishRoughness = ROOF_FINISH_ROUGHNESS[finish];
+  const coveringHex = hexNumber(appearance.covering?.hex);
+
+  // A project with trusses but no roof answers for its closures only
+  // (`covering` null): the roof keys are left exactly as they are.
+  if (appearance.covering) {
+    for (const key of ROOF_COVERING_KEYS) {
+      const metalFamily = key === 'roof_metal' || key === 'roofRidgeCap';
+      const roughness = finish === 'matte' && !metalFamily ? ROOF_MATTE_ROUGHNESS[key] : finishRoughness;
+      setMaterialAppearance(materialPalette[key], coveringHex, roughness, metalFamily ? unpainted : false, result);
+    }
+
+    // Trims are painted steel in the same finish as the sheet they edge.
+    const trimHex = hexNumber(appearance.trims?.hex);
+    for (const key of ROOF_TRIM_KEYS) {
+      setMaterialAppearance(materialPalette[key], trimHex, finishRoughness, unpainted, result);
+    }
+  }
+
+  // Lining and cladding are fibre cement: colour only, never metal.
+  setMaterialAppearance(materialPalette.roofSoffit, hexNumber(appearance.soffit?.hex), undefined, undefined, result);
+  const closureHex = hexNumber(appearance.closures?.[0]?.hex);
+  setMaterialAppearance(materialPalette.gableInfill, closureHex, undefined, undefined, result);
+
+  return result;
+}
+
 export function disposeMaterialPalette(materialPalette) {
   Object.values(materialPalette || {}).forEach((material) => {
     material?.dispose?.();
   });
+  disposeSelectionMaterials(materialPalette);
 }

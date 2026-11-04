@@ -303,3 +303,96 @@
   background: var(--color-warning-subtle);
   border-left-color: var(--color-warning);
 }
+
+/* ── Colour field: picker, hex, and a catalogue swatch strip ─────────── */
+
+.colourControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex: 1;
+  min-width: 0;
+}
+
+.colourPicker {
+  flex: 0 0 auto;
+  width: 40px;
+  height: var(--panel-control-h, 30px);
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-elevated);
+  cursor: pointer;
+}
+
+.colourHex {
+  composes: control;
+  flex: 0 0 84px;
+  font-family: var(--font-blueprint);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.colourName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.swatchBlock {
+  margin: 0 0 var(--space-sm) calc(var(--panel-gutter, 96px) + var(--space-sm));
+}
+
+.swatchToggle {
+  display: inline-flex;
+  margin-bottom: var(--space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.swatchToggleButton {
+  padding: 2px var(--space-sm);
+  border: none;
+  background: transparent;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.swatchToggleButtonActive {
+  composes: swatchToggleButton;
+  background: var(--color-active-glow);
+  color: var(--color-text-primary);
+}
+
+.swatchStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.swatch:focus-visible {
+  outline: 2px solid var(--color-active-glow);
+  outline-offset: 1px;
+}
+
+.swatchActive {
+  composes: swatch;
+  box-shadow:
+    0 0 0 2px var(--color-surface-elevated),
+    0 0 0 3px var(--color-text-primary);
+}

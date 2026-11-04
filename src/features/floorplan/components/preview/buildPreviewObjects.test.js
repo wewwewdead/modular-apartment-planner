@@ -488,6 +488,40 @@ describe('buildPreviewObjectRoot', () => {
     expect(object.rotation.y).toBe(-0.5);
   });
 
+  it('builds a gable-end closure (verticalPolygon) as one outlined panel on its plan axis', () => {
+    palette.gableInfill = new THREE.MeshStandardMaterial({ color: 0xe9e5dd });
+    const closure = {
+      id: 'closure-1',
+      kind: 'trussSystem',
+      geometry: 'verticalPolygon',
+      materialKey: 'gableInfill',
+      metadata: { sourceId: 'ts_1', trussSystemId: 'ts_1', part: 'endClosure', side: 'start' },
+      plane: { origin: { x: 10, y: -3600, elevation: 3000 }, xAxis: { x: 0, y: 1 }, up: { x: 0, y: 1, z: 0 } },
+      points: [
+        { x: 0, z: 0 },
+        { x: 7200, z: 0 },
+        { x: 3600, z: 1800 },
+      ],
+      holes: [],
+      thickness: 87,
+      bounds: { minX: -33.5, maxX: 53.5, minY: -3600, maxY: 3600, minElevation: 3000, maxElevation: 4800 },
+    };
+    const scene = createSceneDescriptor([
+      { floorId: 'f1', name: 'Ground', elevation: 0, visible: true, objects: [closure] },
+    ]);
+
+    const entry = buildPreviewObjectRoot(scene, palette).meshMap.get('closure-1');
+    const object = entry.object;
+
+    expect(object.isMesh).toBe(true);
+    expect(object.material).toBe(palette.gableInfill);
+    expect(object.position).toMatchObject({ x: 10, y: 3000, z: -3600 });
+    // Plan +y is 90° from +x; the plan→world turn negates it.
+    expect(object.rotation.y).toBeCloseTo(-Math.PI / 2, 9);
+    expect(object.children.some((child) => child.isLineSegments)).toBe(true);
+    expect(object.userData.previewTarget).toMatchObject({ kind: 'trussSystem', sourceId: 'ts_1' });
+  });
+
   it('builds per-type electrical device groups with details on the mounted face', () => {
     const device = (id, deviceType, faceSign) => ({
       ...createDescriptor(id, 'electricalDevice', 'electricalPlate', 'electricalDevice'),

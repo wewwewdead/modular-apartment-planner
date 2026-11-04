@@ -6,6 +6,7 @@ import { columnOutline } from '@/geometry/columnGeometry';
 import { computeLandingElevation, landingOutline } from '@/geometry/landingGeometry';
 import { buildRailingElevationElements } from '@/geometry/railingElevationGeometry';
 import { buildRoofElevationElements } from '@/geometry/roofElevationGeometry';
+import { resolveRoofEdgeKitContext } from '@/roof/roofEdgeKit';
 import { buildTrussElevationElements } from '@/geometry/trussElevationGeometry';
 import { getStairRenderData } from '@/geometry/stairGeometry';
 import { doorOutlineOnWall, windowOutlineOnWall } from '@/geometry/wallGeometry';
@@ -275,16 +276,19 @@ function buildElevationSceneFromFloors(floors, viewMode, roofSystem = null, proj
     .flatMap((content) => content.elements || [])
     .sort((a, b) => b.depth - a.depth);
   const floorLineElements = floorElevationContent.flatMap((content) => content.lineElements || []);
-  const trussLineElements = project
-    ? floors.flatMap(
-        (floor) => buildTrussElevationElements(getProjectTrussSystems(project, floor.id), view).lineElements || [],
-      )
+  const trussElevationContent = project
+    ? floors.map((floor) => buildTrussElevationElements(getProjectTrussSystems(project, floor.id), view, roofSystem))
     : [];
+  const trussLineElements = trussElevationContent.flatMap((content) => content.lineElements || []);
+  // Gable-end infill (RT-2): filled polygons on the end trusses' planes.
+  const trussPolygonElements = trussElevationContent.flatMap((content) => content.polygonElements || []);
   const roofElements = roofSystem
-    ? buildRoofElevationElements(roofSystem, view)
+    ? buildRoofElevationElements(roofSystem, view, project ? resolveRoofEdgeKitContext(project, roofSystem) : null)
     : { elements: [], polygonElements: [], lineElements: [] };
   const elements = [...floorElements, ...(roofElements.elements || [])].sort((a, b) => b.depth - a.depth);
-  const polygonElements = [...(roofElements.polygonElements || [])].sort((a, b) => b.depth - a.depth);
+  const polygonElements = [...trussPolygonElements, ...(roofElements.polygonElements || [])].sort(
+    (a, b) => b.depth - a.depth,
+  );
   const lineElements = [...floorLineElements, ...trussLineElements, ...(roofElements.lineElements || [])].sort(
     (a, b) => b.depth - a.depth,
   );

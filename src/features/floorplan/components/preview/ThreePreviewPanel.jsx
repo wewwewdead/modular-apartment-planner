@@ -21,11 +21,40 @@ import {
   readWalkPhysicsPreference,
 } from './renderStyle';
 import CompassOverlay from '@/features/floorplan/components/CompassOverlay';
-import { ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
+import { CameraIcon, ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
+import { VIEW_PRESET_OPTIONS } from './previewCameraMath';
+import { PALETTE_LOOKS } from './materials';
+import { resolveRoofAppearance } from '@/domain/roofCoveringCatalog';
 import styles from './ThreePreviewPanel.module.css';
 
 // ~15 scene rebuilds a second while the project is changing every frame.
 const MIN_SCENE_REBUILD_INTERVAL_MS = 66;
+
+/** `My House` + `iso_northeast` → `my-house-iso_northeast.png`. */
+function imageFileName(projectName, viewPreset) {
+  const base =
+    String(projectName || 'model')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'model';
+  return `${base}-${viewPreset || 'view'}.png`;
+}
+
+/**
+ * Hand a data URL to the browser as a download. A plain anchor works the same
+ * in the browser and in the desktop shell, and needs nothing from the network.
+ */
+function downloadDataUrl(dataUrl, fileName) {
+  const anchor = document.createElement('a');
+  anchor.href = dataUrl;
+  anchor.download = fileName;
+  anchor.rel = 'noopener';
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
 
 /**
  * The project as it stood when the pane went to sleep, for as long as it sleeps.
@@ -91,6 +120,9 @@ function ThreePreviewPanel({
   const assemblyPartSide = assemblySelection?.side || null;
   const viewportRef = useRef(null);
   const containerRef = useRef(null);
+  // Fixed for the pane's life, like the viewport it is built into: an assembly
+  // editor's pane keeps the classic palette, every model view is the white model.
+  const lookRef = useRef(assemblyDriven ? PALETTE_LOOKS.CLASSIC : PALETTE_LOOKS.WHITE_MODEL);
   const resizeObserverRef = useRef(null);
   const compassNeedleRef = useRef(null);
   const sceneCacheRef = useRef(null);
@@ -99,6 +131,11 @@ function ThreePreviewPanel({
   const [renderStyle, setRenderStyle] = useState(readRenderStylePreference);
   const [interiorLightsOn, setInteriorLightsOn] = useState(readInteriorLightsPreference);
   const [nightMode, setNightMode] = useState(readNightModePreference);
+  // Which View preset is on screen. The viewport reports back when an orbit
+  // takes the camera off it, so the menu never claims a view you have left.
+  const [viewPreset, setViewPreset] = useState('free');
+  // Whether the progressive refine has finished; Save image waits for it.
+  const [refined, setRefined] = useState(false);
   const [walkUiState, setWalkUiState] = useState(() => ({
     navigationMode: 'inspect',
     isLocked: false,
@@ -219,7 +256,7 @@ function ThreePreviewPanel({
   useEffect(() => {
     if (!containerRef.current) return undefined;
 
-    const viewport = createPreviewViewport(containerRef.current);
+    const viewport = createPreviewViewport(containerRef.current, { look: lookRef.current });
     viewportRef.current = viewport;
     sceneCacheRef.current = createPreviewSceneCache();
 
@@ -246,9 +283,65 @@ function ThreePreviewPanel({
     };
   }, []);
 
+  // The roof's colours are a palette mutation, not part of the scene build, so
+  // a colour change never re-triangulates anything. Keyed on the primitives:
+  // the roof object is re-normalized on every edit, its colours rarely change.
+  // Runs right after the viewport is created on mount (effects run in order),
+  // so the first frame already carries the project's colours. An assembly
+  // editor's pane keeps the classic palette untouched.
+  // The gable-end infill colour lives on the truss systems (RT-2), so they
+  // key the memo too.
+  const roofAppearanceSource = assemblyDriven ? null : project?.roofSystem || null;
+  const closureAppearanceSource = assemblyDriven ? null : project?.trussSystems || null;
+  const roofAppearanceKey = useMemo(() => {
+    const appearance = resolveRoofAppearance(roofAppearanceSource, closureAppearanceSource || []);
+    return appearance ? JSON.stringify(appearance) : '';
+  }, [roofAppearanceSource, closureAppearanceSource]);
+  const roofAppearance = useMemo(() => (roofAppearanceKey ? JSON.parse(roofAppearanceKey) : null), [roofAppearanceKey]);
+  const roofColourHex = roofAppearance?.covering?.hex;
+  const closureColourHex = roofAppearance?.closures?.[0]?.hex;
+
+  useEffect(() => {
+    if (!roofAppearanceKey) return;
+    viewportRef.current?.applyRoofAppearance(JSON.parse(roofAppearanceKey));
+  }, [roofAppearanceKey]);
+
   useEffect(() => {
     viewportRef.current?.setPickHandler(handlePreviewPick);
   }, [handlePreviewPick]);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    viewport?.setViewPresetHandler(setViewPreset);
+    viewport?.setRenderStatusHandler(({ converged }) => setRefined(converged));
+    return () => {
+      viewport?.setViewPresetHandler(null);
+      viewport?.setRenderStatusHandler(null);
+    };
+  }, []);
+
+  const handleViewPresetChange = useCallback(
+    (nextPreset) => {
+      const viewport = viewportRef.current;
+      if (!viewport) return;
+      // A preset is an inspect-mode view: choosing one steps out of the walk.
+      if (navigationMode !== 'inspect') {
+        viewport.setNavigationMode('inspect');
+        setNavigationMode('inspect');
+      }
+      viewport.setViewPreset(nextPreset);
+      setViewPreset(viewport.getViewPreset());
+    },
+    [navigationMode],
+  );
+
+  const handleSaveImage = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const dataUrl = viewport.captureImage();
+    if (!dataUrl) return;
+    downloadDataUrl(dataUrl, imageFileName(project?.name, viewPreset));
+  }, [project?.name, viewPreset]);
 
   useEffect(() => {
     viewportRef.current?.setPickContext({ activeFloorId });
@@ -414,8 +507,12 @@ function ThreePreviewPanel({
         : 'Shaded: flat drawing view with outlines and the ground grid.';
 
   return (
-    <section className={`${styles.panel} ${className}`}>
-      <div className={styles.header}>
+    <section
+      className={`${styles.panel} ${className}`}
+      data-roof-colour={roofColourHex}
+      data-closure-colour={closureColourHex}
+    >
+      <div className={`${styles.header} ${isFocused ? styles.headerFocused : ''}`}>
         <div className={styles.titleGroup}>
           <span className={styles.eyebrow}>3D Preview</span>
           <span className={styles.title}>
@@ -488,9 +585,43 @@ function ThreePreviewPanel({
               </option>
             ))}
           </select>
+          {/* An assembly editor's pane is a working view of one wall or ceiling:
+              the presentation presets and Save image belong to the model views. */}
+          {!assemblyDriven ? (
+            <select
+              className={styles.viewSelect}
+              value={viewPreset}
+              onChange={(e) => handleViewPresetChange(e.target.value)}
+              title="Iso views look at the model from a corner; Front, Rear, Left and Right are true orthographic elevations."
+              aria-label="Preview view preset"
+            >
+              {VIEW_PRESET_OPTIONS.map(({ value, label }) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <button type="button" className={styles.button} onClick={() => viewportRef.current?.resetView()}>
             {resetLabel}
           </button>
+          {!assemblyDriven ? (
+            <button
+              type="button"
+              className={`${styles.button} ${styles.saveImageButton}`}
+              onClick={handleSaveImage}
+              disabled={!refined || !sceneDescriptor.hasVisibleObjects}
+              title={
+                refined
+                  ? 'Save the picture on screen as a PNG'
+                  : 'Save image — available once the picture has finished refining'
+              }
+              aria-label="Save image"
+            >
+              <CameraIcon />
+              <span>Save image</span>
+            </button>
+          ) : null}
           {onToggleFocus && (
             <button
               type="button"

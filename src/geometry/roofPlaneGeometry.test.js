@@ -77,9 +77,10 @@ describe('buildRoofPlaneGeometry - gable roof', () => {
 
   it('resolves top and bottom surface elevations at the ridge', () => {
     const rs = roof('gable');
-    // bottom = base + rise; top = base + slab + rise. At ridge: rise 750.
+    // bottom = base + rise; top = bottom + the slab measured SQUARE to the
+    // plane (RT-3, spec §7.2): 180 at 25 % is 180 · √(1 + 0.25²) = 185.54 plumb.
     expect(getRoofSurfaceElevation(rs, { x: 4000, y: 3000 }, 'bottom')).toBeCloseTo(3750, 6);
-    expect(getRoofSurfaceElevation(rs, { x: 4000, y: 3000 }, 'top')).toBeCloseTo(3930, 6);
+    expect(getRoofSurfaceElevation(rs, { x: 4000, y: 3000 }, 'top')).toBeCloseTo(3750 + 180 * Math.hypot(1, 0.25), 6);
   });
 
   it('scales the peak rise linearly with slope', () => {
@@ -97,8 +98,9 @@ describe('buildRoofPlaneGeometry - shed roof', () => {
     expect(g.planes).toHaveLength(1);
     expect(g.planes[0].planeType).toBe('shed');
     expect(g.ridges).toHaveLength(0);
-    // Full span 6000 in y; the high edge rise is 25% of 6000 = 1500 -> top = 3000+180+1500.
-    expect(g.maxTopElevation).toBeCloseTo(4680, 6);
+    // Full span 6000 in y; the high edge rise is 25% of 6000 = 1500 -> top =
+    // 3000 + 1500 + the slab square to the slope (RT-3: 180 / cos θ = 185.54).
+    expect(g.maxTopElevation).toBeCloseTo(4500 + 180 * Math.hypot(1, 0.25), 6);
   });
 });
 
@@ -127,7 +129,8 @@ describe('buildRoofPlaneGeometry - hip roof', () => {
     const g = buildRoofPlaneGeometry(roof('hip'));
     // Peak at the ridge line: min(sideDistance, endDistance) = 3000 -> rise 0.25*3000 = 750.
     expect(g.getRiseAtPoint({ x: 4000, y: 3000 })).toBeCloseTo(750, 6);
-    expect(g.maxTopElevation).toBeCloseTo(3930, 6);
+    // RT-3: every hip plane is 180 thick square to its 25 % slope.
+    expect(g.maxTopElevation).toBeCloseTo(3750 + 180 * Math.hypot(1, 0.25), 6);
   });
 });
 
@@ -172,5 +175,111 @@ describe('buildRoofPlaneGeometry - degenerate & concave inputs', () => {
     expect(g.convexBoundary).toBe(false);
     expect(g.overhangApplied).toBe(false);
     expect(g.planes.length).toBeGreaterThan(0);
+  });
+});
+
+describe('buildRoofPlaneGeometry - RT-3 roof body and signed profiles (spec §7.2)', () => {
+  it('measures the slab square to the slope: 180 at 25 % is 185.5 plumb (spec §7.7 rounds it to 185.6)', () => {
+    const g = buildRoofPlaneGeometry(roof('gable'));
+    const point = { x: 4000, y: 1500 };
+    const plumb = g.getSurfaceElevation(point, 'top') - g.getSurfaceElevation(point, 'bottom');
+    expect(plumb).toBeCloseTo(185.54, 2);
+    // A flat roof keeps its slab vertical.
+    const flat = buildRoofPlaneGeometry(roof('flat'));
+    expect(flat.getSurfaceElevation(point, 'top') - flat.getSurfaceElevation(point, 'bottom')).toBeCloseTo(180, 6);
+  });
+
+  it('accepts negative profile rises (tails below the heel datum) on an attached profile', () => {
+    // An attached gable profile across y 0 … 6000: tails at −75 (300 at 25 %),
+    // heels at 0, ridge at +750 — the way buildAttachedRoofShapeProfile emits it.
+    const rs = createRoofSystem('Attached', {
+      roofType: 'gable',
+      trussAttachmentId: 'ts_1',
+      pitchSource: 'truss',
+      boundaryPolygon: RECT,
+      baseElevation: 3000,
+      slabThickness: 180,
+      pitch: { slope: 25, overhang: 0, ridgeOffset: 0, direction: { x: 0, y: 1 } },
+      attachedShapeProfile: {
+        shape: 'gable',
+        totalSpan: 6000,
+        maxRise: 675,
+        points: [
+          { position: 0, rise: -75 },
+          { position: 0.5, rise: 675 },
+          { position: 1, rise: -75 },
+        ],
+      },
+    });
+    expect(rs.attachedShapeProfile.points[0].rise).toBe(-75);
+    const g = buildRoofPlaneGeometry(rs);
+    // The profile path: two slope segments, a ridge in the middle.
+    expect(g.planes.map((plane) => plane.planeType)).toEqual(['gable_segment_1', 'gable_segment_2']);
+    expect(g.getSurfaceElevation({ x: 4000, y: 0 }, 'bottom')).toBeCloseTo(2925, 6);
+    expect(g.getSurfaceElevation({ x: 4000, y: 300 }, 'bottom')).toBeCloseTo(3000, 6);
+    expect(g.getSurfaceElevation({ x: 4000, y: 3000 }, 'bottom')).toBeCloseTo(3675, 6);
+    expect(g.minBottomElevation).toBeCloseTo(2925, 6);
+    expect(g.ridgeSegment.start.y).toBeCloseTo(3000, 6);
+  });
+
+  // Changed in RT-3.1 (spec §7.8.2): this used to assert that a manual slope
+  // kept the preset plane, which measures its rise from the outline edge and
+  // floated the roof `slope × (tail + roof overhang)` above the heel. A manual
+  // slope on an attached gable now scales the truss profile about the heel.
+  it('reports the roof overhang as applied on the profile path (convex boundary)', () => {
+    // RT-3.1 follow-up: the profile path used to hard-code overhangApplied
+    // false, so the Roof panel claimed an applied overhang was not applied.
+    const rs = createRoofSystem('Attached', {
+      roofType: 'gable',
+      trussAttachmentId: 'ts_1',
+      pitchSource: 'truss',
+      boundaryPolygon: RECT,
+      baseElevation: 3000,
+      pitch: { slope: 25, overhang: 510, ridgeOffset: 0, direction: { x: 0, y: 1 } },
+      attachedShapeProfile: {
+        shape: 'gable',
+        totalSpan: 6000,
+        points: [
+          { position: 0, rise: -75 },
+          { position: 0.5, rise: 675 },
+          { position: 1, rise: -75 },
+        ],
+      },
+    });
+    const g = buildRoofPlaneGeometry(rs);
+    expect(g.planes.map((plane) => plane.planeType)).toEqual(['gable_segment_1', 'gable_segment_2']);
+    expect(g.convexBoundary).toBe(true);
+    expect(g.overhangApplied).toBe(true);
+    const noOverhang = buildRoofPlaneGeometry({ ...rs, pitch: { ...rs.pitch, overhang: 0 } });
+    expect(noOverhang.overhangApplied).toBe(false);
+  });
+
+  it('scales a manually pitched attached gable profile about the heel', () => {
+    const rs = createRoofSystem('Manual', {
+      roofType: 'gable',
+      trussAttachmentId: 'ts_1',
+      pitchSource: 'manual',
+      boundaryPolygon: RECT,
+      baseElevation: 3000,
+      pitch: { slope: 20, overhang: 0, direction: { x: 0, y: 1 } },
+      attachedShapeProfile: {
+        // No totalSpan and no slope: the profile slope (0.25) is derived from
+        // the first two points over the boundary span.
+        points: [
+          { position: 0, rise: -75 },
+          { position: 0.5, rise: 675 },
+          { position: 1, rise: -75 },
+        ],
+      },
+    });
+    const g = buildRoofPlaneGeometry(rs);
+    expect(g.planes.map((plane) => plane.planeType)).toEqual(['gable_segment_1', 'gable_segment_2']);
+    // Heel (y = 300) stays at the datum; ridge 0.20 × 2700 up; tail 0.20 × 300 down.
+    expect(g.getSurfaceElevation({ x: 4000, y: 300 }, 'bottom')).toBeCloseTo(3000, 6);
+    expect(g.getSurfaceElevation({ x: 4000, y: 3000 }, 'bottom')).toBeCloseTo(3000 + 0.2 * 2700, 6);
+    expect(g.getSurfaceElevation({ x: 4000, y: 0 }, 'bottom')).toBeCloseTo(3000 - 0.2 * 300, 6);
+    // At the profile's own slope nothing is scaled.
+    const same = buildRoofPlaneGeometry({ ...rs, pitch: { ...rs.pitch, slope: 25 } });
+    expect(same.getSurfaceElevation({ x: 4000, y: 3000 }, 'bottom')).toBeCloseTo(3675, 6);
   });
 });

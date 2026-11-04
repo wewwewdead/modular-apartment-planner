@@ -52,7 +52,9 @@ const FloorPlanLayer = memo(function FloorPlanLayer({ floor, filteredFloor, sele
 
   return (
     <RenderProfilerScope name="FloorPlanLayer">
-      <>
+      {/* Marked so "Save plan image" can lift exactly the drawing — and not the
+          grid, the overlays or a tool's ghost — out of the canvas. */}
+      <g data-plan-layer="">
         <FixtureDefs />
         {(filteredFloor.slabs || EMPTY).map((slab) => (
           <SlabRenderer key={slab.id} slab={slab} selectedId={selectedId} />
@@ -65,7 +67,7 @@ const FloorPlanLayer = memo(function FloorPlanLayer({ floor, filteredFloor, sele
           windows={filteredFloor.windows || EMPTY}
         />
         <BeamRenderer beams={filteredFloor.beams || EMPTY} columns={columns} />
-        <StairRenderer stairs={filteredFloor.stairs || EMPTY} />
+        <StairRenderer stairs={filteredFloor.stairs || EMPTY} floorId={filteredFloor.id} />
         <LandingRenderer landings={filteredFloor.landings || EMPTY} />
         <RailingRenderer railings={filteredFloor.railings || EMPTY} />
         <ColumnRenderer columns={columns} />
@@ -77,7 +79,7 @@ const FloorPlanLayer = memo(function FloorPlanLayer({ floor, filteredFloor, sele
           <SectionCutRenderer key={sectionCut.id} sectionCut={sectionCut} selectedId={selectedId} />
         ))}
         <AnnotationRenderer floor={filteredFloor} settingsOverrides={PLAN_CANVAS_ANNOTATIONS} />
-      </>
+      </g>
     </RenderProfilerScope>
   );
 });

@@ -48,6 +48,10 @@ export function FloorplanProvider({ children, initialProject, isPlayground = fal
   const { state, dispatch, selectors } = floorplan;
   const editor = state.editor;
   const { getFloor } = selectors;
+  // True only while a pointer gesture is actually rewriting the project — not on
+  // every click, which also opens a gesture. The presentation plan reads it to
+  // skip its unioned wall outline while geometry is moving under the pointer.
+  const dragGestureMutating = Boolean(state.gesture?.active && state.gesture?.derivedStale);
 
   const projectValue = useMemo(
     () => ({
@@ -102,6 +106,8 @@ export function FloorplanProvider({ children, initialProject, isPlayground = fal
       selectedOverhangEdge: editor.selectedOverhangEdge,
       workspaceMode: editor.workspaceMode,
       showGrid: editor.showGrid,
+      planStyle: editor.planStyle,
+      dragGestureMutating,
       snapEnabled: editor.snapEnabled,
       showFloorBelowUnderlay: editor.showFloorBelowUnderlay,
       viewMode: editor.viewMode,
@@ -127,6 +133,7 @@ export function FloorplanProvider({ children, initialProject, isPlayground = fal
     }),
     [
       dispatch,
+      dragGestureMutating,
       editor.activeFloorId,
       editor.activeSectionCutId,
       editor.activeSheetId,
@@ -142,6 +149,7 @@ export function FloorplanProvider({ children, initialProject, isPlayground = fal
       editor.modelTarget,
       editor.pastePreview,
       editor.phaseViewMode,
+      editor.planStyle,
       editor.regionSelection,
       editor.selectedId,
       editor.selectedOverhangEdge,
