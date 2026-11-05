@@ -11,7 +11,9 @@ import {
   projectPointOntoAxis,
   resolveSystemLayoutRange,
   resolveSystemPlanAxes,
+  resolveSystemSupportLayoutRange,
 } from '@/truss/systemPlanAxes';
+import { resolveTrussSystemRoofAttachmentType } from '@/truss/roofAttachment';
 
 /**
  * The roof-edge kit: fascia, barge boards, gutters, downpipes, ridge and barge
@@ -58,10 +60,17 @@ export function resolveRoofBearingOutline(roofSystem, trussSystem = null) {
     const bearingPoints = collectSystemCopyBearingPoints(systemGeometry).filter(Boolean);
     if (planAxes && bearingPoints.length) {
       const spanValues = bearingPoints.map((point) => projectPointOntoAxis(point, planAxes.origin, planAxes.spanAxis));
+      // RT-4 (spec §7.9.3.2): a hip's end eaves overhang the SUPPORT line (the
+      // end wall), not the first/last copy, so the hip-end soffit is as wide
+      // as the side soffits. Gable/shed keep the copy range.
+      const layoutRange =
+        resolveTrussSystemRoofAttachmentType(trussSystem) === 'hip'
+          ? resolveSystemSupportLayoutRange(systemGeometry, planAxes)
+          : resolveSystemLayoutRange(systemGeometry, planAxes);
       const outline = buildSystemBoundary(
         planAxes,
         { min: Math.min(...spanValues), max: Math.max(...spanValues) },
-        resolveSystemLayoutRange(systemGeometry, planAxes),
+        layoutRange,
       );
       if (outline?.length >= 3) return outline;
     }

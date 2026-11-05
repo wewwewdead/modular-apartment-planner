@@ -60,6 +60,42 @@ function mergeById(...groups) {
   return merged;
 }
 
+/*
+ * The stripped floors are handed back by identity whenever they come out the
+ * same as last time — same source floor, and every field and every carried
+ * member the same object. The RCP editor rebuilds this project on every commit,
+ * and the ceiling assembly cache (`ceilingModels.js`) and the 3D scene cache
+ * both validate on floor identity: a fresh stripped floor per commit made the
+ * editor's 3D pane re-derive the entire board/framing/screw assembly for an
+ * edit that only placed a light. Compared field by field rather than keyed on
+ * anything, so whatever changes the band — a wall moved, a beam re-levelled —
+ * changes the floor too.
+ */
+const MAX_STABLE_PREVIEW_FLOORS = 4;
+const stablePreviewFloors = new WeakMap();
+
+function sameEntries(a, b) {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function samePreviewFloor(a, b) {
+  const keys = Object.keys(b);
+  if (keys.length !== Object.keys(a).length) return false;
+  return keys.every(
+    (key) => a[key] === b[key] || (Array.isArray(a[key]) && Array.isArray(b[key]) && sameEntries(a[key], b[key])),
+  );
+}
+
+function stablePreviewFloor(source, candidate) {
+  const previous = stablePreviewFloors.get(source) || [];
+  const match = previous.find((floor) => samePreviewFloor(floor, candidate));
+  if (match) return match;
+  // A few per source floor, because two ceilings on one storey strip it to two
+  // different bands and would otherwise evict each other.
+  stablePreviewFloors.set(source, [candidate, ...previous].slice(0, MAX_STABLE_PREVIEW_FLOORS));
+  return candidate;
+}
+
 /**
  * Builds a lightweight, ceiling-only project for the RCP editor's live 3D
  * viewport. The owning floor is kept for its elevation datum but stripped of
@@ -127,11 +163,13 @@ export function createCeilingDetailPreviewProject(project, ceilingId) {
 
   const coverage = resolveCeilingCoverageSlabs(project, ceiling);
   const coverageFloor =
-    coverage.floor && coverage.slabs.length ? { ...stripFloor(coverage.floor), slabs: coverage.slabs } : null;
+    coverage.floor && coverage.slabs.length
+      ? stablePreviewFloor(coverage.floor, { ...stripFloor(coverage.floor), slabs: coverage.slabs })
+      : null;
 
   return {
     ...project,
-    floors: [previewFloor, coverageFloor].filter(Boolean),
+    floors: [previewFloor ? stablePreviewFloor(floor, previewFloor) : null, coverageFloor].filter(Boolean),
     ceilings: [ceiling],
     roofSystem: null,
     // Trusses stand above the ceiling and are no part of it; drawing them here

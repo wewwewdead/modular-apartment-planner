@@ -1,14 +1,17 @@
 /* global process, console, document */
-// The truss-accuracy guard (docs/roof-truss-industrial.md §7.7, RT-3). On the
-// playground project: the playground truss is a hip, so switch its instance to
-// the Gable type first (spec §10); read the instance panel's Profile section
-// (heel height, overall height), switch the Truss Detail view on and count the
+// The truss-accuracy guard (docs/roof-truss-industrial.md §7.7, RT-3; §7.9.5,
+// RT-4). On the playground project: the playground truss is a HIP and its roof
+// follows the trusses as loaded (RT-4) — no "Reset slope", no manual-slope
+// warning, the Roof panel's slope equals the instance pitch — so photograph
+// the hip end square on (Left / Right look along the layout line) and an iso
+// (every slice and purlin under the covering, the eave level all round).
+// Then switch the instance to the Gable type (spec §10) and check the roof
+// slope follows it at once; read the instance panel's Profile section (heel
+// height, overall height), switch the Truss Detail view on and count the
 // drawn members, switch the web pattern to Howe and assert the count changes;
-// then press the Roof panel's "Reset slope" (the playground roof stores a
-// manual slope; RT-3.1, spec §7.8.4) and check the roof slope equals the
-// instance pitch, and photograph the 3D preview — the Front preset, the gable
-// end square on (clean triangle, sloped tails), a closeup of an eave (chord
-// tail meeting the fascia) and an iso view (no purlin through the covering).
+// and photograph the 3D preview — the Front preset, the gable end square on
+// (clean triangle, sloped tails), a closeup of an eave (chord tail meeting the
+// fascia) and an iso view (no purlin through the covering).
 //   npx vite --port 5199 --strictPort   (in another shell)
 //   FLOORPLAN_VERIFY_URL=http://localhost:5199/playground node scripts/verify-truss-accuracy.mjs
 //   TRUSS_VERIFY_DIR=<folder for screenshots>   (default artifacts/floorplan/truss-accuracy)
@@ -152,6 +155,71 @@ try {
     Boolean(frontPreset && leftPreset && rightPreset),
   );
 
+  const labelledInput = (text) =>
+    page
+      .locator('label', { hasText: new RegExp(`^${text}$`) })
+      .first()
+      .locator('xpath=following-sibling::div//input');
+  const slopeSource = () =>
+    page.evaluate(() => {
+      const label = [...document.querySelectorAll('label')].find((l) => l.textContent.trim() === 'Slope Source');
+      return label?.nextElementSibling?.tagName === 'SELECT' ? label.nextElementSibling.value : null;
+    });
+  const hasButton = (text) =>
+    page.evaluate((t) => [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === t), text);
+  const hasNode = (selector) => page.evaluate((s) => Boolean(document.querySelector(s)), selector);
+  const enterFocus = async () => {
+    await page.locator('button[aria-label="Focus preview"]').first().click();
+    await page.waitForTimeout(1200);
+    focused = true;
+  };
+  const exitFocus = async () => {
+    await page.locator('button[aria-label="Exit focus mode"]').first().click();
+    await page.waitForTimeout(900);
+    focused = false;
+  };
+  const isoPreset = presets.find((entry) => entry.value.startsWith('iso'))?.value || null;
+  check(`the preview offers an iso preset (${isoPreset})`, Boolean(isoPreset));
+
+  // 0. RT-4 (spec §7.9.5): the playground opens with its HIP roof following
+  // the trusses — no "Reset slope", no manual-slope warning — and the roof
+  // slope is the instance pitch.
+  await clickButtonText('Truss');
+  await selectInstance();
+  const hipPitch = Number(await labelledInput('Pitch').inputValue());
+  readings.hipInstancePitchPercent = hipPitch;
+  check(`the hip instance reads a pitch (${hipPitch} %)`, Math.abs(hipPitch - 31.68) < 0.05);
+  await clickButtonText('Roof');
+  const hipSource = await slopeSource();
+  const hipRoofSlope = Number(await labelledInput('Roof Slope').inputValue());
+  readings.hipRoofSlopePercent = hipRoofSlope;
+  check(
+    `the loaded hip roof follows the truss: source ${hipSource}, roof slope ${hipRoofSlope} % = instance pitch ${hipPitch} %`,
+    hipSource === 'truss' && Math.abs(hipRoofSlope - hipPitch) < 0.05,
+  );
+  check('…with no "Reset slope" button', !(await hasButton('Reset slope')));
+  check('…no manual-slope warning', !(await hasNode('[data-manual-slope-warning]')));
+  check('…and no unequal-tails warning (the tails are 300 / 300)', !(await hasNode('[data-hip-tail-warning]')));
+  // The hip end square on (the layout line runs along +x, so Left / Right
+  // look along it) and an iso: every slice and purlin under the covering,
+  // the eave level all round.
+  await enterFocus();
+  for (const [name, preset] of [
+    ['hip-end-left', leftPreset],
+    ['hip-end-right', rightPreset],
+    ['hip-iso', isoPreset],
+  ]) {
+    if (!preset) continue;
+    await setPreset(preset);
+    await clickSky();
+    await previewShot(name);
+  }
+  await setPreset(leftPreset);
+  await clickSky();
+  await closeupOn(0.5, 0.35, 3);
+  await previewShot('hip-end-left-closeup');
+  await exitFocus();
+
   // 1. Hip → Gable (spec §10).
   await clickButtonText('Truss');
   await selectInstance();
@@ -182,11 +250,6 @@ try {
     heelValue > 90 && heelValue < 400,
   );
   check(`…and an overall height (${overall}) above the heel`, parseFloat(overall) > heelValue);
-  const labelledInput = (text) =>
-    page
-      .locator('label', { hasText: new RegExp(`^${text}$`) })
-      .first()
-      .locator('xpath=following-sibling::div//input');
   const instancePitch = Number(await labelledInput('Pitch').inputValue());
   readings.instancePitchPercent = instancePitch;
   check(`the instance panel reads a pitch (${instancePitch} %)`, instancePitch > 0);
@@ -247,41 +310,21 @@ try {
   );
   check(`…and notes the spacing ("${spacingNote}")`, /^\d+ @ \d+ = \d+$/.test(spacingNote || ''));
 
-  // 4. RT-3.1 (spec §7.8.4): the playground roof stores a MANUAL slope; the
-  // Roof panel's "Reset slope" (shown only while the source is manual) hands
-  // the slope back to the truss, so the 3D pictures show the roof that follows
-  // the truss — seated on the purlins.
+  // 4. RT-4 (spec §7.9.5): the roof follows the truss through the type switch
+  // — no "Reset slope" to press — so its slope is the gable pitch at once.
   await clickButtonText('Roof');
-  const slopeSource = () =>
-    page.evaluate(() => {
-      const label = [...document.querySelectorAll('label')].find((l) => l.textContent.trim() === 'Slope Source');
-      return label?.nextElementSibling?.tagName === 'SELECT' ? label.nextElementSibling.value : null;
-    });
-  const sourceBefore = await slopeSource();
-  const slopeBefore = Number(await labelledInput('Roof Slope').inputValue());
-  check(
-    `the playground roof's slope source starts manual (${sourceBefore}, ${slopeBefore} %)`,
-    sourceBefore === 'manual',
-  );
-  await clickButtonText('Reset slope');
   const sourceAfter = await slopeSource();
   const slopeAfter = Number(await labelledInput('Roof Slope').inputValue());
-  readings.roofSlopeBeforeReset = slopeBefore;
-  readings.roofSlopeAfterReset = slopeAfter;
+  readings.gableRoofSlopePercent = slopeAfter;
   check(
-    `"Reset slope" follows the truss: source ${sourceAfter}, roof slope ${slopeAfter} % = instance pitch ${instancePitch} %`,
-    sourceAfter === 'truss' && Math.abs(slopeAfter - instancePitch) < 0.05,
+    `after the switch the roof follows the gable: source ${sourceAfter}, roof slope ${slopeAfter} % = instance pitch ${instancePitch} %`,
+    sourceAfter === 'truss' && Math.abs(slopeAfter - instancePitch) < 0.05 && Math.abs(slopeAfter - 35.6) < 0.05,
   );
-  const resetGone = await page.evaluate(
-    () => ![...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Reset slope'),
-  );
-  check('…and the "Reset slope" button is gone once the source follows the truss', resetGone);
+  check('…with no "Reset slope" button', !(await hasButton('Reset slope')));
 
   // 5. 3D, in focus mode: Front, both gable ends, a gable closeup and both
   // eaves close up (the sloped chord tail meeting the fascia).
-  await page.locator('button[aria-label="Focus preview"]').first().click();
-  await page.waitForTimeout(1200);
-  focused = true;
+  await enterFocus();
   await setPreset(frontPreset);
   await clickSky();
   await previewShot('front');
@@ -391,10 +434,8 @@ try {
   focused = true;
   // The iso picture: the roof follows the truss, so no purlin shows through
   // the covering (inspect iso.png; the numbers are in roofAttachment.test.js).
-  const iso = presets.find((entry) => entry.value.startsWith('iso'))?.value;
-  check(`the preview offers an iso preset (${iso})`, Boolean(iso));
-  if (iso) {
-    await setPreset(iso);
+  if (isoPreset) {
+    await setPreset(isoPreset);
     await clickSky();
     await previewShot('iso');
   }

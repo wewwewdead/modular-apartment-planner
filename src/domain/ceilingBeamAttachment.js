@@ -317,6 +317,15 @@ function pickPrimaryRing(regions) {
 }
 
 /**
+ * The floor `selectCeilingCoverageSlabs` reads its slabs from, without
+ * filtering them — what a cache needs to know about the storey overhead to
+ * tell whether an answer derived against it still stands.
+ */
+export function selectCeilingCoverageFloor(project, floor) {
+  return floorAbove(project, floor);
+}
+
+/**
  * The slabs overhead a ceiling sits under, and the storey they belong to.
  *
  * A floor's beams frame the TOP of its own storey and the next floor's slab

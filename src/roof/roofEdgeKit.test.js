@@ -263,6 +263,82 @@ describe('the roof-edge kit on other roof shapes', () => {
   });
 });
 
+// RT-4 (spec §7.9.3.2): a hip's soffit starts at the SUPPORT line (the end
+// wall), not at the first/last copy; gable/shed keep the copy range. Layout
+// 0 → 12 000 along x, span 7200 across y, 300 tails, roof overhang 510.
+describe('the bearing outline of an attached hip roof (RT-4)', () => {
+  function seatingTrussSystem(trussTypeId, instance = {}) {
+    return createTrussSystem('Seating System', {
+      id: 'ts_seat',
+      floorId: 'floor_1',
+      baseElevation: 3000,
+      purlinSystem: { enabled: true, depth: 50, width: 75, spacing: 900 },
+      trussInstances: [
+        {
+          trussTypeId,
+          startPoint: { x: 0, y: 0 },
+          endPoint: { x: 12000, y: 0 },
+          span: 7200,
+          rise: 900,
+          spacing: 1200,
+          count: 11,
+          overhangs: { start: 300, end: 300 },
+          ...instance,
+        },
+      ],
+    });
+  }
+
+  function extent(points) {
+    const xs = points.map((point) => point.x);
+    const ys = points.map((point) => point.y);
+    return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+  }
+
+  function expectExtent(points, minX, maxX, minY, maxY) {
+    const box = extent(points);
+    expect(box.minX).toBeCloseTo(minX, 6);
+    expect(box.maxX).toBeCloseTo(maxX, 6);
+    expect(box.minY).toBeCloseTo(minY, 6);
+    expect(box.maxY).toBeCloseTo(maxY, 6);
+  }
+
+  it('is the support line by the bearings: 0 … 12 000 along the layout, ±3600 across', () => {
+    const trussSystem = seatingTrussSystem('truss_type_hip');
+    const roofSystem = createRoofSystemForProject({ trussSystems: [trussSystem] }, { pitch: { overhang: 510 } });
+    expect(roofSystem.roofType).toBe('hip');
+    expectExtent(resolveRoofBearingOutline(roofSystem, trussSystem), 0, 12000, -3600, 3600);
+  });
+
+  it('lines the whole overhang band with soffit: hip ends as deep as the sides (300 + 510)', () => {
+    const trussSystem = seatingTrussSystem('truss_type_hip');
+    const roofSystem = createRoofSystemForProject({ trussSystems: [trussSystem] }, { pitch: { overhang: 510 } });
+    const roofGeometry = buildRoofPlaneGeometry(roofSystem);
+    expectExtent(roofGeometry.roofOutline, -810, 12810, -4410, 4410);
+    const context = {
+      trussSystem,
+      bearingOutline: resolveRoofBearingOutline(roofSystem, trussSystem),
+      groundElevation: 0,
+    };
+    const layout = buildRoofEdgeKitLayout(roofSystem, roofGeometry, context);
+    expect(layout.soffits).toHaveLength(4);
+    const area = layout.soffits.reduce((sum, soffit) => sum + soffit.area, 0);
+    expect(area).toBeCloseTo((12000 + 2 * 810) * (7200 + 2 * 810) - 12000 * 7200, -2);
+  });
+
+  it('reads the line, not the copies, for a hip; a gable keeps the copy range', () => {
+    const offsetCopies = { supportOffsetAlongAxis: 450, count: 10 };
+    const hip = seatingTrussSystem('truss_type_hip', offsetCopies);
+    const hipRoof = createRoofSystemForProject({ trussSystems: [hip] }, { pitch: { overhang: 510 } });
+    expectExtent(resolveRoofBearingOutline(hipRoof, hip), 0, 12000, -3600, 3600);
+
+    const gable = seatingTrussSystem('truss_type_gable', offsetCopies);
+    const gableRoof = createRoofSystemForProject({ trussSystems: [gable] }, { pitch: { overhang: 510 } });
+    expect(gableRoof.roofType).toBe('gable');
+    expectExtent(resolveRoofBearingOutline(gableRoof, gable), 450, 11250, -3600, 3600);
+  });
+});
+
 describe('the roof-edge kit in elevation and section', () => {
   async function detachedGable() {
     return createRoofSystem('Gable', {

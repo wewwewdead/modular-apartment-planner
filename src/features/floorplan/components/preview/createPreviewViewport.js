@@ -30,6 +30,7 @@ import { SKY_ENVIRONMENT_INTENSITY, STUDIO_ENVIRONMENT_INTENSITY, createEnvironm
 import { createGroundMaterial, createGroundPlane, disposeGroundMaterial } from './createGroundPlane';
 import { REFINE_PROFILES, createProgressiveRenderer } from './createProgressiveRenderer';
 import { canvasPixelRatio } from './previewResolution';
+import { compileScenePrograms } from './compileScenePrograms';
 import { FRAME_ACTION, nextFrameAction, shouldPresizeRefine, wantsAnotherFrame } from './refineSchedule';
 import { PREVIEW_PERF_ENABLED, createPreviewPerfRecorder, publishPreviewPerf } from './previewPerf';
 import { DEFAULT_RENDER_STYLE, renderStyleConfig, toneMappingConstant } from './renderStyle';
@@ -64,11 +65,12 @@ const PENUMBRA_REFERENCE_SAMPLES = 24;
 /**
  * How long after the last world change the shader warm-up runs.
  *
- * `compileAsync` is worth firing because the alternative is compiling the same
- * programs synchronously in the middle of the first frame that shows a new
- * material or a new light count — which is exactly the hitch a user reads as the
- * preview "catching up". It is not worth firing fifteen times a second, which is
- * how often a dragged wall rebuilds the scene, so it waits for the drag to stop.
+ * The asynchronous compile (`compileScenePrograms`) is worth firing because
+ * the alternative is compiling the same programs synchronously in the middle of
+ * the first frame that shows a new material or a new light count — which is
+ * exactly the hitch a user reads as the preview "catching up". It is not worth
+ * firing fifteen times a second, which is how often a dragged wall rebuilds the
+ * scene, so it waits for the drag to stop.
  */
 const SHADER_WARMUP_DEBOUNCE_MS = 250;
 
@@ -628,6 +630,18 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       walkNavigation.update(deltaSeconds);
     }
 
+    // Programs for a new light count are compiling in the background (see
+    // `startLightCompileGate`). Drawing now would make the driver finish them
+    // on this thread, which is the freeze the gate exists to remove — so this
+    // frame draws nothing at all, not even the axis gizmo: anything drawn into
+    // the canvas would replace the picture it is holding. The camera keeps
+    // moving underneath, and the first frame after the gate sees it as moved.
+    if (lightCompileGate && navigationMode === 'inspect') {
+      if (!suspended) animationFrame = window.requestAnimationFrame(renderFrame);
+      else renderLoopRunning = false;
+      return;
+    }
+
     emitCompassHeading();
     // Held in front of the camera rather than fixed in the world, so it has to
     // be repositioned after the camera has settled for this frame.
@@ -710,15 +724,72 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
    * materials on screen — by then the preview has usually gone idle, and an idle
    * loop does not restart itself.
    */
+  /*
+   * A world whose light counts moved needs a fresh program for every lit
+   * material, and three compiles a missing program synchronously on the frame
+   * that first draws with it — 17 programs, a second or more on a ceiling
+   * assembly. `compileScenePrograms` issues them up front — for the offscreen
+   * target the scene is really drawn into — and, where the driver has
+   * KHR_parallel_shader_compile (ANGLE on D3D11 does), lets them compile off
+   * the main thread; while it is pending `renderFrame` holds the last presented
+   * picture instead of drawing.
+   *
+   * Only in inspect mode: in walk mode the view is the user's eyes, and a frozen
+   * one is worse than a hitch. A later gate supersedes an earlier one, so a
+   * resolve for a world that has since been replaced is ignored; a rejection
+   * releases the gate like a resolve does, and so does LIGHT_COMPILE_GATE_MAX_MS
+   * — a compile that never reports back must not hold the picture forever.
+   *
+   * The same holds for a world that brings a material no frame has drawn with
+   * yet: the first light on a ceiling brings a double-sided lens, a program the
+   * scene did not have, and its synchronous link was a quarter-second task of
+   * its own. A material that merely is new — a second lens of a kind already
+   * compiled — finds its program in the cache, so that gate opens on the first
+   * poll and costs one compile traversal.
+   */
+  let lightCompileGate = null;
+  const LIGHT_COMPILE_GATE_MAX_MS = 4000;
+  const hasUnpreparedMaterial = (root) => {
+    let found = false;
+    root?.traverse((node) => {
+      if (found || !(node.isMesh || node.isLine || node.isPoints || node.isSprite)) return;
+      const materials = Array.isArray(node.material) ? node.material : [node.material];
+      found = materials.some((material) => material && !renderer.properties.get(material).currentProgram);
+    });
+    return found;
+  };
+  const startLightCompileGate = () => {
+    if (navigationMode !== 'inspect' || typeof renderer.compile !== 'function') return;
+    let compiling = null;
+    try {
+      compiling = compileScenePrograms(renderer, scene, activeCamera, progressive.getSceneRenderTarget());
+    } catch {
+      return;
+    }
+    if (typeof compiling?.then !== 'function') return;
+    const gate = {};
+    lightCompileGate = gate;
+    const release = () => {
+      if (lightCompileGate !== gate) return;
+      lightCompileGate = null;
+      window.clearTimeout(gate.timeout);
+      markShadowsDirty();
+      invalidate();
+    };
+    gate.timeout = window.setTimeout(release, LIGHT_COMPILE_GATE_MAX_MS);
+    compiling.then(release, release);
+  };
+
   let shaderWarmupTimer = 0;
   const scheduleShaderWarmup = () => {
-    if (typeof renderer.compileAsync !== 'function') return;
+    if (typeof renderer.compile !== 'function') return;
     if (shaderWarmupTimer) window.clearTimeout(shaderWarmupTimer);
     shaderWarmupTimer = window.setTimeout(() => {
       shaderWarmupTimer = 0;
       let compiling = null;
       try {
-        compiling = renderer.compileAsync(scene, activeCamera);
+        // Against the target the scene is drawn into; see `compileScenePrograms`.
+        compiling = compileScenePrograms(renderer, scene, activeCamera, progressive.getSceneRenderTarget());
       } catch {
         return;
       }
@@ -772,6 +843,8 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     const hits = raycaster.intersectObject(worldRoot, true);
     const seenTargets = new Set();
     const targets = [];
+    // The first (nearest) hit on each target, so a click can say where it landed.
+    const targetHits = new Map();
 
     for (const hit of hits) {
       const target = resolvePickTarget(hit.object);
@@ -785,6 +858,7 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       if (seenTargets.has(key)) continue;
       seenTargets.add(key);
       targets.push(target);
+      if (!targetHits.has(target)) targetHits.set(target, hit);
     }
 
     if (!targets.length) {
@@ -796,7 +870,12 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       ? targets.find((target) => target.floorId === pickContext.activeFloorId) || null
       : null;
 
-    pickHandler(preferredTarget || targets[0]);
+    // The hit point in the world root's frame — the frame the descriptors were
+    // built in, which is plan millimetres (x, elevation, y). The root sits at the
+    // origin, so this is the identity today, but it is the frame that matters.
+    const chosen = preferredTarget || targets[0];
+    const hit = targetHits.get(chosen);
+    pickHandler(chosen, hit?.point ? { point: worldRoot.worldToLocal(hit.point.clone()) } : null);
   };
 
   const handlePointerDown = (event) => {
@@ -1040,16 +1119,20 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
 
     worldRoot.traverse((node) => {
       if (node.userData?.isFixtureLight) {
-        // `budgetSuppressed` outranks the switch, and has to: a lamp the scene
-        // could not afford to run has had its flux folded into the room's bounce
-        // fill, so turning the lights back on here would count it twice — and
-        // put back the light the budget exists to remove.
-        node.visible = interiorLighting.lightsOn && !node.userData.budgetSuppressed;
+        // Visibility is the budget's alone: a lamp the scene could not afford to
+        // run has had its flux folded into the room's bounce fill, and showing it
+        // would count it twice. The switch goes through the intensity instead,
+        // because a light's visibility is part of every lit material's program
+        // identity and its intensity is not — switching the lamps by hiding them
+        // recompiled the whole material set on every press, there and back.
+        node.visible = !node.userData.budgetSuppressed;
         // Photometry × adaptation. Always from `baseIntensity` rather than from
         // whatever the light is carrying, so repeated passes over a reused scene
         // graph cannot compound the factor.
         const baseIntensity = node.userData.baseIntensity;
-        if (Number.isFinite(baseIntensity)) node.intensity = baseIntensity * fixtureIntensityScale;
+        if (Number.isFinite(baseIntensity)) {
+          node.intensity = interiorLighting.lightsOn ? baseIntensity * fixtureIntensityScale : 0;
+        }
       }
 
       const materials = Array.isArray(node.material) ? node.material : node.material ? [node.material] : [];
@@ -1396,7 +1479,7 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       sunState = nextSun || null;
       applySun();
     },
-    setWorld(nextRoot, bounds, groundLevel = 0, { batchRoot: nextBatchRoot = null } = {}) {
+    setWorld(nextRoot, bounds, groundLevel = 0, { batchRoot: nextBatchRoot = null, lightsChanged = false } = {}) {
       const hadWorld = !!worldRoot;
       const walkPose = navigationMode === 'walk' ? walkNavigation.capturePose() : null;
       // When the incremental scene cache is used it hands back the SAME
@@ -1479,6 +1562,13 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       // Debounced, so the same fifteen rebuilds a second queue one compile after
       // the drag ends rather than fifteen during it.
       scheduleShaderWarmup();
+      // Not debounced: a moved light count, or a material nothing has drawn
+      // with, means the very next frame would compile, so the background
+      // compile has to be under way before it. Not for the first world: there
+      // is no picture on the canvas yet to hold.
+      if (hadWorld && (lightsChanged || hasUnpreparedMaterial(worldRoot) || hasUnpreparedMaterial(batchRoot))) {
+        startLightCompileGate();
+      }
     },
     /**
      * The room's own lights: `lightsOn` switches the ceiling luminaires, `night`
@@ -1506,9 +1596,9 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       // markShadowsDirty + invalidate, which is the same path a style or sun
       // change takes to restart the progressive refine.
       applySun();
-      // Switching the fixtures changes how many lights the renderer sees, and a
-      // light count is part of a program's identity — so the first night frame
-      // compiles a whole new set of them unless they are asked for early.
+      // The lamps switch by intensity, so the count the renderer sees no longer
+      // moves with the switch; the warm-up stays for whatever the rig itself
+      // changes between day and night, and costs nothing when that is nothing.
       scheduleShaderWarmup();
     },
     resetView() {

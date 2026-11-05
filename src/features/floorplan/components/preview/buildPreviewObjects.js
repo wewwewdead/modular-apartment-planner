@@ -1309,6 +1309,33 @@ function createCeilingLightFixtureObject(descriptor, materialPalette) {
 }
 
 /**
+ * A luminaire built only so its programs exist before the first real one does.
+ *
+ * The first light on a ceiling brings materials no frame has drawn with — the
+ * double-sided lens and the fitting's own palette material — and their programs
+ * are linked on the frame that first needs them. Built through the same builder
+ * as every can on the plan, so the programs it leaves are exactly theirs; the
+ * caller hides it (`compile` prepares hidden meshes, `render` skips them) and
+ * keeps it off the layers the picker and the camera use.
+ */
+export function createFixtureWarmupObject(materialPalette) {
+  return createCeilingLightFixtureObject(
+    {
+      fixtureType: 'recessed_can_6',
+      aperture: { radiusMm: 95 },
+      bulb: { diameterMm: 95, lengthMm: 120, count: 1, flat: false },
+      dropMm: 0,
+      aim: FIXTURE_AIM_REST,
+      emissive: { color: { r: 1, g: 0.85, b: 0.7 } },
+      center: { x: 0, y: 0 },
+      baseElevation: -1e6,
+      rotation: 0,
+    },
+    materialPalette,
+  );
+}
+
+/**
  * Shadow settings for a fixture light, in millimetres.
  *
  * `normalBias` is 20 *world units*, not the sub-unit figure a metre-scaled scene
@@ -1457,8 +1484,15 @@ function setFixtureLightState(object, { lit, casting, baseIntensity }) {
  * Bounce fills are never suppressed. There are only a handful of them after
  * aggregation, they are where the suppressed lamps go, and they are the term
  * that keeps a room from reading as a black box.
+ *
+ * Returns what it left for the renderer to count — the on-screen lamps and
+ * fills that are visible (`point`, `spot`; fills are points) and the casters
+ * among them (`pointShadows`, `spotShadows`). Those four numbers are part of
+ * every lit material's program identity, which is what the fixture light pool
+ * (`fixtureLightPool.js`) holds still.
  */
 export function applySceneLightBudgets(meshMap) {
+  const counts = { point: 0, spot: 0, pointShadows: 0, spotShadows: 0 };
   const lamps = [];
   const bounces = [];
   for (const entry of meshMap.values()) {
@@ -1466,7 +1500,7 @@ export function applySceneLightBudgets(meshMap) {
     if (entry.descriptor.role === 'bounce') bounces.push(entry);
     else lamps.push(entry);
   }
-  if (!lamps.length && !bounces.length) return;
+  if (!lamps.length && !bounces.length) return counts;
 
   lamps.sort(compareLightPriority);
 
@@ -1493,6 +1527,11 @@ export function applySceneLightBudgets(meshMap) {
     const casting = onScreen && lit && Boolean(entry.descriptor.castShadow) && casters < MAX_FIXTURE_SHADOW_LIGHTS;
     if (casting) casters += 1;
     setFixtureLightState(entry.object, { lit, casting });
+    if (onScreen && lit) {
+      const spot = entry.descriptor.lightType === 'spot';
+      counts[spot ? 'spot' : 'point'] += 1;
+      if (casting) counts[spot ? 'spotShadows' : 'pointShadows'] += 1;
+    }
   }
 
   for (const entry of bounces) {
@@ -1502,7 +1541,9 @@ export function applySceneLightBudgets(meshMap) {
     // more every time a wall was dragged.
     const intensity = (entry.descriptor.intensity || 0) + (foldedFill.get(entry.descriptor.id) || 0);
     setFixtureLightState(entry.object, { lit: true, casting: false, baseIntensity: intensity });
+    if (entry.floorVisible !== false) counts.point += 1;
   }
+  return counts;
 }
 
 // ── Railing ──

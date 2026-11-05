@@ -1,4 +1,16 @@
-import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Fragment,
+  lazy,
+  memo,
+  startTransition,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useOptimistic,
+  useRef,
+  useState,
+} from 'react';
 import { useEditorState, useProject } from '@/features/floorplan/context/FloorplanContext';
 import {
   CEILING_ATTACHMENT_MODES,
@@ -16,6 +28,7 @@ import {
   deriveCeilingDetail,
   getProjectCeiling,
   resolveCeilingBeamSupports,
+  resolveCeilingLocalSpace,
 } from '@/domain/ceilingModels';
 import {
   WALL_DIMENSION_MODES,
@@ -63,7 +76,6 @@ import {
 } from '@/features/floorplan/components/wall-detail/wallDetailEditorGeometry';
 import {
   CanvasReadoutChip,
-  WallCanvasGrid,
   WallCanvasRulers,
   useWallCanvasMetrics,
 } from '@/features/floorplan/components/wall-detail/WallCanvasChrome';
@@ -92,6 +104,36 @@ import {
 } from '@/features/floorplan/components/wall-detail/WallDetailUiKit';
 import styles from '@/features/floorplan/components/wall-detail/WallDetailEditor.module.css';
 import { createCeilingDetailPreviewProject } from './ceilingDetailPreviewProject';
+import { useDeferredCoordination } from './useDeferredCoordination';
+import { CeilingPlanUnderlay, CeilingPlanUnderlayLabels } from './CeilingPlanUnderlay';
+import {
+  CeilingLightGhost,
+  CeilingLightGuides,
+  CeilingLightRunGhost,
+  LIGHT_TOOL_HINT,
+  LightToolOptions,
+  PANE_SNAP_SCALE,
+  lightPlacementReadout,
+  lightRunReadout,
+  paneLightPoint,
+  resolveLightPlacement,
+  useLightRunShiftRelease,
+} from './CeilingLightPlacement';
+import { collectLightSnapTargets } from './lightSnap';
+import { adjustLightRun, isLightRunDrag, moveLightRun, resolveLightRunPoints, startLightRun } from './lightRun';
+import {
+  CeilingBoardLayer,
+  CeilingBoundaryLayer,
+  CeilingFixtureLayer,
+  CeilingGridLayer,
+  CeilingHangerLayer,
+  CeilingOpeningProfileLayer,
+  CeilingScrewLayer,
+  CeilingStructureLayer,
+  FRAMING_KIND_LABELS,
+  OPENING_TYPE_LABELS,
+  formatMm,
+} from './CeilingPlanLayers';
 
 const ThreePreviewPanel = lazy(() => import('@/features/floorplan/components/preview/ThreePreviewPanel'));
 
@@ -172,7 +214,7 @@ const TOOL_HINTS = Object.freeze({
   [CANVAS_TOOLS.DRAW_FURRING]: 'Click for a furring channel across the full width, or drag its span',
   [CANVAS_TOOLS.DRAW_CARRIER]: 'Click for a carrier across the full depth, or drag its span',
   [CANVAS_TOOLS.DRAW_OPENING]: 'Drag a rectangle to cut an opening in the ceiling',
-  [CANVAS_TOOLS.ADD_LIGHT]: 'Click to place a light fixture',
+  [CANVAS_TOOLS.ADD_LIGHT]: LIGHT_TOOL_HINT,
   [CANVAS_TOOLS.ADD_FASTENER]: 'Click to place a screw',
   [CANVAS_TOOLS.DRAW_DIMENSION]: 'Click two exact points (or drag); hold Shift to keep the run level or plumb',
 });
@@ -298,6 +340,7 @@ const WORKFLOW_STEPS = Object.freeze([
 ]);
 
 const LAYER_LABELS = Object.freeze({
+  plan: 'Plan',
   boundary: 'Outline',
   openings: 'Openings',
   boards: 'Boards',
@@ -317,220 +360,11 @@ const SELECTION_LABELS = Object.freeze({
   dimension: 'measurement',
 });
 
-const OPENING_TYPE_LABELS = Object.freeze({
-  [CEILING_OPENING_TYPES.ACCESS_HATCH]: 'Access hatch',
-  [CEILING_OPENING_TYPES.DOWNLIGHT]: 'Downlight',
-  [CEILING_OPENING_TYPES.DIFFUSER]: 'Air diffuser',
-  [CEILING_OPENING_TYPES.CUSTOM]: 'Custom cut-out',
-});
-
-const FRAMING_KIND_LABELS = Object.freeze({
-  furring: 'Furring channel',
-  carrier: 'Carrier',
-  trimmer: 'Opening trimmer',
-  wall_angle: 'Wall angle',
-});
-
-const FRAMING_COLORS = Object.freeze({
-  furring: 'rgba(49, 129, 168, 0.35)',
-  carrier: 'rgba(120, 96, 190, 0.42)',
-  trimmer: 'rgba(214, 158, 74, 0.4)',
-  wall_angle: 'rgba(86, 158, 130, 0.5)',
-});
-
-// Below this the wall angle would draw thinner than a line and disappear on a
-// zoomed-out plan, so it is drawn at its real leg width or this, whichever is
-// wider.
-const MIN_MEMBER_LINE_PX = 1.5;
-
-/**
- * One colour per board material, so a ceiling boarded in two of them reads as
- * two on the plan rather than as one flat field. A board answers for itself:
- * the ceiling's profile only decides what a board that never overrode it is.
- */
-const BOARD_FILLS = Object.freeze({
-  [CEILING_BOARD_MATERIALS.PLYWOOD]: '#dcc39b',
-  [CEILING_BOARD_MATERIALS.FIBER_CEMENT]: '#dedbd1',
-});
-
 /** Value the material picker uses for "whatever the profile says". */
 const PROFILE_DEFAULT_MATERIAL = '';
 
-/**
- * Which RCP symbol each catalog luminaire draws. Grouped by what the drawing has
- * to tell apart at a glance — a plain can, something with a lens ring, something
- * hanging — rather than by the mount word: a semi-flush is surface-mounted and
- * still reads as a dome, and a wafer is recessed and still is not a can.
- */
-const FIXTURE_SYMBOLS = Object.freeze({
-  recessed_can_4: 'plain',
-  recessed_can_6: 'plain',
-  gimbal_recessed: 'plain',
-  wafer_led: 'double',
-  cylinder_downlight: 'double',
-  surface_flush: 'cross',
-  semi_flush: 'cross',
-  pendant: 'dot',
-  chandelier_5: 'arms',
-  track_head: 'track',
-  troffer_2x2: 'rect',
-  troffer_2x4: 'rect',
-});
-
-/**
- * Fixtures are drawn at the size they really cover, so a 2 × 4 troffer reads as
- * the two ceiling tiles it displaces. Zoomed out that would shrink a 75 mm track
- * head to nothing, so `unitPx` sets a legibility floor the same way the hanger
- * and screw markers do: below it the symbol stops shrinking and the plan goes on
- * saying what kind of light is there.
- */
-const FIXTURE_MIN_SYMBOL_PX = 7;
-const FIXTURE_SYMBOL_COLOR = '#ffd48a';
-// The one orange every selected piece on this plan wears. The stylesheet holds
-// it as --assembly-selected-line, which a presentation attribute cannot read,
-// and these symbols carry their stroke as an attribute so the whole group can
-// set it once.
-const FIXTURE_SELECTED_COLOR = '#ffb45c';
-
-function svgNumber(value) {
-  return Math.round(value * 100) / 100;
-}
-
-/** Half-extents of a fixture symbol in UV, already floored to stay legible. */
-function fixtureSymbolExtent(type, unitPx) {
-  const floor = FIXTURE_MIN_SYMBOL_PX * unitPx;
-  return {
-    halfU: Math.max(type.apertureMm / 2, floor),
-    halfV: Math.max((type.apertureLengthMm ?? type.apertureMm) / 2, floor),
-  };
-}
-
-/**
- * The arrow an aimable fixture points along. Azimuth is degrees CCW from +U in
- * the RCP frame, so the direction is built in UV and left to the layer's own
- * flip — a rotate() here would come out mirrored, because that transform is what
- * turns the V axis over.
- */
-function fixtureAimPath(fixture, radius) {
-  const angle = ((fixture.aim?.azimuthDeg || 0) * Math.PI) / 180;
-  const tipU = fixture.u + Math.cos(angle) * radius * 1.7;
-  const tipV = fixture.v + Math.sin(angle) * radius * 1.7;
-  const barb = radius * 0.55;
-  const segments = [`M ${svgNumber(fixture.u)} ${svgNumber(fixture.v)} L ${svgNumber(tipU)} ${svgNumber(tipV)}`];
-  for (const sweep of [2.6, -2.6]) {
-    segments.push(
-      `M ${svgNumber(tipU)} ${svgNumber(tipV)} L ${svgNumber(tipU + Math.cos(angle + sweep) * barb)} ${svgNumber(
-        tipV + Math.sin(angle + sweep) * barb,
-      )}`,
-    );
-  }
-  return segments.join(' ');
-}
-
-/** One luminaire as the industry draws it, in ceiling-local UV. */
-function fixtureSymbolNodes(fixture, unitPx, color) {
-  const type = getFixtureType(fixture.fixtureType);
-  const symbol = FIXTURE_SYMBOLS[type.id] || 'plain';
-  const { halfU, halfV } = fixtureSymbolExtent(type, unitPx);
-  const { u, v } = fixture;
-
-  // Troffers are the only rectangular luminaire in the catalog, and a panel is a
-  // tile: drawn as a circle it would claim the wrong footprint entirely.
-  if (symbol === 'rect') {
-    return [
-      <rect
-        key="body"
-        x={u - halfU}
-        y={v - halfV}
-        width={halfU * 2}
-        height={halfV * 2}
-        vectorEffect="non-scaling-stroke"
-      />,
-      <line
-        key="diagonal"
-        x1={u - halfU}
-        y1={v - halfV}
-        x2={u + halfU}
-        y2={v + halfV}
-        vectorEffect="non-scaling-stroke"
-      />,
-    ];
-  }
-
-  const radius = halfU;
-  const nodes = [<circle key="body" cx={u} cy={v} r={radius} vectorEffect="non-scaling-stroke" />];
-  if (symbol === 'double') {
-    nodes.push(<circle key="inner" cx={u} cy={v} r={radius * 0.62} vectorEffect="non-scaling-stroke" />);
-  } else if (symbol === 'cross') {
-    nodes.push(
-      <path
-        key="cross"
-        d={`M ${svgNumber(u - radius)} ${svgNumber(v)} H ${svgNumber(u + radius)} M ${svgNumber(u)} ${svgNumber(
-          v - radius,
-        )} V ${svgNumber(v + radius)}`}
-        vectorEffect="non-scaling-stroke"
-      />,
-    );
-  } else if (symbol === 'dot') {
-    nodes.push(
-      <circle
-        key="lamp"
-        cx={u}
-        cy={v}
-        r={Math.max(radius * 0.22, 1.5 * unitPx)}
-        fill={color}
-        vectorEffect="non-scaling-stroke"
-      />,
-    );
-  } else if (symbol === 'arms') {
-    // Five arms, five ticks: the count is the whole point of the symbol, which
-    // is why a chandelier is not just a bigger circle.
-    const arms = Array.from({ length: 5 }, (unused, index) => {
-      const angle = Math.PI / 2 + (index * 2 * Math.PI) / 5;
-      return `M ${svgNumber(u + Math.cos(angle) * radius * 0.45)} ${svgNumber(
-        v + Math.sin(angle) * radius * 0.45,
-      )} L ${svgNumber(u + Math.cos(angle) * radius)} ${svgNumber(v + Math.sin(angle) * radius)}`;
-    });
-    nodes.push(<path key="arms" d={arms.join(' ')} vectorEffect="non-scaling-stroke" />);
-  } else if (symbol === 'track') {
-    // The rail the head clamps to, drawn across the direction it throws.
-    const angle = ((fixture.aim?.azimuthDeg || 0) * Math.PI) / 180 + Math.PI / 2;
-    const reach = radius * 1.4;
-    nodes.push(
-      <line
-        key="rail"
-        x1={svgNumber(u - Math.cos(angle) * reach)}
-        y1={svgNumber(v - Math.sin(angle) * reach)}
-        x2={svgNumber(u + Math.cos(angle) * reach)}
-        y2={svgNumber(v + Math.sin(angle) * reach)}
-        vectorEffect="non-scaling-stroke"
-      />,
-    );
-  }
-  if (type.aimable) {
-    nodes.push(<path key="aim" d={fixtureAimPath(fixture, radius)} vectorEffect="non-scaling-stroke" />);
-  }
-  return nodes;
-}
-
-function boardFillFor(material) {
-  return BOARD_FILLS[material] || BOARD_FILLS[CEILING_BOARD_MATERIALS.FIBER_CEMENT];
-}
-
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
-}
-
-function formatMm(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? Math.round(number * 10) / 10 : 0;
-}
-
-function regionPath(region) {
-  return [region.outline, ...(region.holes || [])]
-    .filter((ring) => ring?.length)
-    .map((ring) => `${ring.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.u} ${point.v}`).join(' ')} Z`)
-    .join(' ');
 }
 
 /**
@@ -629,258 +463,6 @@ function collectCeilingDimensionSnapTargets({
 }
 
 /**
- * Everything on the reflected ceiling plan that only moves when the ceiling
- * itself changes: snap grid, openings, boards, framing, hangers, screws, and the
- * boundary rings. A real ceiling is thousands of these nodes — a 6 × 4 m board
- * grid alone carries some 750 screws — and panning re-renders the editor on
- * every pointer move, so rebuilding them each frame is what made a drag stutter.
- * Behind `memo` a pan touches nothing here: the only viewport value it reads is
- * `unitPx`, which changes with zoom, never with pan.
- *
- * The in-flight draw and trace previews deliberately stay with the editor: those
- * do change every frame, and they are a handful of nodes.
- */
-const CeilingPlanLayers = memo(function CeilingPlanLayers({
-  bounds,
-  snapStep,
-  snapEnabled,
-  unitPx,
-  layers,
-  panels,
-  frameMembers,
-  hangers,
-  fasteners,
-  lightFixtures,
-  openings,
-  regions,
-  disabledBoardFill,
-  selection,
-  isCustomMember,
-  isManualFastener,
-  onElementPointerDown,
-}) {
-  return (
-    <>
-      <WallCanvasGrid bounds={bounds} snapStep={snapStep} unitPx={unitPx} active={snapEnabled} />
-
-      {layers.openings &&
-        openings.map((opening) => (
-          <rect
-            key={`${opening.id}:void`}
-            className={styles.openingVoid}
-            x={opening.u0}
-            y={opening.v0}
-            width={opening.u1 - opening.u0}
-            height={opening.v1 - opening.v0}
-          />
-        ))}
-
-      {layers.boards &&
-        panels.flatMap((panel) =>
-          panel.regions.map((region, index) => (
-            <path
-              key={`${panel.id}:region:${index}`}
-              className={styles.panelShape}
-              data-selected={selection?.type === 'panel' && selection.id === panel.localId ? 'true' : 'false'}
-              d={regionPath(region)}
-              fill={disabledBoardFill || boardFillFor(panel.material)}
-              fillRule="evenodd"
-              vectorEffect="non-scaling-stroke"
-              onPointerDown={(event) => onElementPointerDown(event, 'panel', panel.localId, panel)}
-            >
-              <title>{`${panel.label} · ${formatMm(panel.width)} × ${formatMm(panel.height)} mm`}</title>
-            </path>
-          )),
-        )}
-
-      {layers.structure &&
-        frameMembers.map((member) =>
-          member.kind === 'wall_angle' ? (
-            // Drawn at the width of its own leg rather than as a profile line.
-            // The angle is the edge framing of every ring the ceiling was traced
-            // into — its perimeter, and the face of every beam, column and
-            // partition cut out of it — and a hairline running 12.5 mm off the
-            // ceiling outline reads as that outline rather than as a member. It
-            // stays out of the way of the pointer: an angle is derived from the
-            // area, so there is nothing to select on it, and a 25 mm band down
-            // every edge would otherwise swallow clicks meant for the board.
-            <line
-              key={member.id}
-              x1={member.start.u}
-              y1={member.start.v}
-              x2={member.end.u}
-              y2={member.end.v}
-              style={{
-                stroke: FRAMING_COLORS.wall_angle,
-                strokeWidth: Math.max(member.width || 0, MIN_MEMBER_LINE_PX * unitPx),
-                pointerEvents: 'none',
-              }}
-            >
-              <title>{FRAMING_KIND_LABELS.wall_angle}</title>
-            </line>
-          ) : (
-            <rect
-              key={member.id}
-              className={styles.frameShape}
-              data-selected={selection?.type === 'framing' && selection.id === member.id ? 'true' : 'false'}
-              x={member.u0}
-              y={member.v0}
-              width={member.u1 - member.u0}
-              height={member.v1 - member.v0}
-              fill={FRAMING_COLORS[member.kind]}
-              vectorEffect="non-scaling-stroke"
-              onPointerDown={(event) =>
-                onElementPointerDown(event, 'framing', member.id, member, isCustomMember(member.id))
-              }
-            >
-              <title>
-                {`${FRAMING_KIND_LABELS[member.kind] || member.kind} · U ${formatMm(member.u0)} → ${formatMm(
-                  member.u1,
-                )} · V ${formatMm(member.v0)} → ${formatMm(member.v1)}`}
-              </title>
-            </rect>
-          ),
-        )}
-
-      {layers.hangers &&
-        hangers.map((hanger) => (
-          <circle
-            key={hanger.id}
-            cx={hanger.u}
-            cy={hanger.v}
-            r={4 * unitPx}
-            fill="none"
-            stroke="#8fd0f0"
-            strokeWidth="1.25"
-            vectorEffect="non-scaling-stroke"
-          >
-            <title>{`Hanger · U ${formatMm(hanger.u)} · V ${formatMm(hanger.v)}`}</title>
-          </circle>
-        ))}
-
-      {/* A screw is a 3 px dot among several hundred of them, so the one that is
-          selected is found by the ring around it, not by its own colour — the
-          same halo the wall elevation draws. */}
-      {layers.screws &&
-        fasteners.map((fastener) => {
-          const selected = selection?.type === 'fastener' && selection.id === fastener.id;
-          return (
-            <g
-              key={fastener.id}
-              className={styles.fastenerGraphic}
-              data-selected={selected ? 'true' : 'false'}
-              onPointerDown={(event) =>
-                onElementPointerDown(event, 'fastener', fastener.id, fastener, isManualFastener(fastener.id))
-              }
-            >
-              <title>{`Screw · U ${formatMm(fastener.u)} · V ${formatMm(fastener.v)}`}</title>
-              {selected ? (
-                <circle
-                  className={styles.fastenerHalo}
-                  cx={fastener.u}
-                  cy={fastener.v}
-                  r={3 * unitPx + 7 * unitPx}
-                  fill="none"
-                  vectorEffect="non-scaling-stroke"
-                />
-              ) : null}
-              <circle
-                cx={fastener.u}
-                cy={fastener.v}
-                r={3 * unitPx}
-                fill="#8a9298"
-                stroke="#2b3238"
-                strokeWidth="1"
-                vectorEffect="non-scaling-stroke"
-              />
-            </g>
-          );
-        })}
-
-      {/* Over the screws and under the opening profiles: a light is read against
-          the boards it sits in, but never over the cut lines those boards stop
-          at. Selection is the screw's halo again — a symbol that changed weight
-          would move the edge the drawing is measured against. */}
-      {layers.fixtures &&
-        lightFixtures.map((fixture) => {
-          const selected = selection?.type === 'fixture' && selection.id === fixture.id;
-          const color = selected ? FIXTURE_SELECTED_COLOR : FIXTURE_SYMBOL_COLOR;
-          const { halfU, halfV } = fixtureSymbolExtent(getFixtureType(fixture.fixtureType), unitPx);
-          return (
-            <g
-              key={fixture.id}
-              className={styles.fastenerGraphic}
-              data-fixture-id={fixture.id}
-              data-selected={selected ? 'true' : 'false'}
-              fill="none"
-              stroke={color}
-              strokeWidth="1.25"
-              onPointerDown={(event) => onElementPointerDown(event, 'fixture', fixture.id, fixture)}
-            >
-              <title>
-                {`${getFixtureType(fixture.fixtureType).label} · ${getBulbType(fixture.bulbType).label} · ${Math.round(
-                  fixture.photometrics.lumens,
-                )} lm · U ${formatMm(fixture.u)} · V ${formatMm(fixture.v)}`}
-              </title>
-              {selected ? (
-                <circle
-                  className={styles.fastenerHalo}
-                  cx={fixture.u}
-                  cy={fixture.v}
-                  r={Math.max(halfU, halfV) + 6 * unitPx}
-                  fill="none"
-                  vectorEffect="non-scaling-stroke"
-                />
-              ) : null}
-              {fixtureSymbolNodes(fixture, unitPx, color)}
-            </g>
-          );
-        })}
-
-      {layers.openings &&
-        openings.map((opening) => (
-          <rect
-            key={`${opening.id}:profile`}
-            className={styles.openingProfile}
-            data-selected={selection?.type === 'opening' && selection.id === opening.id ? 'true' : 'false'}
-            x={opening.u0}
-            y={opening.v0}
-            width={opening.u1 - opening.u0}
-            height={opening.v1 - opening.v0}
-            vectorEffect="non-scaling-stroke"
-            onPointerDown={(event) => onElementPointerDown(event, 'opening', opening.id, opening)}
-          >
-            <title>
-              {`${OPENING_TYPE_LABELS[opening.type] || opening.type} · U ${formatMm(opening.u0)} → ${formatMm(
-                opening.u1,
-              )} · V ${formatMm(opening.v0)} → ${formatMm(opening.v1)}`}
-            </title>
-          </rect>
-        ))}
-
-      {/* One ring per edge of the ceiling area: the perimeter, plus every wall,
-          beam and column it has been traced around. */}
-      {layers.boundary
-        ? regions.flatMap((region, regionIndex) =>
-            [region.outline, ...region.holes]
-              .filter((ring) => ring.length >= 3)
-              .map((ring, ringIndex) => (
-                <polyline
-                  key={`ceiling-edge-${regionIndex}-${ringIndex}`}
-                  className={styles.openingProfile}
-                  style={{ pointerEvents: 'none' }}
-                  points={[...ring, ring[0]].map((point) => `${point.u},${point.v}`).join(' ')}
-                  fill="none"
-                  vectorEffect="non-scaling-stroke"
-                />
-              )),
-          )
-        : null}
-    </>
-  );
-});
-
-/**
  * The committed measurements — derived chains and hand-drawn ones alike. They
  * live in their own memo rather than inside `CeilingPlanLayers` because they are
  * drawn in un-flipped SVG space: `DimensionGraphic` turns UV into drawing
@@ -930,9 +512,37 @@ const CeilingDimensionLayer = memo(function CeilingDimensionLayer({
   );
 });
 
+/*
+ * The contexts are read here and handed down, so the editor body is a memo of
+ * what it actually draws from. The project context changes identity whenever
+ * the coordination models do — the deferred settle after a run of placements
+ * is exactly that, with the project itself untouched — and re-rendering the
+ * whole RCP and its aside for it was most of the settle's cost.
+ */
 export default function CeilingDetailEditor() {
   const { project, dispatch, canUndo = false, canRedo = false } = useProject();
   const { ceilingDetailEditor, dispatch: editorDispatch } = useEditorState();
+  return (
+    <CeilingDetailEditorBody
+      project={project}
+      dispatch={dispatch}
+      canUndo={canUndo}
+      canRedo={canRedo}
+      ceilingDetailEditor={ceilingDetailEditor}
+      editorDispatch={editorDispatch}
+    />
+  );
+}
+
+const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
+  project,
+  dispatch,
+  canUndo,
+  canRedo,
+  ceilingDetailEditor,
+  editorDispatch,
+}) {
+  const scheduleCoordinationSettle = useDeferredCoordination(dispatch, Boolean(ceilingDetailEditor));
   const svgRef = useRef(null);
   const canvasFrameRef = useRef(null);
   /*
@@ -945,9 +555,29 @@ export default function CeilingDetailEditor() {
     so it clears this.
   */
   const gestureRectRef = useRef(null);
-  const ceiling = getProjectCeiling(project, ceilingDetailEditor?.ceilingId);
+  const storedCeiling = getProjectCeiling(project, ceilingDetailEditor?.ceilingId);
+  /*
+    What this editor draws is the stored ceiling, or — between a commit and the
+    store catching up — the detailing that commit sent. Commits are transitions
+    (see `commitDetailing`), so the store's re-render of everything that reads
+    the project runs in slices; this lets the RCP itself show the edit at once,
+    urgently, without waiting for the floor plan under the overlay to finish.
+    React drops the optimistic value the moment the transition lands, and the
+    store then holds that very detailing object, so the two never disagree.
+  */
+  const [optimisticDetailing, showDetailing] = useOptimistic(storedCeiling?.detailing ?? null, (current, next) => next);
+  const ceiling = useMemo(
+    () =>
+      storedCeiling && optimisticDetailing && optimisticDetailing !== storedCeiling.detailing
+        ? { ...storedCeiling, detailing: optimisticDetailing }
+        : storedCeiling,
+    [storedCeiling, optimisticDetailing],
+  );
 
   const [layerVisibility, setLayerVisibility] = useState({
+    // The floor plan under the boards, so a light is placed in a room rather
+    // than at a coordinate. First, because it is what the drawing is read against.
+    plan: true,
     boundary: true,
     openings: true,
     boards: true,
@@ -969,6 +599,10 @@ export default function CeilingDetailEditor() {
   const [snapStep, setSnapStep] = useState(50);
   const [openingDraftType, setOpeningDraftType] = useState(CEILING_OPENING_TYPES.ACCESS_HATCH);
   const [lightDraftType, setLightDraftType] = useState(DEFAULT_FIXTURE_TYPE_ID);
+  // Where the pointer is while the Light tool is armed: the raw ceiling point,
+  // the screen scale it was read at, and Shift. Drawn as the ghost, never as a
+  // layer, so a move re-renders the editor body and none of the plan.
+  const [lightHover, setLightHover] = useState(null);
   const [workspaceView, setWorkspaceView] = useState(WORKSPACE_VIEWS.SPLIT);
   const [openSections, setOpenSections] = useState({
     face: true,
@@ -1007,9 +641,12 @@ export default function CeilingDetailEditor() {
     A pick in the 3D pane, translated back to a selection on the plan. Only the
     parts the plan can select are honoured: a hanger is drawn there but is not
     something the drawing lets you pick, so clicking one leaves the selection
-    alone rather than clearing it. Empty space does clear it.
+    alone rather than clearing it. Empty space does clear it. With the Light
+    tool armed, a click on one of this ceiling's boards places a light at the
+    hit instead (read through the ref, so this keeps one identity).
   */
-  const handlePreviewPick = useCallback((part) => {
+  const handlePreviewPick = useCallback((part, hit) => {
+    if (canvasHandlersRef.current.placeLightFromPane?.(part, hit)) return;
     if (!part) {
       setSelection(null);
       return;
@@ -1094,9 +731,13 @@ export default function CeilingDetailEditor() {
   const jurisdiction = configuration ? getCeilingJurisdictionProfile(configuration.jurisdictionProfileId) : null;
   // Reflected ceiling plan: U runs east, V runs north, and nothing is mirrored —
   // the drawing keeps the same handedness as the floor plan underneath it.
+  // Held by value, not by `detail`: a fresh object per commit made every layer
+  // drawn against it let go on edits that moved nothing.
+  const detailLength = detail?.length;
+  const detailDepth = detail?.depth;
   const bounds = useMemo(
-    () => (detail ? { length: detail.length, height: detail.depth, mirrorU: false } : null),
-    [detail],
+    () => (Number.isFinite(detailLength) ? { length: detailLength, height: detailDepth, mirrorU: false } : null),
+    [detailLength, detailDepth],
   );
   const canvasMetrics = useWallCanvasMetrics(canvasFrameRef, bounds, workspaceView);
   const unitPx = wallUnitsPerPixel(canvasMetrics, viewport, bounds);
@@ -1145,6 +786,28 @@ export default function CeilingDetailEditor() {
         : [],
     [canvasTool, detail, selection?.type],
   );
+  const movingFixtureId = gesture?.kind === 'move' && gesture.type === 'fixture' ? gesture.id : null;
+  const placingLights = canvasTool === CANVAS_TOOLS.ADD_LIGHT || Boolean(movingFixtureId);
+  // Only while a light is being placed or moved; the one moving is left out so
+  // it cannot line up with itself.
+  const lightSnapTargets = useMemo(
+    () =>
+      detail && placingLights
+        ? collectLightSnapTargets({
+            panels: detail.panels,
+            regions: detail.regions,
+            fixtures: detail.lightFixtures,
+            length: detail.length,
+            depth: detail.depth,
+            excludeId: movingFixtureId,
+          })
+        : [],
+    [detail, placingLights, movingFixtureId],
+  );
+  // A Light-tool press that has not yet travelled past a click (lightRun.js).
+  const lightPressRef = useRef(null);
+  const lightRunLive = gesture?.kind === 'draw' && gesture.tool === CANVAS_TOOLS.ADD_LIGHT;
+  useLightRunShiftRelease(lightRunLive, setGesture);
 
   if (!ceilingDetailEditor) {
     shortcutHandlerRef.current = null;
@@ -1177,11 +840,21 @@ export default function CeilingDetailEditor() {
     sectionNodes.current[id]?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   };
 
+  // Deferred: no coordination model reads a ceiling's assembly, and the pass
+  // was most of a click's cost. The hook settles it once the editor goes idle.
+  //
+  // And a transition: the commit re-renders everything that reads the project —
+  // the floor plan, sidebar and panels under this overlay as well as the RCP —
+  // and as one urgent render that was a single long task on every click. As a
+  // transition React renders it in slices and keeps the page answering; the
+  // pointer, the ghost and the field being typed into stay urgent.
   const commitDetailing = (next) => {
-    dispatch({
-      type: 'CEILING_UPDATE',
-      ceiling: { id: ceiling.id, detailing: createCeilingDetailing(next) },
+    const detailing = createCeilingDetailing(next);
+    startTransition(() => {
+      showDetailing(detailing);
+      dispatch({ type: 'CEILING_UPDATE', ceiling: { id: ceiling.id, detailing }, coordination: 'defer' });
     });
+    scheduleCoordinationSettle();
   };
 
   const updateDetailing = (patch) => commitDetailing({ ...configuration, ...patch });
@@ -1222,9 +895,11 @@ export default function CeilingDetailEditor() {
   const chooseCanvasTool = (tool) => {
     setCanvasTool(tool);
     setGesture(null);
+    lightPressRef.current = null;
     setDimensionAcquisition(null);
     gestureRectRef.current = null;
     if (tool !== CANVAS_TOOLS.TRACE_PANEL) setPanelTrace(null);
+    setLightHover(null);
   };
 
   const isCustomMember = (id) => configuration.framing.members.some((member) => member.id === id);
@@ -1465,9 +1140,44 @@ export default function CeilingDetailEditor() {
 
   const fitCeilingInViewport = () => setViewport({ zoom: 1, panU: 0, panV: 0 });
 
+  // The pointer as the Light tool reads it: raw ceiling point plus the screen
+  // scale, so snapping reach is judged in pixels at any zoom.
+  const lightHoverAt = (event, point = null) => {
+    const rect = gestureRectRef.current || svgRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    return {
+      point: point || screenPointToWallLocal(event, rect, bounds),
+      shift: Boolean(event.shiftKey),
+      pixelsPerU: Math.max(1, rect.width) / bounds.length,
+      pixelsPerV: Math.max(1, rect.height) / bounds.height,
+    };
+  };
+  const placeLight = (hover) =>
+    resolveLightPlacement(hover, {
+      targets: lightSnapTargets,
+      fixtures: lightFixtures,
+      selectedFixtureId: selectedIdOf('fixture'),
+      snapEnabled,
+      snapStep,
+      bounds,
+    });
+
   const movedGestureEntity = (value = gesture) => {
     if (!value || value.kind !== 'move') return null;
     const delta = { u: value.current.u - value.start.u, v: value.current.v - value.start.v };
+    if (value.type === 'fixture') {
+      // A light moves by the light's own rules — board and room centres, the
+      // other lights' lines — not by the board edges the drawing tools use.
+      const raw = movePointWithinBounds(value.entity, delta, bounds);
+      const placement = placeLight({
+        ...value.scale,
+        point: raw,
+        shift: value.shift,
+        excludeId: value.id,
+        origin: { u: value.entity.u, v: value.entity.v },
+      });
+      return { ...raw, u: placement.point.u, v: placement.point.v, placement };
+    }
     let moved;
     let anchor;
     if (value.type === 'panel') {
@@ -1493,6 +1203,13 @@ export default function CeilingDetailEditor() {
 
   const drawnGestureEntity = (value = gesture) => {
     if (!value || value.kind !== 'draw') return null;
+    if (value.tool === CANVAS_TOOLS.ADD_LIGHT) {
+      // Only the ends snap; B as a plain point, since Shift here means grid.
+      const end = value.hover ? placeLight({ ...value.hover, shift: false }) : null;
+      const { grid, columns, rows, count } = value;
+      const points = resolveLightRunPoints(value, end?.point || value.start);
+      return { points, grid, columns, rows, count, end, isRun: isLightRunDrag(value) };
+    }
     if (value.tool === CANVAS_TOOLS.DRAW_PANEL || value.tool === CANVAS_TOOLS.DRAW_OPENING) {
       return createDrawnPanel(value.start, value.current, bounds, MIN_DRAWN_SIZE * 2.5);
     }
@@ -1552,10 +1269,13 @@ export default function CeilingDetailEditor() {
     setSelection({ type: 'fastener', id: fastener.id });
   };
 
-  const addLightFixture = (point) => {
-    const fixture = createCeilingLightFixture(point, { fixtureType: lightDraftType });
-    updateLighting({ fixtures: [...configuration.lighting.fixtures, fixture] });
-    setSelection({ type: 'fixture', id: fixture.id });
+  // One commit and one undo step however many lights a gesture places; the
+  // last one placed is selected.
+  const addLightFixtures = (points) => {
+    if (!points?.length) return;
+    const added = points.map((point) => createCeilingLightFixture(point, { fixtureType: lightDraftType }));
+    updateLighting({ fixtures: [...configuration.lighting.fixtures, ...added] });
+    setSelection({ type: 'fixture', id: added.at(-1).id });
   };
 
   const beginCanvasGesture = (event) => {
@@ -1617,8 +1337,16 @@ export default function CeilingDetailEditor() {
       return;
     }
     if (canvasTool === CANVAS_TOOLS.ADD_LIGHT) {
-      addLightFixture(point);
-      releaseCanvasRect();
+      // Placed on release, so a press can become a row or a grid (lightRun.js).
+      // A starts exactly where the ghost was: the same snap, from the same pointer.
+      event.preventDefault();
+      // The arrow keys drive the run, and a focused field would swallow them.
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) document.activeElement.blur();
+      const hover = lightHoverAt(event);
+      if (!hover) return;
+      svgRef.current?.setPointerCapture?.(event.pointerId);
+      // Held in a ref until it travels: a plain click then renders once, on release.
+      lightPressRef.current = startLightRun(placeLight(hover).point, hover, event);
       return;
     }
     if (canvasTool === CANVAS_TOOLS.SELECT) {
@@ -1652,11 +1380,38 @@ export default function CeilingDetailEditor() {
     }
     const point = eventToLocal(event, false);
     svgRef.current?.setPointerCapture?.(event.pointerId);
-    setGesture({ kind: 'move', type, id, entity, start: point, current: point, pointerId: event.pointerId });
+    const scale = lightHoverAt(event, point);
+    setGesture({
+      kind: 'move',
+      type,
+      id,
+      entity,
+      start: point,
+      current: point,
+      pointerId: event.pointerId,
+      scale: scale ? { pixelsPerU: scale.pixelsPerU, pixelsPerV: scale.pixelsPerV } : null,
+    });
   };
 
   const updateCanvasGesture = (event) => {
     if (panGesture) return;
+    if (canvasTool === CANVAS_TOOLS.ADD_LIGHT && !spacePanActive) {
+      const hover = lightHoverAt(event);
+      setLightHover(hover);
+      const press = lightPressRef.current;
+      if (hover && lightRunLive && gesture.pointerId === event.pointerId) {
+        const { clientX, clientY, shiftKey } = event;
+        setGesture((value) => (value ? moveLightRun(value, { clientX, clientY, shiftKey }, hover) : value));
+      } else if (hover && press?.pointerId === event.pointerId) {
+        // Past a click's travel the press becomes the live run the plan draws.
+        const moved = moveLightRun(press, event, hover);
+        if (isLightRunDrag(moved)) {
+          lightPressRef.current = null;
+          setGesture(moved);
+        }
+      }
+      return;
+    }
     if (canvasTool === CANVAS_TOOLS.TRACE_PANEL && panelTrace?.points.length) {
       setPanelTrace((value) => (value ? { ...value, previewPoint: eventToLocal(event, true) } : value));
       return;
@@ -1687,7 +1442,7 @@ export default function CeilingDetailEditor() {
     }
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     const point = eventToLocal(event, gesture.kind === 'draw');
-    setGesture((value) => (value ? { ...value, current: point } : value));
+    setGesture((value) => (value ? { ...value, current: point, shift: event.shiftKey } : value));
   };
 
   const commitDrawnEntity = (finalGesture) => {
@@ -1820,6 +1575,17 @@ export default function CeilingDetailEditor() {
 
   const finishCanvasGesture = (event) => {
     if (panGesture) return;
+    const lightRun = lightRunLive ? gesture : lightPressRef.current;
+    if (lightRun?.pointerId === event.pointerId) {
+      // Within a click's travel: the one light at A. Otherwise the row or grid A → B.
+      lightPressRef.current = null;
+      const run = drawnGestureEntity(moveLightRun(lightRun, event, lightHoverAt(event) || lightRun.hover));
+      svgRef.current?.releasePointerCapture?.(event.pointerId);
+      releaseCanvasRect();
+      setGesture(null);
+      addLightFixtures(run.points);
+      return;
+    }
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     if (gesture.kind === 'dimension_endpoint' || gesture.kind === 'dimension_move') {
       const finalGesture = gesture;
@@ -1851,7 +1617,7 @@ export default function CeilingDetailEditor() {
       commitDrawnDimension(finalGesture);
       return;
     }
-    const finalGesture = { ...gesture, current: eventToLocal(event, gesture.kind === 'draw') };
+    const finalGesture = { ...gesture, current: eventToLocal(event, gesture.kind === 'draw'), shift: event.shiftKey };
     svgRef.current?.releasePointerCapture?.(event.pointerId);
     releaseCanvasRect();
     setGesture(null);
@@ -1969,6 +1735,7 @@ export default function CeilingDetailEditor() {
     takeoff.lighting.fixtureCount === 1 ? '' : 's'
   } · ${Math.round(takeoff.lighting.totalLumens)} lm total${lightingDensity}`;
   const activeToolDefinition = TOOL_BY_ID[canvasTool];
+  const selectedIdOf = (type) => (selection?.type === type ? selection.id : null);
   const rawGesturePreview = gesture?.kind === 'draw' ? drawnGestureEntity() : movedGestureEntity();
   // A measurement is only a measurement once it says what it measures, so the
   // rubber band carries the live number the moment it has one.
@@ -1990,7 +1757,9 @@ export default function CeilingDetailEditor() {
           ? 'opening'
           : gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION
             ? 'dimension'
-            : 'framing'
+            : gesture.tool === CANVAS_TOOLS.ADD_LIGHT
+              ? 'light_run'
+              : 'framing'
       : gesture?.type;
   const dimensionGesturePreview =
     gesture?.kind === 'dimension_endpoint'
@@ -2135,11 +1904,26 @@ export default function CeilingDetailEditor() {
           ? dimensionAcquisition?.reference
           : null;
 
+  // The light about to be placed (Light tool) or being moved (Select tool),
+  // with what the ghost, the guides and the chip need to say about it.
+  const lightPlacement =
+    canvasTool === CANVAS_TOOLS.ADD_LIGHT && lightHover && !gesture ? placeLight(lightHover) : null;
+  const movingLight = movingFixtureId ? gesturePreview : null;
+  const ghostPlacement = lightPlacement || movingLight?.placement || null;
+  const ceilingSpace = resolveCeilingLocalSpace(ceiling, project);
+  const lightReadoutContext = {
+    rooms: ceilingFloor?.rooms || [],
+    panels,
+    toPlan: (point) => ceilingSpace.toPlan(point),
+  };
+  const planOrigin = ceilingSpace.toLocal({ x: 0, y: 0 });
+
   const gestureReadout = (() => {
     if (gesture?.kind === 'draw' && gesturePreview) {
       // The measuring tool draws its own live label above the line it is
       // stretching, so a chip at the cursor would state the number twice.
       if (gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION) return null;
+      if (gesture.tool === CANVAS_TOOLS.ADD_LIGHT) return lightRunReadout(gesturePreview, lightReadoutContext);
       if (gesture.tool === CANVAS_TOOLS.DRAW_PANEL || gesture.tool === CANVAS_TOOLS.DRAW_OPENING) {
         return {
           point: gesture.current,
@@ -2153,6 +1937,10 @@ export default function CeilingDetailEditor() {
         lines: [`${vertical ? 'carrier' : 'furring'} · ${formatMm(span)} mm`],
       };
     }
+    if (gesture?.kind === 'move' && gesture.type === 'fixture' && gesturePreview?.placement) {
+      const { placement } = gesturePreview;
+      return { point: placement.point, lines: lightPlacementReadout(placement, lightReadoutContext) };
+    }
     if (gesture?.kind === 'move' && gesturePreview) {
       if (gesture.type === 'fastener' || gesture.type === 'fixture') {
         return { point: gesture.current, lines: [`U ${formatMm(gesturePreview.u)} · V ${formatMm(gesturePreview.v)}`] };
@@ -2163,6 +1951,9 @@ export default function CeilingDetailEditor() {
       const last = panelTrace.points[panelTrace.points.length - 1];
       const span = Math.hypot(panelTrace.previewPoint.u - last.u, panelTrace.previewPoint.v - last.v);
       return span >= 1 ? { point: panelTrace.previewPoint, lines: [`${formatMm(span)} mm`] } : null;
+    }
+    if (lightPlacement) {
+      return { point: lightPlacement.point, lines: lightPlacementReadout(lightPlacement, lightReadoutContext) };
     }
     return null;
   })();
@@ -2176,12 +1967,22 @@ export default function CeilingDetailEditor() {
     if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
     const target = event.target;
     if (target?.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target?.tagName)) return;
+    if (lightRunLive && adjustLightRun(gesture, event.key)) {
+      // Mid-drag the arrows set how many lights the run places, and Shift makes it a grid.
+      claimShortcut(event);
+      const { key } = event;
+      setGesture((value) =>
+        value?.tool === CANVAS_TOOLS.ADD_LIGHT ? { ...value, ...adjustLightRun(value, key) } : value,
+      );
+      return;
+    }
     if (event.key === 'Escape') {
       // The panel-trace effect owns Escape while a trace is open; never swallow it here.
       if (panelTrace) return;
-      if (gesture) {
+      if (gesture || lightPressRef.current) {
         // First Escape cancels the in-flight gesture but keeps the tool active.
         event.preventDefault();
+        lightPressRef.current = null;
         setGesture(null);
         setDimensionAcquisition(null);
         releaseCanvasRect();
@@ -2224,6 +2025,18 @@ export default function CeilingDetailEditor() {
     isManualFastener,
     pressDimension,
     beginDimensionEndpointMove,
+    // A click on one of this ceiling's boards in the 3D pane, Light tool armed:
+    // a light at the hit, snapped with a 150 mm reach. False lets the pick select.
+    placeLightFromPane: (part, hit) => {
+      const point =
+        canvasTool === CANVAS_TOOLS.ADD_LIGHT
+          ? paneLightPoint(part, hit, { ceilingId: ceiling.id, space: ceilingSpace })
+          : null;
+      if (!point) return false;
+      const scale = { pixelsPerU: PANE_SNAP_SCALE, pixelsPerV: PANE_SNAP_SCALE };
+      addLightFixtures([placeLight({ point, shift: false, ...scale }).point]);
+      return true;
+    },
   };
 
   /**
@@ -3063,6 +2876,9 @@ export default function CeilingDetailEditor() {
                 </select>
               </label>
             </div>
+            {canvasTool === CANVAS_TOOLS.ADD_LIGHT ? (
+              <LightToolOptions value={lightDraftType} onChange={setLightDraftType} />
+            ) : null}
             <div className={styles.toolGroup}>
               <span>Layers</span>
               {Object.keys(layerVisibility).map((key) => (
@@ -3128,7 +2944,9 @@ export default function CeilingDetailEditor() {
                     onPointerMove={updateCanvasGesture}
                     onPointerUp={finishCanvasGesture}
                     onDoubleClick={finishPanelTrace}
+                    onPointerLeave={() => setLightHover(null)}
                     onPointerCancel={() => {
+                      lightPressRef.current = null;
                       setGesture(null);
                       setDimensionAcquisition(null);
                       releaseCanvasRect();
@@ -3136,25 +2954,61 @@ export default function CeilingDetailEditor() {
                   >
                     <rect width={detail.length} height={detail.depth} fill="#202830" />
                     <g data-mirrored="false" transform={`translate(0 ${detail.depth}) scale(1 -1)`}>
-                      <CeilingPlanLayers
-                        bounds={bounds}
-                        snapStep={snapStep}
-                        snapEnabled={snapEnabled}
-                        unitPx={unitPx}
-                        layers={layerVisibility}
+                      <CeilingGridLayer bounds={bounds} snapStep={snapStep} unitPx={unitPx} active={snapEnabled} />
+                      <CeilingBoardLayer
                         panels={panels}
-                        frameMembers={frameMembers}
-                        hangers={hangers}
-                        fasteners={fasteners}
-                        lightFixtures={lightFixtures}
                         openings={openings}
-                        regions={detail.regions}
+                        showVoids={layerVisibility.openings}
+                        showBoards={layerVisibility.boards}
                         disabledBoardFill={disabledBoardFill}
-                        selection={selection}
-                        isCustomMember={stableCanvasHandlers.isCustomMember}
-                        isManualFastener={stableCanvasHandlers.isManualFastener}
+                        selectedId={selectedIdOf('panel')}
                         onElementPointerDown={stableCanvasHandlers.onElementPointerDown}
                       />
+                      {layerVisibility.structure ? (
+                        <CeilingStructureLayer
+                          members={frameMembers}
+                          unitPx={unitPx}
+                          selectedId={selectedIdOf('framing')}
+                          isCustomMember={stableCanvasHandlers.isCustomMember}
+                          onElementPointerDown={stableCanvasHandlers.onElementPointerDown}
+                        />
+                      ) : null}
+                      {layerVisibility.hangers ? <CeilingHangerLayer hangers={hangers} unitPx={unitPx} /> : null}
+                      {layerVisibility.screws ? (
+                        <CeilingScrewLayer
+                          fasteners={fasteners}
+                          unitPx={unitPx}
+                          selectedId={selectedIdOf('fastener')}
+                          isManualFastener={stableCanvasHandlers.isManualFastener}
+                          onElementPointerDown={stableCanvasHandlers.onElementPointerDown}
+                        />
+                      ) : null}
+                      {layerVisibility.plan ? (
+                        <CeilingPlanUnderlay
+                          floor={ceilingFloor}
+                          axisUx={ceilingSpace.axisU.x}
+                          axisUy={ceilingSpace.axisU.y}
+                          originU={planOrigin.u}
+                          originV={planOrigin.v}
+                        />
+                      ) : null}
+                      {layerVisibility.fixtures ? (
+                        <CeilingFixtureLayer
+                          fixtures={lightFixtures}
+                          unitPx={unitPx}
+                          selectedId={selectedIdOf('fixture')}
+                          hiddenId={gesture?.kind === 'move' && gesture.type === 'fixture' ? gesture.id : null}
+                          onElementPointerDown={stableCanvasHandlers.onElementPointerDown}
+                        />
+                      ) : null}
+                      {layerVisibility.openings ? (
+                        <CeilingOpeningProfileLayer
+                          openings={openings}
+                          selectedId={selectedIdOf('opening')}
+                          onElementPointerDown={stableCanvasHandlers.onElementPointerDown}
+                        />
+                      ) : null}
+                      {layerVisibility.boundary ? <CeilingBoundaryLayer regions={detail.regions} /> : null}
 
                       {gesturePreview && (gesturePreviewType === 'panel' || gesturePreviewType === 'opening') ? (
                         <rect
@@ -3186,12 +3040,39 @@ export default function CeilingDetailEditor() {
                         />
                       ) : null}
 
-                      {gesturePreview && (gesturePreviewType === 'fastener' || gesturePreviewType === 'fixture') ? (
+                      {ghostPlacement ? (
+                        <>
+                          <CeilingLightGuides
+                            guides={ghostPlacement.guides}
+                            length={detail.length}
+                            depth={detail.depth}
+                          />
+                          <CeilingLightGhost
+                            fixtureType={movingLight ? gesture.entity.fixtureType : lightDraftType}
+                            aim={movingLight ? gesture.entity.aim : null}
+                            point={ghostPlacement.point}
+                            unitPx={unitPx}
+                          />
+                        </>
+                      ) : null}
+
+                      {gesturePreview && gesturePreviewType === 'light_run' ? (
+                        <CeilingLightRunGhost
+                          run={gesturePreview}
+                          start={gesture.start}
+                          fixtureType={lightDraftType}
+                          unitPx={unitPx}
+                          length={detail.length}
+                          depth={detail.depth}
+                        />
+                      ) : null}
+
+                      {gesturePreview && gesturePreviewType === 'fastener' ? (
                         <circle
                           className={styles.drawPreview}
                           cx={gesturePreview.u}
                           cy={gesturePreview.v}
-                          r={(gesturePreviewType === 'fixture' ? 6 : 3) * unitPx}
+                          r={3 * unitPx}
                           fill="#ffd166"
                           stroke="#fff"
                           strokeWidth="1"
@@ -3224,6 +3105,18 @@ export default function CeilingDetailEditor() {
                         </g>
                       ) : null}
                     </g>
+
+                    {layerVisibility.plan ? (
+                      <CeilingPlanUnderlayLabels
+                        floor={ceilingFloor}
+                        axisUx={ceilingSpace.axisU.x}
+                        axisUy={ceilingSpace.axisU.y}
+                        originU={planOrigin.u}
+                        originV={planOrigin.v}
+                        depth={detail.depth}
+                        unitPx={unitPx}
+                      />
+                    ) : null}
 
                     {/* Measurements are drawn outside the flipped group: the
                         graphic maps UV to drawing coordinates itself, which is
@@ -3312,10 +3205,18 @@ export default function CeilingDetailEditor() {
               </div>
             ) : null}
             {workspaceView !== WORKSPACE_VIEWS.RCP && previewProject ? (
-              <div className={styles.previewPane} aria-label="Live ceiling assembly 3D preview">
+              <div
+                className={styles.previewPane}
+                aria-label="Live ceiling assembly 3D preview"
+                data-light-armed={canvasTool === CANVAS_TOOLS.ADD_LIGHT ? 'true' : undefined}
+              >
                 <div className={styles.liveBadge}>
                   <span>Live ceiling preview</span>
-                  <small>Updates after every committed board, member, screw, opening, or suspension edit</small>
+                  <small>
+                    {canvasTool === CANVAS_TOOLS.ADD_LIGHT
+                      ? 'Light tool armed: click a board here to place a light'
+                      : 'Updates after every committed board, member, screw, opening, or suspension edit'}
+                  </small>
                 </div>
                 <Suspense fallback={<div className={styles.previewLoading}>Loading live ceiling preview…</div>}>
                   <CeilingLivePreview
@@ -3676,4 +3577,4 @@ export default function CeilingDetailEditor() {
       </div>
     </div>
   );
-}
+});

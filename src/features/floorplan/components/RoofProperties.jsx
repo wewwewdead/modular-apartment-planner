@@ -44,6 +44,21 @@ function resolveAttachedTrussPitch(trussSystem) {
   return Number.isFinite(pitch) ? pitch : null;
 }
 
+/**
+ * RT-4 (spec §7.9.3.4): an attached hip roof has ONE eave level, set by the
+ * first instance's START tail; a different end tail leaves the far side plane
+ * off by `slope × |Δ|`. Null when the tails agree.
+ */
+function resolveHipTailMismatch(trussSystem, roofSlopePercent) {
+  const firstInstance = trussSystem?.trussInstances?.[0] || null;
+  if (!firstInstance) return null;
+  const metrics = buildTrussProfile(firstInstance, undefined, getTrussProfileOptions(trussSystem))?.metrics;
+  const start = Number(metrics?.overhangStart);
+  const end = Number(metrics?.overhangEnd);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || Math.abs(end - start) <= 0.5) return null;
+  return { start, end, offBy: (Math.max(0, Number(roofSlopePercent) || 0) / 100) * Math.abs(end - start) };
+}
+
 function formatPercent(value) {
   return `${Number(value.toFixed(1))} %`;
 }
@@ -178,6 +193,10 @@ export function RoofSystemProperties({
       : null;
   const manualSlopeMismatch =
     attachedTrussPitch !== null && Math.abs((Number(pitch.slope) || 0) - attachedTrussPitch) > 0.05;
+  const hipTailMismatch =
+    attachedTruss && roofType === 'hip' && attachedTrussRoofType === 'hip'
+      ? resolveHipTailMismatch(attachedTruss, pitch.slope)
+      : null;
 
   const addRoofPlane = () => {
     const nextPlane = createRoofPlane(
@@ -371,6 +390,15 @@ export function RoofSystemProperties({
                 Hand-set slope {formatPercent(Number(pitch.slope) || 0)} differs from the trusses (
                 {formatPercent(attachedTrussPitch)}): the roof pivots on the bearings and leaves the purlins near the
                 ridge. Reset slope seats it.
+              </Status>
+            </div>
+          )}
+          {hipTailMismatch && (
+            <div data-hip-tail-warning>
+              <Status tone="warning">
+                Hip roof: the truss tails differ ({u.toDisplay(hipTailMismatch.start)} /{' '}
+                {u.toDisplay(hipTailMismatch.end)} {u.suffix}). The roof seats on the start tail; the far eave is off by{' '}
+                {u.toDisplay(Math.round(hipTailMismatch.offBy))} {u.suffix}.
               </Status>
             </div>
           )}

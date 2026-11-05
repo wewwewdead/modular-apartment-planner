@@ -103,6 +103,24 @@ export function resolveSystemLayoutRange(systemGeometry, planAxes) {
   return { min: Math.min(...values), max: Math.max(...values) };
 }
 
+/**
+ * RT-4 (spec §7.9.3.1): the layout range of the trusses' SUPPORT lines — each
+ * instance's `startPoint` and `startPoint + supportLength × axis`, the two
+ * points a hip slice measures its station from — in the transformed (plan)
+ * frame, union over instances. Unlike `resolveSystemLayoutRange` it reads the
+ * line, not the copies, so copies offset along the line do not move it.
+ */
+export function resolveSystemSupportLayoutRange(systemGeometry, planAxes) {
+  if (!planAxes) return null;
+  const points = (systemGeometry?.instances || []).flatMap((instanceGeometry) =>
+    [instanceGeometry.layoutLineStartPoint, instanceGeometry.supportLineEndPoint].filter(Boolean),
+  );
+  if (!points.length) return null;
+
+  const values = points.map((point) => projectPointOntoAxis(point, planAxes.origin, planAxes.layoutAxis));
+  return { min: Math.min(...values), max: Math.max(...values) };
+}
+
 export function buildSystemBoundary(planAxes, spanRange, layoutRange) {
   if (!planAxes || !spanRange || !layoutRange) return null;
   if (spanRange.max - spanRange.min <= EPSILON || layoutRange.max - layoutRange.min <= EPSILON) {

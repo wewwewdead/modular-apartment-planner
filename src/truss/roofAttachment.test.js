@@ -4,6 +4,7 @@ import { createRoofSystemForProject } from '@/domain/roofModels';
 import { buildRoofPlaneGeometry } from '@/geometry/roofPlaneGeometry';
 import { buildTrussSystemGeometry } from '@/geometry/trussGeometry';
 import { deriveRoofStateFromTrussSystem, getTrussRoofAttachmentElevation } from './roofAttachment';
+import { measurePurlins, measureTopChords } from './roofSeating.fixtures';
 
 // Layout line along +x, so the truss span axis (perpendicular of the layout
 // line) is +y: each truss copy is LOW at y = -span/2 (start support, profile
@@ -142,12 +143,12 @@ describe('the attached roof seats on the purlin top face (RT-3.1)', () => {
   const SECANT = Math.hypot(1, 0.25);
   const TOLERANCE = 0.5;
 
-  function seatingSystem(trussTypeId) {
+  function seatingSystem(trussTypeId, { instance = {}, purlins = {} } = {}) {
     return createTrussSystem('Seating System', {
       id: 'ts_seat',
       floorId: 'floor_1',
       baseElevation: 3000,
-      purlinSystem: { enabled: true, depth: PURLIN_DEPTH, width: 75, spacing: 900 },
+      purlinSystem: { enabled: true, depth: PURLIN_DEPTH, width: 75, spacing: 900, ...purlins },
       trussInstances: [
         {
           trussTypeId,
@@ -159,13 +160,14 @@ describe('the attached roof seats on the purlin top face (RT-3.1)', () => {
           spacing: 1200,
           count: 11,
           overhangs: { start: 300, end: 300 },
+          ...instance,
         },
       ],
     });
   }
 
-  function seatedRoof(trussTypeId, roofOptions = {}) {
-    const trussSystem = seatingSystem(trussTypeId);
+  function seatedRoof(trussTypeId, roofOptions = {}, systemOptions = {}) {
+    const trussSystem = seatingSystem(trussTypeId, systemOptions);
     const roofSystem = createRoofSystemForProject(
       { trussSystems: [trussSystem] },
       { ...roofOptions, pitch: { overhang: 510, ...(roofOptions.pitch || {}) } },
@@ -264,7 +266,7 @@ describe('the attached roof seats on the purlin top face (RT-3.1)', () => {
   });
 
   it('hip following the truss: the datum is the roof outline edge, 0.25 × (300 + 510) below the heel datum', () => {
-    const { trussSystem, roofSystem, roofGeometry, trussGeometry } = seatedRoof('truss_type_hip');
+    const { trussSystem, roofSystem } = seatedRoof('truss_type_hip');
     expect(roofSystem.roofType).toBe('hip');
     const heelDatum = 3000 + 90 + (TOP_CHORD_DEPTH + PURLIN_DEPTH) * SECANT;
     expect(getTrussRoofAttachmentElevation(trussSystem, { roofOverhang: 510 })).toBeCloseTo(
@@ -274,22 +276,6 @@ describe('the attached roof seats on the purlin top face (RT-3.1)', () => {
     // Without a roof overhang of its own the datum is the tail tip, as before.
     expect(getTrussRoofAttachmentElevation(trussSystem)).toBeCloseTo(heelDatum - 0.25 * 300, 6);
     expect(roofSystem.baseElevation).toBeCloseTo(heelDatum - 0.25 * 810, 6);
-
-    // The step-down hip slices (H copies) keep their legacy geometry (spec §3:
-    // hip girder/jack sets are out of scope), so the seating claim is made on
-    // the common trusses and the purlins carried only by them.
-    const instance = trussGeometry.instances[0];
-    const commonCopyIds = new Set(
-      instance.copies.filter((copy) => !/^H\d/.test(copy.label || '')).map((copy) => copy.id),
-    );
-    const commonPurlins = trussGeometry.purlinSegments.filter((segment) =>
-      segment.copyIds.every((copyId) => commonCopyIds.has(copyId)),
-    );
-    expect(commonPurlins.length).toBeGreaterThan(20);
-    expect(maxAbs(purlinGaps(roofGeometry, commonPurlins))).toBeLessThan(TOLERANCE);
-    for (const copy of firstAndMiddleCopies(trussGeometry, (entry) => commonCopyIds.has(entry.id))) {
-      expect(maxAbs(chordGaps(roofGeometry, copy))).toBeLessThan(TOLERANCE);
-    }
   });
 
   it('gable with a manual 20 % slope pivots on the heel: ridge 0.20 × 3600 up, tails 0.20 × 300 down', () => {
@@ -323,5 +309,168 @@ describe('the attached roof seats on the purlin top face (RT-3.1)', () => {
     expect(state.attachedShapeProfile.slope).toBeCloseTo(0.25, 9);
     const shed = deriveRoofStateFromTrussSystem(seatingSystem('truss_type_shed'));
     expect(shed.attachedShapeProfile.slope).toBeCloseTo(0.25, 9);
+  });
+
+  // RT-4 (spec §7.9): the hip roof's layout range is the SUPPORT line ± the
+  // start tail, so EVERY copy seats — the step-down slices (H copies) too —
+  // and every purlin (exactly since RT-4.1, §7.10: slice chords break at the
+  // crown, flat slices' tails follow the hip pitch, runs end on their slope). Stations: copies 0 / 1200 / 2400 from each line end are
+  // H1 (a flat slice) / H2 / H3; the rest are full gables (T1).
+  describe('every hip copy seats (RT-4)', () => {
+    const RATIO = 0.25;
+    const SPAN = 7200;
+    const SLOPED_GAP = PURLIN_DEPTH * SECANT; // 51.54: purlins on the slope
+    const FLAT_GAP = (TOP_CHORD_DEPTH + PURLIN_DEPTH) * SECANT - TOP_CHORD_DEPTH; // 54.31: no purlin on a flat top
+    const measure = { ratio: RATIO, span: SPAN, topChordDepth: TOP_CHORD_DEPTH };
+
+    function planExtent(points) {
+      const xs = points.map((point) => point.x);
+      const ys = points.map((point) => point.y);
+      return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+    }
+
+    /**
+     * Every top-chord member of every copy, slices included (RT-4.1, spec
+     * §7.10): a sloped member at 50 · sec θ, a flat one at 140 · sec θ − 90.
+     * No member may be anything else — no chord drawn across a kink, no level
+     * tail. Returns the per-kind counts.
+     */
+    function expectEveryCopySeated(roofGeometry, trussGeometry) {
+      const counts = { sloped: 0, flat: 0, kink: 0, levelTail: 0 };
+      for (const copy of trussGeometry.instances[0].copies) {
+        for (const entry of measureTopChords(roofGeometry, copy, measure)) {
+          counts[entry.kind] += 1;
+          const expected = entry.kind === 'flat' ? FLAT_GAP : SLOPED_GAP;
+          for (const { gap } of entry.samples) expect(Math.abs(gap - expected)).toBeLessThan(TOLERANCE);
+        }
+      }
+      expect(counts.kink).toBe(0);
+      expect(counts.levelTail).toBe(0);
+      return counts;
+    }
+
+    function expectEveryPurlinSeated(roofGeometry, trussGeometry) {
+      const copies = trussGeometry.instances[0].copies;
+      const copyById = new Map(copies.map((copy) => [copy.id, copy]));
+      const segments = trussGeometry.purlinSegments;
+      expect(segments.length).toBeGreaterThan(20);
+      for (const segment of segments) {
+        const [a, b] = segment.copyIds.map((id) => copyById.get(id));
+        // A purlin only spans neighbouring copies that both carry it.
+        expect(Math.abs(a.index - b.index)).toBe(1);
+        for (const { gap } of measurePurlins(roofGeometry, [segment])) {
+          expect(Math.abs(gap)).toBeLessThan(TOLERANCE);
+        }
+      }
+    }
+
+    it('labels and flags the slices: H1 / H2 / H3 at 0 / 1200 / 2400 from each end', () => {
+      const { trussGeometry } = seatedRoof('truss_type_hip');
+      const copies = trussGeometry.instances[0].copies;
+      expect(copies.map((copy) => copy.label)).toEqual([
+        'H1',
+        'H2',
+        'H3',
+        'T1',
+        'T1',
+        'T1',
+        'T1',
+        'T1',
+        'H3',
+        'H2',
+        'H1',
+      ]);
+      expect(copies.map((copy) => copy.isHipSlice)).toEqual(copies.map((copy) => copy.label.startsWith('H')));
+    });
+
+    it('seats every copy, slices included, and every purlin', () => {
+      const { roofGeometry, trussGeometry } = seatedRoof('truss_type_hip');
+      const counts = expectEveryCopySeated(roofGeometry, trussGeometry);
+      // 5 full gables × 10 runs, plus the slices' sloped runs and tails; the
+      // H2 / H3 crown kinks (1200, 2400, inside 900 panels) are chord nodes,
+      // and the H1 flat slices' tails fall at the hip pitch (RT-4.1).
+      expect(counts.sloped).toBeGreaterThan(50);
+      expect(counts.flat).toBeGreaterThan(20);
+      expectEveryPurlinSeated(roofGeometry, trussGeometry);
+    });
+
+    it('puts the hip ends at the line ± (tail + roof overhang) and the ridge span / 2 inside each line end', () => {
+      const { roofGeometry } = seatedRoof('truss_type_hip');
+      const extent = planExtent(roofGeometry.roofOutline);
+      expect(extent.minX).toBeCloseTo(-810, 6);
+      expect(extent.maxX).toBeCloseTo(12810, 6);
+      expect(extent.minY).toBeCloseTo(-4410, 6);
+      expect(extent.maxY).toBeCloseTo(4410, 6);
+      const ridge = roofGeometry.ridgeSegment;
+      expect(Math.min(ridge.start.x, ridge.end.x)).toBeCloseTo(3600, 6);
+      expect(Math.max(ridge.start.x, ridge.end.x)).toBeCloseTo(8400, 6);
+      expect(Math.hypot(ridge.end.x - ridge.start.x, ridge.end.y - ridge.start.y)).toBeCloseTo(4800, 6);
+    });
+
+    it('reads the support line, not the copies: copies offset 450 along it seat the same', () => {
+      const { roofGeometry, trussGeometry } = seatedRoof(
+        'truss_type_hip',
+        {},
+        { instance: { supportOffsetAlongAxis: 450, count: 10 } },
+      );
+      const copies = trussGeometry.instances[0].copies;
+      expect(copies[0].origin.x).toBeCloseTo(450, 6);
+      expect(copies[copies.length - 1].origin.x).toBeCloseTo(11250, 6);
+      // The first copy is a slice whose crown underside is 0.25 × 450 above
+      // the heel's: its flat top face is base + bc + 112.5 + tc.
+      expect(copies[0].isHipSlice).toBe(true);
+      const crown = measureTopChords(roofGeometry, copies[0], measure).filter((entry) => entry.kind === 'flat');
+      expect(crown.length).toBeGreaterThan(0);
+      for (const { member } of crown) {
+        expect(member.startWorld.elevation + TOP_CHORD_DEPTH / 2).toBeCloseTo(3000 + 90 + 0.25 * 450 + 90, 6);
+      }
+      expectEveryCopySeated(roofGeometry, trussGeometry);
+      expectEveryPurlinSeated(roofGeometry, trussGeometry);
+      const extent = planExtent(roofGeometry.roofOutline);
+      expect(extent.minX).toBeCloseTo(-810, 6);
+      expect(extent.maxX).toBeCloseTo(12810, 6);
+    });
+
+    it('seats with no roof overhang: the outline is the line ± the 300 tail', () => {
+      const { roofSystem, roofGeometry, trussGeometry } = seatedRoof('truss_type_hip', { pitch: { overhang: 0 } });
+      expect(roofSystem.pitch.overhang).toBe(0);
+      expectEveryCopySeated(roofGeometry, trussGeometry);
+      expectEveryPurlinSeated(roofGeometry, trussGeometry);
+      const extent = planExtent(roofGeometry.roofOutline);
+      expect(extent.minX).toBeCloseTo(-300, 6);
+      expect(extent.maxX).toBeCloseTo(12300, 6);
+      expect(extent.minY).toBeCloseTo(-3900, 6);
+      expect(extent.maxY).toBeCloseTo(3900, 6);
+    });
+
+    it('stops the purlin layout extension at a slice; a gable run still runs 300 past its last copy', () => {
+      const hip = seatedRoof('truss_type_hip', {}, { purlins: { overhangEnd: 300 } }).trussGeometry.instances[0];
+      const copyById = new Map(hip.copies.map((copy) => [copy.id, copy]));
+      let sliceEnded = 0;
+      for (const run of hip.purlinRuns) {
+        const last = run.attachments[run.attachments.length - 1];
+        const endPoint = run.points[run.points.length - 1];
+        const lastSegment = run.segments[run.segments.length - 1];
+        if (copyById.get(last.copyId).isHipSlice) {
+          sliceEnded += 1;
+          expect(endPoint.x).toBeCloseTo(last.planPoint.x, 6);
+          expect(endPoint.y).toBeCloseTo(last.planPoint.y, 6);
+          expect(lastSegment.endWorld.x).toBeCloseTo(last.worldPoint.x, 6);
+        } else {
+          expect(endPoint.x).toBeCloseTo(last.planPoint.x + 300, 6);
+          expect(lastSegment.endWorld.x).toBeCloseTo(last.worldPoint.x + 300, 6);
+        }
+      }
+      expect(sliceEnded).toBeGreaterThan(0);
+
+      const gable = seatedRoof('truss_type_gable', {}, { purlins: { overhangEnd: 300 } }).trussGeometry.instances[0];
+      expect(gable.purlinRuns.length).toBeGreaterThan(0);
+      for (const run of gable.purlinRuns) {
+        const last = run.attachments[run.attachments.length - 1];
+        expect(last.planPoint.x).toBeCloseTo(12000, 6);
+        expect(run.points[run.points.length - 1].x).toBeCloseTo(12300, 6);
+        expect(run.segments[run.segments.length - 1].endWorld.x).toBeCloseTo(12300, 6);
+      }
+    });
   });
 });

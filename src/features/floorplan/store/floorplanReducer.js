@@ -191,9 +191,19 @@ function buildDerivedModels(project, validationIssues) {
  * structural-grid overlay, the status-bar issue count) show pre-drag numbers
  * while the pointer is down and catch up on release. Geometry itself is never
  * deferred — the canvas always draws the live project.
+ *
+ * `deferredCoordination` marks staleness that came from an edit sent with
+ * `coordination: 'defer'` outside any drag — an assembly editor (the ceiling
+ * RCP) whose edits no coordination model reads. That staleness is NOT settled
+ * by an ordinary pointer release: the floor plan under the editor overlay keeps
+ * its window-level release listener (`useDragGestureRelease`), so the mouse-up
+ * of the very click that placed a light would otherwise run the pass straight
+ * away and the deferral would buy nothing. The editor settles it itself with
+ * `{ type: 'END_DRAG_GESTURE', settleDeferred: true }` when it goes idle or
+ * closes; any settled edit of another kind settles it too.
  */
-function createDragGesture(derivedStale = false) {
-  return { active: false, historyRecorded: false, derivedStale };
+function createDragGesture(derivedStale = false, deferredCoordination = false) {
+  return { active: false, historyRecorded: false, derivedStale, deferredCoordination };
 }
 
 function isDerivedStale(state) {
@@ -1885,6 +1895,9 @@ export default function floorplanReducer(state, action) {
   if (action.type === 'END_DRAG_GESTURE') {
     if (!state.gesture?.active && !isDerivedStale(state)) return state;
     if (!isDerivedStale(state)) return { ...state, gesture: createDragGesture() };
+    // Staleness an assembly editor deferred waits for that editor's own settle
+    // (see `createDragGesture`); a stray pointer release leaves it alone.
+    if (!state.gesture?.active && state.gesture?.deferredCoordination && !action.settleDeferred) return state;
 
     return {
       ...state,
@@ -1908,24 +1921,33 @@ export default function floorplanReducer(state, action) {
       ? { ...nextProjectState, editor: { ...nextProjectState.editor, lastRejection: null } }
       : nextProjectState;
     const projectChanged = nextProjectState.project !== state.project;
+    // An assembly editor's edit (a light placed on the RCP, a screw nudged) is
+    // read by none of the whole-project coordination models, yet the pass cost
+    // ~100 ms per click on a modest plan. Sent with `coordination: 'defer'` it
+    // records history as usual and only flags the models stale, exactly like a
+    // mid-drag edit; the editor settles them when it goes idle or closes. Inside
+    // an open drag the flag changes nothing — the drag already defers.
+    const deferCoordination = action.coordination === 'defer' && !withClearedRejection.gesture?.active;
     // Mid-drag the coordination pass is skipped and only flagged; END_DRAG_GESTURE
     // runs it once against the settled project.
     const withDerivedValidation = !projectChanged
       ? withClearedRejection
       : withClearedRejection.gesture?.active
         ? { ...withClearedRejection, gesture: { ...withClearedRejection.gesture, derivedStale: true } }
-        : {
-            ...withClearedRejection,
-            gesture: createDragGesture(),
-            derived: {
-              ...withClearedRejection.derived,
-              ...computeDerivedModels(nextProjectState.project),
-              lastCommand:
-                projectAction.type === 'EXECUTE_BUILDING_COMMAND'
-                  ? withClearedRejection.derived?.lastCommand || null
-                  : null,
-            },
-          };
+        : deferCoordination
+          ? { ...withClearedRejection, gesture: createDragGesture(true, true) }
+          : {
+              ...withClearedRejection,
+              gesture: createDragGesture(),
+              derived: {
+                ...withClearedRejection.derived,
+                ...computeDerivedModels(nextProjectState.project),
+                lastCommand:
+                  projectAction.type === 'EXECUTE_BUILDING_COMMAND'
+                    ? withClearedRejection.derived?.lastCommand || null
+                    : null,
+              },
+            };
     return syncFloorplanState(withDerivedValidation);
   }
 

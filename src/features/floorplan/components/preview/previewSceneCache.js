@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { applySceneLightBudgets, buildFloorObjectGroup } from './buildPreviewObjects';
 import { disposeScene } from './disposeScene';
+import { MODEL_LIGHT_POOL_POLICY, disposeFixtureLightPool, syncFixtureLightPool } from './fixtureLightPool';
 import { freezeStaticMatrices } from './staticMatrices';
 
 /**
@@ -99,8 +100,13 @@ function applyFloorVisibility(cacheEntry, visible) {
  * Nothing in the app asks for it — a pane that draws is a pane that batches,
  * assembly editors included — but a caller running against a THREE that has no
  * instancing to fold geometry into needs a way to say so.
+ *
+ * `lightPool` is the policy the fixture light pool holds the scene's light
+ * counts to (see `fixtureLightPool.js`); `null` runs without one. `build`
+ * reports `lightsChanged` when the counts the renderer hashes moved, which is
+ * the viewport's cue that the next frame needs programs compiled first.
  */
-export function createPreviewSceneCache({ batch = true } = {}) {
+export function createPreviewSceneCache({ batch = true, lightPool = MODEL_LIGHT_POOL_POLICY } = {}) {
   const root = new THREE.Group();
   root.name = 'preview-root';
   const batchRoot = new THREE.Group();
@@ -187,14 +193,18 @@ export function createPreviewSceneCache({ batch = true } = {}) {
     // the ones handed back untouched. A cross-floor pass that only saw rebuilt
     // floors would hand the whole shadow budget to whichever storey the user
     // happened to be editing.
-    applySceneLightBudgets(meshMap);
+    const lightCounts = applySceneLightBudgets(meshMap);
+    // Straight after the budgets, which decide what is lit and casting, and
+    // before the freeze, so the pool's own lights get their matrices with the
+    // rest of the root.
+    const { changed: lightsChanged } = syncFixtureLightPool(root, lightCounts, lightPool, { materialPalette });
     // After `clear()` + `add()`, because re-parenting is exactly the case where
     // a frozen group's world matrix is stale and nothing else will notice.
     freezeStaticMatrices(root);
     freezeStaticMatrices(batchRoot);
 
     floorCache = nextCache;
-    return { root, batchRoot, meshMap };
+    return { root, batchRoot, meshMap, lightsChanged };
   }
 
   function dispose() {
@@ -202,6 +212,7 @@ export function createPreviewSceneCache({ batch = true } = {}) {
       disposeFloor(previous);
     }
     floorCache = new Map();
+    disposeFixtureLightPool(root);
   }
 
   return { build, dispose, getRoot: () => root, getBatchRoot: () => batchRoot };

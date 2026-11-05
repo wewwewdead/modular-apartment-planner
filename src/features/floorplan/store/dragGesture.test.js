@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createBeam, createColumn, createProject, createStair, createWall, createWindow } from '@/domain/models';
+import { createCeiling, createCeilingDetailing, createCeilingLightFixture } from '@/domain/ceilingModels';
 import floorplanReducer, { initializeFloorplanState } from './floorplanReducer';
 
 /**
@@ -190,5 +191,133 @@ describe('drag gestures', () => {
 
     expect(closed.history).toEqual(state.history);
     expect(closed.project).toBe(state.project);
+  });
+});
+
+/**
+ * The ceiling RCP's edits are read by none of the whole-project coordination
+ * models, so the editor sends them with `coordination: 'defer'` and settles the
+ * models itself when it goes idle or closes (see `createDragGesture`).
+ */
+describe('deferred coordination for assembly edits', () => {
+  function planWithCeiling() {
+    let state = initializeFloorplanState(createProject());
+    const floorId = state.project.floors[0].id;
+    state = floorplanReducer(state, { type: 'WALL_ADD', floorId, wall: createWall({ x: 0, y: 0 }, { x: 6000, y: 0 }) });
+    const ceiling = createCeiling('Ceiling', {
+      floorId,
+      boundaryPolygon: [
+        { x: 0, y: 0 },
+        { x: 6000, y: 0 },
+        { x: 6000, y: 4000 },
+        { x: 0, y: 4000 },
+      ],
+    });
+    state = floorplanReducer(state, { type: 'CEILING_ADD', ceiling });
+    return { state, floorId, ceilingId: ceiling.id };
+  }
+
+  function placeLight(state, ceilingId, u, options = {}) {
+    const ceiling = state.project.ceilings.find((entry) => entry.id === ceilingId);
+    const fixtures = [...ceiling.detailing.lighting.fixtures, createCeilingLightFixture({ u, v: 1500 })];
+    return floorplanReducer(state, {
+      type: 'CEILING_UPDATE',
+      ceiling: {
+        id: ceilingId,
+        detailing: createCeilingDetailing({ ...ceiling.detailing, lighting: { fixtures } }),
+      },
+      ...options,
+    });
+  }
+
+  it('records one history entry, leaves the models untouched and flags them stale', () => {
+    const { state, ceilingId } = planWithCeiling();
+    const historyBefore = state.history.length;
+
+    const placed = placeLight(state, ceilingId, 1000, { coordination: 'defer' });
+
+    expect(placed.project.ceilings[0].detailing.lighting.fixtures).toHaveLength(1);
+    expect(placed.history).toHaveLength(historyBefore + 1);
+    expect(placed.derived).toBe(state.derived);
+    expect(placed.gesture.active).toBe(false);
+    expect(placed.gesture.derivedStale).toBe(true);
+    expect(placed.gesture.deferredCoordination).toBe(true);
+  });
+
+  it("survives a plain pointer release and settles on the editor's own END", () => {
+    const { state, ceilingId } = planWithCeiling();
+    const placed = placeLight(state, ceilingId, 1000, { coordination: 'defer' });
+
+    // The floor plan under the overlay fires END on every window pointer-up —
+    // including the mouse-up of the click that placed the light.
+    expect(floorplanReducer(placed, { type: 'END_DRAG_GESTURE' })).toBe(placed);
+
+    const settled = floorplanReducer(placed, { type: 'END_DRAG_GESTURE', settleDeferred: true });
+    expect(settled.derived).not.toBe(state.derived);
+    expect(settled.gesture.derivedStale).toBe(false);
+    expect(settled.gesture.deferredCoordination).toBe(false);
+    expect(settled.derived.quantityTakeoff).toEqual(placeLight(state, ceilingId, 1000).derived.quantityTakeoff);
+    // A second settle has nothing left to do.
+    expect(floorplanReducer(settled, { type: 'END_DRAG_GESTURE', settleDeferred: true })).toBe(settled);
+  });
+
+  it('keeps deferring across consecutive deferred edits, one history entry each', () => {
+    const { state, ceilingId } = planWithCeiling();
+    const historyBefore = state.history.length;
+    let placed = state;
+    for (const u of [1000, 2000, 3000]) placed = placeLight(placed, ceilingId, u, { coordination: 'defer' });
+
+    expect(placed.history).toHaveLength(historyBefore + 3);
+    expect(placed.derived).toBe(state.derived);
+    expect(placed.gesture.derivedStale).toBe(true);
+  });
+
+  it('is settled by the next ordinary edit of any kind', () => {
+    const { state, floorId, ceilingId } = planWithCeiling();
+    const placed = placeLight(state, ceilingId, 1000, { coordination: 'defer' });
+    const walled = floorplanReducer(placed, {
+      type: 'WALL_ADD',
+      floorId,
+      wall: createWall({ x: 0, y: 4000 }, { x: 6000, y: 4000 }),
+    });
+
+    expect(walled.derived).not.toBe(state.derived);
+    expect(walled.gesture.derivedStale).toBe(false);
+    expect(walled.gesture.deferredCoordination).toBe(false);
+  });
+
+  it('changes nothing inside an open drag gesture', () => {
+    const { state, ceilingId } = planWithCeiling();
+    const historyBefore = state.history.length;
+    let dragged = floorplanReducer(state, { type: 'BEGIN_DRAG_GESTURE' });
+    dragged = placeLight(dragged, ceilingId, 1000, { coordination: 'defer' });
+    dragged = placeLight(dragged, ceilingId, 1200, { coordination: 'defer' });
+
+    expect(dragged.gesture.active).toBe(true);
+    expect(dragged.derived).toBe(state.derived);
+    expect(dragged.history).toHaveLength(historyBefore + 1);
+
+    // The drag's own release settles it — no settleDeferred needed.
+    const released = floorplanReducer(dragged, { type: 'END_DRAG_GESTURE' });
+    expect(released.derived).not.toBe(state.derived);
+    expect(released.gesture).toEqual({
+      active: false,
+      historyRecorded: false,
+      derivedStale: false,
+      deferredCoordination: false,
+    });
+  });
+
+  it('undoes deferred edits one at a time', () => {
+    const { state, ceilingId } = planWithCeiling();
+    const first = placeLight(state, ceilingId, 1000, { coordination: 'defer' });
+    const second = placeLight(first, ceilingId, 2000, { coordination: 'defer' });
+
+    const undone = floorplanReducer(second, { type: 'UNDO' });
+    expect(undone.project).toBe(first.project);
+    expect(undone.project.ceilings[0].detailing.lighting.fixtures).toHaveLength(1);
+    const undoneTwice = floorplanReducer(undone, { type: 'UNDO' });
+    expect(undoneTwice.project).toBe(state.project);
+    expect(floorplanReducer(undoneTwice, { type: 'REDO' }).project).toBe(first.project);
   });
 });

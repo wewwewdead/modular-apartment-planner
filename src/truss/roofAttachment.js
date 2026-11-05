@@ -14,6 +14,7 @@ import {
   projectPointOntoAxis,
   resolveSystemLayoutRange,
   resolveSystemPlanAxes,
+  resolveSystemSupportLayoutRange,
 } from './systemPlanAxes';
 
 const EPSILON = 1e-6;
@@ -171,8 +172,27 @@ export function resolveTrussSystemRoofAttachmentType(trussSystem, catalog) {
   return attachmentTypes.length === 1 ? attachmentTypes[0] : null;
 }
 
-// The roof covers what the top chords cover, overhangs included.
-export function deriveRoofBoundaryFromTrussSystem(trussSystem, sourceSystemGeometry = null) {
+/**
+ * RT-4 (spec §7.9.3.1): a hip roof's layout range is the trusses' SUPPORT
+ * line (where the step-down slices measure their station from) plus the first
+ * instance's start tail at BOTH ends, so the end eaves are level with the side
+ * eaves and the end planes pass through the heel support line.
+ */
+function resolveHipLayoutRange(systemGeometry, planAxes) {
+  const supportRange = resolveSystemSupportLayoutRange(systemGeometry, planAxes);
+  if (!supportRange) return null;
+  const tail = Math.max(0, Number(systemGeometry?.instances?.[0]?.metrics?.overhangStart) || 0);
+  return { min: supportRange.min - tail, max: supportRange.max + tail };
+}
+
+// The roof covers what the top chords cover, overhangs included. A hip roof
+// reads the support line in the layout direction (RT-4); every other type the
+// first/last copy.
+export function deriveRoofBoundaryFromTrussSystem(
+  trussSystem,
+  sourceSystemGeometry = null,
+  attachmentType = resolveTrussSystemRoofAttachmentType(trussSystem),
+) {
   const systemGeometry = sourceSystemGeometry || (trussSystem ? buildTrussSystemGeometry(trussSystem) : null);
   const planAxes = resolveSystemPlanAxes(systemGeometry);
   const copyPlanPoints = collectSystemCopyPlanPoints(systemGeometry);
@@ -183,7 +203,9 @@ export function deriveRoofBoundaryFromTrussSystem(trussSystem, sourceSystemGeome
   return buildSystemBoundary(
     planAxes,
     { min: Math.min(...spanValues), max: Math.max(...spanValues) },
-    resolveSystemLayoutRange(systemGeometry, planAxes),
+    attachmentType === 'hip'
+      ? resolveHipLayoutRange(systemGeometry, planAxes)
+      : resolveSystemLayoutRange(systemGeometry, planAxes),
   );
 }
 
@@ -242,7 +264,7 @@ export function resolveRoofAttachmentContext(project, roofSystem = null, catalog
     const systemGeometry = buildTrussSystemGeometry(attachedTrussSystem);
     const derivedRoofState = deriveRoofStateFromTrussSystem(attachedTrussSystem, catalog, systemGeometry);
     const derivedBoundaryPolygon = derivedRoofState
-      ? deriveRoofBoundaryFromTrussSystem(attachedTrussSystem, systemGeometry)
+      ? deriveRoofBoundaryFromTrussSystem(attachedTrussSystem, systemGeometry, derivedRoofState.roofType)
       : null;
     // RT-3.1: a hip datum sits at the ROOF outline edge (see
     // getTrussRoofAttachmentElevation), so it reads the roof's applied overhang.

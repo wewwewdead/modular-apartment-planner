@@ -532,10 +532,65 @@ export function buildCeilingPreviewObjects(ceiling, project, options = {}) {
   if (!ceiling) return [];
 
   const detail = deriveCeilingDetail(ceiling, project);
-  const { configuration, elevations } = detail;
+  const { configuration } = detail;
   if (!configuration.enabled || !configuration.face.enabled) return [];
   if (detail.length <= 0 || detail.depth <= 0) return [];
 
+  const assembly = cachedAssemblyDescriptors(ceiling, project, detail, options);
+  const { space } = assembly;
+  const shared = { ceilingId: ceiling.id, floorId: ceiling.floorId, sourceId: ceiling.id };
+
+  // Not behind the fastener switch: a room has a handful of luminaires and
+  // several hundred screws, and the fixtures are half the reason to look at the
+  // ceiling in 3D at all. Rebuilt on every call — they are what a lighting edit
+  // changes, and there are a handful of them.
+  const lighting = detail.lightFixtures.flatMap((fixture) =>
+    buildCeilingLightFixtureObjects(fixture, { space, shared, ceilingId: ceiling.id }),
+  );
+  // After the fixtures, and separately from them: the indirect field is a
+  // property of the room the ceiling closes, so it is counted once per patch of
+  // ceiling rather than once per lamp.
+  const bounceLights = buildCeilingBounceLights(detail.lightFixtures, { shared, ceilingId: ceiling.id });
+
+  return [...assembly.descriptors, ...lighting, ...bounceLights];
+}
+
+/*
+ * The assembly's descriptors — boards, framing, hangers, openings, screws —
+ * held per derived assembly and handed back as the SAME objects while it holds.
+ *
+ * `deriveCeilingDetail` returns its boards array by reference for as long as
+ * nothing the assembly depends on has changed (the assembly cache in
+ * `ceilingModels.js`), and every other heavy part comes from the same cache
+ * entry, so that array's identity stands for the whole assembly. Keyed on it,
+ * a lighting-only edit costs the lights and nothing else: the 2,415 descriptors
+ * of a 12 × 10 m screwed ceiling used to be rebuilt on every placement and then
+ * deep-compared one by one by the scene cache to find that none had moved,
+ * where now `descriptorsEqual` stops at `a === b`.
+ *
+ * The options that change what is built are part of the key; the outline's
+ * local frame is kept with the descriptors because it was resolved from the
+ * same boundary.
+ */
+const assemblyDescriptorCache = new WeakMap();
+
+function cachedAssemblyDescriptors(ceiling, project, detail, options) {
+  const key = `${options.fasteners ? 'screws' : 'no-screws'}:${options.hideBoards ? 'no-boards' : 'boards'}`;
+  let byOptions = assemblyDescriptorCache.get(detail.panels);
+  if (!byOptions) {
+    byOptions = new Map();
+    assemblyDescriptorCache.set(detail.panels, byOptions);
+  }
+  let assembly = byOptions.get(key);
+  if (!assembly) {
+    assembly = buildAssemblyDescriptors(ceiling, project, detail, options);
+    byOptions.set(key, assembly);
+  }
+  return assembly;
+}
+
+function buildAssemblyDescriptors(ceiling, project, detail, options) {
+  const { configuration, elevations } = detail;
   const space = getCeilingLocalSpace(resolveCeilingBoundary(project, ceiling));
   const toPlan = (point) => space.toPlan(point);
   const shared = { ceilingId: ceiling.id, floorId: ceiling.floorId, sourceId: ceiling.id };
@@ -682,16 +737,5 @@ export function buildCeilingPreviewObjects(ceiling, project, options = {}) {
         })
       : [];
 
-  // Not behind the fastener switch: a room has a handful of luminaires and
-  // several hundred screws, and the fixtures are half the reason to look at the
-  // ceiling in 3D at all.
-  const lighting = detail.lightFixtures.flatMap((fixture) =>
-    buildCeilingLightFixtureObjects(fixture, { space, shared, ceilingId: ceiling.id }),
-  );
-  // After the fixtures, and separately from them: the indirect field is a
-  // property of the room the ceiling closes, so it is counted once per patch of
-  // ceiling rather than once per lamp.
-  const bounceLights = buildCeilingBounceLights(detail.lightFixtures, { shared, ceilingId: ceiling.id });
-
-  return [...boards, ...framing, ...hangers, ...openings, ...fasteners, ...lighting, ...bounceLights];
+  return { space, descriptors: [...boards, ...framing, ...hangers, ...openings, ...fasteners] };
 }

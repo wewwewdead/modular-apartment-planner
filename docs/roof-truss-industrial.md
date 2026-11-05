@@ -13,6 +13,7 @@ All dimensions in this document are millimetres unless a unit is written.
 > more industrial level of tools. I also want to change colour of the roof so I
 > can simulate my own idea using this software. And also what tools we need so I
 > can cover this roof opening here [screenshot: a gable roof over a two-storey
+>
 > > block; the triangle between the top of the end wall and the two roof slopes
 > > is open air, the trusses are visible through it; there is no fascia, barge,
 > > soffit or gable cladding anywhere].
@@ -166,11 +167,12 @@ below are repeated here so this file stands alone.
 
 ## 3. Scope and phases
 
-| Phase                           | Delivers                                                                                                                                                                                                                                                                                                                                       | Visible result                                                 |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| RT-1 Covering, colour, edge kit | `roofSystem.covering` + `roofSystem.trims`; roof colour and trim colours in 3D; fascia, barge, soffit, gutter, downpipes, ridge/barge capping as 3D objects; elevation/section lines for them; covering-rule warnings; roofing quantity fix                                                                                                    | The roof takes the user's colour; eaves and rakes are finished |
-| RT-2 Gable end closure          | `trussSystem.endClosures`; gable infill panels (and shed/flat side strips) derived from the end trusses and the roof underside; vents; elevation/section/quantities                                                                                                                                                                            | The open triangle in the screenshot is closed                  |
-| RT-3 Industrial truss accuracy  | Member sizes, real heel geometry, sloped overhang tails, named web patterns incl. gable studs, scissor + raised heel, purlins on the chord face and rolled to the slope, truss labels + spacing on the layout plan, truss schedule + cutting list, roof thickness perpendicular to the slope, attached roof follows the chord top face exactly | Trusses look and measure like manufactured trusses             |
+| Phase                           | Delivers                                                                                                                                                                                                                                                                                                                                       | Visible result                                                                                |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| RT-1 Covering, colour, edge kit | `roofSystem.covering` + `roofSystem.trims`; roof colour and trim colours in 3D; fascia, barge, soffit, gutter, downpipes, ridge/barge capping as 3D objects; elevation/section lines for them; covering-rule warnings; roofing quantity fix                                                                                                    | The roof takes the user's colour; eaves and rakes are finished                                |
+| RT-2 Gable end closure          | `trussSystem.endClosures`; gable infill panels (and shed/flat side strips) derived from the end trusses and the roof underside; vents; elevation/section/quantities                                                                                                                                                                            | The open triangle in the screenshot is closed                                                 |
+| RT-3 Industrial truss accuracy  | Member sizes, real heel geometry, sloped overhang tails, named web patterns incl. gable studs, scissor + raised heel, purlins on the chord face and rolled to the slope, truss labels + spacing on the layout plan, truss schedule + cutting list, roof thickness perpendicular to the slope, attached roof follows the chord top face exactly | Trusses look and measure like manufactured trusses                                            |
+| RT-4 Hip end seating            | Hip roof boundary from the layout line ± start tail; soffit bearing outline; purlin extensions stop at slices; unequal-tails warning; playground `pitchSource`                                                                                                                                                                                 | Step-down hip trusses and their purlins seat on the roof exactly; the playground opens seated |
 
 Out of scope (say so in the UI only where a user would look for it): structural
 design/load checks, plates and connectors, hip girder + jack sets and valley
@@ -763,6 +765,267 @@ purlinTopFace` is 0 ± 0.5 (compare at the top face point's OWN plan
    3D pictures and check the Roof panel's slope readout then equals the
    instance pitch; the iso picture must show no purlin on the covering.
 
+### 7.9 RT-4 — Hip end seating (and the playground slope)
+
+**Goal.** On an attached hip roof every truss copy seats on the roof,
+step-down slices included, with the same exactness RT-3.1 gave the common
+trusses; and the playground opens with its roof following the trusses, no
+"Reset slope" needed. Nothing else changes. Hip girders, jacks and creepers
+stay out of scope (§3): the step-down slices remain the hip model.
+
+#### 7.9.1 What the 2026-11-04 probe found
+
+Playground hip following the truss (after Reset slope): span 10 100, rise
+1600 over 5050 = 31.684 %, tails 300/300, tc 90, bc 90, purlins 50 deep at
+900, roof overhang 510, 7 copies at 1950 on an 11 837 layout line with
+`supportOffsetAlongAxis` 137.4. Gap = roof underside − chord top face,
+expected `50 / cos θ = 52.4` on a slope:
+
+| Copy                 | Station from the nearer line end | Sloped runs                                   | Flat top      |
+| -------------------- | -------------------------------- | --------------------------------------------- | ------------- |
+| T1 (common)          | 5987                             | 52.4 everywhere                               | —             |
+| H6 / H5              | 4037 / 3900                      | 52.4 up to the crown, then −12 … −74          | —             |
+| H4 / H3              | 2087 / 1950                      | 52.4, then 67.8 / 46.9 / −56.7 near the crown | −81.7 / −38.2 |
+| H2 (first copy)      | 137                              | −44.6 … −77.6                                 | −81.7         |
+| H1 (last copy, flat) | 0                                | —                                             | −40.4         |
+
+Purlins: −4.0 … +14.1 (the `left_4`/`right_4` runs poke 14 mm through the
+covering where they pass under the end plane at H6). The probe is kept at
+the session scratchpad `rt4/__rt4_probe.test.js` (copy into `src/` to run;
+it writes to `RT4_PROBE_OUT`).
+
+#### 7.9.2 Cause — two reference frames in the layout direction
+
+1. **The slices** (`buildHipSliceProfile`, `src/truss/profile.js:424`)
+   measure their station `d = min(layoutOffset, supportLength −
+layoutOffset)` from the ends of the **layout line** (`instance.startPoint`
+   and `startPoint + getTrussSupportLength(instance) × axis`,
+   `src/truss/layout.js:11`); the crown underside sits at `ratio × d`
+   (`localRise = rise × clippedRun / halfSpan`), a full gable once `d ≥
+span / 2`.
+2. **The roof** (`deriveRoofBoundaryFromTrussSystem`,
+   `src/truss/roofAttachment.js:175`) takes its layout range from the
+   **copies** (`resolveSystemLayoutRange`, `src/truss/systemPlanAxes.js:88`:
+   first copy origin to last copy origin), and the hip builder
+   (`buildHipRoofGeometry`, `src/geometry/roofPlaneGeometry.js:377`,
+   `endDistance`) rises each end plane from that edge plus the roof's own
+   overhang. In the **span** direction the boundary reaches the tail tips
+   and the datum is sampled at `x = −(overhangStart + roofOverhang)`
+   (RT-3.1), so the side planes pass through the heel support line. In the
+   **layout** direction the truss tail is missing, and
+   `supportOffsetAlongAxis` moves the first copy off the line start.
+
+So at a layout-line end the end plane sits `ratio × overhangStart` (95 mm on
+the playground) **below** the heel support line, while the slice there is at
+heel height; every slice inherits that offset, and the roof's crease (where
+the side plane hands over to the end plane) lands `overhangStart` short of
+the slice crown, which is why sloped runs go negative just before the crown.
+A second, smaller term: a flat top's top face is `tc` above the underside
+line, a sloped run's is `tc / cos θ`.
+
+#### 7.9.3 Rules
+
+1. **Hip boundary = layout line ± `overhangStart`.** When
+   `resolveTrussSystemRoofAttachmentType(trussSystem)` is `'hip'`,
+   `deriveRoofBoundaryFromTrussSystem` takes the layout range from each
+   instance's **support line** — the transformed `startPoint` and
+   `startPoint + getTrussSupportLength(instance) × axis` (the same two points
+   `buildHipSliceProfile` measures from), projected on `planAxes.layoutAxis`,
+   union over instances — and extends it by the first instance's
+   `overhangStart` at **both** ends (judgment call §9.12). The span range
+   stays the tail tips. Every other attachment type keeps today's copy
+   range. Put the support-line range in a new helper in `systemPlanAxes.js`
+   (`resolveSystemSupportLayoutRange(systemGeometry, planAxes)`); carry the
+   transformed support-line end on the instance geometry next to
+   `layoutLineStartPoint/EndPoint` (`transformInstanceGeometry`,
+   `src/geometry/trussGeometry.js:409`) so the helper works in the
+   transformed frame — the playground system is rotated 359.6°, and a range
+   built from the raw instance axis is ~40 mm off at the outline corners.
+
+   By construction this makes everything else fall into place, with **no
+   change to the slice profile**: the roof outline's hip ends sit
+   `overhangStart + roofOverhang` past the line ends (level eaves all round,
+   like the sides); the ridge runs from `span / 2` inside each line end
+   (`hipInset = spanWidth / 2`), which is exactly the station where a slice
+   becomes a full gable; the end-plane underside at station `d` is
+   `support(0) + ratio × d` above the truss base; a slice's sloped runs sit
+   on the side planes (`pd / cos θ`); the crease `x = d` coincides with the
+   slice crown; and the flat top face sits `(tc + pd) / cos θ − tc` under
+   the end plane (56.9 on the playground, 54.3 on the 25 % test system) —
+   constant per system, no purlin on it, nothing pokes (judgment call §9.13).
+
+2. **Bearing outline for the soffit** (`resolveRoofBearingOutline`,
+   `src/roof/roofEdgeKit.js:54`): for a hip, the layout range is the same
+   support-line range **without** the tail, so the hip-end soffit runs from
+   the end wall to the eave, `overhangStart + roofOverhang` wide like the
+   side soffits. Gable/shed keep the copy range.
+3. **Purlin extensions stop at slices.** In `buildInstancePurlinGeometry`
+   (`src/geometry/trussGeometry.js:256`) the `purlinSystem.overhangStart /
+overhangEnd` extension is skipped at a run end whose copy is a hip slice
+   (a purlin extended past its last slice walks under the descending end
+   plane). `createCopyGeometry` (`trussGeometry.js:137`) carries
+   `isHipSlice` from `buildRawTrussInstanceGeometry` (line 449) on the copy
+   geometry. Gable barge extensions are unchanged (judgment call §9.14).
+4. **Unequal tails warning.** The hip builder has one eave level; with
+   `overhangStart ≠ overhangEnd` the far side plane misfits by `ratio ×
+|overhangEnd − overhangStart|`. `RoofProperties.jsx` adds a `Status`
+   warning next to the manual-slope one (`data-hip-tail-warning`): "Hip
+   roof: the truss tails differ (300 / 450 mm). The roof seats on the start
+   tail; the far eave is off by 38 mm." Numbers live, no blocking.
+5. **Playground.** `src/pages/playground-demo.json:2094` — `"pitchSource":
+"manual"` becomes `"truss"`. That one field only; the stored `"slope":
+32.5` stays (inert once the source is the truss) and the stored
+   `attachmentOffset −200` keeps exercising migration 30 → 31 on load
+   (judgment call §9.15). Any test whose expectations were computed from the
+   manual 32.5 % roof (`roofEdgeKitPreview.test.js`,
+   `presentationPreviewObjects.test.js`, `previewBatching.test.js`,
+   `migrations.test.js` import the demo) is updated to the followed slope,
+   with the new number derived, not pasted from the failure.
+
+**Unchanged on purpose:** `buildHipSliceProfile`, `getTrussRoofAttachmentElevation`
+(the datum), `buildHipRoofGeometry`, hip closures (none, RT-2), labels,
+schedule, cutting list. Copies placed past the layout line end
+(`supportOffsetAlongAxis + spacing × (count − 1) > supportLength`) clamp to
+flat and sit under the descending end plane — out of scope, as before.
+
+#### 7.9.4 Tests
+
+`src/truss/roofAttachment.test.js`, in the RT-3.1 seating describe
+(`seatingSystem`, line 139: layout 0 → 12 000 along x, span 7200, 25 %,
+tails 300, tc 90, purlins 50 deep at 900, roof overhang 510, 11 copies at
+1200). `SECANT = hypot(1, 0.25) = 1.030776`.
+
+- **Hip, every copy.** Replace the `commonCopyIds` exclusion in the hip test
+  (line 266): for **every** copy, every sloped top-chord member at 0.1 / 0.5
+  / 0.9 gives roof underside − chord top face `= 50 × SECANT = 51.54 ±
+0.5`; every flat top-chord member gives `= 140 × SECANT − 90 = 54.31 ±
+0.5`; every purlin segment (all of them, not only the common ones) gives
+  purlin top − roof underside `= 0 ± 0.5` at 0.02 / 0.5 / 0.98. Stations:
+  copies at 0 / 1200 / 2400 from each end are H1 (flat) / H2 / H3, the rest
+  full gables.
+- **Outline and ridge.** The roof outline's extent along the layout axis is
+  `−810 … 12 810` and along the span axis `±4410`; the ridge runs `3600 …
+8400` (length 4800) — `roofGeometry.ridgeSegment`.
+- **Offset copies.** `supportOffsetAlongAxis: 450`, `count: 10` (copies 450
+  … 11 250, all inside the line): the first copy is a slice with crown
+  underside `0.25 × 450 = 112.5` and seats like the others; the roof outline
+  extent is unchanged (it reads the line, not the copies).
+- **No roof overhang.** `pitch.overhang: 0`: seated, outline `−300 … 12 300`.
+- **Purlin extension.** `purlinSystem.overhangEnd: 300` on the hip system:
+  a run whose last attachment copy is a slice ends at that attachment's
+  plan point; the gable system's runs still end 300 past the last copy.
+- **Playground.** A node test (new `src/truss/roofAttachment.playground.test.js`;
+  load with `deserializeProject(demoData)` then `syncProjectStructures`, as
+  the probe does): `roofSystem.pitchSource === 'truss'`, `pitch.slope ≈
+31.684 ± 0.01`, `attachmentOffset === 0`, `baseElevation ≈ 5980.22 ± 0.5`;
+  all 7 copies seated (`52.45 ± 0.5` sloped, `56.86 ± 0.5` flat) and all 26
+  purlin segments `0 ± 0.5`. If the 359.6° plan rotation breaks the
+  tolerance, the cause is a frame mismatch in rule 1 — fix it there, never
+  loosen the tolerance.
+- `src/roof/roofEdgeKit.test.js`: on the seating hip system the bearing
+  outline's layout extent is `0 … 12 000` (the line), span extent `±3600`.
+- `src/geometry/trussGeometry.test.js`: copies carry `isHipSlice` (true for
+  H copies, false for T and GE).
+- `RoofProperties.dom.test.jsx`: the unequal-tails warning with the real
+  numbers, absent for equal tails and for a gable.
+
+#### 7.9.5 Verification scripts
+
+- `scripts/verify-truss-accuracy.mjs`: before the hip → gable switch, on
+  the loaded playground: no "Reset slope" button, no
+  `[data-manual-slope-warning]`, the Roof panel slope readout equals the
+  instance pitch (31.68 %); photograph the hip end square on (the layout
+  line runs along +x, so the `Left` / `Right` presets look along it) and an
+  iso — no purlin on the covering, the eave line level all round. Then the
+  existing gable flow **without** the Reset slope press (lines 251-278):
+  assert the button is absent and the slope readout equals the gable pitch
+  (35.6 %) right after the switch.
+- `scripts/verify-gable-closure.mjs` lines 131-138: drop the Reset slope
+  press; keep the Slope Source check (reads `truss` without it).
+- `scripts/verify-roof-covering.mjs`: unchanged; must still pass.
+
+### 7.10 RT-4.1 — Slice profile accuracy (from the RT-4 audit)
+
+The RT-4 audit (§10) confirmed rules 1–5 of §7.9.3 landed and that the roof
+frame is now right: on the playground every straight sloped run reads 52.4
+and every flat top 56.9. But §7.9.3's claim "no change to the slice
+profile" was wrong. Four legacy effects in `src/truss/profile.js` keep the
+§7.9.4 numbers from holding on every member; Opus found and measured them,
+the auditor confirmed items 1 and 2 in source. They are RT-4.1. Nothing
+outside `profile.js`, its tests and the RT-4 tests changes.
+
+1. **Top-chord nodes at the slice crown.** `buildProfileFromStructuralOutline`
+   (`profile.js:133`) places top nodes only at the bottom panel points
+   (`createBottomPoints`, 8 panels for a hip) and samples the outline there,
+   so a slice's crown kinks (`x = d` and `x = span − d`) are never nodes and
+   the panel chord that spans a kink runs straight under the outline — it
+   floats 55–109 mm on the 25 % test system and 60–146 mm on the playground
+   (H2…H6). A real truncated truss always has a panel point where the top
+   chord changes direction. Fix: the top-chord member chain runs through
+   the panel-point nodes **and** a node at every kink of the structural
+   outline (a point whose neighbours are not collinear, tolerance 1e-6 in
+   z), sorted by x, kind `'top_chord'`, ids `top_kink_<i>`. The web pairing
+   keeps using the panel-point nodes by index (`topPoints[index]`), so webs
+   are unchanged; the kink nodes only split the chord members. Keep the
+   mechanism generic (it is wrong for any shape), but **report the blast
+   radius**: for gable, shed, flat, box_gable, pyramid_hipped, domed,
+   dropped_eaves and scissor at their default sizes, list which profiles
+   gain nodes (a kink that is not a panel point today) and which are
+   byte-identical; the RT-3 tests that pin node or member counts must keep
+   passing for shapes whose kinks already sit on panel points (a straight
+   gable's ridge is a panel point when `panelCount` is even).
+2. **A flat slice's tails follow the hip pitch.** A slice at station 0
+   (`buildHipSliceProfile`: `clippedRun ≤ EPSILON || localRise ≤ EPSILON` →
+   `buildFlatProfile({rise: 0})`) gets level tails from
+   `continueOutlineTails` (slope 0), so the side planes come down onto them:
+   on the test system's H1 the gap is −13.2 at x = −270 and −20.7 at the
+   tip — the tails poke **through the covering**, and did before RT-4 too.
+   Fix: `buildHipSliceProfile` builds its zero-rise case with an explicit
+   tail slope (`continueOutlineTails(structuralOutline, metrics, {tailSlope})`,
+   `tailSlope = rise / (span / 2)`): `tails.start = −overhangStart ×
+tailSlope`, `tails.end = −overhangEnd × tailSlope`. The flat FAMILY
+   (`shape 'flat'`) keeps level tails.
+3. **Slice runs end on the true slope.** `applyMemberGeometry` resamples
+   each `topChordRuns` point's z on the mitred centre outline
+   (`sampleTrussOutlineZ(centreOutline, point.x)`); at a slice's crown x the
+   centre-line is already level, so the run's crown end sits
+   `tc / 2 × (sec θ − 1)` low (1.4 mm test system, 2.2 mm playground) and
+   purlins near the crown float by that. Fix: a run point's z is the run's
+   OWN segment offset — `lineZ(x) + bc + h_r + tc / (2 cos θ_run)` with
+   `θ_run` the slope of the run's own line-space segment — not a sample of
+   the mitred outline. Straight runs are unchanged by this (same value).
+4. **Sliver slices are flat.** The playground's last copy sits 0.025 mm
+   inside the line end (137.4 + 6 × 1950 against an 11 837.42 line), so
+   `localRise` = 0.008 passes `EPSILON` and the copy is a slice with a
+   0.025 mm sloped stub whose degenerate mitre lifts the whole level
+   centre-line by `tc / 2 × (sec θ − 1)` (54.66 instead of 56.86). Fix:
+   `HIP_SLICE_MIN_RUN = 1` (mm): `clippedRun < HIP_SLICE_MIN_RUN` → the flat
+   case of item 2.
+
+**Then the §7.9.4 numbers hold as written**, and the tests say so:
+
+- `src/truss/roofAttachment.test.js` "every hip copy seats (RT-4)" and
+  `src/truss/roofAttachment.playground.test.js`: remove the `kink`,
+  `levelTail`, `sliver` and `CROWN_RUN_DRIFT` allowances — every sloped
+  member `50 × sec θ ± 0.5`, every flat member `(tc + 50) × sec θ − tc ±
+0.5`, every purlin segment `0 ± 0.5`, slices included; `measureTopChords`
+  in `roofSeating.fixtures.js` may keep classifying members, but the
+  assertions no longer branch on `kink`/`levelTail` (the counts become 0 and
+  are asserted so).
+- `src/truss/profile.test.js`: on the 25 % system a slice at station 1200
+  has top-chord nodes at x = 1200 and 6000 (kind `top_chord`), two more
+  chord members than a panel-only chain, webs unchanged; a station-0 slice's
+  tails sit at `−75` (= −300 × 0.25) at both tips; a station-0.025 slice is
+  flat; a plain gable, shed and flat profile have the same node ids,
+  member count and `roofOutline` as before (pin them in the test before
+  changing the code, from the current output).
+- The probe (`rt4/__rt4_probe.test.js`) must read 52.4 on every sloped
+  member and 56.9 on every flat member of all 7 playground copies.
+- Scripts: no change expected; all three must still pass (a copy's detail
+  view is not selectable, so no new picture).
+
+Judgment calls §9.17–19.
+
 ## 8. Cross-cutting rules
 
 1. **Determinism and caching.** Descriptors are pure functions of project
@@ -825,6 +1088,39 @@ lint` 0 errors; each new module has a `*.test.js`; DOM tests are
     error) and now drops the roof into the trusses. A detached roof keeps its
     base elevation. A manual slope on an attached gable/shed now pivots on
     the heel (rise 0 at the bearing) instead of the roof outline edge.
+
+12. (RT-4) A hip roof's end eaves get the **start tail** (`overhangStart`)
+    at both ends, so the eave is level all round and the end planes pass
+    through the heel support line where the slices are measured from; no
+    new field. Unequal tails misfit the far side by `ratio × |Δ|` and get a
+    Roof-panel warning instead of a second eave level.
+13. (RT-4) A slice's flat top seats `(tc + pd) / cos θ − tc` under the end
+    plane (not `pd`): the flat top carries no purlin, and the truss profile
+    stays independent of the purlin depth. Jacks and creepers remain out of
+    scope.
+14. (RT-4) Purlin layout extensions (`overhangStart / overhangEnd`) are
+    ignored at a run end on a hip slice; gable barge extensions are kept.
+15. (RT-4) `playground-demo.json` gets a one-field edit (`pitchSource` →
+    `truss`); the stored manual 32.5 % and the −200 offset stay in the file
+    so the load path and migration 30 → 31 keep being exercised.
+16. (RT-4) The hip bearing outline (where the soffit starts) is the layout
+    line, not the first/last copy, so the hip-end soffit is as wide as the
+    side soffit.
+
+17. (RT-4.1) Kink nodes are added generically in
+    `buildProfileFromStructuralOutline` (a chord drawn straight across a
+    kink is wrong for every shape), with the web pairing still on the panel
+    points; the hand-back lists every shape whose node list changes.
+18. (RT-4.1) A station-0 hip slice is a flat truss whose tails slope at the
+    hip pitch (the hip plane comes down over them); the flat FAMILY keeps
+    level tails.
+19. (RT-4.1) A hip slice with a sloped run under 1 mm (`HIP_SLICE_MIN_RUN`)
+    is built as that flat slice; the playground's last copy is one.
+
+20. (RT-4.1 audit) The domed arch's sample points are a curve, not
+    structural kinks: `curvedChord` keeps its panel-only chord and skips the
+    mitre move, so domed is byte-identical to before; box_gable,
+    pyramid_hipped and dropped_eaves keep their new kink nodes.
 
 ## 10. Status
 
@@ -1001,3 +1297,102 @@ migrates on load). What landed:
   after switching its instance to Gable (rise resets to 1800 = 35.6 %) the
   warning shows and one click on "Reset slope" seats the roof. Hip step-down
   slices and their purlins are legacy geometry (§3 scope).
+
+**RT-4 built by Opus, audited by Fable 2026-11-04 — PASS on the roof frame,
+with a slice-profile follow-up (RT-4.1, §7.10).** Auditor's run: 412 test
+files / 5050 tests green (+1 file / +19 tests), lint 0 errors (the 42
+pre-existing warnings), `verify-truss-accuracy.mjs` 22/22,
+`verify-gable-closure.mjs` 12/12, `verify-roof-covering.mjs` 10/10, no page
+errors; every file:line anchor in the hand-back resolves to the claimed
+code; line endings match each file (new files CRLF, `roofAttachment.js` /
+`roofEdgeKit.js` were LF already). The auditor's own probe on the playground
+(stored source now `truss`): every straight sloped run on all 7 copies reads
+52.4 and every flat top of H2 / H3 / H4 reads 56.9 (before: −38 … −82); the
+roof outline sits 810 past the support line at both hip ends; the pictures
+show a clean hip, the eave level all round, no purlin through the covering.
+What landed:
+
+- `systemPlanAxes.js` `resolveSystemSupportLayoutRange` (line, not copies,
+  transformed frame); instance geometry carries `supportLineEndPoint`
+  (`buildRawTrussInstanceGeometry`, transformed in
+  `transformInstanceGeometry`); `roofAttachment.js` `resolveHipLayoutRange`
+  (support range ± the first instance's `overhangStart`) and
+  `deriveRoofBoundaryFromTrussSystem(trussSystem, geometry, attachmentType)`;
+  `roofEdgeKit.js` `resolveRoofBearingOutline` reads the support range for a
+  hip; copies carry `isHipSlice`; `buildInstancePurlinGeometry` skips the
+  layout extension at a slice end; `RoofProperties.jsx`
+  `resolveHipTailMismatch` + `data-hip-tail-warning`;
+  `playground-demo.json` `pitchSource` → `truss` (one field); both truss
+  scripts stop pressing "Reset slope" and the accuracy script photographs the
+  hip (`hip-end-left/right`, `hip-iso`, `hip-end-left-closeup`); new
+  `roofAttachment.playground.test.js` and `roofSeating.fixtures.js`.
+- Accepted judgment calls: purlin runs are split into chains of
+  NEIGHBOURING copies (the old code bridged a 12 m purlin from one flat end
+  slice to the other, 829 mm under the roof — a pre-existing bug); the
+  attachment type is a third positional parameter; `supportLineEndPoint`
+  only (the start is `layoutLineStartPoint`); the tails warning reads the
+  roof's `pitch.slope`.
+- Not built as written: the §7.9.4 "every copy / every purlin ± 0.5"
+  assertions. They are written as the TRUE geometry with KNOWN allowances
+  (chords across a crown kink float 55–146 mm; a flat slice's level tails
+  poke 13–21 mm through the covering on the test system; slice purlins near
+  the crown float ≤ 2.2 mm; the playground's last copy is a 0.025 mm sliver
+  reading 54.7). Cause: four legacy effects in `profile.js`, which the brief
+  forbade touching — §7.9.3's "no change to the slice profile" was wrong.
+  RT-4.1 (§7.10) fixes them and restores the §7.9.4 assertions.
+- Spec corrections found by the build: §7.9.1's purlin range "−4.0 … +14.1"
+  carries the probe's −2.4 artefact (it compares at the purlin centre's plan
+  position; at the top-face point it was −1.6 … +16.5 before and 0 … 2.0
+  after). The dev server on port 5199 was still running after the build.
+
+**RT-4.1 built by Opus, audited by Fable 2026-11-04 — PASS.** Auditor's run:
+412 test files / 5061 tests green, lint 0 errors (42 pre-existing warnings),
+`verify-truss-accuracy.mjs` 22/22, `verify-gable-closure.mjs` 12/12,
+`verify-roof-covering.mjs` 10/10 on a fresh dev server; every anchor in the
+hand-backs resolves. The auditor's probe on the playground: every sloped
+member of all 7 copies 52.4, every flat member 56.9, H1 a true flat slice
+(crown centre 135.0), purlins a constant −2.4 (the probe's centre-plan
+artefact; the tests assert 0 ± 0.5 at the top-face point for all 26). The
+domed profile is deep-equal to HEAD on the auditor's own comparison (nodes,
+members, outlines, metrics; run z difference 0). What landed, all in
+`src/truss/profile.js` + tests:
+
+- `outlineKinkPoints`, `KINK_PANEL_TOLERANCE 1`, exported
+  `HIP_SLICE_MIN_RUN 1`; `continueOutlineTails(…, {tailSlope})`;
+  `buildProfileFromStructuralOutline` adds `top_kink_<i>` nodes (kind
+  `top_chord`) to the chord chain with the web pairing still on panel
+  points, and takes `curvedChord` (domed: no kink nodes, carried on the line
+  profile); `buildFlatProfile(metrics, {tailSlope})`; `buildHipSliceProfile`
+  builds the station-0 / sub-millimetre case as the flat slice with tails at
+  the hip pitch; `resolveCentreKinks` + `runCentrePoints` (a run's own
+  offset, mitred inside, plumb at its ends); `applyMemberGeometry` moves a
+  top node at a kink onto the centre-line mitre and widens the heel-stud
+  lookup to `max(1, tc)`.
+- Tests: pinned gable / shed / flat (from the pre-change output) and domed
+  profiles; seven hip-slice tests; the RT-4 seating tests lose every
+  allowance (kink and level-tail counts asserted 0, every purlin ± 0.5).
+- Accepted judgment calls: kink nodes sit on the centre-line MITRE, not at
+  the kink x (`δ = tc / 2 × (sec θ − 1) / tan θ` inward: 5.6 on the test
+  system, 6.9 on the playground; symmetric kinks δ = 0, which is why gable,
+  shed and flat are byte-identical); `KINK_PANEL_TOLERANCE` 1 mm; runs with
+  interior kinks (pyramid) mitred on their own offset; the heel-stud lookup
+  widened so a raised heel on a flat slice keeps its studs (they lean ~5 mm).
+- Blast radius of the kink rule: shed, flat, domed byte-identical; gable,
+  scissor, full hip identical but for run float noise (≤ 3e-14); box*gable
+  +2 kink nodes (chords 10 → 12, run ends move ≤ 6.35 mm onto the true
+  slope); pyramid_hipped +4 (chords 10 → 14, runs ≤ 3.5 mm);
+  dropped_eaves +2 (chords 10 → 12). Member ids after an inserted chord
+  shift (`topChord*<n>` counters); their schedules list the extra chord
+  pieces. Judgment call §9.20.
+- Spec corrections: §7.10.1's test note "nodes at x = 1200 and 6000" names
+  the LINE outline's kinks; the nodes sit δ inward on the crown centre-line
+  (z = bc + 300 + 45 sec θ). "Straight runs are unchanged" holds
+  mathematically, not byte-for-byte.
+
+**All RT phases are done** (RT-1 … RT-3.1 committed as `481e0db`; RT-4 and
+RT-4.1 uncommitted on top, the user has not asked for a commit). Remaining
+warts, for an RT-5 if ever wanted: sheet relief; truss-detail fit-to-view
+and a selectable end-frame / slice detail; the section band ignores vents;
+only the first truss system's closure colour reaches 3D; hip girders, jacks
+and creepers; hip seating with unequal tails (warned, not modelled);
+copies placed past the layout line end clamp to flat under the end plane.

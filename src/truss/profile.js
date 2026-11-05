@@ -33,9 +33,34 @@ import { WEB_PATTERNS, parseWebNodeRef, resolveWebPatternKey } from './webPatter
  */
 
 const EPSILON = 1e-6;
+// RT-4.1 (spec §7.10.1): a kink within this of a panel point is that panel
+// point (the same rule the named web patterns use for their kink nodes).
+const KINK_PANEL_TOLERANCE = 1;
+// RT-4.1 (spec §7.10.4): a hip slice whose sloped run is shorter than this is
+// built as the flat slice (a sub-millimetre stub only distorts the mitre).
+export const HIP_SLICE_MIN_RUN = 1;
 
 function lerp(a, b, t) {
   return a + (b - a) * t;
+}
+
+/**
+ * The interior points of an x-ordered outline where it changes direction:
+ * the point is off the straight line through its two neighbours by more than
+ * EPSILON in z (spec §7.10.1).
+ */
+function outlineKinkPoints(points = []) {
+  const kinks = [];
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const previous = points[index - 1];
+    const point = points[index];
+    const next = points[index + 1];
+    const run = next.x - previous.x;
+    if (Math.abs(run) <= EPSILON) continue;
+    const expected = previous.z + ((next.z - previous.z) * (point.x - previous.x)) / run;
+    if (Math.abs(point.z - expected) > EPSILON) kinks.push(point);
+  }
+  return kinks;
 }
 
 function createLocalNodeMap(points, prefix) {
@@ -112,10 +137,20 @@ function createBottomPoints(metrics) {
 /**
  * Line-space z of the two overhang tail tips: each tail continues the slope of
  * the run it extends (spec §7.1). A flat run gives a level tail.
+ *
+ * `tailSlope` (RT-4.1, spec §7.10.2) overrides that: both tails fall at this
+ * slope from their heel, whatever the run does — a flat hip slice's tails
+ * follow the hip pitch, because the hip plane comes down over them.
  */
-function continueOutlineTails(structuralOutline = [], metrics) {
+function continueOutlineTails(structuralOutline = [], metrics, { tailSlope = null } = {}) {
   const points = structuralOutline;
   if (!points.length) return { start: 0, end: 0 };
+  if (Number.isFinite(tailSlope)) {
+    return {
+      start: points[0].z - metrics.overhangStart * tailSlope,
+      end: points[points.length - 1].z - metrics.overhangEnd * tailSlope,
+    };
+  }
   const first = points[0];
   const second = points[1] || first;
   const last = points[points.length - 1];
@@ -147,7 +182,7 @@ function buildProfileFromStructuralOutline(metrics, structuralOutline, options =
     };
   });
 
-  const tails = continueOutlineTails(structuralOutline, metrics);
+  const tails = continueOutlineTails(structuralOutline, metrics, { tailSlope: options.tailSlope });
   const overhangPoints = [
     { x: -metrics.overhangStart, z: tails.start, kind: 'overhang' },
     { x: metrics.span + metrics.overhangEnd, z: tails.end, kind: 'overhang' },
@@ -156,13 +191,23 @@ function buildProfileFromStructuralOutline(metrics, structuralOutline, options =
   const topNodes = createLocalNodeMap(topPoints, 'top');
   const bottomNodes = createLocalNodeMap(bottomPoints, 'bottom');
   const overhangNodes = createLocalNodeMap(overhangPoints, 'overhang');
+  // RT-4.1 (spec §7.10.1): the chord changes direction only at a node. Every
+  // kink of the outline that is not already a panel point gets a top-chord
+  // node of its own; the webs keep pairing with the panel points by index. A
+  // curved chord (`curvedChord`, the domed arch) samples a curve, not kinks,
+  // and keeps its panel-only chain.
+  const curvedChord = Boolean(options.curvedChord);
+  const kinkNodes = (curvedChord ? [] : outlineKinkPoints(structuralOutline))
+    .filter((point) => !topPoints.some((panel) => Math.abs(panel.x - point.x) <= KINK_PANEL_TOLERANCE))
+    .map((point, index) => createTrussNode(point.x, point.z, { id: `top_kink_${index}`, kind: 'top_chord' }));
+  const chordNodes = [...topNodes, ...kinkNodes].sort((a, b) => a.x - b.x);
   const members = [];
 
-  addMember(members, overhangNodes[0].id, topNodes[0].id, 'topChord', members.length);
-  for (let index = 0; index < topNodes.length - 1; index += 1) {
-    addMember(members, topNodes[index].id, topNodes[index + 1].id, 'topChord', members.length);
+  addMember(members, overhangNodes[0].id, chordNodes[0].id, 'topChord', members.length);
+  for (let index = 0; index < chordNodes.length - 1; index += 1) {
+    addMember(members, chordNodes[index].id, chordNodes[index + 1].id, 'topChord', members.length);
   }
-  addMember(members, topNodes[topNodes.length - 1].id, overhangNodes[1].id, 'topChord', members.length);
+  addMember(members, chordNodes[chordNodes.length - 1].id, overhangNodes[1].id, 'topChord', members.length);
 
   for (let index = 0; index < bottomNodes.length - 1; index += 1) {
     addMember(members, bottomNodes[index].id, bottomNodes[index + 1].id, 'bottomChord', members.length);
@@ -193,7 +238,7 @@ function buildProfileFromStructuralOutline(metrics, structuralOutline, options =
   }
 
   return {
-    nodes: [...overhangNodes, ...topNodes, ...bottomNodes],
+    nodes: [...overhangNodes, ...topNodes, ...kinkNodes, ...bottomNodes],
     members,
     roofOutline: uniqueOutlinePoints([
       { x: -metrics.overhangStart, z: tails.start },
@@ -208,6 +253,7 @@ function buildProfileFromStructuralOutline(metrics, structuralOutline, options =
         points: structuralOutline,
       },
     ],
+    ...(curvedChord ? { curvedChord: true } : {}),
   };
 }
 
@@ -389,7 +435,7 @@ function buildShedProfile(metrics) {
   };
 }
 
-function buildFlatProfile(metrics) {
+function buildFlatProfile(metrics, { tailSlope = null } = {}) {
   const structuralOutline = uniqueOutlinePoints([
     { x: 0, z: metrics.rise },
     { x: metrics.span, z: metrics.rise },
@@ -398,6 +444,7 @@ function buildFlatProfile(metrics) {
   return buildProfileFromStructuralOutline(metrics, structuralOutline, {
     webMode: 'alternating',
     topChordRuns: [{ id: 'main', side: 'main', points: structuralOutline }],
+    tailSlope,
   });
 }
 
@@ -430,11 +477,11 @@ function buildHipSliceProfile(metrics, options = {}) {
   const clippedRun = Math.max(0, Math.min(halfSpan, endDistance));
   const localRise = metrics.rise * (clippedRun / halfSpan);
 
-  if (clippedRun <= EPSILON || localRise <= EPSILON) {
-    return buildFlatProfile({
-      ...metrics,
-      rise: 0,
-    });
+  // The flat slice — at a line end, or a sub-millimetre sliver (RT-4.1, spec
+  // §7.10.4) — is a flat truss whose tails fall at the HIP pitch (§7.10.2):
+  // the hip planes come down over them on every side.
+  if (clippedRun < HIP_SLICE_MIN_RUN || localRise <= EPSILON) {
+    return buildFlatProfile({ ...metrics, rise: 0 }, { tailSlope: metrics.rise / halfSpan });
   }
 
   if (clippedRun >= halfSpan - EPSILON) {
@@ -523,6 +570,9 @@ function buildDomedProfile(metrics) {
 
   return buildProfileFromStructuralOutline(metrics, structuralOutline, {
     webMode: 'gable',
+    // The arch's sample points are not structural kinks: the chord stays a
+    // panel-point chain (no kink nodes, no mitre move — RT-4.1 audit).
+    curvedChord: true,
     topChordRuns: [
       {
         id: 'main',
@@ -627,6 +677,35 @@ function resolveMemberSizes(options = {}) {
 const TOP_KINDS = new Set(['top_chord', 'ridge', 'high_point', 'overhang']);
 
 /**
+ * The centre-line mitre at every kink of the underside: `{lineX, x, z}` with
+ * `lineX` the kink's x on the line and `{x, z}` the centre-line vertex
+ * `offsetTrussOutline` made for it (the two offset lines' intersection).
+ */
+function resolveCentreKinks(undersideOutline, centreOutline) {
+  if (undersideOutline.length !== centreOutline.length) return [];
+  return outlineKinkPoints(undersideOutline).map((point) => {
+    const index = undersideOutline.indexOf(point);
+    return { lineX: point.x, x: centreOutline[index].x, z: centreOutline[index].z };
+  });
+}
+
+/**
+ * A top-chord run's points on the chord centre-line (RT-4.1, spec §7.10.3):
+ * the run's OWN line offset square to its own segments (`tc / 2`, mitred at
+ * its interior kinks, plumb at its ends), so a run that stops at a kink of the
+ * whole outline (a hip slice's crown) ends on its own slope, not on the next
+ * segment's centre-line. A straight run gives the old value.
+ */
+function runCentrePoints(points, centreOutline, { tc, lift }) {
+  const runUnderside = sortedOutline(points.map((point) => ({ x: point.x, z: point.z + lift })));
+  if (runUnderside.length < 2) {
+    return points.map((point) => ({ ...point, z: sampleTrussOutlineZ(centreOutline, point.x) }));
+  }
+  const runCentre = offsetTrussOutline(runUnderside, tc / 2);
+  return points.map((point) => ({ ...point, z: sampleTrussOutlineZ(runCentre, point.x) }));
+}
+
+/**
  * Line-space profile → profile with real members (see the header comment).
  * Webs that would lie flat on the bearing line (a zero-rise hip slice) are
  * dropped: there is no depth between the chords for them.
@@ -638,11 +717,21 @@ function applyMemberGeometry(lineProfile, metrics, sizes) {
   const centreOutline = offsetTrussOutline(undersideOutline, tc / 2);
   const topFace = offsetTrussOutline(undersideOutline, tc);
   const lineNodes = new Map((lineProfile.nodes || []).map((node) => [node.id, node]));
+  // A curved chord (the domed arch) has no structural kinks: its top nodes
+  // sample the centre outline as before RT-4.1.
+  const centreKinks = lineProfile.curvedChord ? [] : resolveCentreKinks(undersideOutline, centreOutline);
 
-  const nodes = (lineProfile.nodes || []).map((node) => ({
-    ...node,
-    z: TOP_KINDS.has(node.kind) ? sampleTrussOutlineZ(centreOutline, node.x) : node.z + bc / 2,
-  }));
+  const nodes = (lineProfile.nodes || []).map((node) => {
+    if (!TOP_KINDS.has(node.kind)) return { ...node, z: node.z + bc / 2 };
+    // RT-4.1 (spec §7.10.1): a chord node at a kink sits where the two chord
+    // centre-lines meet (the mitre), so both members it joins lie exactly on
+    // their own centre-lines.
+    const kink =
+      node.kind === 'overhang'
+        ? null
+        : centreKinks.find((entry) => Math.abs(entry.lineX - node.x) <= KINK_PANEL_TOLERANCE) || null;
+    return kink ? { ...node, x: kink.x, z: kink.z } : { ...node, z: sampleTrussOutlineZ(centreOutline, node.x) };
+  });
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
 
   const members = (lineProfile.members || [])
@@ -661,9 +750,13 @@ function applyMemberGeometry(lineProfile, metrics, sizes) {
 
   if (raisedHeel > EPSILON) {
     [0, metrics.span].forEach((x, index) => {
-      const top = nodes.find(
-        (node) => node.kind !== 'overhang' && TOP_KINDS.has(node.kind) && Math.abs(node.x - x) <= 1,
-      );
+      // The heel's chord node; at a kinked heel (a flat hip slice) it sits on
+      // the centre-line mitre, a few millimetres off x (RT-4.1).
+      const top = nodes
+        .filter(
+          (node) => node.kind !== 'overhang' && TOP_KINDS.has(node.kind) && Math.abs(node.x - x) <= Math.max(1, tc),
+        )
+        .sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x))[0];
       const bottom = nodes.find((node) => node.kind === 'bottom_chord' && Math.abs(node.x - x) <= 1);
       if (!top || !bottom) return;
       members.push({
@@ -681,11 +774,7 @@ function applyMemberGeometry(lineProfile, metrics, sizes) {
 
   const topChordRuns = (lineProfile.topChordRuns || []).map((run) => ({
     ...run,
-    points: (run.points || []).map((point) => ({
-      ...point,
-      x: point.x,
-      z: sampleTrussOutlineZ(centreOutline, point.x),
-    })),
+    points: runCentrePoints(run.points || [], centreOutline, { tc, lift: bc + raisedHeel }),
     ...(run.measurementCurve
       ? { measurementCurve: { ...run.measurementCurve, zOffset: bc + raisedHeel + tc / 2 } }
       : {}),

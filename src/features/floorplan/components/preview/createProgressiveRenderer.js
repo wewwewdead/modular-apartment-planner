@@ -391,6 +391,15 @@ export function createProgressiveRenderer({ renderer, scene, camera: initialCame
       return sampleIndex;
     },
 
+    /**
+     * The target the scene itself is drawn into. A program compiled ahead of
+     * time has to be compiled against this, not the canvas: output colour space
+     * and tone mapping are part of a program's identity, and they differ.
+     */
+    getSceneRenderTarget() {
+      return composer.readBuffer;
+    },
+
     /** Where the refine has got to, for anyone who wants to show or check it. */
     getStats() {
       return {

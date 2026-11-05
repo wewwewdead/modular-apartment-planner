@@ -881,3 +881,66 @@ describe('ceiling bounce light aggregation', () => {
     expect(build([]).bounces).toEqual([]);
   });
 });
+
+/**
+ * A lighting-only edit must hand the assembly's descriptors back as the same
+ * objects, so the scene cache's `descriptorsEqual` stops at `a === b` instead
+ * of deep-comparing every board and screw head to find nothing moved.
+ */
+describe('ceiling assembly descriptor reuse', () => {
+  const isAssembly = (descriptor) => !['fixture', 'bounce'].includes(descriptor.metadata.ceilingDetailKind);
+
+  function lit(ceiling, fixtures) {
+    return { ...ceiling, detailing: { ...ceiling.detailing, lighting: { fixtures } } };
+  }
+
+  it('reuses every board, member, hanger, opening and screw descriptor across a lighting edit', () => {
+    const ceiling = beamCeiling({
+      detailing: {
+        suspension: { drop: SUPPORT_DROP },
+        openings: [{ id: 'op_1', u: 500, v: 500, width: 300, height: 300, type: 'access_hatch' }],
+      },
+    });
+    const project = createProject([ceiling]);
+    const before = buildCeilingPreviewObjects(ceiling, project, { fasteners: true });
+
+    const withLight = lit(ceiling, [{ id: 'lt_1', u: 1500, v: 1500, fixtureType: 'recessed_can_6' }]);
+    const after = buildCeilingPreviewObjects(withLight, { ...project, ceilings: [withLight] }, { fasteners: true });
+
+    const assemblyBefore = before.filter(isAssembly);
+    const assemblyAfter = after.filter(isAssembly);
+    expect(assemblyBefore.length).toBeGreaterThan(10);
+    expect(assemblyBefore.some((entry) => entry.geometry === 'fastener')).toBe(true);
+    expect(assemblyAfter).toHaveLength(assemblyBefore.length);
+    assemblyAfter.forEach((descriptor, index) => expect(descriptor).toBe(assemblyBefore[index]));
+    // The light is new, and nothing else is.
+    expect(after.filter((entry) => entry.metadata.ceilingDetailKind === 'fixture')).toHaveLength(2);
+    expect(before.filter((entry) => entry.metadata.ceilingDetailKind === 'fixture')).toHaveLength(0);
+  });
+
+  it('builds separately for each set of options that changes what is drawn', () => {
+    const ceiling = manualCeiling();
+    const project = createProject([ceiling]);
+    const screwed = buildCeilingPreviewObjects(ceiling, project, { fasteners: true });
+    const plain = buildCeilingPreviewObjects(ceiling, project, { fasteners: false });
+    const stripped = buildCeilingPreviewObjects(ceiling, project, { fasteners: true, hideBoards: true });
+
+    expect(screwed.some((entry) => entry.geometry === 'fastener')).toBe(true);
+    expect(plain.some((entry) => entry.geometry === 'fastener')).toBe(false);
+    expect(byDetailKind(stripped, 'panel')).toHaveLength(0);
+    // Asked again, each comes back as the same objects.
+    expect(buildCeilingPreviewObjects(ceiling, project, { fasteners: false })[0]).toBe(plain[0]);
+  });
+
+  it('rebuilds the assembly once the boards are re-derived', () => {
+    const ceiling = manualCeiling();
+    const project = createProject([ceiling]);
+    const before = buildCeilingPreviewObjects(ceiling, project);
+    const wider = {
+      ...ceiling,
+      detailing: { ...ceiling.detailing, face: { ...ceiling.detailing.face, boardThickness: 16 } },
+    };
+    const after = buildCeilingPreviewObjects(wider, { ...project, ceilings: [wider] });
+    expect(byDetailKind(after, 'panel')[0]).not.toBe(byDetailKind(before, 'panel')[0]);
+  });
+});

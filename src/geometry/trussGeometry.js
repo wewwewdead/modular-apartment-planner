@@ -170,6 +170,8 @@ function createCopyGeometry(trussSystem, instance, profile, layout, origin, inde
     label: profile.copyLabel || null,
     endFrameSide: profile.endFrameSide || null,
     webPatternKey: profile.webPatternKey || null,
+    // RT-4 (spec §7.9.3.3): a step-down hip slice, lower than the common truss.
+    isHipSlice: Boolean(profile.isHipSlice),
     origin,
     structuralStartPoint,
     structuralEndPoint,
@@ -272,6 +274,7 @@ function buildInstancePurlinGeometry(trussSystem, instanceGeometry, purlinSystem
         ...attachment,
         copyId: copy.id,
         copyIndex: copy.index,
+        isHipSlice: Boolean(copy.isHipSlice),
       });
     }
   }
@@ -283,32 +286,63 @@ function buildInstancePurlinGeometry(trussSystem, instanceGeometry, purlinSystem
   const purlinRuns = [];
   const purlinMarkers = [];
   const purlinSegments = [];
-  const overhangStart = Math.max(Number(purlinSystem?.overhangStart || 0), 0);
-  const overhangEnd = Math.max(Number(purlinSystem?.overhangEnd || 0), 0);
+  const purlinOverhangStart = Math.max(Number(purlinSystem?.overhangStart || 0), 0);
+  const purlinOverhangEnd = Math.max(Number(purlinSystem?.overhangEnd || 0), 0);
 
   for (const [attachmentId, attachmentPoints] of attachmentGroups.entries()) {
     const sortedPoints = [...attachmentPoints].sort((a, b) => a.copyIndex - b.copyIndex);
-    if (sortedPoints.length >= 2) {
-      const firstPoint = sortedPoints[0];
-      const lastPoint = sortedPoints[sortedPoints.length - 1];
+    // RT-4: a purlin only spans between NEIGHBOURING copies that both carry
+    // it. A copy without the seat (a lower hip slice between two flat end
+    // slices) breaks the run instead of being bridged under the roof.
+    const chains = [];
+    sortedPoints.forEach((point, index) => {
+      const chain = chains[chains.length - 1];
+      if (chain && point.copyIndex === sortedPoints[index - 1].copyIndex + 1) chain.push(index);
+      else chains.push([index]);
+    });
+
+    chains.forEach((chain, chainIndex) => {
+      const chainPoints = chain.map((index) => sortedPoints[index]);
+      const firstPoint = chainPoints[0];
+      const lastPoint = chainPoints[chainPoints.length - 1];
+      const idSuffix = chainIndex === 0 ? '' : `_${chainIndex}`;
+
+      if (chainPoints.length === 1) {
+        const marker = createPlanMarker(firstPoint.planPoint, layoutAxis);
+        purlinMarkers.push({
+          id: `${instanceGeometry.instance.id}_${attachmentId}_marker${idSuffix}`,
+          side: firstPoint.side,
+          center: firstPoint.planPoint,
+          ...marker,
+        });
+        return;
+      }
+
+      // The layout extensions belong to the run's outer ends only, and RT-4
+      // (spec §7.9.3.3): never past a hip slice — beyond it the end plane
+      // descends and the purlin would walk under it.
+      const overhangStart = chainIndex > 0 || firstPoint.isHipSlice ? 0 : purlinOverhangStart;
+      const overhangEnd = chainIndex < chains.length - 1 || lastPoint.isHipSlice ? 0 : purlinOverhangEnd;
       const runPoints = [
         ...(overhangStart > 1e-6 ? [add(firstPoint.planPoint, scale(layoutAxis, -overhangStart))] : []),
-        ...sortedPoints.map((point) => point.planPoint),
+        ...chainPoints.map((point) => point.planPoint),
         ...(overhangEnd > 1e-6 ? [add(lastPoint.planPoint, scale(layoutAxis, overhangEnd))] : []),
       ];
-      const segments = sortedPoints
+      const segments = chainPoints
         .slice(0, -1)
         .map((startPoint, index) => {
-          const endPoint = sortedPoints[index + 1];
+          const endPoint = chainPoints[index + 1];
           const startWorld =
             index === 0 ? offsetWorldPoint(startPoint.worldPoint, layoutAxis, -overhangStart) : startPoint.worldPoint;
           const endWorld =
-            index === sortedPoints.length - 2
+            index === chainPoints.length - 2
               ? offsetWorldPoint(endPoint.worldPoint, layoutAxis, overhangEnd)
               : endPoint.worldPoint;
 
           return createPurlinSegment(
-            `${instanceGeometry.instance.id}_${attachmentId}_${index}`,
+            // Indexed by the position in the whole attachment group, so an
+            // unbroken run keeps its segment ids.
+            `${instanceGeometry.instance.id}_${attachmentId}_${chain[index]}`,
             trussSystem,
             instanceGeometry.instance,
             startWorld,
@@ -321,25 +355,14 @@ function buildInstancePurlinGeometry(trussSystem, instanceGeometry, purlinSystem
         })
         .filter(Boolean);
       purlinRuns.push({
-        id: `${instanceGeometry.instance.id}_${attachmentId}_run`,
+        id: `${instanceGeometry.instance.id}_${attachmentId}_run${idSuffix}`,
         side: firstPoint.side,
         points: runPoints,
-        attachments: sortedPoints,
+        attachments: chainPoints,
         segments,
       });
       purlinSegments.push(...segments);
-      continue;
-    }
-
-    if (sortedPoints.length === 1) {
-      const marker = createPlanMarker(sortedPoints[0].planPoint, layoutAxis);
-      purlinMarkers.push({
-        id: `${instanceGeometry.instance.id}_${attachmentId}_marker`,
-        side: sortedPoints[0].side,
-        center: sortedPoints[0].planPoint,
-        ...marker,
-      });
-    }
+    });
   }
 
   return {
@@ -415,6 +438,7 @@ function transformInstanceGeometry(instanceGeometry, transform, baseElevation) {
     copies,
     layoutLineStartPoint: transformPlanPoint(instanceGeometry.instance.startPoint, transform),
     layoutLineEndPoint: transformPlanPoint(instanceGeometry.instance.endPoint, transform),
+    supportLineEndPoint: transformPlanPoint(instanceGeometry.supportLineEndPoint, transform),
     planBounds: createBounds(
       planPoints.map((point) => ({
         x: point.x,
@@ -469,6 +493,7 @@ function buildRawTrussInstanceGeometry(trussSystem, instance, context = {}) {
         purlinAttachments: copyPurlinAttachments,
         copyLabel,
         endFrameSide,
+        isHipSlice,
       },
       layout,
       copy.origin,
@@ -503,6 +528,11 @@ function buildRawTrussInstanceGeometry(trussSystem, instance, context = {}) {
     copies,
     layoutLineStartPoint: instance.startPoint,
     layoutLineEndPoint: instance.endPoint,
+    // RT-4 (spec §7.9.3.1): the far end of the SUPPORT line — `startPoint +
+    // supportLength × axis`, the second of the two points a hip slice measures
+    // its station from (`buildHipSliceProfile`). It differs from the layout
+    // line end when the copies run past it.
+    supportLineEndPoint: add(instance.startPoint, scale(layout.axis, layout.supportLength)),
     planBounds: createBounds(
       planPoints.map((point) => ({
         x: point.x,

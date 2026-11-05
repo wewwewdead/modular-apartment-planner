@@ -1,10 +1,10 @@
 /* global process, console, document */
 // The gable-end closure guard (docs/roof-truss-industrial.md §6.5, RT-2). On
 // the playground project: the playground truss is a hip, so switch its
-// instance to the Gable type first (spec §10) and press the Roof panel's
-// "Reset slope" (the playground roof stores a manual slope; RT-3.1 makes a
-// manual slope pivot on the bearings, so the pictures would show the roof
-// below the trusses near the ridge); then, in Truss mode, set End A
+// instance to the Gable type first (spec §10) and check the Roof panel's
+// Slope Source still reads "truss" (RT-4: the playground roof follows the
+// trusses as loaded, so the roof is seated on the purlins with nothing to
+// press); then, in Truss mode, set End A
 // to Open and back to Infill in the system panel's "Gable ends" section,
 // photographing the 3D preview from the Front preset each time, and click the
 // closure panel in 3D: the truss system's inspect card must read
@@ -127,15 +127,15 @@ try {
     (await typeSelect.evaluate((select) => select.value)) === 'truss_type_gable',
   );
 
-  // RT-3.1: hand the slope back to the truss, so the pictures show the
-  // designed state (the roof seated on the purlins), not the stored manual slope.
+  // RT-4 (spec §7.9.5): the playground roof follows the trusses as loaded, so
+  // the pictures show the designed state (the roof seated on the purlins)
+  // without pressing anything.
   await clickButtonText('Roof');
-  await clickButtonText('Reset slope');
   const slopeSource = await page.evaluate(() => {
     const label = [...document.querySelectorAll('label')].find((l) => l.textContent.trim() === 'Slope Source');
     return label?.nextElementSibling?.tagName === 'SELECT' ? label.nextElementSibling.value : null;
   });
-  check(`"Reset slope" hands the roof slope to the truss (Slope Source "${slopeSource}")`, slopeSource === 'truss');
+  check(`the roof slope follows the truss (Slope Source "${slopeSource}")`, slopeSource === 'truss');
   await clickButtonText('Truss');
 
   // 2. The system panel's Gable ends section, End A infilled by default.

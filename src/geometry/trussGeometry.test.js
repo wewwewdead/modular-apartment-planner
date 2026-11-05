@@ -125,6 +125,76 @@ describe('gable end frames and labels (RT-3, spec §7.3, §7.5)', () => {
   });
 });
 
+// RT-4 (spec §7.9.3.3): the copy geometry says which copies are step-down hip
+// slices, so the purlin builder can stop its layout extension at them.
+describe('hip slice flags (RT-4)', () => {
+  it('flags the H copies of a hip and nothing else', () => {
+    // Layout 0 → 12 000 at 1200: slices at 0 / 1200 / 2400 from each end
+    // (span 7200, so the copies from 3600 to 8400 are full gables).
+    const hip = gableSystem(
+      {},
+      { trussTypeId: 'truss_type_hip', rise: 900, spacing: 1200, count: 11, endPoint: { x: 12000, y: 0 } },
+    );
+    const copies = buildTrussSystemGeometry(hip).instances[0].copies;
+    expect(copies.map((copy) => copy.label)).toEqual([
+      'H1',
+      'H2',
+      'H3',
+      'T1',
+      'T1',
+      'T1',
+      'T1',
+      'T1',
+      'H3',
+      'H2',
+      'H1',
+    ]);
+    expect(copies.map((copy) => copy.isHipSlice)).toEqual([
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+    ]);
+  });
+
+  it('never bridges a purlin across copies that do not carry it', () => {
+    // The two H1 flat slices share their seat ids ('main_*'); nothing between
+    // them carries those seats, so each is a plan marker, not a 12 m purlin
+    // run under the whole roof.
+    const hip = gableSystem(
+      { purlinSystem: { enabled: true, depth: 50, width: 75, spacing: 900 } },
+      { trussTypeId: 'truss_type_hip', rise: 900, spacing: 1200, count: 11, endPoint: { x: 12000, y: 0 } },
+    );
+    const instance = buildTrussSystemGeometry(hip).instances[0];
+    const indexById = new Map(instance.copies.map((copy) => [copy.id, copy.index]));
+    expect(instance.purlinSegments.length).toBeGreaterThan(0);
+    for (const segment of instance.purlinSegments) {
+      const [a, b] = segment.copyIds.map((id) => indexById.get(id));
+      expect(b - a).toBe(1);
+    }
+    const flatSeats = instance.copies[0].purlinAttachments.map((attachment) => attachment.id);
+    expect(flatSeats.length).toBeGreaterThan(0);
+    expect(flatSeats.every((id) => id.startsWith('main_'))).toBe(true);
+    for (const id of flatSeats) {
+      const markers = instance.purlinMarkers.filter((marker) => marker.id.startsWith(`ti_1_${id}_marker`));
+      expect(markers.map((marker) => marker.center.x)).toEqual([0, 12000]);
+    }
+  });
+
+  it('never flags a gable copy or its GE end frames', () => {
+    const copies = buildTrussSystemGeometry(gableSystem()).instances[0].copies;
+    expect(copies.map((copy) => copy.label)).toEqual(['GE', 'T1', 'T1', 'T1', 'GE']);
+    expect(copies.every((copy) => copy.isHipSlice === false)).toBe(true);
+  });
+});
+
 describe('truss detail scene (RT-3, spec §7.5)', () => {
   it('draws members with their depth and tags the heel, overall height and sizes', () => {
     const scene = buildTrussDetailScene(gableSystem());

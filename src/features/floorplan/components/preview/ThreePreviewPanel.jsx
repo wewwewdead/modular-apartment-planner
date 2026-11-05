@@ -4,7 +4,9 @@ import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { buildPreviewScene } from '@/three/scene/buildPreviewScene';
 import { buildSelectionOverlay } from './buildPreviewObjects';
 import { createPreviewSceneCache } from './previewSceneCache';
+import { resolveLightPoolPolicy } from './fixtureLightPool';
 import { createPreviewViewport } from './createPreviewViewport';
+import { previewPickHit } from './previewPick';
 import { getOrderedFloors } from '@/domain/floorModels';
 import { getPreviewInspection } from './previewInspection';
 import { resolveWalkFloorContext } from './resolveWalkFloorContext';
@@ -126,6 +128,10 @@ function ThreePreviewPanel({
   const resizeObserverRef = useRef(null);
   const compassNeedleRef = useRef(null);
   const sceneCacheRef = useRef(null);
+  // Read once, at mount, like the look: the scene cache is built with it and
+  // lives as long as the viewport does. An assembly editor's pane is pre-warmed
+  // for its first lamps; the model views pay nothing until they have one.
+  const lightPoolKindRef = useRef(assemblyDriven ? 'assembly' : 'model');
   const [previewScope, setPreviewScope] = useState('all');
   const [navigationMode, setNavigationMode] = useState('inspect');
   const [renderStyle, setRenderStyle] = useState(readRenderStylePreference);
@@ -229,13 +235,15 @@ function ThreePreviewPanel({
     [activeFloorId, editorDispatch, orderedFloors],
   );
   const handlePreviewPick = useCallback(
-    (target) => {
+    (target, hit) => {
       // Inside an assembly editor a click is about the piece of material, not
       // about the wall or ceiling it belongs to, and the plan's selection is no
       // business of this pane. A part-less mesh there — the odd support beam
       // kept for context — clears the selection rather than selecting the beam.
+      // The second argument says where the click landed, in plan terms, for an
+      // editor that places things from here (the ceiling editor's Light tool).
       if (assemblyDriven) {
-        onAssemblyPick?.(target?.part || null);
+        onAssemblyPick?.(target?.part || null, previewPickHit(target, hit));
         return;
       }
 
@@ -258,7 +266,7 @@ function ThreePreviewPanel({
 
     const viewport = createPreviewViewport(containerRef.current, { look: lookRef.current });
     viewportRef.current = viewport;
-    sceneCacheRef.current = createPreviewSceneCache();
+    sceneCacheRef.current = createPreviewSceneCache({ lightPool: resolveLightPoolPolicy(lightPoolKindRef.current) });
 
     if ('ResizeObserver' in window) {
       const observer = new ResizeObserver(() => {
@@ -407,9 +415,9 @@ function ThreePreviewPanel({
       // Incremental build: reuse THREE groups for floors whose source geometry is
       // unchanged (immutable reducer updates preserve floor object identity), and
       // only rebuild floors that actually changed.
-      const { root, batchRoot, meshMap } = sceneCache.build(sceneDescriptor, viewport.materialPalette);
+      const { root, batchRoot, meshMap, lightsChanged } = sceneCache.build(sceneDescriptor, viewport.materialPalette);
       meshMapRef.current = meshMap;
-      viewport.setWorld(root, sceneDescriptor.bounds, sceneDescriptor.groundLevel, { batchRoot });
+      viewport.setWorld(root, sceneDescriptor.bounds, sceneDescriptor.groundLevel, { batchRoot, lightsChanged });
       setSceneBuildId((id) => id + 1);
     };
 

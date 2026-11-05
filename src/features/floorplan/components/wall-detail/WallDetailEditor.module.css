@@ -587,6 +587,10 @@
   overflow: hidden;
   border-top: 1px solid #43515c;
 }
+/* The ceiling editor's Light tool places from the 3D pane too: say so with the cursor. */
+.previewPane[data-light-armed='true'] canvas {
+  cursor: crosshair;
+}
 .wallPreviewPanel {
   border-left: 0;
 }
@@ -932,10 +936,17 @@
 .canvasFrame[data-panning='true'] .canvas {
   cursor: grabbing;
 }
+/* Every tool that places or draws at the pointer. The wall editor's own ids
+   and the ceiling RCP's (which shares this sheet) are listed together; a tool
+   missing here leaves the default arrow, which reads as "nothing will happen". */
 .canvas[data-tool='draw_panel'],
 .canvas[data-tool='trace_panel'],
 .canvas[data-tool='draw_stud'],
 .canvas[data-tool='draw_noggin'],
+.canvas[data-tool='draw_furring'],
+.canvas[data-tool='draw_carrier'],
+.canvas[data-tool='draw_opening'],
+.canvas[data-tool='add_light'],
 .canvas[data-tool='add_fastener'],
 .canvas[data-tool='draw_dimension'] {
   cursor: crosshair;

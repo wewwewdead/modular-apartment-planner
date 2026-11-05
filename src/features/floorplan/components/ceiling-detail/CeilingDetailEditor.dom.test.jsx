@@ -9,9 +9,15 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
-import { createBeam, createFloor } from '@/domain/models';
-import { createCeiling, deriveCeilingHangers, deriveCeilingPanels } from '@/domain/ceilingModels';
+import { createBeam, createFloor, createRoom } from '@/domain/models';
+import {
+  createCeiling,
+  deriveCeilingHangers,
+  deriveCeilingPanels,
+  resolveCeilingLocalSpace,
+} from '@/domain/ceilingModels';
 import CeilingDetailEditor from './CeilingDetailEditor';
+import { COORDINATION_SETTLE_DELAY_MS } from './useDeferredCoordination';
 
 const BOUNDARY = [
   { x: 0, y: 0 },
@@ -37,6 +43,26 @@ vi.mock('@/features/floorplan/context/FloorplanContext', () => ({
 // suite out of WebGL while still recording what the editor asks of it — which is
 // the whole of the highlight contract between the two panes.
 const previewProps = { current: null, pick: null };
+// Every plan layer is passed through untouched, except that the screw and
+// light layers count their renders: placing a light must re-render the light
+// layer and leave the two thousand screws alone, which DOM identity alone
+// cannot show (React keeps the nodes either way).
+const layerRenders = vi.hoisted(() => ({ screws: 0, fixtures: 0 }));
+vi.mock('./CeilingPlanLayers', async (importOriginal) => {
+  const actual = await importOriginal();
+  const { memo } = await import('react');
+  const counted = (layer, key) =>
+    memo(function CountedLayer(props) {
+      layerRenders[key] += 1;
+      return layer.type(props);
+    });
+  return {
+    ...actual,
+    CeilingScrewLayer: counted(actual.CeilingScrewLayer, 'screws'),
+    CeilingFixtureLayer: counted(actual.CeilingFixtureLayer, 'fixtures'),
+  };
+});
+
 vi.mock('@/features/floorplan/components/preview/ThreePreviewPanel', () => ({
   default: (props) => {
     previewProps.current = props;
@@ -87,6 +113,7 @@ function mountManualCeiling(options = {}) {
     attachment: { mode: 'manual', beamIds: [] },
     detailing: options.detailing,
   });
+  if (options.rooms) floor.rooms = options.rooms;
   mocks.project = { id: 'project', floors: [floor], ceilings: [ceiling], trussSystems: [] };
   mocks.editor = { ceilingDetailEditor: { ceilingId: ceiling.id } };
   return { ceiling, floor, ...render(<CeilingDetailEditor />) };
@@ -1018,5 +1045,419 @@ describe('panel trace pointer mapping', () => {
     const preview = container.querySelector('polyline[stroke="#ffb85c"]');
     expect(preview).not.toBeNull();
     expect(preview.getAttribute('points')).toBe('1000,1000 3000,1000');
+  });
+});
+
+/**
+ * The Light tool, before and after the click: a crosshair, a ghost of the
+ * chosen luminaire where it will land, guides for what it lined up with, a chip
+ * naming the room, the board and the spacing — and a commit that leaves the
+ * coordination models to catch up once the editor goes idle.
+ */
+describe('placing a light', () => {
+  // 600 × 400 px over the 6000 × 4000 mm ceiling: 10 mm per px, V up from the
+  // bottom. clientX 100 is U 1000; clientY 300 is V 1000.
+  const CANVAS = { left: 0, top: 0, width: 600, height: 400, right: 600, bottom: 400 };
+  const LIVING = () =>
+    createRoom('Living room', [
+      { x: 0, y: 0 },
+      { x: 6000, y: 0 },
+      { x: 6000, y: 4000 },
+      { x: 0, y: 4000 },
+    ]);
+
+  function mountForLights(fixtures = []) {
+    const mounted = mountManualCeiling({ beamless: true, rooms: [LIVING()], detailing: { lighting: { fixtures } } });
+    const svg = mounted.container.querySelector('svg[data-tool]');
+    svg.setPointerCapture = () => {};
+    svg.releasePointerCapture = () => {};
+    svg.getBoundingClientRect = () => CANVAS;
+    return { ...mounted, svg };
+  }
+
+  const toScreen = ({ u, v }) => ({ clientX: u / 10, clientY: (4000 - v) / 10 });
+  const pressKey = (key) => fireEvent.keyDown(window, { key });
+  const chipText = (container) =>
+    Array.from(container.querySelectorAll('svg[data-tool] text'))
+      .map((node) => node.textContent)
+      .join(' | ');
+
+  /** Feed the last CEILING_UPDATE back in, as the store would. */
+  function commitLastUpdate(rerender) {
+    const action = mocks.dispatch.mock.calls.filter(([entry]) => entry.type === 'CEILING_UPDATE').at(-1)[0];
+    mocks.project = {
+      ...mocks.project,
+      ceilings: mocks.project.ceilings.map((entry) =>
+        entry.id === action.ceiling.id ? { ...entry, ...action.ceiling } : entry,
+      ),
+    };
+    rerender(<CeilingDetailEditor />);
+    return action;
+  }
+
+  beforeEach(() => {
+    layerRenders.screws = 0;
+    layerRenders.fixtures = 0;
+  });
+
+  it('arms with L: crosshair tool, its own options strip sharing the Lighting picker', () => {
+    const { container, svg } = mountForLights();
+    pressKey('l');
+
+    expect(svg.getAttribute('data-tool')).toBe('add_light');
+    const strip = container.querySelector('[data-tool-options="add_light"]');
+    expect(strip).not.toBeNull();
+    const stripSelect = strip.querySelector('select');
+    fireEvent.change(stripSelect, { target: { value: 'troffer_2x4' } });
+    // One state behind both pickers.
+    expect(selectField(container, 'New light type').value).toBe('troffer_2x4');
+
+    pressKey('v');
+    expect(container.querySelector('[data-tool-options="add_light"]')).toBeNull();
+  });
+
+  it('shows a ghost of the chosen type under the pointer, and drops it on a tool change', () => {
+    const { container, svg } = mountForLights();
+    pressKey('l');
+    fireEvent.change(container.querySelector('[data-tool-options="add_light"] select'), {
+      target: { value: 'troffer_2x4' },
+    });
+    fireEvent.pointerMove(svg, { pointerId: 1, clientX: 333, clientY: 177 });
+
+    const ghost = container.querySelector('[data-light-ghost]');
+    expect(ghost).not.toBeNull();
+    expect(ghost.getAttribute('data-light-ghost')).toBe('troffer_2x4');
+    // A troffer is the catalog's one rectangular luminaire, drawn at its size.
+    expect(ghost.querySelector('rect')).not.toBeNull();
+    expect(ghost.getAttribute('opacity')).toBe('0.6');
+    expect(ghost.getAttribute('stroke-dasharray')).toBe('4 3');
+
+    pressKey('v');
+    expect(container.querySelector('[data-light-ghost]')).toBeNull();
+  });
+
+  it('names the room, the board and the spacing in the chip', () => {
+    const { container, svg, ceiling } = mountForLights([{ id: 'light_a', u: 1000, v: 1000 }]);
+    pressKey('l');
+
+    const board = deriveCeilingPanels(ceiling, mocks.project)[1];
+    const centre = { u: (board.u0 + board.u1) / 2, v: (board.v0 + board.v1) / 2 };
+    fireEvent.pointerMove(svg, { pointerId: 1, ...toScreen({ u: centre.u + 20, v: centre.v - 20 }) });
+    expect(chipText(container)).toContain('Living room');
+    expect(chipText(container)).toContain(`Board ${board.label} · centre`);
+
+    // In line with the light already up, 1,500 mm along its U line.
+    fireEvent.pointerMove(svg, { pointerId: 1, ...toScreen({ u: 1030, v: 2500 }) });
+    expect(chipText(container)).toContain('In line with Light 1 · 1,500 mm');
+    expect(container.querySelector('[data-light-guide="u"]')?.getAttribute('x1')).toBe('1000');
+  });
+
+  it('commits one fixture where the ghost was, deferred, and settles the models when idle', () => {
+    vi.useFakeTimers();
+    try {
+      const { svg } = mountForLights([{ id: 'light_a', u: 1000, v: 1000 }]);
+      pressKey('l');
+      const at = { pointerId: 1, button: 0, ...toScreen({ u: 1030, v: 2500 }) };
+      fireEvent.pointerMove(svg, at);
+      fireEvent.pointerDown(svg, at);
+      // Placed on release now, so a press can become a row (§5.1).
+      expect(mocks.dispatch.mock.calls.some(([action]) => action.type === 'CEILING_UPDATE')).toBe(false);
+      fireEvent.pointerUp(svg, at);
+
+      const updates = mocks.dispatch.mock.calls.filter(([action]) => action.type === 'CEILING_UPDATE');
+      expect(updates).toHaveLength(1);
+      expect(updates[0][0].coordination).toBe('defer');
+      const fixtures = updates[0][0].ceiling.detailing.lighting.fixtures;
+      expect(fixtures).toHaveLength(2);
+      expect(fixtures[1]).toMatchObject({ u: 1000, v: 2500, fixtureType: 'recessed_can_6' });
+
+      expect(mocks.dispatch).not.toHaveBeenCalledWith({ type: 'END_DRAG_GESTURE', settleDeferred: true });
+      act(() => vi.advanceTimersByTime(COORDINATION_SETTLE_DELAY_MS));
+      expect(mocks.dispatch).toHaveBeenCalledWith({ type: 'END_DRAG_GESTURE', settleDeferred: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('settles a pending deferral when the editor goes away', () => {
+    const { svg, unmount } = mountForLights();
+    pressKey('l');
+    fireEvent.pointerDown(svg, { pointerId: 1, button: 0, clientX: 200, clientY: 200 });
+    fireEvent.pointerUp(svg, { pointerId: 1, button: 0, clientX: 200, clientY: 200 });
+    expect(mocks.dispatch).not.toHaveBeenCalledWith({ type: 'END_DRAG_GESTURE', settleDeferred: true });
+    unmount();
+    expect(mocks.dispatch).toHaveBeenCalledWith({ type: 'END_DRAG_GESTURE', settleDeferred: true });
+  });
+
+  it('re-renders the light layer and leaves the screw layer alone when a light is placed', () => {
+    const { container, svg, rerender } = mountForLights();
+    pressKey('l');
+    const screwsBefore = layerRenders.screws;
+    const fixturesBefore = layerRenders.fixtures;
+    // The counter is live: the layer rendered when the editor mounted.
+    expect(screwsBefore).toBeGreaterThan(0);
+    const screwNode = Array.from(container.querySelectorAll('title')).find((node) =>
+      node.textContent.startsWith('Screw'),
+    ).parentElement;
+
+    fireEvent.pointerMove(svg, { pointerId: 1, clientX: 250, clientY: 150 });
+    fireEvent.pointerDown(svg, { pointerId: 1, button: 0, clientX: 250, clientY: 150 });
+    fireEvent.pointerUp(svg, { pointerId: 1, button: 0, clientX: 250, clientY: 150 });
+    commitLastUpdate(rerender);
+
+    expect(container.querySelectorAll('g[data-fixture-id]')).toHaveLength(1);
+    expect(layerRenders.fixtures).toBeGreaterThan(fixturesBefore);
+    expect(layerRenders.screws).toBe(screwsBefore);
+    expect(container.contains(screwNode)).toBe(true);
+  });
+
+  it('drags a placed light as its ghost, with guides and the chip, instead of a dot', () => {
+    const { container, svg } = mountForLights([
+      { id: 'light_a', u: 1000, v: 1000 },
+      { id: 'light_b', u: 3000, v: 1000 },
+    ]);
+    const at = { pointerId: 1, button: 0, ...toScreen({ u: 3000, v: 1000 }) };
+    fireEvent.pointerDown(container.querySelector('g[data-fixture-id="light_b"]'), at);
+    fireEvent.pointerMove(svg, { ...at, ...toScreen({ u: 3500, v: 1030 }) });
+
+    expect(container.querySelector('[data-light-ghost="recessed_can_6"]')).not.toBeNull();
+    // On light A's V line, so the ghost is guided along it.
+    expect(container.querySelector('[data-light-guide="v"]')?.getAttribute('y1')).toBe('1000');
+    expect(chipText(container)).toContain('In line with Light 1 · 2,500 mm');
+    expect(container.querySelector('circle[fill="#ffd166"]')).toBeNull();
+
+    fireEvent.pointerUp(svg, { ...at, ...toScreen({ u: 3500, v: 1030 }) });
+    const moved = mocks.dispatch.mock.calls.at(-1)[0];
+    expect(moved.coordination).toBe('defer');
+    expect(moved.ceiling.detailing.lighting.fixtures[1]).toMatchObject({ id: 'light_b', u: 3500, v: 1000 });
+  });
+
+  it('draws the floor plan under the boards, room names included, and hides it with its toggle', () => {
+    const { container } = mountForLights();
+
+    const underlay = container.querySelectorAll('[data-plan-underlay]');
+    expect(underlay.length).toBe(2);
+    expect(container.querySelector('[data-plan-underlay="labels"]').textContent).toContain('Living room');
+    expect(container.querySelector('[data-plan-underlay="plan"] polygon')).not.toBeNull();
+
+    const toggle = Array.from(container.querySelectorAll('label')).find(
+      (node) => node.textContent.trim() === 'Plan' && node.querySelector('input[type="checkbox"]'),
+    );
+    expect(toggle.querySelector('input').checked).toBe(true);
+    fireEvent.click(toggle.querySelector('input'));
+    expect(container.querySelectorAll('[data-plan-underlay]')).toHaveLength(0);
+  });
+
+  /*
+   * §5.1 — a press can become a row or a grid. The points below are on the
+   * 50 mm grid and clear of every board and room centre's 12 px reach, so the
+   * ends land exactly where they are put.
+   */
+  const ceilingUpdates = () => mocks.dispatch.mock.calls.filter(([action]) => action.type === 'CEILING_UPDATE');
+  const addedFixtures = (update) => update[0].ceiling.detailing.lighting.fixtures.map(({ u, v }) => ({ u, v }));
+  const A = { u: 1000, v: 1000 };
+  const ROW_END = { u: 4000, v: 1000 };
+  const GRID_END = { u: 4000, v: 3000 };
+
+  it('drags a row: ↑ adds a light, the ghosts and the chip say so, and release commits them in one update', () => {
+    const { container, svg } = mountForLights();
+    pressKey('l');
+    fireEvent.pointerDown(svg, { pointerId: 1, button: 0, ...toScreen(A) });
+    fireEvent.pointerMove(svg, { pointerId: 1, ...toScreen(ROW_END) });
+
+    const run = () => container.querySelector('[data-light-run="row"]');
+    expect(run()).not.toBeNull();
+    expect(run().querySelectorAll('[data-light-ghost]')).toHaveLength(2);
+    expect(chipText(container)).toContain('2 × 3,000 mm');
+
+    pressKey('ArrowUp');
+    expect(run().getAttribute('data-light-count')).toBe('3');
+    // Only the run's ghosts: the single hover ghost is not drawn while it is live.
+    expect(container.querySelectorAll('[data-light-ghost]')).toHaveLength(3);
+    expect(run().querySelectorAll('[data-light-ghost]')).toHaveLength(3);
+    expect(chipText(container)).toContain('Living room');
+    expect(chipText(container)).toContain('3 × 1,500 mm');
+    expect(ceilingUpdates()).toHaveLength(0);
+
+    fireEvent.pointerUp(svg, { pointerId: 1, button: 0, ...toScreen(ROW_END) });
+    const updates = ceilingUpdates();
+    expect(updates).toHaveLength(1);
+    expect(updates[0][0].coordination).toBe('defer');
+    expect(addedFixtures(updates[0])).toEqual([A, { u: 2500, v: 1000 }, ROW_END]);
+    expect(container.querySelector('[data-light-run]')).toBeNull();
+  });
+
+  it('↓ never takes a row below two, and the last light of the run is the one selected', () => {
+    const { container, svg, rerender } = mountForLights();
+    pressKey('l');
+    fireEvent.pointerDown(svg, { pointerId: 1, button: 0, ...toScreen(A) });
+    fireEvent.pointerMove(svg, { pointerId: 1, ...toScreen(ROW_END) });
+    pressKey('ArrowDown');
+    expect(container.querySelector('[data-light-run="row"]').getAttribute('data-light-count')).toBe('2');
+    fireEvent.pointerUp(svg, { pointerId: 1, button: 0, ...toScreen(ROW_END) });
+    const action = commitLastUpdate(rerender);
+    const placed = action.ceiling.detailing.lighting.fixtures;
+    expect(placed).toHaveLength(2);
+    expect(container.querySelector(`g[data-fixture-id="${placed[1].id}"]`).getAttribute('data-selected')).toBe('true');
+  });
+
+  it('drags a grid with Shift held: 2 × 2 by default, committed in one update', () => {
+    const { container, svg } = mountForLights();
+    pressKey('l');
+    fireEvent.pointerDown(svg, { pointerId: 1, button: 0, shiftKey: true, ...toScreen(A) });
+    fireEvent.pointerMove(svg, { pointerId: 1, shiftKey: true, ...toScreen(GRID_END) });
+
+    const grid = container.querySelector('[data-light-run="grid"]');
+    expect(grid).not.toBeNull();
+    expect(grid.querySelectorAll('[data-light-ghost]')).toHaveLength(4);
+    expect(grid.querySelector('rect[stroke="#ffb85c"]')).not.toBeNull();
+    expect(chipText(container)).toContain('2 × 2 · 3,000 × 2,000 mm');
+
+    fireEvent.pointerUp(svg, { pointerId: 1, button: 0, shiftKey: true, ...toScreen(GRID_END) });
+    const updates = ceilingUpdates();
+    expect(updates).toHaveLength(1);
+    expect(addedFixtures(updates[0])).toEqual([A, { u: 4000, v: 1000 }, { u: 1000, v: 3000 }, GRID_END]);
+  });
+
+  it('→ adds a column to the grid: 3 × 2', () => {
+    const { container, svg } = mountForLights();
+    pressKey('l');
+    fireEvent.pointerDown(svg, { pointerId: 1, button: 0, shiftKey: true, ...toScreen(A) });
+    fireEvent.pointerMove(svg, { pointerId: 1, shiftKey: true, ...toScreen(GRID_END) });
+    pressKey('ArrowRight');
+    expect(container.querySelector('[data-light-run="grid"]').getAttribute('data-light-count')).toBe('6');
+    expect(chipText(container)).toContain('3 × 2 · 1,500 × 2,000 mm');
+
+    fireEvent.pointerUp(svg, { pointerId: 1, button: 0, shiftKey: true, ...toScreen(GRID_END) });
+    const updates = ceilingUpdates();
+    expect(updates).toHaveLength(1);
+    expect(addedFixtures(updates[0])).toEqual([
+      A,
+      { u: 2500, v: 1000 },
+      { u: 4000, v: 1000 },
+      { u: 1000, v: 3000 },
+      { u: 2500, v: 3000 },
+      GRID_END,
+    ]);
+  });
+
+  it('turns a row into a grid while Shift is down, and back when it comes up', () => {
+    const { container, svg } = mountForLights();
+    pressKey('l');
+    fireEvent.pointerDown(svg, { pointerId: 1, button: 0, ...toScreen(A) });
+    fireEvent.pointerMove(svg, { pointerId: 1, ...toScreen(GRID_END) });
+    expect(container.querySelector('[data-light-run="row"]')).not.toBeNull();
+
+    pressKey('Shift');
+    expect(container.querySelector('[data-light-run="grid"]')).not.toBeNull();
+    fireEvent.keyUp(window, { key: 'Shift' });
+    expect(container.querySelector('[data-light-run="row"]')).not.toBeNull();
+  });
+
+  it('still places one light for a press and release that hardly moves', () => {
+    const { container, svg } = mountForLights();
+    pressKey('l');
+    fireEvent.pointerDown(svg, { pointerId: 1, button: 0, ...toScreen(A) });
+    // 4 px of travel is a click, not a drag (the threshold is 6 px).
+    const near = { pointerId: 1, button: 0, clientX: toScreen(A).clientX + 4, clientY: toScreen(A).clientY };
+    fireEvent.pointerMove(svg, near);
+    // Not yet a run: the plan still shows the one hover ghost, and nothing is committed.
+    expect(container.querySelector('[data-light-run]')).toBeNull();
+    expect(container.querySelectorAll('[data-light-ghost]')).toHaveLength(1);
+    expect(ceilingUpdates()).toHaveLength(0);
+    fireEvent.pointerUp(svg, near);
+    const updates = ceilingUpdates();
+    expect(updates).toHaveLength(1);
+    expect(addedFixtures(updates[0])).toEqual([A]);
+  });
+
+  it('Escape mid-drag places nothing and keeps the Light tool armed', () => {
+    const { container, svg } = mountForLights();
+    pressKey('l');
+    fireEvent.pointerDown(svg, { pointerId: 1, button: 0, ...toScreen(A) });
+    fireEvent.pointerMove(svg, { pointerId: 1, ...toScreen(ROW_END) });
+    pressKey('ArrowUp');
+    pressKey('Escape');
+    expect(container.querySelector('[data-light-run]')).toBeNull();
+    fireEvent.pointerUp(svg, { pointerId: 1, button: 0, ...toScreen(ROW_END) });
+    expect(ceilingUpdates()).toHaveLength(0);
+
+    // A press that has not moved yet is cancelled the same way.
+    fireEvent.pointerDown(svg, { pointerId: 1, button: 0, ...toScreen(A) });
+    pressKey('Escape');
+    fireEvent.pointerUp(svg, { pointerId: 1, button: 0, ...toScreen(A) });
+
+    expect(ceilingUpdates()).toHaveLength(0);
+    expect(svg.getAttribute('data-tool')).toBe('add_light');
+  });
+
+  /*
+   * §5.2 — placing from the Live 3D pane. The hit arrives in plan millimetres
+   * (`previewPickHit`); the editor maps it into the ceiling's UV frame.
+   */
+  const paneHit = (ceiling, plan) => ({ plan, elevation: 2700, kind: 'ceiling', sourceId: ceiling.id });
+
+  it('with the Light tool armed, a click on a board in the pane places a light at the hit, snapped', () => {
+    const { container, ceiling } = mountForLights();
+    const pane = () => container.querySelector('[aria-label="Live ceiling assembly 3D preview"]');
+    expect(pane().hasAttribute('data-light-armed')).toBe(false);
+    pressKey('l');
+    expect(pane().getAttribute('data-light-armed')).toBe('true');
+    expect(pane().textContent).toContain('Light tool armed: click a board here to place a light');
+
+    const space = resolveCeilingLocalSpace(ceiling, mocks.project);
+    // A free point, so the 50 mm grid takes it.
+    const plan = { x: 1012, y: 2994 };
+    const local = space.toLocal(plan);
+    act(() => previewProps.pick({ kind: 'panel', id: 'grid-c0-r0', side: null }, paneHit(ceiling, plan)));
+
+    const updates = ceilingUpdates();
+    expect(updates).toHaveLength(1);
+    expect(updates[0][0].coordination).toBe('defer');
+    expect(addedFixtures(updates[0])).toEqual([{ u: Math.round(local.u / 50) * 50, v: Math.round(local.v / 50) * 50 }]);
+    // Selected, like a light placed on the plan.
+    expect(previewProps.current.assemblySelection).toEqual({
+      kind: 'fixture',
+      id: updates[0][0].ceiling.detailing.lighting.fixtures[0].id,
+    });
+  });
+
+  it('snaps a pane click to a board centre within 150 mm, not 12 px', () => {
+    const { ceiling } = mountForLights();
+    pressKey('l');
+    const board = deriveCeilingPanels(ceiling, mocks.project)[1];
+    const centre = { u: (board.u0 + board.u1) / 2, v: (board.v0 + board.v1) / 2 };
+    const space = resolveCeilingLocalSpace(ceiling, mocks.project);
+    const plan = space.toPlan({ u: centre.u + 90, v: centre.v - 90 });
+    act(() => previewProps.pick({ kind: 'panel', id: board.localId, side: null }, paneHit(ceiling, plan)));
+    expect(addedFixtures(ceilingUpdates()[0])).toEqual([centre]);
+  });
+
+  it('with the Light tool armed, the pane still selects a light, ignores a hanger and clears on a miss', () => {
+    const { ceiling } = mountForLights([{ id: 'light_a', u: 1000, v: 1000 }]);
+    pressKey('l');
+    const hit = paneHit(ceiling, { x: 1000, y: 3000 });
+
+    act(() => previewProps.pick({ kind: 'fixture', id: 'light_a', side: null }, hit));
+    expect(previewProps.current.assemblySelection).toEqual({ kind: 'fixture', id: 'light_a' });
+    act(() => previewProps.pick({ kind: 'hanger', id: 'h1', side: null }, hit));
+    expect(previewProps.current.assemblySelection).toEqual({ kind: 'fixture', id: 'light_a' });
+    // A board of some other ceiling, seen for context, is not this one's to light.
+    act(() => previewProps.pick({ kind: 'panel', id: 'p9', side: null }, { ...hit, sourceId: 'other_ceiling' }));
+    expect(ceilingUpdates()).toHaveLength(0);
+    act(() => previewProps.pick(null, null));
+    expect(previewProps.current.assemblySelection).toBeNull();
+    expect(ceilingUpdates()).toHaveLength(0);
+  });
+
+  it('with the Select tool, the same board pick selects the board and places nothing', () => {
+    const { container, ceiling } = mountForLights();
+    act(() =>
+      previewProps.pick({ kind: 'panel', id: 'grid-c0-r0', side: null }, paneHit(ceiling, { x: 1012, y: 2994 })),
+    );
+    expect(previewProps.current.assemblySelection).toEqual({ kind: 'panel', id: 'grid-c0-r0' });
+    expect(ceilingUpdates()).toHaveLength(0);
+    const pane = container.querySelector('[aria-label="Live ceiling assembly 3D preview"]');
+    expect(pane.hasAttribute('data-light-armed')).toBe(false);
   });
 });

@@ -3,7 +3,9 @@ import { createBeam, createColumn, createFloor, createWall } from '@/domain/mode
 import {
   ceilingElevationRange,
   createCeiling,
+  createCeilingDetailing,
   createCeilingForProject,
+  createCeilingLightFixture,
   deriveCeilingDetail,
   resolveCeilingBoundary,
   resolveCeilingElevations,
@@ -323,6 +325,62 @@ describe('the slab a ceiling closes off travels with the preview', () => {
 
 // The preview only ever contains what the RCP's own cutouts were traced around,
 // so the two panes of the editor cannot disagree about the shape of a board.
+describe('the preview floors hold their identity while nothing under them changes', () => {
+  // The RCP editor rebuilds the preview project on every commit, and both the
+  // ceiling assembly cache and the 3D scene cache validate on floor identity.
+  function stackedWithLight() {
+    const ground = createFloor('Ground', 0, { elevation: 0, floorToFloorHeight: 3200 });
+    ground.walls = [createWall({ x: 0, y: 0 }, { x: 6000, y: 0 }, 100, { height: 3200 })];
+    const upper = createFloor('First', 1, { elevation: 3200, floorToFloorHeight: 3200 });
+    upper.slabs = [
+      {
+        id: 'slab_above',
+        floorId: upper.id,
+        elevation: 3200,
+        thickness: 200,
+        boundaryPoints: [
+          { x: 0, y: 0 },
+          { x: 6000, y: 0 },
+          { x: 6000, y: 4000 },
+          { x: 0, y: 4000 },
+        ],
+      },
+    ];
+    const project = { id: 'project', floors: [ground, upper], ceilings: [], trussSystems: [] };
+    const ceiling = createCeilingForProject(project, { floorId: ground.id, attachment: { mode: 'manual' } });
+    project.ceilings = [ceiling];
+    return { project, ceiling, ground };
+  }
+
+  it('hands back the same stripped floors for a lighting-only edit', () => {
+    const { project, ceiling } = stackedWithLight();
+    const before = createCeilingDetailPreviewProject(project, ceiling.id);
+    const lit = {
+      ...ceiling,
+      detailing: createCeilingDetailing({
+        ...ceiling.detailing,
+        lighting: { fixtures: [createCeilingLightFixture({ u: 1000, v: 1000 })] },
+      }),
+    };
+    const after = createCeilingDetailPreviewProject({ ...project, ceilings: [lit] }, ceiling.id);
+
+    expect(before.floors).toHaveLength(2);
+    expect(after.floors[0]).toBe(before.floors[0]);
+    expect(after.floors[1]).toBe(before.floors[1]);
+    expect(after.ceilings[0]).toBe(lit);
+  });
+
+  it('builds a new stripped floor when the structure it carries changes', () => {
+    const { project, ceiling, ground } = stackedWithLight();
+    const before = createCeilingDetailPreviewProject(project, ceiling.id);
+    const moved = { ...ground, walls: [createWall({ x: 0, y: 500 }, { x: 6000, y: 500 }, 100, { height: 3200 })] };
+    const after = createCeilingDetailPreviewProject({ ...project, floors: [moved, project.floors[1]] }, ceiling.id);
+
+    expect(after.floors[0]).not.toBe(before.floors[0]);
+    expect(after.floors[0].walls[0]).toBe(moved.walls[0]);
+  });
+});
+
 describe('preview structure matches what the obstruction tracer sees', () => {
   it('includes every member whose footprint the tracer subtracts from the boards', () => {
     const { project, ceiling } = buildProject();

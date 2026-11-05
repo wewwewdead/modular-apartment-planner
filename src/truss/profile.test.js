@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTrussProfile, resolveTrussMetrics } from './profile';
+import { HIP_SLICE_MIN_RUN, buildTrussProfile, resolveTrussMetrics } from './profile';
 import { createTrussInstance } from '@/domain/trussModels';
 import { WEB_PATTERNS } from './webPatterns';
 
@@ -325,5 +325,222 @@ describe('buildTrussProfile - outline shapes', () => {
     expect(frame.webPatternKey).toBe('gable_studs');
     expect(frame.roofOutline).toEqual(typical.roofOutline);
     expect(frame.members.every((member) => member.memberType !== 'web' || member.length > 0)).toBe(true);
+  });
+});
+
+// RT-4.1 (spec §7.10): hip slices on the 25 % system — span 7200, rise 900,
+// 300 tails, 90 × 35 chords, a 12 000 support line, 8 panels (900 apart).
+describe('buildTrussProfile - hip slices (RT-4.1)', () => {
+  const instance = createTrussInstance({
+    trussTypeId: 'truss_type_hip',
+    span: 7200,
+    rise: 900,
+    overhangs: { start: 300, end: 300 },
+  });
+  const slice = (layoutOffset) => buildTrussProfile(instance, undefined, { layoutOffset, supportLength: 12000 });
+  const SECANT = Math.hypot(1, 0.25);
+  // The two chord centre-lines meet tc/2 · (sec θ − 1) / tan θ inside a
+  // crown kink (the mitre): that is where the kink node sits.
+  const MITRE_SHIFT = (45 * (SECANT - 1)) / 0.25;
+  const chordCount = (profile) => profile.members.filter((member) => member.memberType === 'topChord').length;
+  const webIds = (profile) =>
+    profile.members
+      .filter((member) => member.memberType === 'web')
+      .map((member) => `${member.startNodeId}-${member.endNodeId}`)
+      .sort();
+
+  it('gives a station-1200 slice chord nodes at its crown kinks (1200 and 6000)', () => {
+    const profile = slice(1200);
+    expect(profile.lineOutline.map((point) => point.x)).toEqual([-300, 0, 1200, 6000, 7200, 7500]);
+    const kinks = profile.nodes.filter((node) => node.id.startsWith('top_kink_'));
+    expect(kinks.map((node) => node.kind)).toEqual(['top_chord', 'top_chord']);
+    expect(kinks[0].x).toBeCloseTo(1200 - MITRE_SHIFT, 6);
+    expect(kinks[1].x).toBeCloseTo(6000 + MITRE_SHIFT, 6);
+    // On the level crown's centre-line: bc + 0.25 × 1200 + tc / 2.
+    for (const node of kinks) expect(node.z).toBeCloseTo(90 + 300 + 45, 6);
+    // A panel-only chain is tail + 8 panels + tail = 10 members; the kinks add two.
+    expect(chordCount(profile)).toBe(12);
+  });
+
+  it('keeps the webs on the panel points: the same webs as a slice whose crown is a panel point', () => {
+    const profile = slice(1200);
+    expect(webIds(profile).some((id) => id.includes('top_kink_'))).toBe(false);
+    const onPanel = slice(900);
+    expect(onPanel.nodes.some((node) => node.id.startsWith('top_kink_'))).toBe(false);
+    expect(chordCount(onPanel)).toBe(10);
+    expect(webIds(profile)).toEqual(webIds(onPanel));
+  });
+
+  it('lays every sloped chord member of a slice on the sloped centre-line', () => {
+    const profile = slice(1200);
+    const nodes = new Map(profile.nodes.map((node) => [node.id, node]));
+    for (const member of profile.members.filter((entry) => entry.memberType === 'topChord')) {
+      const a = nodes.get(member.startNodeId);
+      const b = nodes.get(member.endNodeId);
+      const slope = Math.abs((b.z - a.z) / (b.x - a.x));
+      expect([0, 0.25].some((value) => Math.abs(slope - value) < 1e-9)).toBe(true);
+    }
+  });
+
+  it('ends a slice run on its own slope: bc + 0.25 × 1200 + tc / 2 · sec θ at the crown', () => {
+    const left = slice(1200).topChordRuns.find((run) => run.id === 'left');
+    const crown = left.points[left.points.length - 1];
+    expect(crown.x).toBe(1200);
+    expect(crown.z).toBeCloseTo(90 + 300 + 45 * SECANT, 6);
+    expect(left.points[0].z).toBeCloseTo(90 + 45 * SECANT, 6);
+  });
+
+  it('slopes a station-0 slice’s tails at the hip pitch: −75 at both tips', () => {
+    const profile = slice(0);
+    const line = profile.lineOutline;
+    expect(line[0]).toEqual({ x: -300, z: -75 });
+    expect(line[line.length - 1]).toEqual({ x: 7500, z: -75 });
+    expect(line.filter((point) => point.x >= 0 && point.x <= 7200).every((point) => point.z === 0)).toBe(true);
+    expect(profile.undersideOutline[0].z).toBeCloseTo(90 - 75, 6);
+  });
+
+  it('builds a station-0.025 sliver as the flat slice', () => {
+    expect(HIP_SLICE_MIN_RUN).toBe(1);
+    const sliver = slice(12000 - 0.025);
+    const flat = slice(0);
+    expect(sliver.lineOutline).toEqual(flat.lineOutline);
+    expect(sliver.roofOutline).toEqual(flat.roofOutline);
+    expect(sliver.nodes.map((node) => node.id)).toEqual(flat.nodes.map((node) => node.id));
+  });
+
+  it('keeps the flat FAMILY’s tails level', () => {
+    const flat = buildTrussProfile(
+      createTrussInstance({
+        trussTypeId: 'truss_type_flat',
+        span: 7200,
+        rise: 900,
+        overhangs: { start: 300, end: 300 },
+      }),
+    );
+    expect(flat.lineOutline.every((point) => point.z === 900)).toBe(true);
+  });
+});
+
+// RT-4.1 (spec §7.10.1): kink nodes must not touch a profile whose kinks
+// already sit on panel points. Pinned from the output BEFORE RT-4.1.
+describe('buildTrussProfile - unchanged by RT-4.1 (pinned)', () => {
+  it('keeps the plain gable: node ids, member count and roof outline', () => {
+    const profile = buildTrussProfile(
+      createTrussInstance({
+        trussTypeId: 'truss_type_gable',
+        span: 7200,
+        rise: 900,
+        overhangs: { start: 300, end: 300 },
+      }),
+    );
+    expect(profile.nodes.map((node) => node.id)).toEqual([
+      'overhang_0',
+      'overhang_1',
+      'top_0',
+      'top_1',
+      'top_2',
+      'top_3',
+      'top_4',
+      'bottom_0',
+      'bottom_1',
+      'bottom_2',
+      'bottom_3',
+    ]);
+    expect(profile.members).toHaveLength(13);
+    expect(profile.roofOutline.map(({ x, z }) => ({ x, z }))).toEqual([
+      { x: -300, z: 107.76987657639737 },
+      { x: 0, z: 182.76987657639737 },
+      { x: 1200, z: 482.76987657639734 },
+      { x: 2400, z: 782.7698765763973 },
+      { x: 3600, z: 1082.7698765763973 },
+      { x: 4800, z: 782.7698765763973 },
+      { x: 6000, z: 482.7698765763972 },
+      { x: 7200, z: 182.76987657639737 },
+      { x: 7500, z: 107.76987657639737 },
+    ]);
+  });
+  it('keeps the plain shed: node ids, member count and roof outline', () => {
+    const profile = buildTrussProfile(
+      createTrussInstance({
+        trussTypeId: 'truss_type_shed',
+        span: 6000,
+        rise: 1200,
+        overhangs: { start: 300, end: 300 },
+      }),
+    );
+    expect(profile.nodes.map((node) => node.id)).toEqual([
+      'overhang_0',
+      'overhang_1',
+      'top_0',
+      'top_1',
+      'top_2',
+      'top_3',
+      'top_4',
+      'bottom_0',
+      'bottom_1',
+      'bottom_2',
+      'bottom_3',
+      'bottom_4',
+    ]);
+    expect(profile.members).toHaveLength(18);
+    expect(profile.roofOutline.map(({ x, z }) => ({ x, z }))).toEqual([
+      { x: -300, z: 121.78235124467014 },
+      { x: 0, z: 181.78235124467014 },
+      { x: 1500, z: 481.78235124467017 },
+      { x: 3000, z: 781.7823512446702 },
+      { x: 4500, z: 1081.78235124467 },
+      { x: 6000, z: 1381.78235124467 },
+      { x: 6300, z: 1441.78235124467 },
+    ]);
+  });
+  it('keeps the plain flat: node ids, member count and roof outline', () => {
+    const profile = buildTrussProfile(
+      createTrussInstance({
+        trussTypeId: 'truss_type_flat',
+        span: 7200,
+        rise: 900,
+        overhangs: { start: 300, end: 300 },
+      }),
+    );
+    expect(profile.nodes.map((node) => node.id)).toEqual([
+      'overhang_0',
+      'overhang_1',
+      'top_0',
+      'top_1',
+      'top_2',
+      'top_3',
+      'top_4',
+      'top_5',
+      'top_6',
+      'bottom_0',
+      'bottom_1',
+      'bottom_2',
+      'bottom_3',
+      'bottom_4',
+      'bottom_5',
+      'bottom_6',
+    ]);
+    expect(profile.members).toHaveLength(27);
+    expect(profile.roofOutline.map(({ x, z }) => ({ x, z }))).toEqual([
+      { x: -300, z: 1080 },
+      { x: 0, z: 1080 },
+      { x: 7200, z: 1080 },
+      { x: 7500, z: 1080 },
+    ]);
+  });
+
+  // The domed arch's sample points are a curve, not structural kinks: its
+  // chord stays the panel-only chain (curvedChord; RT-4.1 audit).
+  it('keeps the domed arch a panel-point chain: no kink nodes, 10 chord members', () => {
+    const profile = buildTrussProfile(
+      createTrussInstance({ trussTypeId: 'truss_type_domed', overhangs: { start: 300, end: 300 } }),
+    );
+    // 2 overhang + 9 top + 9 bottom.
+    expect(profile.nodes).toHaveLength(20);
+    expect(profile.nodes.some((node) => node.id.startsWith('top_kink_'))).toBe(false);
+    expect(profile.members.filter((member) => member.memberType === 'topChord')).toHaveLength(10);
+    expect(profile.members).toHaveLength(33);
+    expect(profile.topChordRuns).toHaveLength(1);
+    expect(profile.topChordRuns[0].measurementCurve.kind).toBe('sine_arch');
   });
 });

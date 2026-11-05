@@ -10,6 +10,7 @@ import {
   deriveCeilingBoundaryFromBeams,
   deriveCeilingStructuralCoverage,
   resolveCeilingSupportBeams,
+  selectCeilingCoverageFloor,
   selectCeilingCoverageSlabs,
   selectPreferredCeilingBeamLevel,
 } from './ceilingBeamAttachment';
@@ -879,7 +880,7 @@ export function ceilingElevationRange(elevations) {
   };
 }
 
-function ceilingContext(ceiling, project) {
+function buildCeilingContext(ceiling, project) {
   const detailing = resolveCeilingDetailing(ceiling);
   const boundary = resolveCeilingBoundary(project, ceiling);
   const space = getCeilingLocalSpace(boundary);
@@ -910,6 +911,181 @@ function ceilingContext(ceiling, project) {
     depth: space.depth,
     openings: detailing.openings.map(openingRect).filter((opening) => rectangleArea(opening) > EPSILON),
   };
+}
+
+/*
+ * Per-ceiling assembly cache.
+ *
+ * Placing a light used to re-derive the whole board/framing/screw assembly —
+ * twice, once for the RCP and once for the editor's 3D pane — although a light
+ * changes none of it: ~50 ms per derivation on a 12 × 10 m beam-hung ceiling,
+ * and every array came back new, so every memo downstream let go. The heavy
+ * parts (the context with its polygon booleans, the boards, the framing, the
+ * hangers, the screws, the regions, the elevations) are therefore held per
+ * ceiling and handed back BY REFERENCE while nothing they depend on changed.
+ *
+ * What they depend on, and so what validates an entry:
+ *   - the ceiling's own floor, by identity: its walls, columns and beams are
+ *     the obstructions, the supports and the elevation datum;
+ *   - the floor above, by identity: its slabs are the boundary of a ceiling
+ *     whose beams frame no rectangle;
+ *   - a JSON signature of the ceiling minus `detailing.lighting` and
+ *     `detailing.dimensions`. Identity on the stored sub-objects cannot work:
+ *     the editor rebuilds the whole detailing through `createCeilingDetailing`
+ *     on every commit, so an unchanged face arrives as a new object. The
+ *     signature is memoised per ceiling object, so a ceiling nothing touched
+ *     costs a WeakMap lookup.
+ *
+ * Lighting and dimensions stay live: they are cheap, and they are what the
+ * edits being made actually change.
+ *
+ * Keyed by ceiling id, with up to two variants per ceiling, because two
+ * different projects ask about the same ceiling on every commit — the model
+ * itself and the RCP editor's stripped preview project, whose floors are other
+ * objects. With one slot each would evict the other and both would miss every
+ * time. The last ASSEMBLY_CACHE_CEILINGS ceilings are kept, oldest out first.
+ *
+ * Sharing the arrays is only safe because nothing downstream writes into them;
+ * every reader maps or filters into arrays of its own.
+ */
+const ASSEMBLY_CACHE_CEILINGS = 8;
+const ASSEMBLY_VARIANTS_PER_CEILING = 2;
+const assemblyCache = new Map();
+const assemblySignatures = new WeakMap();
+
+function assemblySignature(ceiling) {
+  let signature = assemblySignatures.get(ceiling);
+  if (signature === undefined) {
+    const detailing = ceiling.detailing || {};
+    signature = JSON.stringify({
+      floorId: ceiling.floorId ?? null,
+      attachment: ceiling.attachment,
+      boundaryPolygon: ceiling.boundaryPolygon,
+      boundarySource: ceiling.boundarySource,
+      baseElevation: ceiling.baseElevation,
+      detailing: {
+        enabled: detailing.enabled,
+        jurisdictionProfileId: detailing.jurisdictionProfileId,
+        face: detailing.face,
+        framing: detailing.framing,
+        suspension: detailing.suspension,
+        openings: detailing.openings,
+      },
+    });
+    assemblySignatures.set(ceiling, signature);
+  }
+  return signature;
+}
+
+function createAssemblyEntry(floor, coverageFloor, signature) {
+  return {
+    floor,
+    coverageFloor,
+    signature,
+    context: null,
+    elevations: null,
+    panels: null,
+    framing: null,
+    hangers: null,
+    fasteners: null,
+    regions: null,
+    openings: null,
+  };
+}
+
+/**
+ * The cache entry for this ceiling in this project: a hit, or a fresh entry
+ * put in the cache. A ceiling with no id to key on gets a throwaway entry,
+ * which still lets one call share its parts instead of re-deriving them.
+ */
+function assemblyEntry(ceiling, project) {
+  const floor = getProjectFloor(project, ceiling?.floorId);
+  const coverageFloor = selectCeilingCoverageFloor(project, floor);
+  if (!ceiling?.id || !project) return createAssemblyEntry(floor, coverageFloor, null);
+
+  const signature = assemblySignature(ceiling);
+  const variants = assemblyCache.get(ceiling.id) || [];
+  const hit = variants.find(
+    (entry) => entry.floor === floor && entry.coverageFloor === coverageFloor && entry.signature === signature,
+  );
+  const entry = hit || createAssemblyEntry(floor, coverageFloor, signature);
+  // Most recent first within the ceiling, and the ceiling moved to the back of
+  // the insertion order, so the ceiling evicted is the one asked about longest ago.
+  const nextVariants = [entry, ...variants.filter((variant) => variant !== entry)].slice(
+    0,
+    ASSEMBLY_VARIANTS_PER_CEILING,
+  );
+  assemblyCache.delete(ceiling.id);
+  assemblyCache.set(ceiling.id, nextVariants);
+  while (assemblyCache.size > ASSEMBLY_CACHE_CEILINGS) {
+    assemblyCache.delete(assemblyCache.keys().next().value);
+  }
+  return entry;
+}
+
+/**
+ * The ceiling's local UV frame (see `getCeilingLocalSpace`), from the assembly
+ * cache: the same object for as long as the assembly holds, so a caller that
+ * maps plan geometry into the RCP on every render pays for the boundary once.
+ */
+export function resolveCeilingLocalSpace(ceiling, project) {
+  return contextOf(assemblyEntry(ceiling, project), ceiling, project).space;
+}
+
+/** Drops every cached assembly — for tests comparing cached and uncached answers. */
+export function clearCeilingAssemblyCache() {
+  assemblyCache.clear();
+}
+
+function contextOf(entry, ceiling, project) {
+  if (!entry.context) entry.context = buildCeilingContext(ceiling, project);
+  return entry.context;
+}
+
+function elevationsOf(entry, ceiling, project) {
+  if (!entry.elevations) entry.elevations = resolveCeilingElevations(project, ceiling);
+  return entry.elevations;
+}
+
+function panelsOf(entry, ceiling, project) {
+  if (!entry.panels) entry.panels = computeCeilingPanels(ceiling, contextOf(entry, ceiling, project));
+  return entry.panels;
+}
+
+function framingOf(entry, ceiling, project) {
+  if (!entry.framing) entry.framing = computeCeilingFramingMembers(ceiling, contextOf(entry, ceiling, project));
+  return entry.framing;
+}
+
+function hangersOf(entry, ceiling, project) {
+  if (!entry.hangers) entry.hangers = computeCeilingHangers(ceiling, contextOf(entry, ceiling, project));
+  return entry.hangers;
+}
+
+function fastenersOf(entry, ceiling, project) {
+  if (!entry.fasteners) {
+    entry.fasteners = computeCeilingFasteners(
+      contextOf(entry, ceiling, project).detailing,
+      framingOf(entry, ceiling, project),
+      panelsOf(entry, ceiling, project),
+    );
+  }
+  return entry.fasteners;
+}
+
+function regionsOf(entry, ceiling, project) {
+  if (!entry.regions) {
+    entry.regions = contextOf(entry, ceiling, project).regions.map((region) => ({
+      outline: xyToUv(region.outline),
+      holes: (region.holes || []).map(xyToUv),
+    }));
+  }
+  return entry.regions;
+}
+
+function openingsOf(entry, ceiling, project) {
+  if (!entry.openings) entry.openings = contextOf(entry, ceiling, project).detailing.openings.map(openingRect);
+  return entry.openings;
 }
 
 function profileBoardSize(face) {
@@ -977,10 +1153,11 @@ function normalizeStoredRect(value, bounds) {
 }
 
 export function deriveCeilingPanels(ceiling, project) {
-  const { detailing, boundaryLocal, boundaryXy, obstructions, length, depth, openings } = ceilingContext(
-    ceiling,
-    project,
-  );
+  return panelsOf(assemblyEntry(ceiling, project), ceiling, project);
+}
+
+function computeCeilingPanels(ceiling, context) {
+  const { detailing, boundaryLocal, boundaryXy, obstructions, length, depth, openings } = context;
   const face = detailing.face;
   if (!detailing.enabled || !face.enabled || length <= EPSILON || depth <= EPSILON || boundaryLocal.length < 3) {
     return [];
@@ -1462,7 +1639,10 @@ function deriveAutomaticCeilingFraming(context, ceilingId) {
 }
 
 export function deriveCeilingFramingMembers(ceiling, project) {
-  const context = ceilingContext(ceiling, project);
+  return framingOf(assemblyEntry(ceiling, project), ceiling, project);
+}
+
+function computeCeilingFramingMembers(ceiling, context) {
   const framing = context.detailing.framing;
   if (!context.detailing.enabled || context.length <= EPSILON || context.depth <= EPSILON) return [];
 
@@ -1480,7 +1660,10 @@ export function deriveCeilingFramingMembers(ceiling, project) {
 }
 
 export function deriveCeilingHangers(ceiling, project) {
-  const context = ceilingContext(ceiling, project);
+  return hangersOf(assemblyEntry(ceiling, project), ceiling, project);
+}
+
+function computeCeilingHangers(ceiling, context) {
   const { detailing, regions, length, depth } = context;
   if (!detailing.enabled || length <= EPSILON || depth <= EPSILON) return [];
 
@@ -1605,7 +1788,10 @@ function generateCeilingPanelFasteners(panel, members, pattern, type) {
 }
 
 export function deriveCeilingFasteners(ceiling, project) {
-  const detailing = resolveCeilingDetailing(ceiling);
+  return fastenersOf(assemblyEntry(ceiling, project), ceiling, project);
+}
+
+function computeCeilingFasteners(detailing, members, panels) {
   const face = detailing.face;
   if (!detailing.enabled || !face.enabled) return [];
 
@@ -1618,8 +1804,6 @@ export function deriveCeilingFasteners(ceiling, project) {
     fieldSpacing: positive(face.fasteners.fieldSpacing, defaults.fieldSpacingMm || 230),
   };
   const type = face.fasteners.type || defaults.fastenerType || 'screw';
-  const members = deriveCeilingFramingMembers(ceiling, project);
-  const panels = deriveCeilingPanels(ceiling, project);
   const generated =
     face.fasteners.mode === CEILING_FASTENER_LAYOUT_MODES.GENERATED
       ? panels.flatMap((panel) => generateCeilingPanelFasteners(panel, members, pattern, type))
@@ -1641,10 +1825,16 @@ export function deriveCeilingFasteners(ceiling, project) {
  * that shrank under a fixture is a fixture to move, not one to lose.
  */
 export function deriveCeilingLightFixtures(ceiling, project) {
-  const { detailing, space, length, depth } = ceilingContext(ceiling, project);
+  return lightFixturesOf(assemblyEntry(ceiling, project), ceiling, project, resolveCeilingDetailing(ceiling));
+}
+
+// Live on every call — the fixtures are what a lighting edit changes — but the
+// frame and the elevations they are placed against come from the cached entry.
+function lightFixturesOf(entry, ceiling, project, detailing) {
+  const { space, length, depth } = contextOf(entry, ceiling, project);
   if (!detailing.enabled || length <= EPSILON || depth <= EPSILON) return [];
 
-  const elevations = resolveCeilingElevations(project, ceiling);
+  const elevations = elevationsOf(entry, ceiling, project);
   return detailing.lighting.fixtures.map((fixture) => {
     const u = clamp(fixture.u, 0, length);
     const v = clamp(fixture.v, 0, depth);
@@ -1855,18 +2045,20 @@ function ceilingDimensionEntries(settings, context) {
 }
 
 export function deriveCeilingDimensions(ceiling, project) {
-  const context = ceilingContext(ceiling, project);
-  if (!context.detailing.enabled || context.length <= EPSILON || context.depth <= EPSILON) return [];
-  return ceilingDimensionEntries(context.detailing.dimensions, {
+  const entry = assemblyEntry(ceiling, project);
+  const context = contextOf(entry, ceiling, project);
+  const detailing = resolveCeilingDetailing(ceiling);
+  if (!detailing.enabled || context.length <= EPSILON || context.depth <= EPSILON) return [];
+  return ceilingDimensionEntries(detailing.dimensions, {
     ceilingId: ceiling.id,
     length: context.length,
     depth: context.depth,
     openings: context.openings,
-    panels: deriveCeilingPanels(ceiling, project),
-    members: deriveCeilingFramingMembers(ceiling, project),
-    fasteners: deriveCeilingFasteners(ceiling, project),
-    hangers: deriveCeilingHangers(ceiling, project),
-    fixtures: deriveCeilingLightFixtures(ceiling, project),
+    panels: panelsOf(entry, ceiling, project),
+    members: framingOf(entry, ceiling, project),
+    fasteners: fastenersOf(entry, ceiling, project),
+    hangers: hangersOf(entry, ceiling, project),
+    fixtures: lightFixturesOf(entry, ceiling, project, detailing),
   });
 }
 
@@ -1926,13 +2118,20 @@ function summarizeLightFixtures(fixtures) {
   return [...totals.values()];
 }
 
-export function deriveCeilingTakeoff(ceiling, project) {
-  const detailing = resolveCeilingDetailing(ceiling);
-  const panels = deriveCeilingPanels(ceiling, project);
-  const members = deriveCeilingFramingMembers(ceiling, project);
-  const fasteners = deriveCeilingFasteners(ceiling, project);
-  const hangers = deriveCeilingHangers(ceiling, project);
-  const lightFixtures = deriveCeilingLightFixtures(ceiling, project);
+/**
+ * The quantities. A caller already holding the derived parts passes them in
+ * (`deriveCeilingDetail` does) so they are counted rather than derived again:
+ * the takeoff used to re-run every derivation, and the fasteners inside it ran
+ * the boards and the framing a second time on top.
+ */
+export function deriveCeilingTakeoff(ceiling, project, parts = null) {
+  const detailing = parts?.detailing || resolveCeilingDetailing(ceiling);
+  const entry = parts ? null : assemblyEntry(ceiling, project);
+  const panels = parts?.panels || panelsOf(entry, ceiling, project);
+  const members = parts?.framing || framingOf(entry, ceiling, project);
+  const fasteners = parts?.fasteners || fastenersOf(entry, ceiling, project);
+  const hangers = parts?.hangers || hangersOf(entry, ceiling, project);
+  const lightFixtures = parts?.lightFixtures || lightFixturesOf(entry, ceiling, project, detailing);
   const profile = getCeilingProductProfile(detailing.face.productProfileId);
   const stock = profile.stockBoards[0] || { widthMm: 1219, heightMm: 2438 };
   const stockArea = Math.max(EPSILON, stock.widthMm * stock.heightMm);
@@ -1961,14 +2160,25 @@ export function deriveCeilingTakeoff(ceiling, project) {
   };
 }
 
+/**
+ * Everything the RCP editor and the 3D assembly draw, each part derived once:
+ * one cache entry carries them all the way to the takeoff, so nothing here asks
+ * for the same derivation twice. Boards, framing, hangers, screws, regions,
+ * openings, the outline and the elevations come back identity-stable across an
+ * edit that only touched the lighting or the dimensions (see the assembly
+ * cache above), which is what lets the plan's layers and the 3D descriptors
+ * hold still while a light is placed.
+ */
 export function deriveCeilingDetail(ceiling, project) {
-  const context = ceilingContext(ceiling, project);
-  const panels = deriveCeilingPanels(ceiling, project);
-  const framing = deriveCeilingFramingMembers(ceiling, project);
-  const hangers = deriveCeilingHangers(ceiling, project);
-  const fasteners = deriveCeilingFasteners(ceiling, project);
-  const lightFixtures = deriveCeilingLightFixtures(ceiling, project);
-  const openings = context.detailing.openings.map(openingRect);
+  const entry = assemblyEntry(ceiling, project);
+  const context = contextOf(entry, ceiling, project);
+  const detailing = resolveCeilingDetailing(ceiling);
+  const panels = panelsOf(entry, ceiling, project);
+  const framing = framingOf(entry, ceiling, project);
+  const hangers = hangersOf(entry, ceiling, project);
+  const fasteners = fastenersOf(entry, ceiling, project);
+  const lightFixtures = lightFixturesOf(entry, ceiling, project, detailing);
+  const openings = openingsOf(entry, ceiling, project);
   return {
     ceilingId: ceiling.id,
     length: context.length,
@@ -1978,20 +2188,17 @@ export function deriveCeilingDetail(ceiling, project) {
     rotation: context.space.rotation,
     boundaryLocal: context.boundaryLocal,
     // The drawn outline: the boundary with the structure taken out of it.
-    regions: context.regions.map((region) => ({
-      outline: xyToUv(region.outline),
-      holes: (region.holes || []).map(xyToUv),
-    })),
+    regions: regionsOf(entry, ceiling, project),
     openings,
-    configuration: context.detailing,
+    configuration: detailing,
     panels,
     framing,
     hangers,
     fasteners,
     lightFixtures,
     dimensions:
-      context.detailing.enabled && context.length > EPSILON && context.depth > EPSILON
-        ? ceilingDimensionEntries(context.detailing.dimensions, {
+      detailing.enabled && context.length > EPSILON && context.depth > EPSILON
+        ? ceilingDimensionEntries(detailing.dimensions, {
             ceilingId: ceiling.id,
             length: context.length,
             depth: context.depth,
@@ -2003,7 +2210,7 @@ export function deriveCeilingDetail(ceiling, project) {
             fixtures: lightFixtures,
           })
         : [],
-    takeoff: deriveCeilingTakeoff(ceiling, project),
-    elevations: resolveCeilingElevations(project, ceiling),
+    takeoff: deriveCeilingTakeoff(ceiling, project, { detailing, panels, framing, fasteners, hangers, lightFixtures }),
+    elevations: elevationsOf(entry, ceiling, project),
   };
 }

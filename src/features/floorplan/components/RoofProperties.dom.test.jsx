@@ -239,3 +239,51 @@ describe('RoofSystemProperties — manual slope on an attached roof', () => {
     expect(container.querySelector('[data-manual-slope-warning]')).toBeNull();
   });
 });
+
+// RT-4 (spec §7.9.3.4): an attached hip has one eave level, set by the start
+// tail; unequal tails leave the far eave off by slope × |Δ|.
+describe('RoofSystemProperties — unequal truss tails on a hip', () => {
+  // 25 % trusses: rise 900 over a 3600 run.
+  function trusses(trussTypeId, overhangs) {
+    return createTrussSystem('Hip System', {
+      id: 'ts_1',
+      floorId: 'floor_1',
+      baseElevation: 3000,
+      trussInstances: [
+        {
+          trussTypeId,
+          startPoint: { x: 0, y: 0 },
+          endPoint: { x: 12000, y: 0 },
+          span: 7200,
+          rise: 900,
+          spacing: 1200,
+          count: 11,
+          overhangs,
+        },
+      ],
+    });
+  }
+
+  it('warns, with the real numbers, when the tails differ', () => {
+    const { roofSystem } = mount({}, { trussSystems: [trusses('truss_type_hip', { start: 300, end: 450 })] });
+    expect(roofSystem.roofType).toBe('hip');
+    expect(roofSystem.pitch.slope).toBeCloseTo(25, 9);
+    const warning = container.querySelector('[data-hip-tail-warning]');
+    expect(warning).not.toBeNull();
+    // 0.25 × |450 − 300| = 37.5 → 38.
+    expect(warning.textContent.replace(/\s+/g, ' ').trim()).toBe(
+      'Hip roof: the truss tails differ (300 / 450 mm). The roof seats on the start tail; the far eave is off by 38 mm.',
+    );
+  });
+
+  it('says nothing for equal tails', () => {
+    mount({}, { trussSystems: [trusses('truss_type_hip', { start: 300, end: 300 })] });
+    expect(container.querySelector('[data-hip-tail-warning]')).toBeNull();
+  });
+
+  it('says nothing for a gable, whatever its tails', () => {
+    const { roofSystem } = mount({}, { trussSystems: [trusses('truss_type_gable', { start: 300, end: 450 })] });
+    expect(roofSystem.roofType).toBe('gable');
+    expect(container.querySelector('[data-hip-tail-warning]')).toBeNull();
+  });
+});
