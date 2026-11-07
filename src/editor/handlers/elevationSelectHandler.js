@@ -1,4 +1,4 @@
-import { buildProjectElevationScene } from '@/elevations/scene';
+import { getProjectElevationScene } from '@/elevations/elevationSceneCache';
 import { getElevationView, projectElevationHorizontal } from '@/elevations/projection';
 import { resolveWallVerticalSpan } from '@/domain/wallFit';
 import { elevationRegionContainsPoint, getVisibleElevationDrawables } from '@/elevations/visibility';
@@ -22,7 +22,9 @@ function findWindowOwner(project, windowId) {
 }
 
 function hitTestElevationWindow(modelPos, project, sourceFloorId, viewMode) {
-  const scene = buildProjectElevationScene(project, sourceFloorId, viewMode);
+  // The cached scene: the drawing on screen has already paid for its
+  // visibility pass, so a click no longer rebuilds the scene and redoes it.
+  const scene = getProjectElevationScene(project, sourceFloorId, viewMode);
   if (!scene?.elements?.length) return null;
 
   let hit = null;

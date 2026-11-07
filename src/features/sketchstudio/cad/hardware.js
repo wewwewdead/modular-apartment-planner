@@ -1,10 +1,18 @@
 import { positive, uid } from './model.js';
 import {
+  BLIND_SIZES,
   DRYWALL_THREADS,
   HEX_FLATS,
   LAG_THREADS,
   PHILLIPS_M,
+  PUSH_SIZES,
+  RIVET_SIZE_LISTS,
+  RIVET_TABLES,
   SCREW_TABLES,
+  SOLID_SIZES,
+  SPR_SIZES,
+  STRUCTURAL_SIZES,
+  TUBE_SIZES,
   TAPPING_THREADS,
   TORX_A,
   TORX_A_BY_DIAMETER,
@@ -199,6 +207,152 @@ export const SCREW_KINDS = {
   lag: kindOf('Lag / coach screw', 'DIN 571', 'lag', ['hex', 'hex-washer'], ['none'], ['sharp'], 60),
 };
 
+// ---------------------------------------------------------------- Phase O
+// The rivet library (docs/sketch-studio-rivet-library.md): 15 rivet kinds,
+// each kind × head × state (× body for the rivet nut / stud) in the one
+// `hardware` feature. sizes: the kind's sizes in catalog order. tabled: the
+// defaults come from a standard's table; otherwise manufacturer-typical
+// proportional rules, and the BOM note says so.
+const rivetOf = (label, standard, catalog, heads, sizes, material, tabled) => ({
+  label,
+  standard,
+  catalog,
+  heads,
+  sizes,
+  material,
+  tabled,
+});
+const BLIND_FOUR = ['3.2', '4.0', '4.8', '6.4'];
+export const RIVET_KINDS = {
+  'blind-open': rivetOf(
+    'Blind rivet, open end (pop rivet)',
+    'ISO 15977–15984 / DIN 7337',
+    'blind',
+    ['dome', 'countersunk-120', 'large-flange'],
+    RIVET_SIZE_LISTS.blind,
+    'Aluminum',
+    true,
+  ),
+  'blind-closed': rivetOf(
+    'Blind rivet, closed end (sealed)',
+    'ISO 15973–15976 / ISO 16585',
+    'blind',
+    ['dome', 'countersunk-120'],
+    BLIND_FOUR,
+    'Aluminum',
+    true,
+  ),
+  'blind-multigrip': rivetOf(
+    'Blind rivet, multi-grip',
+    'ISO 15977 type, multi-grip (manufacturer)',
+    'blind',
+    ['dome', 'large-flange', 'countersunk-120'],
+    BLIND_FOUR,
+    'Aluminum',
+    false,
+  ),
+  'blind-peel': rivetOf(
+    'Blind rivet, peel type',
+    'manufacturer (POP / Gesipa peel)',
+    'blind',
+    ['dome', 'large-flange'],
+    BLIND_FOUR,
+    'Aluminum',
+    false,
+  ),
+  'blind-structural': rivetOf(
+    'Structural blind rivet (locked mandrel)',
+    'manufacturer (Monobolt / Magna-Lok / Hemlok)',
+    'structural',
+    ['dome', 'countersunk-120'],
+    ['4.8', '6.4', '9.5', '12.7'],
+    'Steel',
+    false,
+  ),
+  'blind-drive': rivetOf(
+    'Hammer drive rivet (pin rivet)',
+    'manufacturer (drive / pin rivet tables)',
+    'blind',
+    ['dome'],
+    BLIND_FOUR,
+    'Aluminum',
+    false,
+  ),
+  solid: rivetOf(
+    'Solid rivet',
+    'DIN 660 / 661 / 662 / 674 (ISO 1051)',
+    'solid',
+    ['round', 'countersunk', 'raised-countersunk', 'pan', 'universal', 'countersunk-100'],
+    RIVET_SIZE_LISTS.solid,
+    'Steel',
+    true,
+  ),
+  'semi-tubular': rivetOf(
+    'Semi-tubular rivet',
+    'DIN 7338',
+    'tube',
+    ['flat', 'truss'],
+    ['3', '4', '5', '6', '8', '10'],
+    'Steel',
+    true,
+  ),
+  tubular: rivetOf('Tubular rivet', 'DIN 7340', 'tube', ['flat', 'round'], RIVET_SIZE_LISTS.tube, 'Brass', false),
+  split: rivetOf(
+    'Split (bifurcated) rivet',
+    'manufacturer (gauge tables)',
+    'solid',
+    ['round', 'countersunk'],
+    ['2', '2.5', '3', '4', '5'],
+    'Steel',
+    false,
+  ),
+  'self-piercing': rivetOf(
+    'Self-piercing rivet (SPR)',
+    'manufacturer (Henrob / Böllhoff)',
+    'spr',
+    ['countersunk', 'flat'],
+    RIVET_SIZE_LISTS.spr,
+    'Steel',
+    false,
+  ),
+  'blind-rivet-nut': rivetOf(
+    'Blind rivet nut (rivnut)',
+    'manufacturer (PEM / Böllhoff tables)',
+    'metric',
+    ['flat', 'reduced', 'countersunk'],
+    ['M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12'],
+    'Steel',
+    false,
+  ),
+  'blind-rivet-stud': rivetOf(
+    'Blind rivet stud',
+    'manufacturer (rivet stud tables)',
+    'metric',
+    ['flat', 'reduced'],
+    ['M4', 'M5', 'M6', 'M8'],
+    'Steel',
+    false,
+  ),
+  lockbolt: rivetOf(
+    'Lockbolt (pin + swaged collar)',
+    'manufacturer (Huck C6L / Magna-Grip)',
+    'structural',
+    ['dome', 'countersunk-100'],
+    RIVET_SIZE_LISTS.structural,
+    'Steel',
+    false,
+  ),
+  'push-rivet': rivetOf(
+    'Plastic push rivet (panel clip)',
+    'manufacturer (trim-panel rivets)',
+    'push',
+    ['flat'],
+    RIVET_SIZE_LISTS.push,
+    'Nylon',
+    false,
+  ),
+};
+
 export const HARDWARE_TYPES = {
   bolt: 'Hex bolt',
   nut: 'Hex nut',
@@ -210,6 +364,7 @@ export const HARDWARE_TYPES = {
   'rivet-nut': 'Rivet nut',
   insert: 'Threaded insert',
   ...Object.fromEntries(Object.entries(SCREW_KINDS).map(([key, kind]) => [key, kind.label])),
+  ...Object.fromEntries(Object.entries(RIVET_KINDS).map(([key, kind]) => [key, kind.label])),
 };
 
 // The panel's <optgroup>s (spec §3), the nine Phase J kinds first.
@@ -226,6 +381,16 @@ export const HARDWARE_GROUPS = [
   { label: 'Tapping & self-drilling', kinds: ['tapping-pan', 'tapping-countersunk', 'self-drilling'] },
   { label: 'Wood & construction', kinds: ['wood', 'chipboard', 'drywall', 'lag'] },
   { label: 'Special', kinds: ['thumb', 'wing', 'eye-bolt', 'carriage'] },
+  // Phase O: the rivets, after the screws.
+  {
+    label: 'Blind rivets',
+    kinds: ['blind-open', 'blind-closed', 'blind-multigrip', 'blind-peel', 'blind-structural', 'blind-drive'],
+  },
+  {
+    label: 'Solid, tubular & special rivets',
+    kinds: ['solid', 'semi-tubular', 'tubular', 'split', 'self-piercing', 'lockbolt', 'push-rivet'],
+  },
+  { label: 'Blind rivet nuts & studs', kinds: ['blind-rivet-nut', 'blind-rivet-stud'] },
 ];
 
 // Head styles (spec §4.1). flush: the top rim sits on the seating plane and
@@ -250,6 +415,15 @@ export const HEAD_STYLES = {
   wing: { label: 'Wing', flush: false },
   eye: { label: 'Eye (ring)', flush: false },
   none: { label: 'No head', flush: false },
+  // Phase O rivet heads (docs/sketch-studio-rivet-library.md §4.1); the
+  // solids are built in rivetGeometry.js.
+  dome: { label: 'Dome (protruding)', flush: false },
+  'large-flange': { label: 'Large flange', flush: false },
+  'countersunk-120': { label: 'Countersunk 120° (blind rivet)', flush: true },
+  'countersunk-100': { label: 'Countersunk 100° (aircraft)', flush: true },
+  universal: { label: 'Universal (MS20470)', flush: false },
+  flat: { label: 'Flat (thin disc)', flush: false },
+  reduced: { label: 'Reduced flange (semi-flush)', flush: false },
 };
 // Drives (spec §4.2); the recess cuts are in screwGeometry.js.
 export const DRIVES = {
@@ -274,6 +448,9 @@ export const POINTS = {
   dog: { label: 'Dog (ISO 4028)' },
   cup: { label: 'Cup (ISO 4029)' },
 };
+// Rivet states and rivet-nut / stud bodies (Phase O §6–§7).
+export const STATES = { set: { label: 'Installed (set)' }, unset: { label: 'As supplied (unset)' } };
+export const BODIES = { round: { label: 'Round body' }, hex: { label: 'Hexagon body' } };
 
 // Sizes (spec §5).
 export const SIZE_CATALOGS = {
@@ -282,11 +459,30 @@ export const SIZE_CATALOGS = {
   wood: WOOD_THREADS,
   drywall: DRYWALL_THREADS,
   lag: LAG_THREADS,
+  blind: BLIND_SIZES,
+  solid: SOLID_SIZES,
+  tube: TUBE_SIZES,
+  structural: STRUCTURAL_SIZES,
+  spr: SPR_SIZES,
+  push: PUSH_SIZES,
 };
-const DEFAULT_SIZES = { metric: 'M6', tapping: 'ST4.2', wood: '4.0', drywall: '3.5', lag: '8' };
-export const catalogOf = (kind) => SCREW_KINDS[kind]?.catalog || 'metric';
-export const sizesFor = (kind) => SCREW_KINDS[kind]?.sizes || Object.keys(SIZE_CATALOGS[catalogOf(kind)]);
-export const headsFor = (kind) => SCREW_KINDS[kind]?.heads || [];
+const DEFAULT_SIZES = {
+  metric: 'M6',
+  tapping: 'ST4.2',
+  wood: '4.0',
+  drywall: '3.5',
+  lag: '8',
+  blind: '4.8',
+  solid: '4',
+  tube: '4',
+  structural: '6.4',
+  spr: '5.3',
+  push: '6',
+};
+export const catalogOf = (kind) => SCREW_KINDS[kind]?.catalog || RIVET_KINDS[kind]?.catalog || 'metric';
+export const sizesFor = (kind) =>
+  SCREW_KINDS[kind]?.sizes || RIVET_KINDS[kind]?.sizes || Object.keys(SIZE_CATALOGS[catalogOf(kind)]);
+export const headsFor = (kind) => SCREW_KINDS[kind]?.heads || RIVET_KINDS[kind]?.heads || [];
 export const pointsFor = (kind) => SCREW_KINDS[kind]?.points || [];
 export function drivesFor(kind, head) {
   const drives = SCREW_KINDS[kind]?.drives;
@@ -294,7 +490,7 @@ export function drivesFor(kind, head) {
   return Array.isArray(drives) ? drives : drives[head] || drives[headsFor(kind)[0]];
 }
 // The nine Phase J kinds keep M3, so hardwareDefaults() is unchanged.
-export const defaultSize = (kind) => (SCREW_KINDS[kind] ? DEFAULT_SIZES[catalogOf(kind)] : 'M3');
+export const defaultSize = (kind) => (SCREW_KINDS[kind] || RIVET_KINDS[kind] ? DEFAULT_SIZES[catalogOf(kind)] : 'M3');
 const validSize = (kind, size) => (sizesFor(kind).includes(size) ? size : defaultSize(kind));
 export function threadFor(kind, size) {
   const { diameter, pitch } = SIZE_CATALOGS[catalogOf(kind)][validSize(kind, size)];
@@ -499,6 +695,14 @@ function screwDefaults(kind, size, choice = {}) {
 // Phase J kinds come back unchanged. `estimated`: the size lies outside the
 // standard's table (derived, never persisted).
 export function resolveHardware(feature) {
+  // Phase O: rivets fill head / state (/ body) and the grip and blind-side
+  // sizes; a size outside the kind's catalog resolves to its default size.
+  if (RIVET_KINDS[feature?.kind]) {
+    const { fields, estimated } = rivetDefaults(feature.kind, feature.size, feature);
+    const defined = Object.fromEntries(Object.entries(feature).filter(([, v]) => v !== undefined && v !== null));
+    const body = fields.body ? { body: fields.body } : {};
+    return { ...fields, ...defined, size: fields.size, head: fields.head, state: fields.state, ...body, estimated };
+  }
   if (!SCREW_KINDS[feature?.kind]) return feature;
   const { fields, estimated } = screwDefaults(feature.kind, feature.size, feature);
   const defined = Object.fromEntries(Object.entries(feature).filter(([, v]) => v !== undefined && v !== null));
@@ -518,6 +722,11 @@ const assign = (target, source, keys) => {
 // new head does not offer it) from the standard; length, material, supplier
 // fields and notes kept.
 export function withHead(feature, head) {
+  if (RIVET_KINDS[feature.kind]) {
+    const r = resolveHardware(feature);
+    const { fields } = rivetDefaults(feature.kind, r.size, { ...r, head });
+    return assign({ ...feature, head: fields.head }, fields, ['headDiameter', 'headHeight', 'domeHeight']);
+  }
   if (!SCREW_KINDS[feature.kind]) return feature;
   const r = resolveHardware(feature);
   // The drive is kept when the new head offers it (self-drilling: the hex
@@ -629,6 +838,362 @@ function screwDimensions(feature, parameters) {
   return { ...values, kind: r.kind, head: r.head, drive: r.drive, point: r.point };
 }
 
+// ---------------------------------------------------------------- Phase O
+// Rivet rules (docs/sketch-studio-rivet-library.md §3, §6).
+const INSERTS = ['blind-rivet-nut', 'blind-rivet-stud'];
+// The kinds with a mandrel / pin field (drive and push rivet: a pin).
+const MANDREL_RIVETS = [
+  'blind-open',
+  'blind-closed',
+  'blind-multigrip',
+  'blind-peel',
+  'blind-structural',
+  'blind-drive',
+  'push-rivet',
+];
+// No upset height: the flare / expanded legs run from the grip to the tail.
+const NO_UPSET_HEIGHT = ['blind-drive', 'self-piercing', 'push-rivet'];
+// The upset is formed from the rivet tail: it must fit in length − grip.
+const CONSUMED_TAIL = [
+  'blind-open',
+  'blind-closed',
+  'blind-multigrip',
+  'blind-structural',
+  'solid',
+  'semi-tubular',
+  'tubular',
+];
+// The default material of a kind (Phase J and screws: steel).
+export const hardwareMaterial = (kind) => RIVET_KINDS[kind]?.material || 'Steel';
+
+// The head / body / upset numbers of one rivet kind, size and head (§3.1–3.2),
+// unrounded: from the kind's table row where it has one, else its rule.
+function rivetShape(kind, size, head, d) {
+  const t = RIVET_TABLES[kind]?.[size] || {};
+  const pick = (rows) => {
+    const [dk, k, extra] = rows[head];
+    return { headDiameter: dk, headHeight: k, ...extra };
+  };
+  switch (kind) {
+    case 'blind-open':
+    case 'blind-closed':
+    case 'blind-multigrip':
+    case 'blind-peel': {
+      // The heads and mandrel of ISO 15977 (the open-end rows) for all four.
+      const b = RIVET_TABLES['blind-open'][size];
+      const lengths = kind === 'blind-open' ? b : t;
+      const bulb =
+        kind === 'blind-multigrip'
+          ? [1.45 * d, 1.1 * d]
+          : kind === 'blind-peel'
+            ? [2.8 * d, Math.max(0.4, 0.15 * d)]
+            : [1.5 * d, 0.65 * d];
+      return {
+        length: lengths.l,
+        grip: lengths.g,
+        ...pick({ dome: [b.domeDk, b.domeK], 'countersunk-120': [b.cskDk, b.cskK], 'large-flange': [b.lfDk, b.lfK] }),
+        mandrelDiameter: b.dm,
+        mandrelLength: b.ml,
+        bulbDiameter: bulb[0],
+        bulbHeight: bulb[1],
+      };
+    }
+    case 'blind-structural': {
+      const cskDk = 1.97 * d;
+      return {
+        length: t.l,
+        grip: t.g,
+        ...pick({ dome: [2.1 * d, 0.45 * d], 'countersunk-120': [cskDk, (cskDk - d) / (2 * Math.tan(Math.PI / 3))] }),
+        mandrelDiameter: 0.62 * d,
+        mandrelLength: 30,
+        bulbDiameter: 1.5 * d,
+        bulbHeight: 0.7 * d,
+      };
+    }
+    case 'blind-drive':
+      return {
+        length: t.l,
+        grip: t.g,
+        headDiameter: 2 * d,
+        headHeight: 0.43 * d,
+        mandrelDiameter: 0.45 * d,
+        mandrelLength: 0.6 * d,
+        bulbDiameter: 1.3 * d,
+      };
+    case 'solid':
+      return {
+        length: 3 * d,
+        grip: 1.5 * d,
+        ...pick({
+          round: [t.roundDk, t.roundK],
+          countersunk: [t.cskDk, t.cskK],
+          'raised-countersunk': [t.ovalDk, t.ovalK, { domeHeight: t.ovalW }],
+          pan: [t.panDk, t.panK],
+          universal: [1.9 * d, 0.425 * d],
+          'countersunk-100': [1.8 * d, 0.336 * d],
+        }),
+        bulbDiameter: 1.5 * d,
+        bulbHeight: 0.5 * d,
+      };
+    case 'semi-tubular':
+      return {
+        length: t.l,
+        grip: t.l - 0.6 * d,
+        ...pick({ flat: [t.flatDk, t.flatK], truss: [1.9 * d, 0.4 * d] }),
+        boreDiameter: t.bore,
+        boreDepth: t.boreDepth,
+        bulbDiameter: 1.45 * d,
+        bulbHeight: 0.3 * d,
+      };
+    case 'tubular':
+      return {
+        length: t.l,
+        grip: t.l - 0.6 * d,
+        ...pick({ flat: [1.5 * d, 0.2 * d], round: [1.5 * d, 0.4 * d] }),
+        boreDiameter: 0.8 * d,
+        bulbDiameter: 1.45 * d,
+        bulbHeight: 0.3 * d,
+      };
+    case 'split':
+      return {
+        length: 4 * d,
+        grip: 4 * d - 1.2 * d,
+        headDiameter: 1.9 * d,
+        headHeight: 0.45 * d,
+        bulbDiameter: 3.4 * d,
+        bulbHeight: 0.4 * d,
+      };
+    case 'self-piercing':
+      return {
+        length: t.l,
+        grip: 0.8 * t.l,
+        ...pick({ countersunk: [t.cskDk, t.cskK], flat: [1.45 * d, 0.2 * d] }),
+        boreDiameter: 0.55 * d,
+        boreDepth: 0.6 * t.l,
+        bulbDiameter: 1.4 * d,
+      };
+    case 'blind-rivet-nut':
+      return {
+        length: t.l,
+        grip: t.g,
+        ...pick({ flat: [t.flatDk, t.flatK], reduced: [t.reducedDk, t.reducedK], countersunk: [t.cskDk, t.cskK] }),
+        bodyDiameter: t.body,
+        boreDiameter: d,
+        bulbDiameter: 1.3 * t.body,
+        bulbHeight: 0.35 * t.body,
+      };
+    case 'blind-rivet-stud':
+      return {
+        length: t.l,
+        grip: t.g,
+        ...pick({ flat: [t.flatDk, t.flatK], reduced: [t.reducedDk, t.reducedK] }),
+        bodyDiameter: t.body,
+        threadLength: t.t,
+        bulbDiameter: 1.3 * t.body,
+        bulbHeight: 0.35 * t.body,
+      };
+    case 'lockbolt':
+      return {
+        length: t.g + 3.7 * d,
+        grip: t.g,
+        ...pick({ dome: [1.8 * d, 0.4 * d], 'countersunk-100': [1.8 * d, 0.336 * d] }),
+        bulbDiameter: 1.55 * d,
+        bulbHeight: 1.2 * d,
+      };
+    case 'push-rivet':
+      return {
+        length: 2 * d,
+        grip: 0.4 * 2 * d,
+        headDiameter: 2.5 * d,
+        headHeight: 0.2 * d,
+        mandrelDiameter: 0.5 * d,
+        mandrelLength: 0.8 * d,
+        bulbDiameter: 1.4 * d,
+      };
+    default:
+      throw new Error('Choose a hardware type.');
+  }
+}
+
+// Every derived field of a rivet kind for one size and head / state / body
+// choice (invalid choices fall back to the kind's defaults; numbers round2).
+// No pitch key for the pitch-less catalogs.
+function rivetDefaults(kind, size, choice = {}) {
+  const spec = RIVET_KINDS[kind];
+  const at = validSize(kind, size);
+  const { diameter, pitch } = threadFor(kind, at);
+  const head = allowed(spec.heads, choice.head);
+  const shape = Object.entries(rivetShape(kind, at, head, diameter)).map(([key, value]) => [key, round2(value)]);
+  const fields = {
+    kind,
+    size: at,
+    ...(pitch !== undefined ? { pitch } : {}),
+    diameter,
+    ...Object.fromEntries(shape),
+    head,
+    state: choice.state === 'unset' ? 'unset' : 'set',
+    ...(INSERTS.includes(kind) ? { body: choice.body === 'hex' ? 'hex' : 'round' } : {}),
+  };
+  // Every size a tabled kind offers has its row: estimated only for a row
+  // that is missing.
+  return { fields, estimated: Boolean(spec.tabled && !RIVET_TABLES[kind]?.[at]) };
+}
+
+// A new rivet state (installed / as supplied): nothing else changes.
+export function withState(feature, state) {
+  if (!RIVET_KINDS[feature.kind]) return feature;
+  return { ...feature, state: state === 'unset' ? 'unset' : 'set' };
+}
+// A new rivet-nut / stud body shape (round / hexagon): nothing else changes.
+export function withBody(feature, body) {
+  if (!INSERTS.includes(feature.kind)) return feature;
+  return { ...feature, body: body === 'hex' ? 'hex' : 'round' };
+}
+
+// The numeric fields a rivet uses, in panel order (§7). The mandrel
+// protrusion shows only as supplied, the upset height only when set.
+const RIVET_FIELD_ORDER = [
+  'length',
+  'grip',
+  'diameter',
+  'headDiameter',
+  'headHeight',
+  'domeHeight',
+  'bodyDiameter',
+  'boreDiameter',
+  'boreDepth',
+  'threadLength',
+  'mandrelDiameter',
+  'mandrelLength',
+  'bulbDiameter',
+  'bulbHeight',
+  'pitch',
+];
+function rivetUses(r) {
+  const set = r.state !== 'unset';
+  const used = new Set(['length', 'grip', 'diameter', 'headDiameter', 'headHeight', 'bulbDiameter']);
+  if (r.head === 'raised-countersunk') used.add('domeHeight');
+  if (INSERTS.includes(r.kind)) used.add('bodyDiameter').add('pitch');
+  if (['semi-tubular', 'tubular', 'self-piercing', 'blind-rivet-nut'].includes(r.kind)) used.add('boreDiameter');
+  if (['semi-tubular', 'self-piercing'].includes(r.kind)) used.add('boreDepth');
+  if (r.kind === 'blind-rivet-stud') used.add('threadLength');
+  if (MANDREL_RIVETS.includes(r.kind)) used.add('mandrelDiameter');
+  if (MANDREL_RIVETS.includes(r.kind) && !set) used.add('mandrelLength');
+  if (set && !NO_UPSET_HEIGHT.includes(r.kind)) used.add('bulbHeight');
+  return RIVET_FIELD_ORDER.filter((key) => used.has(key));
+}
+
+// §6: resolve the used fields through positive() and validate in order.
+function rivetDimensions(feature, parameters) {
+  const r = resolveHardware(feature);
+  const used = rivetUses(r);
+  const v = Object.fromEntries(used.map((key) => [key, positive(r[key], parameters, key)]));
+  // Unused: the body Ø (rings and ghosts stay right).
+  v.bodyDiameter ??= v.diameter;
+  const insert = INSERTS.includes(r.kind);
+  const body = insert ? v.bodyDiameter : v.diameter;
+  if (insert) {
+    if (r.head === 'countersunk') {
+      if (v.headDiameter <= v.bodyDiameter) throw new Error('The head must be wider than the body.');
+    } else if (v.headDiameter < v.bodyDiameter) throw new Error('The flange must be at least as wide as the body.');
+    if (v.bodyDiameter <= v.diameter) throw new Error('The body must be wider than the thread.');
+  } else if (v.headDiameter <= v.diameter) throw new Error('The head must be wider than the shank.');
+  if (isFlush(r.head) && v.headHeight > v.grip) throw new Error('The head must not be deeper than the grip.');
+  if (v.grip >= v.length) throw new Error('The grip must be shorter than the rivet.');
+  if (r.kind === 'lockbolt' && used.includes('bulbHeight') && v.grip + v.bulbHeight >= v.length)
+    throw new Error('The pin must reach past the collar.');
+  if (CONSUMED_TAIL.includes(r.kind) && used.includes('bulbHeight') && v.bulbHeight > v.length - v.grip)
+    throw new Error('The upset must fit in the rivet tail.');
+  if (v.bulbDiameter <= body) throw new Error('The upset must be wider than the body.');
+  if (used.includes('mandrelDiameter') && v.mandrelDiameter >= v.diameter)
+    throw new Error(
+      r.kind === 'push-rivet'
+        ? 'The pin must be narrower than the body.'
+        : 'The mandrel must be narrower than the body.',
+    );
+  if (used.includes('boreDiameter') && v.boreDiameter >= body)
+    throw new Error('The bore must be smaller than the rivet body.');
+  if (used.includes('boreDepth') && v.boreDepth >= v.length)
+    throw new Error('The bore must be shorter than the rivet.');
+  return { ...v, kind: r.kind, head: r.head, state: r.state, ...(insert ? { body: r.body } : {}) };
+}
+
+// The panel label of one rivet field (§7).
+function rivetLabel(r, key) {
+  const { kind, head } = r;
+  const insert = INSERTS.includes(kind);
+  const pin = ['blind-drive', 'push-rivet'].includes(kind);
+  const lip = ['semi-tubular', 'tubular'].includes(kind);
+  switch (key) {
+    case 'length':
+      return kind === 'lockbolt'
+        ? 'Pin length (mm)'
+        : kind === 'blind-rivet-stud'
+          ? 'Body length below flange (mm)'
+          : isFlush(head)
+            ? 'Overall length (mm)'
+            : 'Body length (mm)';
+    case 'grip':
+      return 'Grip / clamped thickness (mm)';
+    case 'diameter':
+      return insert
+        ? 'Thread diameter (mm)'
+        : kind === 'push-rivet'
+          ? 'Panel hole diameter (mm)'
+          : 'Body diameter (mm)';
+    case 'headDiameter':
+      return head === 'large-flange' || insert ? 'Flange diameter (mm)' : 'Head diameter (mm)';
+    case 'headHeight':
+      return insert ? 'Flange thickness (mm)' : 'Head height (mm)';
+    case 'domeHeight':
+      return 'Dome height (mm)';
+    case 'bodyDiameter':
+      return r.body === 'hex' ? 'Body across flats (mm)' : 'Body diameter (mm)';
+    case 'boreDiameter':
+      return kind === 'blind-rivet-nut' ? 'Thread bore (mm)' : 'Tube bore diameter (mm)';
+    case 'boreDepth':
+      return 'Tube bore depth (mm)';
+    case 'threadLength':
+      return 'Stud length above flange (mm)';
+    case 'mandrelDiameter':
+      return pin ? 'Pin diameter (mm)' : 'Mandrel diameter (mm)';
+    case 'mandrelLength':
+      return pin ? 'Pin protrusion (mm)' : 'Mandrel protrusion (mm)';
+    case 'bulbDiameter':
+      return (
+        {
+          solid: 'Shop head diameter (mm)',
+          'semi-tubular': 'Rolled lip diameter (mm)',
+          tubular: 'Rolled lip diameter (mm)',
+          'blind-peel': 'Petal span (mm)',
+          split: 'Leg span (mm)',
+          'blind-drive': 'Flared tail diameter (mm)',
+          'self-piercing': 'Flared tail diameter (mm)',
+          lockbolt: 'Collar diameter (mm)',
+          'push-rivet': 'Expanded leg diameter (mm)',
+        }[kind] || (insert ? 'Bulge diameter (mm)' : 'Bulb diameter (mm)')
+      );
+    case 'bulbHeight':
+      return kind === 'solid'
+        ? 'Shop head height (mm)'
+        : lip
+          ? 'Rolled lip height (mm)'
+          : kind === 'blind-peel'
+            ? 'Petal thickness (mm)'
+            : kind === 'split'
+              ? 'Leg thickness (mm)'
+              : kind === 'lockbolt'
+                ? 'Collar height (mm)'
+                : insert
+                  ? 'Bulge height (mm)'
+                  : 'Bulb height (mm)';
+    case 'pitch':
+      return 'Thread pitch (mm)';
+    default:
+      return key;
+  }
+}
+
 export function holePreset(feature, mode, size = 'M3') {
   if (mode === 'plain') return { ...feature, holeSpec: undefined };
   const thread = METRIC_THREADS[size];
@@ -664,6 +1229,18 @@ export function hardwareDefaults(kind = 'bolt', size) {
       notes: '',
     };
   }
+  if (RIVET_KINDS[kind]) {
+    return {
+      id: uid('hardware'),
+      type: 'hardware',
+      ...rivetDefaults(kind, at).fields,
+      material: RIVET_KINDS[kind].material,
+      supplierCode: '',
+      installationHole: '',
+      minimumSheet: '',
+      notes: '',
+    };
+  }
   const { diameter, pitch } = METRIC_THREADS[at];
   return {
     id: uid('hardware'),
@@ -687,6 +1264,7 @@ export function hardwareDefaults(kind = 'bolt', size) {
 export function hardwareDimensions(feature, parameters = {}) {
   if (!HARDWARE_TYPES[feature.kind]) throw new Error('Choose a hardware type.');
   if (SCREW_KINDS[feature.kind]) return screwDimensions(feature, parameters);
+  if (RIVET_KINDS[feature.kind]) return rivetDimensions(feature, parameters);
   const values = Object.fromEntries(
     ['diameter', 'pitch', 'length', 'bodyDiameter', 'headDiameter', 'headHeight', 'boreDiameter'].map((key) => [
       key,
@@ -714,6 +1292,10 @@ export function hardwareFieldLabels(feature) {
     ['minimumSheet', 'Supplier minimum sheet thickness (mm)'],
     ['notes', 'Installation / finish notes'],
   ];
+  if (RIVET_KINDS[feature.kind]) {
+    const r = resolveHardware(feature);
+    return [...rivetUses(r).map((key) => [key, rivetLabel(r, key)]), ...supplier];
+  }
   if (!SCREW_KINDS[feature.kind]) {
     const shank = ['bolt', 'stud'].includes(feature.kind);
     return Object.entries({
@@ -805,7 +1387,40 @@ function screwNote(f) {
     .filter(Boolean)
     .join('; ');
 }
+// The supplier / installation / minimum-sheet / notes suffixes (Phase O
+// rivets; the screw and Phase J notes keep their own copies byte for byte).
+const procurement = (f) =>
+  `${f.supplierCode ? `; Supplier: ${f.supplierCode}` : ''}${f.installationHole ? `; Installation hole Ø${f.installationHole} mm` : ''}${f.minimumSheet ? `; Minimum sheet ${f.minimumSheet} mm` : ''}${f.notes ? `; ${f.notes}` : ''}`;
+function rivetNote(f) {
+  const r = resolveHardware(f);
+  const spec = RIVET_KINDS[r.kind];
+  const size =
+    r.kind === 'blind-rivet-nut'
+      ? `${r.size} × ${shown(r.pitch)} × ${shown(r.length)} mm`
+      : r.kind === 'blind-rivet-stud'
+        ? `${r.size} × ${shown(r.pitch)}, body ${shown(r.length)} mm, stud ${shown(r.threadLength)} mm`
+        : `${r.size} × ${shown(r.length)} mm`;
+  const pin = ['blind-drive', 'push-rivet'].includes(r.kind) ? 'pin' : 'mandrel';
+  return [
+    `${spec.label} ${spec.standard}`,
+    size,
+    spec.heads.length > 1 ? suffixed(HEAD_STYLES[r.head].label, 'head') : '',
+    INSERTS.includes(r.kind) ? `${r.body === 'hex' ? 'hexagon' : 'round'} body` : '',
+    `grip ${shown(r.grip)} mm, ${r.state === 'unset' ? 'as supplied' : 'installed'}`,
+    MANDREL_RIVETS.includes(r.kind) ? `${pin} Ø${shown(r.mandrelDiameter)}` : '',
+    spec.tabled
+      ? r.estimated
+        ? `sizes outside ${spec.standard} estimated`
+        : ''
+      : 'proportional defaults, no standard table',
+    r.kind === 'lockbolt' && r.state === 'unset' ? 'collar not shown as supplied' : '',
+    'simplified envelope: blind-side upset schematic, no threads, grooves or knurls',
+  ]
+    .filter(Boolean)
+    .join('; ');
+}
 export function hardwareNote(f) {
+  if (RIVET_KINDS[f.kind]) return `${rivetNote(f)}${procurement(f)}`;
   if (SCREW_KINDS[f.kind])
     return `${screwNote(f)}${f.supplierCode ? `; Supplier: ${f.supplierCode}` : ''}${f.installationHole ? `; Installation hole Ø${f.installationHole} mm` : ''}${f.minimumSheet ? `; Minimum sheet ${f.minimumSheet} mm` : ''}${f.notes ? `; ${f.notes}` : ''}`;
   return `${HARDWARE_TYPES[f.kind]}; ${f.kind === 'washer' ? `${f.size} clearance` : `${f.size} × ${f.pitch}`}; simplified envelope, no helical threads or clinching teeth${f.supplierCode ? `; Supplier: ${f.supplierCode}` : ''}${f.installationHole ? `; Installation hole Ø${f.installationHole} mm` : ''}${f.minimumSheet ? `; Minimum sheet ${f.minimumSheet} mm` : ''}${f.notes ? `; ${f.notes}` : ''}`;

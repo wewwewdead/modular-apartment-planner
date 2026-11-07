@@ -49,7 +49,27 @@ it('stays out of the way of typing, modifiers, drags and other tools', () => {
   // A sketch session, hole tool, mate or operation draft owns the keys.
   expect(key({ key: 'r' }, { busy: true })).toBeNull();
   expect(key({ key: ']', code: 'BracketRight' }, { busy: true })).toBeNull();
-  expect(key({ key: 'x' })).toBeNull();
+  // An unbound key does nothing (X is the view toggle since the X-ray build).
+  expect(key({ key: 'q' })).toBeNull();
+});
+
+it('X / Shift+X toggle the view mode with or without a selection and while a tool runs', () => {
+  const xray = { type: 'view', wireframe: false };
+  const wire = { type: 'view', wireframe: true };
+  expect(key({ key: 'x' })).toEqual(xray);
+  expect(key({ key: 'X', shiftKey: true })).toEqual(wire);
+  expect(key({ key: 'x', code: 'KeyX' }, { selected: false, placeable: false })).toEqual(xray);
+  // Busy: a sketch, hole tool, mate, operation draft or Measure.
+  expect(key({ key: 'x' }, { busy: true })).toEqual(xray);
+  expect(key({ key: 'x' }, { busy: true, measuring: true })).toEqual(xray);
+  expect(key({ key: 'X', shiftKey: true }, { busy: true, toolGizmo: true })).toEqual(wire);
+  // Never while dragging, typing, with a modifier or on key repeat.
+  expect(key({ key: 'x' }, { dragging: true })).toBeNull();
+  expect(key({ key: 'x' }, { busy: true, dragging: true })).toBeNull();
+  for (const target of [document.createElement('input'), document.createElement('textarea')])
+    expect(key({ key: 'x', target }, { selected: false })).toBeNull();
+  for (const modifier of ['ctrlKey', 'metaKey', 'altKey']) expect(key({ key: 'x', [modifier]: true })).toBeNull();
+  expect(key({ key: 'x', repeat: true })).toBeNull();
 });
 
 it('D starts or stops Measure, with or without a selection', () => {

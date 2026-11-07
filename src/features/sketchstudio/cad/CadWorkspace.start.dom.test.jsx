@@ -102,6 +102,7 @@ it('an empty model shows the Start list and the origin plane tiles, never the we
     'New sketch',
     'Board / plate',
     'Tube / member',
+    'Angle bar',
     'Design parameters',
     'Welded table example',
     'Pump bracket drawing study',

@@ -91,6 +91,7 @@ export function createPreviewPerfRecorder({
   getCamera = null,
   getViewPreset = null,
   getScene = null,
+  debug = null,
 }) {
   const durations = new Float32Array(FRAME_HISTORY);
   const gaps = new Float32Array(FRAME_HISTORY);
@@ -217,6 +218,7 @@ export function createPreviewPerfRecorder({
         isPerspectiveCamera: Boolean(camera.isPerspectiveCamera),
         zoom: camera.zoom,
         fov: camera.isPerspectiveCamera ? camera.fov : null,
+        position: camera.position?.toArray?.() ?? null,
       };
     },
 
@@ -245,6 +247,26 @@ export function createPreviewPerfRecorder({
       });
       return [...seen.values()];
     },
+
+    /**
+     * What a verify script needs to aim a click or a pixel probe rather than
+     * guess one (`scripts/verify-xray-mode.mjs`): `viewMode()`, `probe(x, y)`
+     * — the targets a ray through a client pixel hits, nearest first, with the
+     * palette key, whether the material is a ghost, and the hit mesh's opacity,
+     * depth writes and shadow flag — `project([x, y, z])` from world to client
+     * pixels, `centers(kind)`, the world centre of every mesh whose pick target
+     * is of that kind, `drawables()`, the scene pass's draw list counted
+     * structurally (post-processing passes left out), `batches()`, the ids of
+     * every instanced batch, which stay the same when a rebuild refills them,
+     * and `batchMaterials()`, what each batch is drawing with right now.
+     */
+    viewMode: () => debug?.viewMode?.() ?? null,
+    probe: (clientX, clientY) => debug?.probe?.(clientX, clientY) ?? null,
+    project: (point) => debug?.project?.(point) ?? null,
+    centers: (kind) => debug?.centers?.(kind) ?? null,
+    drawables: () => debug?.drawables?.() ?? null,
+    batches: () => debug?.batches?.() ?? null,
+    batchMaterials: () => debug?.batchMaterials?.() ?? null,
 
     programs() {
       return (renderer.info.programs || []).map((program) => ({

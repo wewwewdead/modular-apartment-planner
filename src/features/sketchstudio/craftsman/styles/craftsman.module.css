@@ -1232,6 +1232,16 @@
   border-color: var(--dark-accent-craftsman);
 }
 
+/* The card content as one block, so the busy face can stand in for all of it. */
+.templateCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
 .templateCardName {
   font-size: 13px;
   font-weight: 600;

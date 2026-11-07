@@ -5,6 +5,7 @@ import { buildPreviewScene } from '@/three/scene/buildPreviewScene';
 import { MAX_FIXTURE_SHADOW_LIGHTS } from './buildPreviewObjects';
 import { createMaterialPalette } from './materials';
 import { createPreviewSceneCache } from './previewSceneCache';
+import { VIEW_MODES, applyViewModeToWorld, tierOf } from './viewMode';
 
 /**
  * Dragging a stair moves one object. The preview used to answer that by
@@ -332,6 +333,70 @@ describe('preview scene cache — frozen matrices survive reuse', () => {
     expect(world[13]).toBeCloseTo(entry.object.position.y, 6);
     expect(world[14]).toBeCloseTo(entry.object.position.z, 6);
 
+    cache.dispose();
+  });
+});
+
+describe('preview scene cache — a see-through mode across rebuilds', () => {
+  /** Whether every ghostable mesh under `root` holds what X-ray gives it. */
+  const xrayHolds = (root) => {
+    let checked = 0;
+    root.traverse((node) => {
+      if (!node.isMesh) return;
+      const base = node.userData.baseMaterial || node.material;
+      const tier = tierOf(base);
+      if (tier === 'skin' || tier === 'deck') {
+        checked += 1;
+        if (!node.material.userData.ghostTwin || node.castShadow) throw new Error(`${node.name} is not ghosted`);
+      } else if (tier === 'structure' || tier === 'contents') {
+        checked += 1;
+        if (node.material !== base) throw new Error(`${node.name} was ghosted`);
+      }
+    });
+    return checked;
+  };
+
+  it('ghosts the meshes a rebuild brings and leaves the ones it carried over as they were', () => {
+    const { project, stairId, activeFloorId } = buildProject();
+    const palette = createMaterialPalette();
+    const cache = createPreviewSceneCache();
+
+    const first = cache.build(buildPreviewScene(project, { activeFloorId }), palette);
+    applyViewModeToWorld(first.root, first.batchRoot, palette, VIEW_MODES.XRAY);
+    const survivorId = [...first.meshMap.keys()].find(
+      (id) => id !== stairId && first.meshMap.get(id).materialKey === 'wall',
+    );
+    const survivor = first.meshMap.get(survivorId).object;
+    const survivorMaterial = survivor.material;
+    expect(survivorMaterial.userData.ghostTwin).toBe(true);
+
+    // A stair move rebuilds every floor group and carries every other object over.
+    const second = cache.build(buildPreviewScene(moveStair(project, 3000), { activeFloorId }), palette);
+    expect(second.meshMap.get(survivorId).object).toBe(survivor);
+    // Carried over still holding its twin; the floor groups are new and unstamped.
+    expect(survivor.material).toBe(survivorMaterial);
+    expect(second.root.children.every((group) => group.userData.viewModeApplied === undefined)).toBe(true);
+
+    applyViewModeToWorld(second.root, second.batchRoot, palette, VIEW_MODES.XRAY);
+    expect(xrayHolds(second.root)).toBeGreaterThan(6);
+    expect(xrayHolds(second.batchRoot)).toBeGreaterThan(0);
+    expect(survivor.material).toBe(survivorMaterial);
+    cache.dispose();
+  });
+
+  it('hands back an untouched floor still stamped, so the mode does not walk it again', () => {
+    const { project, activeFloorId } = buildProject();
+    const palette = createMaterialPalette();
+    const cache = createPreviewSceneCache();
+    const first = cache.build(buildPreviewScene(project, { activeFloorId }), palette);
+    applyViewModeToWorld(first.root, first.batchRoot, palette, VIEW_MODES.XRAY);
+    const groups = first.root.children.slice();
+
+    // Same project: every floor is handed back as it was.
+    const second = cache.build(buildPreviewScene(project, { activeFloorId }), palette);
+    expect(second.root.children).toEqual(groups);
+    expect(groups.every((group) => group.userData.viewModeApplied === VIEW_MODES.XRAY)).toBe(true);
+    expect(applyViewModeToWorld(second.root, second.batchRoot, palette, VIEW_MODES.XRAY)).toBe(false);
     cache.dispose();
   });
 });

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { IS_DESKTOP_APP } from '@/platform/desktopApp';
 import { sunDirectionInPlan } from '@/analysis/sunStudyRunner';
+import { SKY_CANVAS_HEIGHT, SKY_CANVAS_WIDTH } from './environmentSize';
 
 /**
  * The sun and the sky it hangs in, for the 3D preview.
@@ -203,9 +203,13 @@ export function createSunSky() {
     // light from the other, which one column cannot express.
     skyCanvas = document.createElement('canvas');
     // This canvas is both the visible backdrop and the source the image-based
-    // lighting is prefiltered from; the desktop shell takes the sharper dome.
-    skyCanvas.width = IS_DESKTOP_APP ? 1024 : 512;
-    skyCanvas.height = IS_DESKTOP_APP ? 512 : 256;
+    // lighting is prefiltered from, so its width is not a free choice: three
+    // prefilters it at width / 4, and that has to be the studio environment's
+    // size or every lit material links a new program the moment the study
+    // starts (see `environmentSize.js`). The web build used to take a 512-wide
+    // dome and pay exactly that; it now paints the desktop shell's size too.
+    skyCanvas.width = SKY_CANVAS_WIDTH;
+    skyCanvas.height = SKY_CANVAS_HEIGHT;
     skyTexture = new THREE.CanvasTexture(skyCanvas);
     // Equirectangular so three treats it as a dome: the vertical axis becomes
     // the polar angle and the gradient sits where a sky sits, however the

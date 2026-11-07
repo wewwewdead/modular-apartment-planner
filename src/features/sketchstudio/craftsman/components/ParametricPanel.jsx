@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { createVariable, findVariableReferences } from '../../utils/parametricEngine';
+import NumericInput from '../../components/NumericInput';
 import styles from '../styles/craftsman.module.css';
 
 export default function ParametricPanel({ variables, entities, onVariablesChange }) {
@@ -51,11 +52,10 @@ export default function ParametricPanel({ variables, entities, onVariablesChange
             return (
               <div key={v.id} className={styles.varRow}>
                 <span className={styles.varName}>{v.name}</span>
-                <input
-                  type="number"
+                <NumericInput
                   className={styles.varInput}
                   value={v.value}
-                  onChange={(e) => handleUpdate(v.id, e.target.value)}
+                  onCommit={(next) => handleUpdate(v.id, next)}
                 />
                 <span className={styles.varUnit}>mm</span>
                 {refs.length > 0 && (

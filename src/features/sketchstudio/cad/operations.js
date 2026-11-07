@@ -1,5 +1,6 @@
 import { clone, createPart, uid, memberMetrics, resolveParameters } from './model.js';
 import { mapPlacement } from './placement.js';
+import { angleSectionProfile } from './stockSections.js';
 
 export const PROFILE_OPERATIONS = ['extrude', 'revolve', 'sweep', 'loft'];
 export const GUIDED_OPERATIONS = [
@@ -98,7 +99,8 @@ function memberEndSketch(part, parameters) {
       center: [0, 0],
       ...(s.wall ? { holes: [{ type: 'circle', radius: s.diameter / 2 - s.wall, center: [0, 0] }] } : {}),
     };
-  else if (s.type === 'angle') return null;
+  // An angle's own L outline, with its root and toe arcs when it has them.
+  else if (s.type === 'angle') profile = angleSectionProfile(s);
   else
     profile = {
       type: 'rectangle',

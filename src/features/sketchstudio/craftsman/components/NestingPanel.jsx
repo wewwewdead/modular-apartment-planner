@@ -7,6 +7,7 @@ import {
   optimizeLinearStock,
   resolveStockLengthMm,
 } from '../utils/linearStockOptimizer';
+import NumericInput from '../../components/NumericInput';
 import styles from '../styles/craftsman.module.css';
 
 const COLORS = ['#4a9eff', '#ff6b6b', '#51cf66', '#ffd43b', '#cc5de8', '#ff922b', '#20c997', '#f06595'];
@@ -475,12 +476,11 @@ export default function NestingPanel({ bomRows }) {
 
       <div className={styles.nestingConfig}>
         <label className={styles.fieldLabel}>Blade kerf (mm)</label>
-        <input
-          type="number"
+        <NumericInput
           min="0"
           step="0.1"
           value={bladeKerf}
-          onChange={(event) => setBladeKerf(Number(event.target.value) || DEFAULT_BLADE_KERF)}
+          onCommit={(v) => setBladeKerf(v > 0 ? v : DEFAULT_BLADE_KERF)}
           className={styles.thicknessInput}
         />
       </div>
@@ -489,17 +489,15 @@ export default function NestingPanel({ bomRows }) {
         <div className={styles.nestingConfig}>
           <label className={styles.fieldLabel}>Sheet size (mm)</label>
           <div className={styles.nestingSizeInputs}>
-            <input
-              type="number"
+            <NumericInput
               value={sheetWidth}
-              onChange={(event) => setSheetWidth(Number(event.target.value) || DEFAULT_SHEET.width)}
+              onCommit={(v) => setSheetWidth(v > 0 ? v : DEFAULT_SHEET.width)}
               className={styles.thicknessInput}
             />
             <span className={styles.nestingSizeX}>x</span>
-            <input
-              type="number"
+            <NumericInput
               value={sheetHeight}
-              onChange={(event) => setSheetHeight(Number(event.target.value) || DEFAULT_SHEET.height)}
+              onCommit={(v) => setSheetHeight(v > 0 ? v : DEFAULT_SHEET.height)}
               className={styles.thicknessInput}
             />
           </div>
@@ -513,13 +511,12 @@ export default function NestingPanel({ bomRows }) {
             {linearMaterials.map((material) => (
               <div key={material.material} className={styles.nestingLinearConfigRow}>
                 <span className={styles.nestingLinearConfigLabel}>{material.materialName}</span>
-                <input
-                  type="number"
+                <NumericInput
                   min="1"
                   step="1"
                   value={linearStockLengths[material.material] ?? material.defaultStockLength}
-                  onChange={(event) => {
-                    const nextValue = Number(event.target.value) || material.defaultStockLength;
+                  onCommit={(v) => {
+                    const nextValue = v > 0 ? v : material.defaultStockLength;
                     setLinearStockLengths((current) => ({
                       ...current,
                       [material.material]: nextValue,
@@ -553,13 +550,12 @@ export default function NestingPanel({ bomRows }) {
             <label className={styles.fieldLabel} htmlFor="cut-kerf">
               Saw kerf per cut (mm)
             </label>
-            <input
+            <NumericInput
               id="cut-kerf"
-              type="number"
               min="0"
               step="0.5"
               value={cutKerf}
-              onChange={(event) => setCutKerf(Number(event.target.value) || 0)}
+              onCommit={(v) => setCutKerf(Math.max(0, v))}
               className={styles.thicknessInput}
             />
           </div>
@@ -570,13 +566,12 @@ export default function NestingPanel({ bomRows }) {
               {cutMaterials.map((material) => (
                 <div key={material.material} className={styles.nestingLinearConfigRow}>
                   <span className={styles.nestingLinearConfigLabel}>{material.materialName}</span>
-                  <input
-                    type="number"
+                  <NumericInput
                     min="1"
                     step="1"
                     value={cutStockLengths[material.material] ?? material.defaultStockLengthMm}
-                    onChange={(event) => {
-                      const nextValue = Number(event.target.value) || material.defaultStockLengthMm;
+                    onCommit={(v) => {
+                      const nextValue = v > 0 ? v : material.defaultStockLengthMm;
                       setCutStockLengths((current) => ({ ...current, [material.material]: nextValue }));
                     }}
                     className={styles.thicknessInput}

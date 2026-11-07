@@ -17,12 +17,15 @@
  * vertex chains out of the rasteriser.
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 import { CanvasZoomProvider } from './CanvasZoomContext';
-import ShadowOverlay, { decimateRing } from './ShadowOverlay';
+import ShadowOverlay, { decimateRing, SUN_STUDY_MAX_PATH_VERTICES } from './ShadowOverlay';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const square = (size) => [
   { x: 0, y: 0 },
@@ -218,5 +221,141 @@ describe('decimateRing', () => {
     ];
 
     expect(decimateRing(sliver, 1).length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+/**
+ * A many-vertex envelope: `count` overlapping 20-gons, the shape of an
+ * unmerged union fallback (thousands of overlapping pieces).
+ */
+function overlappingPieces(count, sides = 20) {
+  return Array.from({ length: count }, (_, index) => ({
+    outline: Array.from({ length: sides }, (__, corner) => {
+      const angle = (corner / sides) * Math.PI * 2;
+      return { x: index * 300 + Math.cos(angle) * 5000, y: Math.sin(angle) * 5000 };
+    }),
+    holes: [],
+  }));
+}
+
+/** jsdom has no canvas; a stub that records the fill and returns a data URL. */
+function stubCanvas() {
+  const calls = { fill: [], moveTo: 0 };
+  const context = {
+    setTransform() {},
+    beginPath() {},
+    moveTo() {
+      calls.moveTo += 1;
+    },
+    lineTo() {},
+    closePath() {},
+    fill(rule) {
+      calls.fill.push(rule);
+    },
+    createImageData: (width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
+    putImageData() {},
+  };
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
+  vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/png;base64,stub');
+  return calls;
+}
+
+describe('the sun-study layer guards its own complexity (docs/all-day-shadow-freeze.md §4.3)', () => {
+  it('draws a small envelope as a path and says so', () => {
+    const container = renderOverlay();
+    const layer = container.querySelector('g[data-layer="sun-study"]');
+
+    expect(layer.getAttribute('data-envelope-render')).toBe('path');
+    // Outline (4) + hole (4).
+    expect(layer.getAttribute('data-envelope-vertices')).toBe('8');
+    expect(layer.getAttribute('data-envelope-regions')).toBe('1');
+    expect(container.querySelector('[data-type="shadow-envelope-fill"]')).not.toBeNull();
+    expect(container.querySelector('[data-type="shadow-envelope-image"]')).toBeNull();
+  });
+
+  it('stays on the path just under the budget', () => {
+    // 249 pieces x 20 vertices = 4,980; the instant shadow (4) and the target
+    // (4) bring the layer to 4,988.
+    const container = renderOverlay(0.1, { ...study, envelope: overlappingPieces(249) });
+    const layer = container.querySelector('g[data-layer="sun-study"]');
+
+    expect(Number(layer.getAttribute('data-envelope-vertices'))).toBe(4980);
+    expect(layer.getAttribute('data-envelope-render')).toBe('path');
+  });
+
+  it('switches the envelope to one nonzero bitmap past the budget, and drops the dashed outline', () => {
+    const calls = stubCanvas();
+    const envelope = overlappingPieces(300);
+    const container = renderOverlay(0.1, { ...study, envelope });
+    const layer = container.querySelector('g[data-layer="sun-study"]');
+
+    expect(Number(layer.getAttribute('data-envelope-vertices'))).toBeGreaterThan(SUN_STUDY_MAX_PATH_VERTICES);
+    expect(layer.getAttribute('data-envelope-render')).toBe('image');
+    expect(layer.getAttribute('data-envelope-regions')).toBe('300');
+    expect(container.querySelector('[data-type="shadow-envelope-fill"]')).toBeNull();
+    expect(container.querySelector('[data-type="shadow-envelope-outline"]')).toBeNull();
+
+    const image = container.querySelector('image[data-type="shadow-envelope-image"]');
+    expect(image.getAttribute('href')).toBe('data:image/png;base64,stub');
+    // Every piece filled in one nonzero pass, so overlaps cannot cancel.
+    expect(calls.fill).toEqual(['nonzero']);
+    expect(calls.moveTo).toBe(300);
+    // The image covers the envelope's extent.
+    expect(Number(image.getAttribute('x'))).toBeCloseTo(-5000, 0);
+    expect(Number(image.getAttribute('width'))).toBeGreaterThanOrEqual(299 * 300 + 10000 - 1);
+  });
+
+  it('draws nothing for the envelope rather than a huge path when no canvas exists', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const container = renderOverlay(0.1, { ...study, envelope: overlappingPieces(300) });
+
+    expect(container.querySelector('g[data-layer="sun-study"]').getAttribute('data-envelope-render')).toBe('image');
+    expect(container.querySelector('[data-type="shadow-envelope-fill"]')).toBeNull();
+    expect(container.querySelector('image[data-type="shadow-envelope-image"]')).toBeNull();
+  });
+
+  it('draws the instant shadow as one nonzero path per region', () => {
+    const regions = [
+      { outline: square(5000), holes: [] },
+      // Overlaps the first: with one evenodd path the overlap would read as lit.
+      { outline: square(3000).map(({ x, y }) => ({ x: x + 4000, y: y + 4000 })), holes: [] },
+      { outline: square(8000).map(({ x, y }) => ({ x: x + 20000, y })), holes: [square(1000)] },
+    ];
+    const container = renderOverlay(0.1, { ...study, regions });
+    const paths = [...container.querySelectorAll('[data-type="shadow-instant"]')];
+
+    expect(paths).toHaveLength(3);
+    for (const path of paths) expect(path.getAttribute('fill-rule')).toBe('nonzero');
+    // The third region still punches its hole: two closed subpaths.
+    expect(paths[2].getAttribute('d').match(/Z/g)).toHaveLength(2);
+  });
+
+  it('winds holes against their outline so nonzero still punches them', () => {
+    // Outline and hole given with the SAME winding, as an unmerged piece can be.
+    const region = { outline: square(10000), holes: [square(2000).map(({ x, y }) => ({ x: x + 4000, y: y + 4000 }))] };
+    const container = renderOverlay(0.1, { ...study, regions: [region] });
+    const d = container.querySelector('[data-type="shadow-instant"]').getAttribute('d');
+    const rings = d
+      .split('Z')
+      .filter((part) => part.trim())
+      .map((part) =>
+        part
+          .replace(/[ML]/g, ' ')
+          .trim()
+          .split(/\s+/)
+          .map(Number)
+          .reduce(
+            (points, value, index, all) => (index % 2 ? points : [...points, { x: value, y: all[index + 1] }]),
+            [],
+          ),
+      );
+    const signedArea = (points) =>
+      points.reduce((sum, a, index) => {
+        const b = points[(index + 1) % points.length];
+        return sum + a.x * b.y - b.x * a.y;
+      }, 0);
+
+    expect(rings).toHaveLength(2);
+    expect(Math.sign(signedArea(rings[0]))).toBe(-Math.sign(signedArea(rings[1])));
   });
 });

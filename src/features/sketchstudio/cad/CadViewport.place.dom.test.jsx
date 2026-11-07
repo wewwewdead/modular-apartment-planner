@@ -971,3 +971,128 @@ it('Hole row: digits + Enter in the direction stage set the spacing along the ho
   expect(info).toMatchObject({ kind: 'path', along: 20 });
   info.direction.forEach((v, i) => expect(v).toBeCloseTo([0, 1, 0][i], 9));
 });
+
+// Phase Q (docs/sketch-studio-hardware-seat-side.md §6.4): an angle bar's leg
+// (a 5 mm plate) lies on the board, a through hole in each on one axis. The
+// bores are real gaps in the meshes, so pointing at the centre hits nothing
+// and only the opening rule decides: from above the leg's opening (nearest
+// the camera) wins over the board's coaxial one listed first; from below the
+// board's far opening wins.
+it('Hardware: coaxial openings — the one nearest the camera wins, from above and from below', () => {
+  const axis = [200, 150];
+  // A box with a 6 mm square bore through it on the hole axis, as four boxes.
+  const bored = ([x0, y0, z0], [x1, y1, z1]) => {
+    const [cx, cy] = axis;
+    const boxes = [
+      [
+        [x0, y0, z0],
+        [cx - 3, y1, z1],
+      ],
+      [
+        [cx + 3, y0, z0],
+        [x1, y1, z1],
+      ],
+      [
+        [cx - 3, y0, z0],
+        [cx + 3, cy - 3, z1],
+      ],
+      [
+        [cx - 3, cy + 3, z0],
+        [cx + 3, y1, z1],
+      ],
+    ];
+    const mesh = { vertices: [], normals: [], triangles: [] };
+    for (const [a, b] of boxes) {
+      const part = boxMesh(a, b);
+      const base = mesh.vertices.length / 3;
+      mesh.vertices.push(...part.vertices);
+      mesh.normals.push(...part.normals);
+      mesh.triangles.push(...part.triangles.map((t) => t + base));
+    }
+    return mesh;
+  };
+  const BAR = [
+    [100, 50, 18],
+    [300, 250, 23],
+  ];
+  const cut = (z) => ({ position: [...axis, z], direction: [0, 0, -1], widthDirection: [1, 0, 0] });
+  const hole = (id) => ({ id, type: 'hole', diameter: 6.6, depth: 5, throughAll: true });
+  const pairModel = {
+    ...model,
+    parts: [
+      { id: 'board', name: 'Board', features: [hole('w')] },
+      { id: 'bar', name: 'Angle bar', features: [hole('a')] },
+    ],
+    instances: [
+      { id: 'board', partId: 'board', position: [0, 0, 0], rotation: [0, 0, 0] },
+      { id: 'bar', partId: 'bar', position: [0, 0, 0], rotation: [0, 0, 0] },
+    ],
+  };
+  const pairSnapshot = {
+    parameters: {},
+    // The board first: list order alone would pick its hole.
+    parts: [
+      { id: 'board', bounds: BOUNDS, features: { w: { cut: cut(18), exits: [18] } } },
+      { id: 'bar', bounds: BAR, features: { a: { cut: cut(23), exits: [5] } } },
+    ],
+    instances: [
+      { ...board, mesh: bored(...BOUNDS) },
+      {
+        id: 'bar',
+        partId: 'bar',
+        bounds: BAR,
+        mesh: bored(...BAR),
+        edges: { lines: boxEdges(...BAR) },
+        placement: [{ translation: [0, 0, 0] }],
+      },
+    ],
+  };
+  const pctx = { model: pairModel, snapshot: pairSnapshot, parameters: {} };
+  const placement = placementView(
+    createOperationDraft({
+      type: 'hardware',
+      model: pairModel,
+      placement: startPlacement({ type: 'hardware', hardware: hardwareDefaults('bolt', 'M6') }),
+    }),
+    pctx,
+  );
+  expect(placement.holeCentres.map((h) => `${h.instanceId}/${h.side}`)).toEqual([
+    'board/entry',
+    'board/far',
+    'bar/entry',
+    'bar/far',
+  ]);
+  const onPlace = vi.fn();
+  const view = render(
+    <CadViewport {...props({ model: pairModel, snapshot: pairSnapshot, placement, onPlace, view: 'top' })} />,
+  );
+  const top = viewportEl().cadProject([...axis, 23]);
+  pointer('pointermove', top);
+  expect(state().snapKind).toBe('hole centre');
+  click(top);
+  expect(onPlace.mock.calls[0][0]).toMatchObject({
+    instanceId: 'bar',
+    holeFeatureId: 'a',
+    holeSide: 'entry',
+    point: [...axis, 23],
+    normal: [0, 0, 1],
+  });
+  // Seen from below: the board's far opening (z = 0), facing down.
+  view.rerender(
+    <CadViewport {...props({ model: pairModel, snapshot: pairSnapshot, placement, onPlace, view: 'bottom' })} />,
+  );
+  const under = viewportEl().cadProject([...axis, 0]);
+  pointer('pointermove', under);
+  expect(state().snapKind).toBe('hole centre');
+  expect(document.querySelector('.cad-placement-hud').textContent).toContain(
+    'hole centre · Hex bolt M6 · Board bottom · far side · click to add',
+  );
+  click(under);
+  expect(onPlace.mock.calls[1][0]).toMatchObject({
+    instanceId: 'board',
+    holeFeatureId: 'w',
+    holeSide: 'far',
+    point: [...axis, 0],
+    normal: [0, 0, -1],
+  });
+});

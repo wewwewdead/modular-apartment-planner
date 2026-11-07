@@ -1,0 +1,20 @@
+/*
+ * An HTML layer over the plan <svg> for the section / elevation wait's bar and
+ * pill. It takes no pointer events, so the drawing under it stays usable.
+ */
+.host {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+/*
+ * The section view's controls dock at the top right and can run most of the
+ * canvas wide, so the pill sits at the bottom centre, clear of them and of
+ * the drawing's title.
+ */
+.host [data-loading-pill][data-placement='region'] {
+  top: auto;
+  bottom: 44px;
+}

@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { useNumericDraft } from '@/features/floorplan/components/useNumericDraft';
+import { useNumericDraft } from '@/hooks/useNumericDraft';
 import styles from './WallDetailEditor.module.css';
 
 const GLYPHS = {
@@ -104,18 +104,29 @@ function Chevron() {
   );
 }
 
+/**
+ * Typing holds a draft and commits on Enter or blur (see useNumericDraft).
+ * Committing per keystroke made the box impossible to clear — '' parsed to 0,
+ * 0 was written back — and turned every keystroke into an undo step and a 3D
+ * rebuild.
+ */
 export function NumberField({ label, value, onChange, min, step = 1, suffix = 'mm', disabled = false }) {
+  // null/undefined must never reach `value`, or React flips the input to uncontrolled.
+  const stored = value != null && Number.isFinite(Number(value)) ? value : '';
+  const { displayValue, handleChange, handleKeyDown, handleBlur } = useNumericDraft(stored, onChange);
   return (
     <label className={styles.field}>
       <span>{label}</span>
       <span className={styles.inputWrap}>
         <input
           type="number"
-          value={Number.isFinite(Number(value)) ? value : ''}
+          value={displayValue}
           min={min}
           step={step}
           disabled={disabled}
-          onChange={(event) => onChange(Number(event.target.value))}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
         />
         {suffix ? <small>{suffix}</small> : null}
       </span>
@@ -124,14 +135,9 @@ export function NumberField({ label, value, onChange, min, step = 1, suffix = 'm
 }
 
 /**
- * A number that is allowed to be negative.
- *
- * The plain NumberField above commits on every keystroke, which a positive-only
- * dimension survives — every prefix of "300" is a number. A signed one does not:
- * the first character of "-150" is a lone minus, which parses to nothing, and a
- * committed nothing writes zero straight back over the box before the second
- * character arrives. So this one keeps a draft and commits on Enter or blur, the
- * same rule the floor plan's own number entry runs on.
+ * A number that is allowed to be negative. Same draft rule as NumberField; it
+ * matters most here, since the first character of "-150" is a lone minus that
+ * parses to nothing. Only `min` is left off.
  */
 export function SignedNumberField({ label, value, onChange, step = 1, suffix = 'mm', disabled = false }) {
   const { displayValue, handleChange, handleKeyDown, handleBlur } = useNumericDraft(value, onChange);

@@ -162,12 +162,12 @@ function addOutline(object3d, materialPalette, { force = false } = {}) {
  * get one — glass, ceiling screw heads and luminaire lenses were never marked,
  * so they stay bare exactly as they would have on the eager path.
  *
- * The lines this makes are drawn individually rather than folded into the
- * floor's merged outline: the batch was made when there was nothing to merge, and
- * re-cutting it here would mean disposing instance buffers the cache still holds
- * a reference to. The next rebuild of a floor merges them properly. That is the
- * one cost of the lazy path, it lands on a deliberate view switch rather than on
- * every frame of every drag, and it heals itself the first time anything moves.
+ * The lines this makes are not folded into the floor's merged outline here: the
+ * batch was made when there was nothing to merge, and the batches belong to the
+ * batch root, which this never sees. The viewport follows up with
+ * `previewBatching.remergeFloorOutlines`, which rewrites only the merged line
+ * object and leaves the instance buffers the cache still holds alone; until it
+ * does, each line is a draw call of its own.
  */
 export function ensureOutlines(root, materialPalette) {
   if (!root) return false;

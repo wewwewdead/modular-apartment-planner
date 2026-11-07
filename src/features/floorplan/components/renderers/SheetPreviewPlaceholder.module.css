@@ -1,0 +1,74 @@
+/*
+ * The sheet thumbnail's stand-in, drawn in the sheet's own SVG. The loading
+ * kit's PanePlaceholder is HTML; inside a scaled sheet drawing its 12 px words
+ * would scale with the paper, so this is the same look — grid paper, a
+ * breathing hairline frame, words from 300 ms — in SVG terms.
+ */
+.paper {
+  fill: var(--color-panel-bg);
+}
+
+.gridMinor {
+  stroke: rgba(26, 122, 104, 0.06);
+  stroke-width: 0.5px;
+  vector-effect: non-scaling-stroke;
+  fill: none;
+}
+
+.gridMajor {
+  stroke: rgba(26, 122, 104, 0.1);
+  stroke-width: 0.5px;
+  vector-effect: non-scaling-stroke;
+  fill: none;
+}
+
+.frame {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.35;
+  animation: sheetPreviewBreathe 2.4s var(--ease-in-out-soft) infinite alternate;
+}
+
+.placeholder[data-loading-state='error'] .frame,
+.placeholder[data-loading-state='empty'] .frame {
+  animation: none;
+  opacity: 0.2;
+}
+
+.words {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  fill: var(--color-text-secondary);
+  animation: sheetPreviewWordsIn var(--duration-smooth) var(--ease-out) both;
+}
+
+.placeholder[data-loading-state='error'] .words {
+  fill: var(--color-danger);
+}
+
+@keyframes sheetPreviewBreathe {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 0.6;
+  }
+}
+
+@keyframes sheetPreviewWordsIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame {
+    animation: none;
+    opacity: 0.48;
+  }
+}

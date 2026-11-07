@@ -10,11 +10,15 @@ import { mapPlacement } from './placement.js';
 import { operationModel } from './operations.js';
 import { holeCentres } from './placementCuts.js';
 import {
+  HARDWARE_HINTS,
   HOLES_PENDING,
   NO_HOLES,
+  NO_OTHER_SIDE,
+  canFlipSide,
   chooseHole,
   chosenHoleRows,
   finishHardware,
+  flipHardwareSide,
   hardwareRings,
   hardwareStepBack,
   hardwareSummary,
@@ -29,6 +33,7 @@ import {
 import {
   finishPlacement,
   ghostSegments,
+  instanceOperations,
   placeClick,
   placementSummary,
   placementView,
@@ -115,7 +120,8 @@ describe('Place: choosing holes', () => {
       'Hardware: 3 holes chosen · click more holes, or a chosen one to remove it · Enter seats it in them · Esc removes the last one',
     );
     expect(view.place.chosenCount).toBe(3);
-    expect(view.place.chosen).toEqual({ 'b1/r/3': true, 'b1/r/0': true, 'b1/r/1': true });
+    // The value is the chosen opening (Phase Q).
+    expect(view.place.chosen).toEqual({ 'b1/r/3': 'entry', 'b1/r/0': 'entry', 'b1/r/1': 'entry' });
     expect(view.handles).toEqual([]);
     // A chosen hole clicked again is removed; the others keep their order.
     const two = placeClick(three, rowHole(w, 0), w.ctx);
@@ -461,5 +467,229 @@ describe('after Apply: history, Delete and the BOM', () => {
     const after = removeInstance(applied, seated.extraInstances[0].id);
     expect(after.instances).toHaveLength(w.model.instances.length + 1);
     expect(after.connections.map((c) => c.from)).toEqual([seated.newInstance.id]);
+  });
+});
+
+// Phase Q (docs/sketch-studio-hardware-seat-side.md §6.3): the side a hole is
+// seated on. The board's 4-row 'r' comes out of the bottom face (exits 18);
+// the single hole 'h' is blind (no far opening) unless `throughH`.
+function sidedWorld({ throughH = false, rowExits = [18, 18, 18, 18], ...options } = {}) {
+  const w = rowWorld(options);
+  const features = w.snapshot.parts[0].features;
+  features.r = { ...features.r, exits: rowExits };
+  features.h = { ...features.h, exits: [throughH ? 18 : null] };
+  return w;
+}
+// A click on the far (bottom) opening of row centre k.
+const farRowHole = (w, k, extra = {}) =>
+  face(w, [CENTRES[k][0], CENTRES[k][1], 0], [0, 0, -1], {
+    snapKind: 'hole centre',
+    holeFeatureId: 'r',
+    holeAttachable: true,
+    holeIndex: k,
+    holeSide: 'far',
+    ...extra,
+  });
+const entry = (info) => ({ ...info, holeSide: 'entry' });
+// The seated hardware's seat origin and shank direction (local -Z), world.
+const poseOf = (instance) => {
+  const ops = instanceOperations(instance);
+  return { origin: mapPlacement([0, 0, 0], ops), shank: mapPlacement([0, 0, -1], ops, true) };
+};
+
+describe('seat side (Phase Q)', () => {
+  it('a far pick seats on the bottom opening, shank up, with side: far on the connection', () => {
+    const w = sidedWorld();
+    const chosen = pick(w, hardwareDraft(w), farRowHole(w, 1));
+    expect(chosen.placement.holes[0]).toMatchObject({ index: 1, side: 'far', point: [150, 100, 0] });
+    const seated = finishPlacement(chosen, w.ctx);
+    const pose = poseOf(seated.newInstance);
+    close(pose.origin, [150, 100, 0]);
+    close(pose.shank, [0, 0, 1]);
+    expect(seated.connections[0]).toMatchObject({ toFeatureId: 'r', holeIndex: 1, side: 'far', offset: 0 });
+    expect(Object.keys(seated.connections[0])).toEqual([
+      'id',
+      'type',
+      'from',
+      'to',
+      'fromFeatureId',
+      'toFeatureId',
+      'holeIndex',
+      'side',
+      'offset',
+    ]);
+    expect(placementSummary(seated, w.ctx)).toMatch(
+      /^Hex bolt M6 on Board · bottom face at .* · concentric with the hole$/,
+    );
+  });
+
+  it('an entry pick is byte-identical to Phase M (no side key)', () => {
+    const w = sidedWorld({ throughH: true });
+    const seated = finishPlacement(pick(w, hardwareDraft(w), entry(singleHole(w))), w.ctx);
+    expect(seated.placement.holes[0].side).toBe('entry');
+    expect(Object.keys(seated.connections[0])).toEqual([
+      'id',
+      'type',
+      'from',
+      'to',
+      'fromFeatureId',
+      'toFeatureId',
+      'offset',
+    ]);
+    close(poseOf(seated.newInstance).shank, [0, 0, -1]);
+  });
+
+  it('the other opening of a chosen hole switches its side in place; the same opening removes it', () => {
+    const w = sidedWorld();
+    const three = pick(w, hardwareDraft(w), rowHole(w, 0), rowHole(w, 1), rowHole(w, 2));
+    const switched = pick(w, three, farRowHole(w, 1));
+    expect(switched.placement.holes.map((h) => [h.index, h.side])).toEqual([
+      [0, 'entry'],
+      [1, 'far'],
+      [2, 'entry'],
+    ]);
+    close(switched.placement.holes[1].normal, [0, 0, -1]);
+    // The HUD map carries the side chosen.
+    expect(placementView(switched, w.ctx).place.chosen['b1/r/1']).toBe('far');
+    const removed = pick(w, switched, farRowHole(w, 1));
+    expect(removed.placement.holes.map((h) => h.index)).toEqual([0, 2]);
+    // A double-click on the other opening moves it there (never removes).
+    const moved = chooseHole(three, farRowHole(w, 2), w.ctx);
+    expect(moved.placement.holes.map((h) => h.side)).toEqual(['entry', 'entry', 'far']);
+    expect(chooseHole(moved, farRowHole(w, 2), w.ctx)).toBe(moved);
+  });
+
+  it('Flip side in Place moves the rings; twice is the start again', () => {
+    const w = sidedWorld();
+    const two = pick(w, hardwareDraft(w), rowHole(w, 0), rowHole(w, 3));
+    expect(canFlipSide(two, w.ctx)).toBe(true);
+    expect(placementView(two, w.ctx).hint).toBe(HARDWARE_HINTS.chosen(2) + HARDWARE_HINTS.flip);
+    const flipped = flipHardwareSide(two, w.ctx);
+    expect(flipped.placement.stage).toBe('place');
+    expect(flipped.placement.holes.map((h) => [h.index, h.side, h.point])).toEqual([
+      [0, 'far', [100, 100, 0]],
+      [3, 'far', [250, 100, 0]],
+    ]);
+    expect(hardwareRings(flipped, w.ctx).map((r) => r.frame.origin)).toEqual([
+      [100, 100, 0],
+      [250, 100, 0],
+    ]);
+    const back = flipHardwareSide(flipped, w.ctx);
+    expect(back.placement.holes.map((h) => [h.index, h.side, h.point])).toEqual([
+      [0, 'entry', [100, 100, 18]],
+      [3, 'entry', [250, 100, 18]],
+    ]);
+  });
+
+  it('Flip side when seated rebuilds the result: same instance ids and offset, side: far, then back to no key', () => {
+    const w = sidedWorld();
+    const seated = setHardwareOffset(
+      finishPlacement(pick(w, hardwareDraft(w), rowHole(w, 0), rowHole(w, 2)), w.ctx),
+      1.5,
+    );
+    const ids = [seated.newInstance.id, seated.extraInstances[0].id];
+    const flipped = flipHardwareSide(seated, w.ctx);
+    expect(flipped.placement.stage).toBe('shape');
+    expect([flipped.newInstance.id, flipped.extraInstances[0].id]).toEqual(ids);
+    expect(flipped.connections.map((c) => [c.side, c.offset])).toEqual([
+      ['far', 1.5],
+      ['far', 1.5],
+    ]);
+    close(poseOf(flipped.extraInstances[0]).origin, [200, 100, 0]);
+    close(poseOf(flipped.extraInstances[0]).shank, [0, 0, 1]);
+    // Only the draft changes: the saved model gets it all at Apply.
+    expect(operationModel(flipped).connections).toHaveLength(2);
+    const back = flipHardwareSide(flipped, w.ctx);
+    expect(back.connections.every((c) => !('side' in c))).toBe(true);
+    close(poseOf(back.newInstance).origin, [100, 100, 18]);
+  });
+
+  it('a blind hole stays on its drill side and the hint says so; nothing to flip throws', () => {
+    const w = sidedWorld();
+    const seated = finishPlacement(pick(w, hardwareDraft(w), rowHole(w, 1), singleHole(w)), w.ctx);
+    const flipped = flipHardwareSide(seated, w.ctx);
+    expect(flipped.placement.holes.map((h) => h.side)).toEqual(['far', 'entry']);
+    expect(flipped.connections.map((c) => c.side)).toEqual(['far', undefined]);
+    expect(flipped.placement.sideNote).toBe('1 hole has no far opening');
+    // A note, not a problem: Apply stays possible.
+    expect(flipped.placement.problem).toBe('');
+    expect(placementView(flipped, w.ctx).hint).toBe(
+      `${HARDWARE_HINTS.seated(2)} · 1 hole has no far opening${HARDWARE_HINTS.flip}`,
+    );
+    // Only the blind hole chosen: no other side anywhere.
+    const blind = pick(w, hardwareDraft(w), singleHole(w));
+    expect(canFlipSide(blind, w.ctx)).toBe(false);
+    expect(placementView(blind, w.ctx).hint).toBe(HARDWARE_HINTS.chosen(1));
+    expect(() => flipHardwareSide(blind, w.ctx)).toThrow(NO_OTHER_SIDE);
+    expect(() => flipHardwareSide(hardwareDraft(w), w.ctx)).toThrow(NO_HOLES);
+  });
+
+  it('Shift+click on a far opening takes the whole row far side; a row with a blind centre stays on the drill side', () => {
+    const w = sidedWorld();
+    const row = pick(w, hardwareDraft(w), farRowHole(w, 2, { shift: true }));
+    expect(row.placement.holes.map((h) => h.side)).toEqual(['far', 'far', 'far', 'far']);
+    // An entry-chosen row: Shift+click its far side moves every hole there,
+    // and Shift+click on that side again takes the row off.
+    const entryRow = pick(w, hardwareDraft(w), rowHole(w, 0, { shift: true }));
+    const moved = pick(w, entryRow, farRowHole(w, 1, { shift: true }));
+    expect(moved.placement.holes.map((h) => h.side)).toEqual(['far', 'far', 'far', 'far']);
+    expect(pick(w, moved, farRowHole(w, 3, { shift: true })).placement.holes).toEqual([]);
+    const partial = sidedWorld({ rowExits: [18, 18, null, 18] });
+    const fallback = pick(partial, hardwareDraft(partial), farRowHole(partial, 0, { shift: true }));
+    expect(fallback.placement.holes.map((h) => h.side)).toEqual(['entry', 'entry', 'entry', 'entry']);
+    expect(placementView(fallback, partial.ctx).hint).toContain(
+      ' · not every hole of the row comes out, so the row is on the drill side',
+    );
+  });
+
+  it('Flip side goes through a stack: a board lying on the board flips to the lower board underside and back', () => {
+    // b2 lies on b1 (z 18 … 36): its row is coaxial with b1's.
+    const w = sidedWorld({ more: [{ id: 'b2', name: 'Top board', position: [0, 0, 18] }] });
+    const top = rowHole(w, 1, { instanceId: 'b2' });
+    const chosen = pick(w, hardwareDraft(w), top);
+    expect(chosen.placement.holes[0]).toMatchObject({ instanceId: 'b2', side: 'entry', point: [150, 100, 36] });
+    const flipped = flipHardwareSide(chosen, w.ctx);
+    expect(flipped.placement.holes).toEqual([
+      expect.objectContaining({
+        instanceId: 'b1',
+        name: 'Board',
+        featureId: 'r',
+        index: 1,
+        side: 'far',
+        point: [150, 100, 0],
+        normal: [0, 0, -1],
+      }),
+    ]);
+    const seated = finishPlacement(flipped, w.ctx);
+    expect(seated.connections[0]).toMatchObject({ to: 'b1', toFeatureId: 'r', holeIndex: 1, side: 'far' });
+    close(poseOf(seated.newInstance).shank, [0, 0, 1]);
+    // Back: up through b1, then b2, to the top board's top.
+    const back = flipHardwareSide(seated, w.ctx);
+    expect(back.placement.holes[0]).toMatchObject({ instanceId: 'b2', side: 'entry', point: [150, 100, 36] });
+    expect(back.connections[0]).toMatchObject({ to: 'b2', toFeatureId: 'r', holeIndex: 1 });
+    expect('side' in back.connections[0]).toBe(false);
+    // Both holes of one stack chosen: they flip to the same opening, kept once.
+    const both = pick(w, hardwareDraft(w), top, rowHole(w, 1));
+    expect(flipHardwareSide(both, w.ctx).placement.holes.map(holeKey)).toEqual(['b1/r/1']);
+  });
+
+  it('labels and the Chosen holes list name the far side', () => {
+    const w = sidedWorld({ throughH: true });
+    const far = face(w, [400, 300, 0], [0, 0, -1], {
+      snapKind: 'hole centre',
+      holeFeatureId: 'h',
+      holeAttachable: true,
+      holeIndex: 0,
+      holeSide: 'far',
+    });
+    const chosen = pick(w, hardwareDraft(w), farRowHole(w, 1), far);
+    expect(chosen.placement.holes.map((h) => holeLabel(h, w.ctx))).toEqual([
+      'Hole 2 of 4 · Board · far side',
+      'Hole · Board · Ø 5 · far side',
+    ]);
+    expect(chosenHoleRows(chosen, w.ctx).map((r) => r.removeLabel)).toEqual([
+      'Remove hole 2 of 4 on Board, far side',
+      'Remove hole Ø 5 on Board, far side',
+    ]);
   });
 });

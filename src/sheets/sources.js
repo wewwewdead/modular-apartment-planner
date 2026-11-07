@@ -1,5 +1,6 @@
 import { buildElevationAnnotationScene } from '@/elevations/annotations';
-import { buildProjectElevationScene, buildRoofOnlyElevationScene } from '@/elevations/scene';
+import { buildRoofOnlyElevationScene } from '@/elevations/scene';
+import { getProjectElevationScene } from '@/elevations/elevationSceneCache';
 import { getDefaultActiveFloorId, resolveProjectFloor } from '@/domain/floorModels';
 import { resolveRoofSectionCut } from '@/domain/roofModels';
 import { getProjectTrussSystems } from '@/domain/trussModels';
@@ -18,7 +19,7 @@ import { buildRoofPlanScene } from '@/geometry/roofPlanScene';
 import { buildFloorTrussGeometry, buildTrussDetailScene } from '@/geometry/trussGeometry';
 import { buildRoofScheduleSummary } from '@/roof/roofSchedule';
 import { buildRoofScheduleLayout } from '@/roof/roofScheduleLayout';
-import { buildProjectSectionScene } from '@/sections/scene';
+import { getProjectSectionScene } from '@/sections/sectionSceneCache';
 import { buildBuildingReport } from '@/domain/documentPackage';
 
 const PLAN_PADDING = 1500;
@@ -210,7 +211,7 @@ function buildSectionSource(project, floor, sourceRefId) {
     };
   }
 
-  const scene = buildProjectSectionScene(project, floor.id, sectionCut.id);
+  const scene = getProjectSectionScene(project, floor.id, sectionCut.id);
   return {
     kind: 'section',
     title: sectionCut.label || 'Section',
@@ -230,7 +231,7 @@ function buildElevationSource(project, floor, sourceView) {
     };
   }
 
-  const scene = buildProjectElevationScene(project, floor.id, sourceView);
+  const scene = getProjectElevationScene(project, floor.id, sourceView);
   const annotationScene = buildElevationAnnotationScene(floor, scene);
 
   return {
@@ -432,7 +433,7 @@ function buildRoofSectionSource(project, sourceFloorId, sourceRefId) {
     };
   }
 
-  const scene = buildProjectSectionScene(project, floor.id, sectionCut.id);
+  const scene = getProjectSectionScene(project, floor.id, sectionCut.id);
   return {
     kind: 'roof_section',
     title: `Roof ${sectionCut.label || 'Section'}`,

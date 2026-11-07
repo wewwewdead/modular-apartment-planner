@@ -99,7 +99,8 @@ describe('run status', () => {
 
   it('reports progress while tracing', () => {
     const markup = render({ project, solarAccess, status: 'running', progress: { done: 500, total: 2000 } });
-    expect(markup).toContain('Tracing 500 of 2000');
+    // Counts carry thousands separators, like every number a loading state says.
+    expect(markup).toContain('Tracing 500 of 2,000');
   });
 
   it('says when it is showing a superseded run', () => {

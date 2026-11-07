@@ -1,4 +1,4 @@
-import { elevationElementOutline, getVisibleElevationDrawables } from '@/elevations/visibility';
+import { createElevationVisibilityJob, elevationElementOutline } from '@/elevations/visibility';
 import { unionRegions } from '@/geometry/polygonBoolean';
 
 const cache = new WeakMap();
@@ -37,10 +37,8 @@ function sectionRectSurfaces(rect) {
     .map((part, index) => ({ ...part, id: `${rect.id}-solid-${index}`, strokeOutlines }));
 }
 
-export function getVisibleSectionDrawables(scene) {
-  if (!scene) return [];
-  if (cache.has(scene)) return cache.get(scene);
-  const adapted = {
+function adaptSectionScene(scene) {
+  return {
     elements: (scene.rectElements || []).flatMap(sectionRectSurfaces),
     polygonElements: scene.polygonElements || [],
     lineElements: [...(scene.lineElements || []), ...(scene.stairElements || [])].flatMap((element) =>
@@ -53,11 +51,13 @@ export function getVisibleSectionDrawables(scene) {
       })),
     ),
   };
-  const visible = getVisibleElevationDrawables(adapted);
+}
+
+// Roof triangles and partitioned wall material share their original stroke
+// outlines. Rejoin their visible fills to avoid anti-aliased triangle seams.
+function groupByStrokeOutlines(visible) {
   const groups = new Map();
   const result = [];
-  // Roof triangles and partitioned wall material share their original stroke
-  // outlines. Rejoin their visible fills to avoid anti-aliased triangle seams.
   for (const element of visible) {
     if (!element.strokeOutlines) {
       result.push(element);
@@ -71,7 +71,61 @@ export function getVisibleSectionDrawables(scene) {
     }
     group.visibleRegions.push(...element.visibleRegions);
   }
-  for (const group of groups.values()) group.visibleRegions = unionRegions(group.visibleRegions);
-  cache.set(scene, result);
-  return result;
+  return { result, groups: [...groups.values()] };
+}
+
+const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+/**
+ * The section's visibility pass as a resumable job — the elevation job over
+ * the adapted scene, then the per-outline unions, each stoppable between two
+ * units of work. `step(budgetMs)` returns `{ done, resolved, total }`; once
+ * done, `result` is set and cached on the scene, identical to what the
+ * synchronous `getVisibleSectionDrawables` returns.
+ */
+export function createSectionVisibilityJob(scene) {
+  let result = !scene ? [] : cache.get(scene);
+  let inner = null;
+  let grouped = null;
+  let unionIndex = 0;
+
+  return {
+    get result() {
+      return result;
+    },
+    step(budgetMs = Infinity) {
+      if (result) return { done: true, resolved: 1, total: 1 };
+      const deadline = now() + budgetMs;
+      if (!inner) inner = createElevationVisibilityJob(adaptSectionScene(scene), { cache: false });
+      if (!grouped) {
+        const progress = inner.step(budgetMs);
+        if (!progress.done) return { done: false, resolved: progress.resolved, total: progress.total + 1 };
+        grouped = groupByStrokeOutlines(inner.result);
+      }
+      const { groups } = grouped;
+      while (unionIndex < groups.length) {
+        groups[unionIndex].visibleRegions = unionRegions(groups[unionIndex].visibleRegions);
+        unionIndex += 1;
+        if (now() >= deadline && unionIndex < groups.length) {
+          return { done: false, resolved: unionIndex, total: groups.length + 1 };
+        }
+      }
+      result = grouped.result;
+      cache.set(scene, result);
+      return { done: true, resolved: 1, total: 1 };
+    },
+  };
+}
+
+/** The cached visible drawables of a section scene, or undefined if the pass has not run. */
+export function peekVisibleSectionDrawables(scene) {
+  return scene ? cache.get(scene) : [];
+}
+
+export function getVisibleSectionDrawables(scene) {
+  if (!scene) return [];
+  if (cache.has(scene)) return cache.get(scene);
+  const job = createSectionVisibilityJob(scene);
+  job.step(Infinity);
+  return job.result;
 }

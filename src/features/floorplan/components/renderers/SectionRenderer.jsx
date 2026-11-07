@@ -1,6 +1,8 @@
-import { memo, useMemo } from 'react';
-import { buildProjectSectionScene } from '@/sections/scene';
+import { memo } from 'react';
+import { getProjectSectionScene } from '@/sections/sectionSceneCache';
 import { getSectionVisibilityMessage, SECTION_VISIBILITY_REASONS } from '@/sections/diagnostics';
+import { cuttingSection, LOADING_COPY } from '@/ui/loading';
+import DeferredSceneDrawing from './DeferredSceneDrawing';
 import SectionSceneLayer from './SectionSceneLayer';
 
 function SectionDiagnosticMessages({ scene, messages = [] }) {
@@ -38,10 +40,9 @@ function SectionRenderer({
 }) {
   const cuts = floor?.sectionCuts || [];
   const sectionCut = (activeSectionCutId && cuts.find((s) => s.id === activeSectionCutId)) || cuts[0] || null;
-  const scene = useMemo(
-    () => (sectionCut ? buildProjectSectionScene(project, floor?.id, sectionCut.id) : null),
-    [project, floor?.id, sectionCut],
-  );
+  // The same scene object the canvas built for its diagnostics and the section
+  // controls (`sectionSceneCache`), so its visibility pass is paid once.
+  const scene = sectionCut ? getProjectSectionScene(project, floor?.id, sectionCut.id) : null;
 
   if (!sectionCut) {
     return (
@@ -74,7 +75,15 @@ function SectionRenderer({
 
   return (
     <g className="section-view">
-      <SectionSceneLayer scene={scene} />
+      <DeferredSceneDrawing
+        kind="section"
+        scene={scene}
+        viewKey={`${floor?.id}:${sectionCut.id}`}
+        label={cuttingSection(sectionCut.label)}
+        detail={LOADING_COPY.cuttingSectionDetail}
+      >
+        {(drawnScene, drawables) => <SectionSceneLayer scene={drawnScene} drawables={drawables} />}
+      </DeferredSceneDrawing>
       <SectionDiagnosticMessages scene={scene} messages={messages} />
     </g>
   );

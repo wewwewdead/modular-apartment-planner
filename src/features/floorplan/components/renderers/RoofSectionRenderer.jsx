@@ -1,6 +1,8 @@
 import { memo } from 'react';
-import { buildProjectSectionScene } from '@/sections/scene';
+import { getProjectSectionScene } from '@/sections/sectionSceneCache';
 import { getSectionVisibilityMessage, SECTION_VISIBILITY_REASONS } from '@/sections/diagnostics';
+import { cuttingSection, LOADING_COPY } from '@/ui/loading';
+import DeferredSceneDrawing from './DeferredSceneDrawing';
 import SectionSceneLayer from './SectionSceneLayer';
 import { resolveRoofSectionCut } from '@/domain/roofModels';
 
@@ -48,14 +50,24 @@ function RoofSectionRenderer({ project, preferredFloorId, activeSectionCutId, ro
     return <EmptyState message="Add a section cut on a floor to view the roof section." />;
   }
 
-  const scene = buildProjectSectionScene(project, floor.id, sectionCut.id);
+  // Built once per project and shared with the canvas's diagnostics; it used
+  // to be rebuilt on every render of this component.
+  const scene = getProjectSectionScene(project, floor.id, sectionCut.id);
   if (!scene) return null;
   const roofReason = roofHiddenByPhase ? SECTION_VISIBILITY_REASONS.HIDDEN_BY_PHASE : scene.diagnostics?.roof?.reason;
   const roofMessage = getSectionVisibilityMessage('roof', roofReason);
 
   return (
     <g className="roof-section-view">
-      <SectionSceneLayer scene={scene} />
+      <DeferredSceneDrawing
+        kind="section"
+        scene={scene}
+        viewKey={`${floor.id}:${sectionCut.id}`}
+        label={cuttingSection(sectionCut.label)}
+        detail={LOADING_COPY.cuttingSectionDetail}
+      >
+        {(drawnScene, drawables) => <SectionSceneLayer scene={drawnScene} drawables={drawables} />}
+      </DeferredSceneDrawing>
       <SectionDiagnosticMessage scene={scene} message={roofMessage} />
     </g>
   );

@@ -1,0 +1,92 @@
+/*
+ * The section / elevation view's stand-in, drawn in the plan's own SVG. The
+ * same look as SheetPreviewPlaceholder — grid paper, a breathing hairline,
+ * words from 300 ms — and, like PanePlaceholder in overlay mode, it fades out
+ * over the drawing that arrives beneath it.
+ */
+.placeholder {
+  opacity: 1;
+  transition: opacity var(--duration-smooth) var(--ease-out);
+}
+
+.placeholder[data-leaving='true'] {
+  opacity: 0;
+}
+
+.paper {
+  fill: var(--color-panel-bg);
+}
+
+.gridMinor {
+  stroke: rgba(26, 122, 104, 0.06);
+  stroke-width: 0.5px;
+  vector-effect: non-scaling-stroke;
+  fill: none;
+}
+
+.gridMajor {
+  stroke: rgba(26, 122, 104, 0.1);
+  stroke-width: 0.5px;
+  vector-effect: non-scaling-stroke;
+  fill: none;
+}
+
+.silhouette {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.35;
+  animation: sectionPlaceholderBreathe 2.4s var(--ease-in-out-soft) infinite alternate;
+}
+
+.title {
+  font-family: var(--font-blueprint);
+}
+
+.words {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  fill: var(--color-text-secondary);
+  opacity: 0;
+}
+
+/*
+ * One animation for both states, so the reveal is not restarted when the
+ * timer catches up and marks the words shown. Its delay is set, and its start
+ * pinned to when the wait began, by useCompositorTiming.
+ */
+.words[data-words='scheduled'],
+.words[data-words='shown'] {
+  animation: sectionPlaceholderWordsReveal var(--duration-smooth) var(--ease-out) var(--words-delay, 300ms) both;
+}
+
+.detail {
+  font-weight: 500;
+  fill: var(--color-text-muted, var(--color-text-secondary));
+}
+
+@keyframes sectionPlaceholderBreathe {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 0.6;
+  }
+}
+
+@keyframes sectionPlaceholderWordsReveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .silhouette {
+    animation: none;
+    opacity: 0.48;
+  }
+}

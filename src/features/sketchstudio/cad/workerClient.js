@@ -10,6 +10,11 @@ export class RevisionWorker {
     if (this.worker) return;
     this.worker = this.factory();
     this.worker.onmessage = ({ data }) => {
+      // Lifecycle notes carry no request: the kernel saying its WASM has loaded.
+      if (data?.status) {
+        this.onStatus?.(data.status);
+        return;
+      }
       const pending = this.pending.get(data.requestId);
       if (!pending) return;
       clearTimeout(pending.timer);

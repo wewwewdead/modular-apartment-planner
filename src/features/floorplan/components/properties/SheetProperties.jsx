@@ -1,16 +1,19 @@
 import { memo, useEffect, useRef, useState } from 'react';
+import { BusyButton, LoadingBar, afterPaint, sheetPdf, sheetPng } from '@/ui/loading';
 import { getDefaultActiveFloorId } from '@/domain/floorModels';
 import { resolveRoofSectionFloor } from '@/domain/roofModels';
 import { createSheetRevision, createSheetViewport } from '@/domain/sheetModels';
 import { exportActiveSheetAsPdf, exportActiveSheetAsPng } from '@/export/sheetExport';
 import { getDefaultViewportRect, materializeSheetViewportFrames } from '@/sheets/layout';
-import { listPaperPresets } from '@/sheets/paper';
+import { getPaperPreset, listPaperPresets } from '@/sheets/paper';
 import { resolveSheetViewportSource } from '@/sheets/sources';
 import InputField from '../InputField';
 import styles from '../PropertiesPanel.module.css';
 
 function SheetExportMenuInner({ sheet, editorDispatch }) {
   const [open, setOpen] = useState(false);
+  // Which item is rendering ('pdf' or a DPI), so only that one goes busy.
+  const [exporting, setExporting] = useState(null);
   const rootRef = useRef(null);
   const pngOptions = [
     { label: 'PNG 150 DPI', dpi: 150 },
@@ -32,8 +35,12 @@ function SheetExportMenuInner({ sheet, editorDispatch }) {
   }, [open]);
 
   const handleExport = async (kind, options = {}) => {
-    if (!sheet) return;
+    if (!sheet || exporting) return;
+    setExporting(kind === 'pdf' ? 'pdf' : options.dpi);
     try {
+      // A 600 DPI render holds the main thread for a while; the busy item and
+      // the bar have to be on screen before it starts, not after.
+      await afterPaint();
       if (kind === 'pdf') {
         await exportActiveSheetAsPdf(sheet.title || sheet.drawingName || 'sheet', sheet.paperSize);
         editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Exported sheet as PDF.' });
@@ -48,30 +55,42 @@ function SheetExportMenuInner({ sheet, editorDispatch }) {
         message: error.message || `${kind.toUpperCase()} export failed.`,
       });
     } finally {
+      setExporting(null);
       setOpen(false);
     }
   };
 
+  const paperName = getPaperPreset(sheet?.paperSize).key.split('_')[0];
+
   return (
     <div className={styles.exportMenu} ref={rootRef}>
+      <LoadingBar active={Boolean(exporting)} placement="viewport" />
       <button className={styles.exportMenuTrigger} type="button" onClick={() => setOpen((value) => !value)}>
         Export sheet
         <span className={styles.exportMenuChevron}>{open ? '▴' : '▾'}</span>
       </button>
       {open && (
         <div className={styles.exportMenuList}>
-          <button className={styles.exportMenuItem} type="button" onClick={() => handleExport('pdf')}>
+          <BusyButton
+            className={styles.exportMenuItem}
+            busy={exporting === 'pdf'}
+            busyLabel={sheetPdf(paperName)}
+            disabled={Boolean(exporting) && exporting !== 'pdf'}
+            onClick={() => handleExport('pdf')}
+          >
             PDF
-          </button>
+          </BusyButton>
           {pngOptions.map((option) => (
-            <button
+            <BusyButton
               key={option.dpi}
               className={styles.exportMenuItem}
-              type="button"
+              busy={exporting === option.dpi}
+              busyLabel={sheetPng(option.dpi)}
+              disabled={Boolean(exporting) && exporting !== option.dpi}
               onClick={() => handleExport('png', { dpi: option.dpi })}
             >
               {option.label}
-            </button>
+            </BusyButton>
           ))}
         </div>
       )}

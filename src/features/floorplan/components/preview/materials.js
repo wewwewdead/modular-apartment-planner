@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { applyProceduralDetail, setDetailScale } from './proceduralDetail';
+import { applyProceduralDetail, cloneWithProceduralDetail, setDetailScale } from './proceduralDetail';
 import { disposeSelectionMaterials, selectionMaterialsOf } from './selectionMaterials';
 
 /**
@@ -42,6 +42,8 @@ const DETAIL_ASSIGNMENTS = {
   wallRainscreenDeep: 'board',
   wallFramingSteel: 'metal',
   wallFramingTimber: 'timber',
+  wallCoreSteel: 'metal',
+  wallCoreTimber: 'timber',
   wallFastener: 'metal',
   wallFastenerContrast: 'metal',
   wallFastenerConstruction: 'smooth',
@@ -239,6 +241,17 @@ export function createMaterialPalette({ look = PALETTE_LOOKS.WHITE_MODEL } = {})
     wallRainscreenDeep: surface({ color: 0x6d3d26, roughness: 0.85 }),
     wallFramingSteel: metal({ color: 0xb4bcc2, roughness: 0.42 }),
     wallFramingTimber: surface({ color: 0xb07740, roughness: 0.76 }),
+    // The schematic core of an undetailed framed wall: one box the full depth
+    // of the frame, standing in for the studs, tracks and noggins it does not
+    // draw. The same look as the framing it stands for, so Solid cannot tell
+    // them apart — but its own instances, because it is not studs. The
+    // see-through modes read a mesh's tier off its material (`viewMode.js`):
+    // X-ray keeps real members solid, and a 75 mm slab left solid between two
+    // ghosted boards makes the wall read exactly as opaque as in Solid. Batching
+    // buckets by material identity too, so a shared instance would put a core
+    // and a real stud in one InstancedMesh that cannot be both ghost and solid.
+    wallCoreSteel: metal({ color: 0xb4bcc2, roughness: 0.42 }),
+    wallCoreTimber: surface({ color: 0xb07740, roughness: 0.76 }),
     wallFastener: metal({ color: 0xa8adb1, roughness: 0.3 }),
     wallFastenerContrast: metal({ color: 0x3c4145, roughness: 0.36 }),
     wallFastenerConstruction: surface({ color: 0xd4523f, roughness: 0.44 }),
@@ -405,8 +418,143 @@ export function createMaterialPalette({ look = PALETTE_LOOKS.WHITE_MODEL } = {})
 
   if (look === PALETTE_LOOKS.CLASSIC) applyClassicLook(palette);
   palette.look = look;
+  stampPaletteKeys(palette);
 
   return palette;
+}
+
+/**
+ * Name every material after the key it lives under, and note the opacity the
+ * transparent-by-design ones were built with.
+ *
+ * The see-through modes (`viewMode.js`) decide what a mesh does from what it is
+ * made of, and a mesh only holds the material — so the material has to say
+ * which one it is. An alias keeps the first key it was found under (`roof` is
+ * `roof_slab`, `roofGutter` is `roofTrim`), which is why this walks the
+ * literal's own order. Last of all, after the classic look, because the look
+ * rewrites the glass's opacity and `baseOpacity` has to be the one it ended on.
+ */
+function stampPaletteKeys(palette) {
+  for (const [key, material] of Object.entries(palette)) {
+    if (!material?.isMaterial || material.userData.paletteKey) continue;
+    material.userData.paletteKey = key;
+    if (material.transparent) material.userData.baseOpacity = material.opacity;
+  }
+}
+
+/**
+ * The ghost a see-through mode draws a palette material as.
+ *
+ * A twin rather than the source with `transparent` flipped on: transparency is
+ * part of three's program identity (`WebGLPrograms` → `#define OPAQUE`), so
+ * flipping it on a shared instance relinks a program on every toggle, in both
+ * directions. A twin is made once per source and kept for the palette's life —
+ * like the selection overlay's tints (`selectionMaterials.js`), and for the
+ * same reason: a material nothing holds releases its program, and the next
+ * toggle would link it all over again.
+ *
+ * Made by `cloneWithProceduralDetail`, so it stays in the detailed palette's
+ * one program family; every twin then differs from its source only in
+ * `transparent`, which collapses the whole ghost set onto a couple of programs
+ * (plain and instanced) for the life of the page.
+ *
+ * `forceSinglePass`, because three draws a transparent double-sided material
+ * as two calls — back faces, then front faces — and flags the material for a
+ * program update on each of them. That would double the draw calls of every
+ * ghosted batch and re-derive two program keys per batch per frame, for a
+ * sorting refinement a uniformly tinted ghost does not need: one pass blends
+ * both faces just the same.
+ */
+export const GHOST_TINT = 0xa9b7c6;
+export const GHOST_TINT_AMOUNT = 0.35;
+const ghostTint = new THREE.Color(GHOST_TINT);
+
+const ghostRegistries = new WeakMap();
+
+function ghostRegistryFor(materialPalette) {
+  let registry = ghostRegistries.get(materialPalette);
+  if (!registry) {
+    registry = { bySource: new Map(), sourceOf: new Map(), all: [] };
+    ghostRegistries.set(materialPalette, registry);
+  }
+  return registry;
+}
+
+/** Copy what a source says about its look onto its twin, re-tinting from scratch. */
+function syncGhostFromSource(twin, source) {
+  if (twin.color?.isColor && source.color?.isColor) {
+    // From the source's own colour every time, so a re-sync never compounds
+    // the tint onto a colour that was already tinted.
+    twin.color.copy(source.color).lerp(ghostTint, GHOST_TINT_AMOUNT);
+  }
+  if ('roughness' in source) twin.roughness = source.roughness;
+  if ('metalness' in source && twin.metalness !== source.metalness) {
+    twin.metalness = source.metalness;
+    // Mirrors `setMaterialAppearance`: a metalness flip is the change that
+    // asks for a program update.
+    twin.needsUpdate = true;
+  }
+  if ('envMapIntensity' in source) twin.envMapIntensity = source.envMapIntensity;
+  if (twin.emissive?.isColor && source.emissive?.isColor) twin.emissive.copy(source.emissive);
+  if ('emissiveIntensity' in source) twin.emissiveIntensity = source.emissiveIntensity;
+}
+
+export function ghostMaterialFor(materialPalette, source, { tier = null } = {}) {
+  if (!materialPalette || !source?.isMaterial) return source;
+  const registry = ghostRegistryFor(materialPalette);
+  const cached = registry.bySource.get(source);
+  if (cached) return cached;
+
+  const twin = cloneWithProceduralDetail(source);
+  twin.name = `${source.name || source.userData.paletteKey || 'material'}-ghost`;
+  twin.userData = {
+    ...twin.userData,
+    ownedByPalette: true,
+    ghostTwin: true,
+    paletteKey: source.userData.paletteKey,
+    ...(tier ? { tier } : {}),
+  };
+  delete twin.userData.ownedByPreviewObject;
+  delete twin.userData.baseOpacity;
+  twin.transparent = true;
+  twin.depthWrite = false;
+  twin.forceSinglePass = true;
+  twin.side = source.side;
+  // Born indistinguishable from its source; the mode decides its opacity.
+  twin.opacity = 1;
+  syncGhostFromSource(twin, source);
+
+  registry.bySource.set(source, twin);
+  registry.sourceOf.set(twin, source);
+  registry.all.push(twin);
+  return twin;
+}
+
+/** Every twin a palette has made so far. */
+export function ghostMaterialsOf(materialPalette) {
+  return ghostRegistries.get(materialPalette)?.all || [];
+}
+
+/** The palette material a twin was made from, or null. */
+export function ghostSourceOf(materialPalette, twin) {
+  return ghostRegistries.get(materialPalette)?.sourceOf.get(twin) || null;
+}
+
+/** Bring every twin back into line with its source after a runtime appearance change. */
+export function syncGhostMaterials(materialPalette) {
+  const registry = ghostRegistries.get(materialPalette);
+  if (!registry) return;
+  for (const twin of registry.all) {
+    const source = registry.sourceOf.get(twin);
+    if (source) syncGhostFromSource(twin, source);
+  }
+}
+
+function disposeGhostMaterials(materialPalette) {
+  const registry = ghostRegistries.get(materialPalette);
+  if (!registry) return;
+  for (const twin of registry.all) twin.dispose();
+  ghostRegistries.delete(materialPalette);
 }
 
 /**
@@ -416,8 +564,12 @@ export function createMaterialPalette({ look = PALETTE_LOOKS.WHITE_MODEL } = {})
  * recompiled, so the Shaded/Realistic toggle is instant even on a large scene.
  */
 export function applyRenderStyleToPalette(materialPalette, styleConfig) {
-  // The selection overlay's tinted copies follow the palette's relief setting.
-  setDetailScale(materialPalette, styleConfig.detailStrength, selectionMaterialsOf(materialPalette));
+  // The selection overlay's tinted copies and the see-through modes' twins
+  // follow the palette's relief setting.
+  setDetailScale(materialPalette, styleConfig.detailStrength, [
+    ...selectionMaterialsOf(materialPalette),
+    ...ghostMaterialsOf(materialPalette),
+  ]);
   // Read by the next scene build to decide whether to cut edge geometry at all.
   // Turning it back on does not retrofit the world that was built without it —
   // `ensureOutlines` does, from the viewport, once the palette says yes.
@@ -507,6 +659,9 @@ export function applyRoofAppearanceToPalette(materialPalette, appearance) {
   const closureHex = hexNumber(appearance.closures?.[0]?.hex);
   setMaterialAppearance(materialPalette.gableInfill, closureHex, undefined, undefined, result);
 
+  // A roof ghosted in X-ray is still the project's roof colour, cooled.
+  if (result.changed) syncGhostMaterials(materialPalette);
+
   return result;
 }
 
@@ -515,4 +670,5 @@ export function disposeMaterialPalette(materialPalette) {
     material?.dispose?.();
   });
   disposeSelectionMaterials(materialPalette);
+  disposeGhostMaterials(materialPalette);
 }

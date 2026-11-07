@@ -13,6 +13,7 @@ import {
   measureCandidates,
   mmPerPixelAt,
   modelPoses,
+  pendingDelta,
 } from './marks.js';
 import { instanceMatrix, placementMatrix } from './movement.js';
 
@@ -433,7 +434,38 @@ it('reads poses from the committed model for the Marks panel', () => {
   close(anchorWorld({ instanceId: 'moved', local: [5, 0, 0] }, poses), [110, 5, 0]);
   expect(anchorWorld({ instanceId: 'hidden', local: [0, 0, 0] }, poses)).toBeNull();
   expect(anchorWorld({ instanceId: 'gone', local: [0, 0, 0] }, poses)).toBeNull();
-  // Attached: where the kernel meshed it.
-  close(anchorWorld({ instanceId: 'attached', local: [1, 0, 0] }, poses), [11, 0, 0]);
+  // Attached: rides its root's pending delta (docs/sketch-studio-part-groups.md
+  // §3.5), meshed at (11, 0, 0) then moved like 'moved': (1, 0, 0) about the
+  // root's meshed origin turned 90° about Z, at (110, 0, 0).
+  close(anchorWorld({ instanceId: 'attached', local: [1, 0, 0] }, poses), [110, 1, 0]);
   expect(modelPoses(model, null).size).toBe(0);
+});
+
+it('pendingDelta: a chain of attached parts rides its root, identity at rest and on a cycle', () => {
+  const meshed = { root: [{ translation: [10, 0, 0] }], mid: [{ translation: [50, 0, 0] }], leaf: [] };
+  const model = {
+    instances: [
+      { id: 'root', position: [30, 5, 0], rotation: [0, 0, 0] },
+      { id: 'mid', position: [0, 0, 0] },
+      { id: 'leaf', position: [0, 0, 0] },
+    ],
+    connections: [
+      { id: 'a', type: 'fixed', from: 'mid', to: 'root' },
+      { id: 'b', type: 'concentric', from: 'leaf', to: 'mid' },
+      { id: 'w', type: 'weld', from: 'root', to: 'leaf' },
+    ],
+  };
+  const lookup = (id) => meshed[id];
+  for (const id of ['root', 'mid', 'leaf'])
+    close(new THREE.Vector3().applyMatrix4(pendingDelta(model, id, lookup)).toArray(), [20, 5, 0]);
+  const atRest = {
+    ...model,
+    instances: [{ ...model.instances[0], position: [10, 0, 0] }, ...model.instances.slice(1)],
+  };
+  expect(pendingDelta(atRest, 'leaf', lookup).equals(new THREE.Matrix4())).toBe(true);
+  const cyclic = {
+    ...model,
+    connections: [...model.connections, { id: 'c', type: 'fixed', from: 'root', to: 'leaf' }],
+  };
+  expect(pendingDelta(cyclic, 'mid', lookup).equals(new THREE.Matrix4())).toBe(true);
 });

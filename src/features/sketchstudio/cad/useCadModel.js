@@ -10,6 +10,8 @@ export default function useCadModel(model, enabled = true) {
   const sequence = useRef(0);
   const [attempt, retry] = useState(0);
   const [state, setState] = useState({ status: 'idle', snapshot: null, source: null });
+  // OpenCascade has loaded in the current worker; a restarted worker loads it again.
+  const [kernelAwake, setKernelAwake] = useState(false);
   useEffect(() => {
     const kernel = new RevisionWorker(
       () => new Worker(new URL('./kernel.worker.js', import.meta.url), { type: 'module' }),
@@ -17,6 +19,9 @@ export default function useCadModel(model, enabled = true) {
     const solver = new RevisionWorker(
       () => new Worker(new URL('./solver.worker.js', import.meta.url), { type: 'module' }),
     );
+    kernel.onStatus = (status) => {
+      if (status === 'awake') setKernelAwake(true);
+    };
     clients.current = { kernel, solver };
     return () => {
       kernel.cancel();
@@ -80,11 +85,13 @@ export default function useCadModel(model, enabled = true) {
   );
   return {
     ...state,
+    kernelAwake,
     ready,
     request,
     retry: () => retry((v) => v + 1),
     cancel: () => {
       sequence.current++;
+      setKernelAwake(false);
       clients.current.kernel.cancel();
       clients.current.solver.cancel();
       setState((old) => ({ ...old, status: 'cancelled', error: new Error('Operation cancelled. Retry to rebuild.') }));

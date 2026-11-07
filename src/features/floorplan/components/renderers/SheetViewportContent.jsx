@@ -20,6 +20,7 @@ import TrussRenderer from './TrussRenderer';
 import WallRenderer from './WallRenderer';
 import WindowRenderer from './WindowRenderer';
 import SitePlanOverlay from './SitePlanOverlay';
+import SheetPreviewPlaceholder from './SheetPreviewPlaceholder';
 import BuildingReportRenderer from './BuildingReportRenderer';
 import StructuralGridOverlay from './StructuralGridOverlay';
 import { deriveConceptualLoadPath } from '@/domain/structuralCoordination';
@@ -181,21 +182,9 @@ function ThreePreviewViewportContent({ source }) {
       : { status: 'loading', imageUrl: null };
 
   const { bounds } = source;
-  const centerX = (bounds.minX + bounds.maxX) / 2;
-  const centerY = (bounds.minY + bounds.maxY) / 2;
 
   if (previewState.status !== 'ready' || !previewState.imageUrl) {
-    const messages = {
-      loading: 'Rendering 3D preview...',
-      empty: 'No 3D geometry available.',
-      error: '3D preview failed to render.',
-    };
-
-    return (
-      <text x={centerX} y={centerY} textAnchor="middle" fontSize={400} fill="#8899aa" pointerEvents="none">
-        {messages[previewState.status] || messages.loading}
-      </text>
-    );
+    return <SheetPreviewPlaceholder bounds={bounds} status={previewState.status} />;
   }
 
   return (

@@ -6,6 +6,7 @@
 import { MathUtils, Matrix4, Vector3 } from 'three';
 import { instanceMatrix, placementMatrix } from './movement.js';
 import { MARK_ALONG } from './model.js';
+import { attachmentRoot } from './groups.js';
 
 export { MARK_ALONG };
 // Screen tolerances (px): snap radius, the depth slack behind a surface, and
@@ -39,25 +40,39 @@ export function displayedInstanceMatrix(groupMatrix, meshedPlacement = []) {
   return groupMatrix.clone().multiply(placementMatrix(meshedPlacement || []));
 }
 
+// How far the committed model is from what the worker meshed, for one
+// displayed instance (CadViewport's placementDelta; docs/sketch-studio-part-groups.md
+// §3.5): committed · meshed⁻¹ of the instance itself when it is free. An
+// attached instance follows its parent in the kernel, so it rides its
+// attachment root's delta instead (walking from → to): at rest that is the
+// identity, and while a moved root waits for the rebuild the whole attached
+// chain moves rigidly with it. `meshedPlacement(id)` gives an instance's
+// meshed placement operations (null when it was not meshed).
+export function pendingDelta(model, id, meshedPlacement, parameters = {}) {
+  const root = attachmentRoot(model, id);
+  const instance = root && model.instances.find((i) => i.id === root);
+  const placement = instance && meshedPlacement(root);
+  if (!placement) return new Matrix4();
+  try {
+    return instanceMatrix(instance, parameters).multiply(placementMatrix(placement).invert());
+  } catch {
+    return new Matrix4();
+  }
+}
+
 // Poses as the viewport shows them once the committed model is on screen:
-// each meshed instance moved by committed · meshed⁻¹ (CadViewport's
-// placementDelta), attached parts where the kernel meshed them. For reading
-// mark coordinates outside the viewport (the Marks panel); a drag in
-// progress is not included.
+// each meshed instance moved by pendingDelta (attached parts by their root's
+// delta), exactly as CadViewport's pose effect does. For reading mark
+// coordinates outside the viewport (the Marks panel); a drag in progress is
+// not included.
 export function modelPoses(model, snapshot) {
   const poses = new Map();
   const parameters = snapshot?.parameters || {};
+  const meshed = new Map((snapshot?.instances || []).map((item) => [item.id, item.placement]));
   for (const item of snapshot?.instances || []) {
     const instance = model.instances.find((i) => i.id === item.id);
-    const attached = model.connections?.some((c) => c.from === item.id && c.type !== 'weld');
-    let matrix = new Matrix4();
-    if (instance && item.placement && !attached) {
-      try {
-        matrix = instanceMatrix(instance, parameters).multiply(placementMatrix(item.placement).invert());
-      } catch {
-        matrix = new Matrix4();
-      }
-    }
+    const matrix =
+      instance && item.placement ? pendingDelta(model, item.id, (id) => meshed.get(id), parameters) : new Matrix4();
     poses.set(item.id, { matrix, placement: item.placement, visible: Boolean(instance) && instance.visible !== false });
   }
   return poses;
@@ -164,15 +179,18 @@ export const formatMm = (value) => Number(value.toFixed(2)).toString();
 // Snap points of drawn marks (entries { mark, A, B }): both measured points
 // and their midpoint, each with the anchor a new point copies. The midpoint
 // keeps a part anchor only when both ends are on the same part. `exclude`
-// leaves out points that ride on that part (a part never snaps to itself).
+// (an instance id, or a Set of them for a group) leaves out points that ride
+// on those parts (a part never snaps to itself).
 export function markSnapPoints(entries, { exclude = null } = {}) {
   const points = [];
+  const excluded =
+    exclude instanceof Set ? (id) => id != null && exclude.has(id) : (id) => exclude != null && id === exclude;
   for (const { mark, A, B } of entries) {
     const fromId = mark.from?.instanceId ?? null,
       toId = mark.to?.instanceId ?? null;
-    if (!exclude || fromId !== exclude) points.push({ point: A, anchor: mark.from, markId: mark.id, role: 'from' });
-    if (!exclude || toId !== exclude) points.push({ point: B, anchor: mark.to, markId: mark.id, role: 'to' });
-    if (exclude && (fromId === exclude || toId === exclude)) continue;
+    if (!excluded(fromId)) points.push({ point: A, anchor: mark.from, markId: mark.id, role: 'from' });
+    if (!excluded(toId)) points.push({ point: B, anchor: mark.to, markId: mark.id, role: 'to' });
+    if (excluded(fromId) || excluded(toId)) continue;
     const mid = midpoint(A, B);
     const anchor =
       fromId && fromId === toId

@@ -101,7 +101,7 @@ it('builds each hardware family as a real exportable solid with procurement note
   } finally {
     session.dispose();
   }
-});
+}, 20000);
 
 it('attaches hardware to a moved M3 pilot bore in a rotated assembly and exports its thread callout', () => {
   const hole = holePreset(

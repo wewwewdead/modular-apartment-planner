@@ -1,4 +1,5 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useState, useTransition } from 'react';
+import { BusyButton, LOADING_COPY, afterPaint } from '@/ui/loading';
 import { BUILDING_COMMANDS } from '@/domain/buildingCommands';
 import { formatBearing, isValidTraverseLine, traverseBoundary } from '@/domain/surveyTraverse';
 import styles from './ProjectLifecyclePanel.module.css';
@@ -5024,6 +5025,19 @@ function DocumentsStage({
     sourceFileName: '',
   });
   const [exchangeDownload, setExchangeDownload] = useState({ running: false, error: '' });
+  // Regenerating the package rebuilds every sheet in the reducer — ~300 ms on
+  // the three-floor bench project — so the button goes busy and paints before
+  // that work starts, and the work lands as a transition.
+  const [packagePending, startPackageTransition] = useTransition();
+  const [packageQueued, setPackageQueued] = useState(false);
+  const generatePackage = async () => {
+    setPackageQueued(true);
+    await afterPaint();
+    startPackageTransition(() => {
+      setPackageQueued(false);
+      onExecuteCommand({ type: BUILDING_COMMANDS.GENERATE_PRELIMINARY_DRAWING_PACKAGE, packageId: 'alpha' });
+    });
+  };
   return (
     <div className={styles.stageContent}>
       <div className={styles.stageIntro}>
@@ -5206,13 +5220,15 @@ function DocumentsStage({
           Publish immutable Xi exchange
         </button>
         {activeExchange && (
-          <button
-            type="button"
+          <BusyButton
             className={styles.secondaryAction}
-            disabled={exchangeDownload.running}
+            busy={exchangeDownload.running}
+            busyLabel={LOADING_COPY.exchangeZip}
             onClick={async () => {
               setExchangeDownload({ running: true, error: '' });
               try {
+                // Every sheet renders synchronously; the busy look goes up first.
+                await afterPaint();
                 const { downloadProfessionalExchangeArchive } = await import('@/export/professionalExchangeExport');
                 await downloadProfessionalExchangeArchive(project, { exchangeId: activeExchange.id });
                 setExchangeDownload({ running: false, error: '' });
@@ -5221,10 +5237,8 @@ function DocumentsStage({
               }
             }}
           >
-            {exchangeDownload.running
-              ? 'Rendering complete PDF and DXFs…'
-              : 'Download PDF / DXF / manifest exchange ZIP'}
-          </button>
+            Download PDF / DXF / manifest exchange ZIP
+          </BusyButton>
         )}
         {exchangeDownload.error && <span className={styles.commandError}>{exchangeDownload.error}</span>}
         {lastCommand?.commandType === BUILDING_COMMANDS.PUBLISH_PROFESSIONAL_EXCHANGE && (
@@ -5818,15 +5832,15 @@ function DocumentsStage({
           </p>
         )}
       </div>
-      <button
-        type="button"
+      <BusyButton
         className={styles.primaryAction}
-        onClick={() =>
-          onExecuteCommand({ type: BUILDING_COMMANDS.GENERATE_PRELIMINARY_DRAWING_PACKAGE, packageId: 'alpha' })
-        }
+        busy={packageQueued || packagePending}
+        busyLabel={generated ? LOADING_COPY.regeneratingPackage : LOADING_COPY.generatingPackage}
+        spinnerTone="inverse"
+        onClick={generatePackage}
       >
         {generated ? 'Regenerate preliminary package' : 'Generate preliminary package'}
-      </button>
+      </BusyButton>
       {lastCommand?.commandType === BUILDING_COMMANDS.GENERATE_PRELIMINARY_DRAWING_PACKAGE && (
         <span className={lastCommand.ok ? styles.commandSuccess : styles.commandError}>
           {lastCommand.ok

@@ -200,68 +200,17 @@
 }
 
 /*
- * Recompute indicator.
- *
- * Held invisible for the first fraction of a second, so the common case — a
- * switch that resolves in well under 100 ms — shows nothing at all. Flashing a
- * progress bar for one frame reads as a glitch, not as feedback. Only work that
- * actually takes long enough to notice gets an indicator.
+ * Recompute indicator: a slot that always reserves the bar's height, so
+ * switching modes cannot reflow the panel. The bar itself is the loading kit's
+ * region LoadingBar, held back 250 ms — measured switches land between 50 and
+ * 175 ms and read as instant, and a bar flashed for a few frames there looks
+ * like a rendering bug.
  */
 .progressTrack {
-  height: 2px;
+  position: relative;
+  height: 3px;
   overflow: hidden;
   border-radius: 1px;
-  background: transparent;
-}
-
-/*
- * 250 ms before anything shows. Measured switches land between 50 ms and 175 ms,
- * which reads as instant thanks to the button responding on the next frame — an
- * indicator there would flash for a few frames and look like a rendering bug.
- * Only a plan heavy enough to genuinely stall gets one.
- */
-.progressTrack[data-busy] {
-  background: var(--color-border-subtle);
-  animation: sun-study-progress-reveal 140ms linear 250ms both;
-}
-
-.progressBar {
-  display: block;
-  width: 40%;
-  height: 100%;
-  border-radius: 1px;
-  background: var(--color-accent);
-  opacity: 0;
-}
-
-.progressTrack[data-busy] .progressBar {
-  opacity: 1;
-  animation: sun-study-progress-slide 900ms ease-in-out 250ms infinite;
-}
-
-@keyframes sun-study-progress-reveal {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes sun-study-progress-slide {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(250%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .progressTrack[data-busy] .progressBar {
-    width: 100%;
-    animation: none;
-  }
 }
 
 .modeButton,

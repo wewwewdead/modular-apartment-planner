@@ -9,6 +9,7 @@ import {
   shadowCoverageOfPlot,
 } from './shadowProjection';
 import { multiPolygonArea } from '@/geometry/polygonBoolean';
+import { benchSunCase } from '@/geometry/__fixtures__/benchShadowCase';
 
 const DEG = Math.PI / 180;
 
@@ -445,5 +446,43 @@ describe('shadowArea', () => {
 
     expect(shadowArea(regions)).toBe(10000 * 10000 - 2000 * 2000);
     expect(multiPolygonArea(regions)).toBe(shadowArea(regions));
+  });
+});
+
+describe('the bench fixture day (docs/all-day-shadow-freeze.md)', () => {
+  // 11 masses in Manila on the December solstice: the project on which the day
+  // union threw and fell back to 8,408 unmerged regions reporting 111,900 m².
+  // The true envelope, from the moments merged one at a time, is one region of
+  // about 4,932 m².
+  const { masses, samples, samplesAboveOneDegree } = benchSunCase();
+
+  it('resolves every moment above 1° to one region, merged, in well under a frame budget (U3)', () => {
+    castShadows(masses, samplesAboveOneDegree[0]); // warm-up
+    const slowest = { ms: 0 };
+    for (const sample of samplesAboveOneDegree) {
+      const stats = {};
+      const startedAt = performance.now();
+      const regions = castShadows(masses, sample, { stats });
+      const ms = performance.now() - startedAt;
+      if (ms > slowest.ms) Object.assign(slowest, { ms, sample });
+
+      expect(regions).toHaveLength(1);
+      expect(stats.appended).toBe(0);
+    }
+    // Measured 11–19 ms per moment under vitest (§3 asks ≤ 60 ms in the
+    // browser); twice the target here so a loaded CI box does not trip it, and
+    // still far below the fallback's 100+ ms.
+    expect(slowest.ms).toBeLessThan(120);
+  });
+
+  it('merges the day into a handful of regions with the true area (U1, U2)', () => {
+    const stats = {};
+    const envelope = shadowRangeEnvelope(masses, samples, { stats });
+
+    expect(envelope.length).toBeLessThanOrEqual(10);
+    expect(stats).toMatchObject({ appended: 0, strategy: 'incremental', momentFallbacks: 0 });
+    expect(stats.moments).toBe(samplesAboveOneDegree.length);
+    const areaM2 = shadowArea(envelope) / 1e6;
+    expect(Math.abs(areaM2 - 4932) / 4932).toBeLessThan(0.01);
   });
 });

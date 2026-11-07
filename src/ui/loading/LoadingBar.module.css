@@ -1,0 +1,84 @@
+/*
+ * The indeterminate 3 px bar (lifted from RouteProgress). Indeterminate on
+ * purpose: nothing that drives it reports progress, so a bar that claimed a
+ * percentage would be inventing one.
+ */
+.bar {
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  pointer-events: none;
+  overflow: hidden;
+  background: var(--color-accent-subtle);
+  animation: loadingBarIn var(--duration-normal) var(--ease-out) both;
+  transition: opacity var(--duration-smooth) var(--ease-out);
+}
+
+/* Fixed to the window: the page underneath may be the one being left. */
+.bar[data-placement='viewport'] {
+  position: fixed;
+  z-index: 10001;
+}
+
+/* Absolute to the top of its positioned parent: a pane rebuilding in place. */
+.bar[data-placement='region'] {
+  position: absolute;
+  z-index: 5;
+}
+
+.bar[data-tone='dark'] {
+  background: rgba(184, 245, 229, 0.1);
+}
+
+.bar[data-leaving='true'] {
+  opacity: 0;
+}
+
+.fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  background: var(--color-accent);
+  border-radius: 0 2px 2px 0;
+  animation: loadingBarSlide 1.1s var(--ease-in-out-soft) infinite;
+}
+
+.bar[data-tone='dark'] .fill {
+  background: var(--dark-accent-active);
+}
+
+@keyframes loadingBarSlide {
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+@keyframes loadingBarIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/*
+ * Reduced motion: a still accent band. It must keep saying "busy", which an
+ * animation collapsed by the global rule to one arbitrary frame would not.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .bar,
+  .fill {
+    animation: none;
+  }
+  .fill {
+    left: 0;
+    width: 100%;
+    opacity: 0.6;
+  }
+}

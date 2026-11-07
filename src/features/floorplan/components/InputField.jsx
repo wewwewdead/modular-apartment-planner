@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import styles from './InputField.module.css';
-import { useNumericDraft } from './useNumericDraft';
+import { useNumericDraft } from '@/hooks/useNumericDraft';
 
 /**
  * A number field keeps the raw text while it is being typed.

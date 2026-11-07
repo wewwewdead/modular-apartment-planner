@@ -35,6 +35,18 @@ import { useCanvasZoom } from './CanvasZoomContext';
  * flat translucent fills only, and constant on-screen line weights obtained by
  * dividing by the current zoom instead of by `non-scaling-stroke`. Stroke
  * attributes then change only when the zoom does — never during a pan.
+ *
+ * ## Why the layer counts its own vertices
+ *
+ * Every repaint of this layer — every time-slider step, because the instant
+ * shadow changes — re-rasterises everything in it on the GPU raster worker.
+ * When the envelope's union once fell back to its unmerged pieces, that was
+ * 8,408 overlapping polygons re-rasterised per step: 1.6 s frozen per slider
+ * step, with the main thread idle (docs/all-day-shadow-freeze.md). The union
+ * is fixed upstream; this layer still refuses to draw an envelope that would
+ * push it past `SUN_STUDY_MAX_PATH_VERTICES` as a path, and paints it into one
+ * bitmap instead — one texture whatever the input, filled with the nonzero
+ * rule so overlapping pieces cannot cancel each other out.
  */
 
 /** Ramp from fully overshadowed to fully open, walking through warm midtones. */
@@ -77,6 +89,143 @@ function regionPath(region) {
 
 function regionsPath(regions) {
   return regions.map(regionPath).filter(Boolean).join(' ');
+}
+
+/** Twice the signed area of a ring; the sign is its winding. */
+function signedArea2(points) {
+  let sum = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const a = points[index];
+    const b = points[(index + 1) % points.length];
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return sum;
+}
+
+function wound(points, positive) {
+  return signedArea2(points) >= 0 === positive ? points : [...points].reverse();
+}
+
+/**
+ * One region as a path for the nonzero rule: outline wound one way, holes the
+ * other, so the holes still punch out and an overlapping neighbour drawn as its
+ * own path can never cancel this one's fill the way one evenodd path across
+ * overlapping regions did.
+ */
+function nonzeroRegionPath(region) {
+  return regionPath({
+    outline: wound(region.outline || [], true),
+    holes: (region.holes || []).filter((hole) => hole?.length >= 3).map((hole) => wound(hole, false)),
+  });
+}
+
+function countVertices(regions) {
+  let count = 0;
+  for (const region of regions || []) {
+    count += region.outline?.length || 0;
+    for (const hole of region.holes || []) count += hole?.length || 0;
+  }
+  return count;
+}
+
+/**
+ * The most vertices the sun-study layer draws as paths (envelope + instant
+ * shadow + target). Past it the envelope is drawn as a bitmap.
+ */
+export const SUN_STUDY_MAX_PATH_VERTICES = 5000;
+
+/** Long side of the envelope bitmap, px. */
+const ENVELOPE_IMAGE_MAX_PIXELS = 2048;
+
+const ENVELOPE_RGB = '58, 74, 102';
+const ENVELOPE_FILL_OPACITY = 0.16;
+
+/**
+ * A data URL painted by `paint` into a `width` x `height` canvas, or null where
+ * there is no usable canvas (some test environments) — callers still render.
+ */
+function canvasDataUrl(width, height, paint) {
+  if (typeof document === 'undefined') return null;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+    paint(context);
+    return canvas.toDataURL();
+  } catch {
+    return null;
+  }
+}
+
+function regionsBounds(regions) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const region of regions) {
+    for (const point of region.outline || []) {
+      if (point.x < minX) minX = point.x;
+      if (point.x > maxX) maxX = point.x;
+      if (point.y < minY) minY = point.y;
+      if (point.y > maxY) maxY = point.y;
+    }
+  }
+  return Number.isFinite(minX) && maxX > minX && maxY > minY ? { minX, minY, maxX, maxY } : null;
+}
+
+/** Bitmaps already painted, per regions array, so a route flip back and forth never repaints. */
+const regionsImageCache = new WeakMap();
+
+function paintRegionsImage(regions, bounds, maxPixels) {
+  const box = bounds || regionsBounds(regions);
+  if (!box) return null;
+  const width = box.maxX - box.minX;
+  const height = box.maxY - box.minY;
+  const scale = maxPixels / Math.max(width, height);
+  const pixelWidth = Math.max(1, Math.ceil(width * scale));
+  const pixelHeight = Math.max(1, Math.ceil(height * scale));
+  const href = canvasDataUrl(pixelWidth, pixelHeight, (context) => {
+    context.setTransform(scale, 0, 0, scale, -box.minX * scale, -box.minY * scale);
+    context.beginPath();
+    const ring = (points) => {
+      if (points.length < 3) return;
+      context.moveTo(points[0].x, points[0].y);
+      for (let index = 1; index < points.length; index += 1) context.lineTo(points[index].x, points[index].y);
+      context.closePath();
+    };
+    for (const region of regions) {
+      ring(wound(region.outline || [], true));
+      for (const hole of region.holes || []) if (hole?.length >= 3) ring(wound(hole, false));
+    }
+    // Opaque here; the <image> carries the wash's opacity, so the colour is not
+    // quantised through a premultiplied 16 % alpha.
+    context.fillStyle = `rgb(${ENVELOPE_RGB})`;
+    context.fill('nonzero');
+  });
+  if (!href) return null;
+  // The bitmap's pixel grid is whole pixels; size the image to match it exactly.
+  return { href, x: box.minX, y: box.minY, width: pixelWidth / scale, height: pixelHeight / scale };
+}
+
+/**
+ * Regions filled into one bitmap with the nonzero rule, for one `<image>`: the
+ * sun-hours map's approach applied to polygons. Overlapping pieces cannot
+ * cancel, and the raster cost is one texture whatever the input. `null` for
+ * `regions` (the path route) skips the work.
+ *
+ * @returns {{href: string, x: number, y: number, width: number, height: number}|null}
+ */
+export function useRegionsImage(regions, bounds = null, maxPixels = ENVELOPE_IMAGE_MAX_PIXELS) {
+  return useMemo(() => {
+    if (!regions?.length) return null;
+    const cached = !bounds && regionsImageCache.get(regions);
+    if (cached && cached.maxPixels === maxPixels) return cached.image;
+    const image = paintRegionsImage(regions, bounds, maxPixels);
+    if (!bounds && image) regionsImageCache.set(regions, { maxPixels, image });
+    return image;
+  }, [regions, bounds, maxPixels]);
 }
 
 /**
@@ -175,15 +324,11 @@ function bleedOutward(mask, columns, rows, rings) {
  */
 function useSunHoursImage(grid) {
   return useMemo(() => {
-    if (!grid || typeof document === 'undefined') return null;
+    if (!grid) return null;
 
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = grid.columns;
-      canvas.height = grid.rows;
-      const context = canvas.getContext('2d');
-      if (!context) return null;
-
+    // A canvas is unavailable in some test environments; `canvasDataUrl` then
+    // returns null and the rest of the study still renders.
+    return canvasDataUrl(grid.columns, grid.rows, (context) => {
       const image = context.createImageData(grid.columns, grid.rows);
       // The full ramp always spans the best ground in the study, so the map
       // uses its whole range. The contour labels and the panel legend are what
@@ -205,12 +350,7 @@ function useSunHoursImage(grid) {
         image.data[offset + 3] = 205;
       }
       context.putImageData(image, 0, 0);
-      return canvas.toDataURL();
-    } catch {
-      // Canvas is unavailable in some test environments; the rest of the study
-      // still renders.
-      return null;
-    }
+    });
   }, [grid]);
 }
 
@@ -261,8 +401,28 @@ function ShadowOverlay({ study }) {
   const zoom = useCanvasZoom() || DEFAULT_ZOOM;
   const px = (units) => units / zoom;
 
-  const envelopePath = useMemo(() => regionsPath(decimateRegions(study?.envelope || [])), [study?.envelope]);
-  const instantPath = useMemo(() => regionsPath(study?.regions || []), [study?.regions]);
+  // The complexity guard (§4.3): count what the layer would draw as paths. The
+  // envelope is drawn only in "All day"; the instant shadow and the target are
+  // drawn in every mode.
+  const envelope = study?.envelope;
+  const envelopeShown = study?.mode === 'range' && Boolean(envelope?.length);
+  const envelopeDisplay = useMemo(() => (envelopeShown ? decimateRegions(envelope) : []), [envelopeShown, envelope]);
+  const envelopeVertices = useMemo(() => countVertices(envelopeDisplay), [envelopeDisplay]);
+  const instantRegions = study?.regions;
+  const instantVertices = useMemo(() => countVertices(instantRegions), [instantRegions]);
+  const targetVertices = targetPolygon?.length >= 3 ? targetPolygon.length : 0;
+  const envelopeAsImage =
+    envelopeShown && envelopeVertices + instantVertices + targetVertices > SUN_STUDY_MAX_PATH_VERTICES;
+
+  const envelopePath = useMemo(
+    () => (envelopeShown && !envelopeAsImage ? regionsPath(envelopeDisplay) : ''),
+    [envelopeShown, envelopeAsImage, envelopeDisplay],
+  );
+  // The exact rings, not the decimated ones: the bitmap costs the same either way.
+  const envelopeImage = useRegionsImage(envelopeAsImage ? envelope : null);
+  // One path per region with the nonzero rule: a single evenodd path across
+  // regions that overlap cancels their fill wherever an even number cross.
+  const instantPaths = useMemo(() => (instantRegions || []).map(nonzeroRegionPath).filter(Boolean), [instantRegions]);
   const targetPath = useMemo(
     () => (targetPolygon?.length >= 3 ? regionPath({ outline: targetPolygon, holes: [] }) : ''),
     [targetPolygon],
@@ -275,8 +435,8 @@ function ShadowOverlay({ study }) {
   if (!study) return null;
 
   const grid = study.grid;
-  const showEnvelope = study.mode === 'range' && envelopePath;
-  const showInstant = Boolean(instantPath);
+  const showEnvelope = Boolean(envelopePath);
+  const envelopeRender = !envelopeShown ? 'none' : envelopeAsImage ? 'image' : 'path';
   // Contours are drawn even where the raster could not be built — a browser
   // without a usable canvas still gets a readable map, just an unshaded one.
   const showSunHoursMap = Boolean(grid && (sunHoursImage || contours?.levels.length || contours?.threshold));
@@ -288,7 +448,14 @@ function ShadowOverlay({ study }) {
   const labelSize = px(11);
 
   return (
-    <g data-layer="sun-study" data-mode={study.mode} style={{ pointerEvents: 'none' }}>
+    <g
+      data-layer="sun-study"
+      data-mode={study.mode}
+      data-envelope-render={envelopeRender}
+      data-envelope-vertices={envelopeShown ? envelopeVertices : 0}
+      data-envelope-regions={envelopeShown ? envelope.length : 0}
+      style={{ pointerEvents: 'none' }}
+    >
       {showSunHoursMap && targetPath && (
         <clipPath id={clipId}>
           <path d={targetPath} />
@@ -384,7 +551,12 @@ function ShadowOverlay({ study }) {
           {/* A flat wash rather than the hatch it used to be: the instant
               shadow drawn on top is darker, so the two still read apart, and
               the dashed boundary says "extent" the way hatching did. */}
-          <path data-type="shadow-envelope-fill" d={envelopePath} fill="rgba(58, 74, 102, 0.16)" fillRule="evenodd" />
+          <path
+            data-type="shadow-envelope-fill"
+            d={envelopePath}
+            fill={`rgba(${ENVELOPE_RGB}, ${ENVELOPE_FILL_OPACITY})`}
+            fillRule="evenodd"
+          />
           <path
             data-type="shadow-envelope-outline"
             d={envelopePath}
@@ -396,16 +568,32 @@ function ShadowOverlay({ study }) {
         </>
       )}
 
-      {showInstant && (
+      {/* Past the vertex budget the envelope is one bitmap and has no dashed
+          outline: the outline is the same rings again as a path. */}
+      {envelopeImage && (
+        <image
+          data-type="shadow-envelope-image"
+          href={envelopeImage.href}
+          x={envelopeImage.x}
+          y={envelopeImage.y}
+          width={envelopeImage.width}
+          height={envelopeImage.height}
+          opacity={ENVELOPE_FILL_OPACITY}
+          preserveAspectRatio="none"
+        />
+      )}
+
+      {instantPaths.map((d, index) => (
         <path
+          key={`instant-${index}`}
           data-type="shadow-instant"
-          d={instantPath}
+          d={d}
           fill="rgba(32, 44, 66, 0.26)"
-          fillRule="evenodd"
+          fillRule="nonzero"
           stroke="rgba(32, 44, 66, 0.42)"
           strokeWidth={px(1)}
         />
-      )}
+      ))}
 
       {/* Last in this layer so the assessed boundary remains visible over the
           heatmap and shadow fills it is measuring. */}

@@ -3,6 +3,7 @@ import { exactProjection } from './projection.js';
 import { mapPlacement } from './placement.js';
 import { resolveCutPlacement, resolveRow } from './cutPlacement.js';
 import { hardwareGeometry } from './hardwareGeometry.js';
+import { angleSectionProfile } from './stockSections.js';
 import {
   normalizeModel,
   resolveParameters,
@@ -145,6 +146,11 @@ export function createKernelSession(input) {
         shape = own(
           shape.cut(own(cad.makeCylinder(s.diameter / 2 - s.wall, length + 2 * extra + 2, [0, 0, -extra - 1]))),
         );
+    } else if (s.type === 'angle' && (s.rootRadius > 0 || s.toeRadius > 0)) {
+      // A hot-rolled angle (Phase P): its L outline with the root and toe
+      // radii, extruded over the same overlong span. A radius-free angle keeps
+      // the box-minus-box construction below.
+      shape = own(own(drawing(angleSectionProfile(s)).sketchOnPlane('XY', [0, 0, -extra])).extrude(length + 2 * extra));
     } else {
       shape = own(cad.makeBox([-s.width / 2, -s.height / 2, -extra], [s.width / 2, s.height / 2, length + extra]));
       if (s.type === 'tube')
@@ -195,6 +201,48 @@ export function createKernelSession(input) {
     else if (dir[2] < 0) shape = own(shape.rotate(180, [0, 0, 0], [1, 0, 0]));
     shape = own(shape.translate(m.start.map((x, i) => x + dir[i] * m.gapStart)));
     return { shape, metrics: m };
+  };
+
+  // Phase Q (docs/sketch-studio-hardware-seat-side.md 4.1): where each hole's
+  // axis last leaves the solid it is cut from, as the distance from its
+  // centre along the drill direction: the far opening a fastener seats on
+  // from the other side. A through-all cut's depth runs to the bounding box,
+  // so only the real solid knows (an angle leg is 5 mm, not the 50 mm box).
+  // The Common of the solid and the axes (edges) keeps the axis segments
+  // inside the material; ONE Common for every centre of a row (20 separate
+  // ones cost 2.5 times as much), each segment end assigned to the axis it
+  // lies on. null: the hole stops in the material, or the measurement
+  // failed (never a build error).
+  const farOpenings = (solid, centres, direction, depth) => {
+    try {
+      const length = Math.hypot(...direction),
+        dir = direction.map((x) => x / length);
+      const at = (centre, t) => centre.map((x, i) => x + dir[i] * t);
+      const axes = centres.map((centre) => own(cad.makeLine(at(centre, -0.02), at(centre, depth + 0.02))));
+      const tool = axes.length === 1 ? axes[0] : own(cad.makeCompound(axes));
+      const inside = own(solid.intersect(tool, { simplify: false }));
+      const exits = centres.map(() => null);
+      for (const edge of inside.edges) {
+        own(edge);
+        for (const point of [own(edge.startPoint), own(edge.endPoint)]) {
+          const p = point.toTuple();
+          let k = -1,
+            off = Infinity,
+            t = 0;
+          centres.forEach((centre, j) => {
+            const d = p.map((x, i) => x - centre[i]);
+            const along = d.reduce((sum, x, i) => sum + x * dir[i], 0);
+            const away = Math.hypot(...d.map((x, i) => x - dir[i] * along));
+            if (away < off) [k, off, t] = [j, away, along];
+          });
+          if (off < 1e-3 && (exits[k] === null || t > exits[k])) exits[k] = t;
+        }
+      }
+      // Up to the tool's end: a hole exactly as deep as the material is through.
+      return exits.map((exit) => (exit !== null && exit > 1e-6 && exit <= depth + 1e-6 ? exit : null));
+    } catch {
+      return centres.map(() => null);
+    }
   };
 
   const build = (partId) => {
@@ -311,7 +359,12 @@ export function createKernelSession(input) {
                       ).extrude(cut.depth + clearance),
                     );
               });
-              featureMetrics[f.id] = { cut, ...(row ? { row } : {}) };
+              // One far opening per centre (Phase Q), measured before the cut.
+              const exits =
+                f.type === 'hole'
+                  ? farOpenings(shape, row ? row.centres : [cut.position], cut.direction, cut.depth)
+                  : null;
+              featureMetrics[f.id] = { cut, ...(row ? { row } : {}), ...(exits ? { exits } : {}) };
             }
             let removedVolume = 0;
             next = shape;
@@ -462,7 +515,9 @@ export function createKernelSession(input) {
         } else if (c.type === 'concentric') {
           const targetInstance = model.instances.find((i) => i.id === c.to);
           // holeIndex (Phase K): which hole of a hole row the axis runs through.
-          const getAxis = (inst, featureId, holeIndex = 0) => {
+          // side 'far' (Phase Q): seated on the hole's far opening, facing back
+          // up the hole; absent = the drill side.
+          const getAxis = (inst, featureId, holeIndex = 0, side = null) => {
             const definition = model.parts.find((p) => p.id === inst.partId);
             const feature = definition.features.find((f) => f.id === featureId && !f.suppressed);
             if (!feature || !['hardware', 'cylinder', 'hole', 'member'].includes(feature.type))
@@ -477,16 +532,29 @@ export function createKernelSession(input) {
               );
             const resolvedCut = metrics.get(inst.partId)?.[feature.id]?.cut;
             const rowCentre = metrics.get(inst.partId)?.[feature.id]?.row?.centres?.[holeIndex];
-            const origin =
+            let origin =
               feature.type === 'member'
                 ? v(feature.start)
                 : rowCentre || resolvedCut?.position || v(feature.position || [0, 0, 0]);
-            const direction =
+            let direction =
               feature.type === 'member'
                 ? v(feature.end).map((x, i) => x - origin[i])
                 : resolvedCut?.direction ||
                   v(feature.direction || (feature.type === 'hardware' ? [0, 0, -1] : [0, 0, 1]));
             const length = Math.hypot(...direction);
+            if (side === 'far') {
+              if (feature.type !== 'hole') throw new Error(`Only a hole has a far side to seat on: ${featureId}`);
+              const t = metrics.get(inst.partId)?.[feature.id]?.exits?.[holeIndex];
+              if (t == null) {
+                const hardware = model.parts.find((p) => p.id === instance.partId)?.name || 'the hardware';
+                const hole = feature.row ? `Hole ${holeIndex + 1} of the row` : 'The hole';
+                throw new Error(
+                  `${hole} on ${definition.name} has no far opening for ${hardware}: seat it on the drill side or make the hole go through.`,
+                );
+              }
+              origin = origin.map((x, i) => x + (direction[i] / length) * t);
+              direction = direction.map((x) => (x ? -x : 0));
+            }
             const pose = inst.id === id ? operations : placements.get(inst.id);
             return {
               origin: mapPlacement(origin, pose),
@@ -498,7 +566,12 @@ export function createKernelSession(input) {
             };
           };
           const a = getAxis(instance, c.fromFeatureId),
-            b = getAxis(targetInstance, c.toFeatureId, Number.isInteger(c.holeIndex) ? c.holeIndex : 0);
+            b = getAxis(
+              targetInstance,
+              c.toFeatureId,
+              Number.isInteger(c.holeIndex) ? c.holeIndex : 0,
+              c.side === 'far' ? 'far' : null,
+            );
           const [ax, ay, az] = a.direction,
             [bx, by, bz] = b.direction;
           let axis = [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx];

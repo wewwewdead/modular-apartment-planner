@@ -40,8 +40,11 @@ it('groups the hardware types, the nine Phase J kinds first', () => {
     'Tapping & self-drilling',
     'Wood & construction',
     'Special',
+    'Blind rivets',
+    'Solid, tubular & special rivets',
+    'Blind rivet nuts & studs',
   ]);
-  expect(options('Hardware type')).toHaveLength(31);
+  expect(options('Hardware type')).toHaveLength(46);
   expect(options('Hardware type').slice(0, 9)).toEqual(OLD_KINDS);
   expect([...groups[0].querySelectorAll('option')].map((o) => o.value)).toEqual(OLD_KINDS);
   expect(within(groups[2]).getByRole('option', { name: 'Socket head cap screw' }).value).toBe('socket-cap');
@@ -167,4 +170,104 @@ it('HardwareFields (tree editor, Place) shows the selects and applies them at on
   expect(screen.getByLabelText('Drive').value).toBe('phillips');
   // The same field element: never keyed on its value (Phase L).
   expect(screen.getByLabelText('Shank length (mm)')).toBe(length);
+});
+
+// Phase O (docs/sketch-studio-rivet-library.md §7, §10): rivets add State and,
+// for the rivet nut / stud, Body; never Drive or Point.
+it('a blind rivet lists the blind sizes, Head style and State; no Drive, Point or Body', () => {
+  setup();
+  select('Hardware type', 'blind-open');
+  expect(options('Metric size')).toEqual(['2.4', '3.0', '3.2', '4.0', '4.8', '5.0', '6.0', '6.4']);
+  expect(screen.getByLabelText('Metric size').value).toBe('4.8');
+  expect(options('Head style')).toEqual(['dome', 'countersunk-120', 'large-flange']);
+  expect(options('State')).toEqual(['set', 'unset']);
+  expect(screen.getByLabelText('State').value).toBe('set');
+  expect(screen.queryByLabelText('Drive')).toBeNull();
+  expect(screen.queryByLabelText('Point')).toBeNull();
+  expect(screen.queryByLabelText('Body')).toBeNull();
+  // A pop rivet comes in aluminium: the material follows the kind default.
+  expect(screen.getByLabelText('Hardware material').value).toBe('Aluminum');
+  expect(fieldLabels().slice(0, 8)).toEqual([
+    'Body length (mm)',
+    'Grip / clamped thickness (mm)',
+    'Body diameter (mm)',
+    'Head diameter (mm)',
+    'Head height (mm)',
+    'Mandrel diameter (mm)',
+    'Bulb diameter (mm)',
+    'Bulb height (mm)',
+  ]);
+  select('Head style', 'large-flange');
+  expect(screen.getByLabelText('Flange diameter (mm)').value).toBe('16');
+});
+
+it('the rivet nut shows Head style, State, Body and a thread pitch', () => {
+  setup();
+  select('Hardware type', 'blind-rivet-nut');
+  expect(screen.getByLabelText('Metric size').value).toBe('M3');
+  select('Metric size', 'M6');
+  expect(options('Head style')).toEqual(['flat', 'reduced', 'countersunk']);
+  expect(options('State')).toEqual(['set', 'unset']);
+  expect(options('Body')).toEqual(['round', 'hex']);
+  expect(screen.getByLabelText('Thread pitch (mm)').value).toBe('1');
+  expect(screen.getByLabelText('Body diameter (mm)').value).toBe('9');
+  select('Body', 'hex');
+  expect(screen.getByLabelText('Body across flats (mm)').value).toBe('9');
+  // A size change keeps the head, state and body.
+  select('Head style', 'countersunk');
+  select('State', 'unset');
+  select('Metric size', 'M8');
+  expect(screen.getByLabelText('Head style').value).toBe('countersunk');
+  expect(screen.getByLabelText('State').value).toBe('unset');
+  expect(screen.getByLabelText('Body').value).toBe('hex');
+  expect(screen.getByLabelText('Flange diameter (mm)').value).toBe('14.5');
+});
+
+it('As supplied swaps the bulb height for the mandrel protrusion and keeps a typed grip; bolt restores today', () => {
+  const onAdd = setup();
+  select('Hardware type', 'blind-open');
+  type('Grip / clamped thickness (mm)', '4');
+  expect(screen.getByLabelText('Bulb height (mm)')).toBeTruthy();
+  expect(screen.queryByLabelText('Mandrel protrusion (mm)')).toBeNull();
+  const grip = screen.getByLabelText('Grip / clamped thickness (mm)');
+  select('State', 'unset');
+  expect(screen.queryByLabelText('Bulb height (mm)')).toBeNull();
+  expect(screen.getByLabelText('Mandrel protrusion (mm)').value).toBe('27');
+  expect(screen.getByLabelText('Grip / clamped thickness (mm)').value).toBe('4');
+  // The same field element: never keyed on its value (Phase L).
+  expect(screen.getByLabelText('Grip / clamped thickness (mm)')).toBe(grip);
+  select('State', 'set');
+  act(() => fireEvent.click(screen.getByRole('button', { name: 'Add hardware' })));
+  expect(onAdd.mock.calls[0][0]).toMatchObject({
+    kind: 'blind-open',
+    size: '4.8',
+    head: 'dome',
+    state: 'set',
+    grip: 4,
+    material: 'Aluminum',
+  });
+  select('Hardware type', 'bolt');
+  expect(screen.getByLabelText('Metric size').value).toBe('M3');
+  expect(screen.queryByLabelText('State')).toBeNull();
+  expect(screen.getByLabelText('Hardware material').value).toBe('Steel');
+  expect(fieldLabels()).toEqual([
+    'Shank length (mm)',
+    'Shank diameter (mm)',
+    'Head across flats (mm)',
+    'Head / flange height (mm)',
+    'Thread pitch (mm)',
+    'Supplier part number',
+    'Supplier installation hole (mm)',
+    'Supplier minimum sheet thickness (mm)',
+    'Installation / finish notes',
+  ]);
+});
+
+it('an impossible grip blocks Add with the reason', () => {
+  setup();
+  select('Hardware type', 'solid');
+  expect(screen.getByLabelText('Metric size').value).toBe('4');
+  type('Grip / clamped thickness (mm)', '12');
+  expect(screen.getByRole('alert').textContent).toBe('The grip must be shorter than the rivet.');
+  expect(screen.getByRole('button', { name: 'Add hardware' }).disabled).toBe(true);
 });

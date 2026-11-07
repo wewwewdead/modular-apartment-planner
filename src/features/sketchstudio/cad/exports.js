@@ -83,6 +83,22 @@ export async function vectorPdf(sheets, model, snapshot) {
   return pdf.output('blob');
 }
 
+// The README's ## Groups section (docs/sketch-studio-part-groups.md §3.7):
+// each group's name, parent and member instance ids, so the editing
+// structure survives an export that has no other place for it.
+export function groupsReadme(model) {
+  const groups = model.groups || [];
+  if (!groups.length) return 'None.';
+  const name = (id) => groups.find((g) => g.id === id)?.name || id;
+  return groups
+    .map((g) => {
+      const parts = model.instances.filter((i) => i.groupId === g.id).map((i) => i.id);
+      const children = groups.filter((c) => c.parentId === g.id).map((c) => c.id);
+      return `- ${g.id}: ${g.name}; parent ${g.parentId ? `${g.parentId} (${name(g.parentId)})` : 'none'}; instances ${parts.join(', ') || 'none'}${children.length ? `; groups ${children.join(', ')}` : ''}`;
+    })
+    .join('\n');
+}
+
 export async function workshopZip(model, snapshot, exports, title) {
   const zip = new JSZip(),
     rows = buildCutList(model, snapshot);
@@ -135,7 +151,7 @@ export async function workshopZip(model, snapshot, exports, title) {
   }
   zip.file(
     'ASSEMBLY.md',
-    `# ${title}\n\nAll solid and cutting coordinates are millimetres. STL is unitless; import as millimetres. SVG and PDF are vector drawings. DXF uses millimetres and tessellated polylines (0.02 mm sampled chord-error target).\n\nNominal model dimensions exclude kerf and stock allowances. Cutting layout reserves ${model.fabrication.kerf} mm kerf and ${model.fabrication.allowance} mm allowance. Tube end angles are measured from square, about local Y; refer to part STEP for orientation. Long and short points describe the extreme end measurements.\n\nOnly constant-thickness planar extrusions with through cuts receive flat cutting profiles. Other parts use STEP and detail drawings. Assembly quantities include hidden instances.\n\n## Instances\n${model.instances.map((i) => `- ${i.id}: ${i.partId}; position ${JSON.stringify(i.position)}; XYZ rotation ${JSON.stringify(i.rotation)}`).join('\n')}\n\n## Connections and weld notes\n${model.connections.map((c) => `- ${c.id}: ${c.from} → ${c.to}; ${c.type}; ${c.note || ''}; location ${JSON.stringify(c.location || [])}`).join('\n')}\n`,
+    `# ${title}\n\nAll solid and cutting coordinates are millimetres. STL is unitless; import as millimetres. SVG and PDF are vector drawings. DXF uses millimetres and tessellated polylines (0.02 mm sampled chord-error target).\n\nNominal model dimensions exclude kerf and stock allowances. Cutting layout reserves ${model.fabrication.kerf} mm kerf and ${model.fabrication.allowance} mm allowance. Tube end angles are measured from square, about local Y; refer to part STEP for orientation. Long and short points describe the extreme end measurements.\n\nOnly constant-thickness planar extrusions with through cuts receive flat cutting profiles. Other parts use STEP and detail drawings. Assembly quantities include hidden instances.\n\n## Instances\n${model.instances.map((i) => `- ${i.id}: ${i.partId}; position ${JSON.stringify(i.position)}; XYZ rotation ${JSON.stringify(i.rotation)}`).join('\n')}\n\n## Groups\n${groupsReadme(model)}\n\n## Connections and weld notes\n${model.connections.map((c) => `- ${c.id}: ${c.from} → ${c.to}; ${c.type}; ${c.note || ''}; location ${JSON.stringify(c.location || [])}`).join('\n')}\n`,
   );
   return zip.generateAsync({ type: 'blob' });
 }

@@ -37,6 +37,8 @@ vi.mock('./useCadModel.js', () => ({
                     f.position.map((v, i) => v + f.row.direction[i] * f.row.pitch * k),
                   ),
                 },
+                // Through the 18 mm board (Phase Q): every centre has a far opening.
+                ...(f.throughAll ? { exits: Array.from({ length: f.row.count }, () => 18) } : {}),
               },
             ]),
         ),
@@ -464,6 +466,28 @@ it('Add hardware: a socket head cap screw M6 seats on a face and commits with it
   expect(model().instances.at(-1)).toMatchObject({ position: [120, 60, 18], rotation: [0, 0, 0] });
 });
 
+// Phase O (docs/sketch-studio-rivet-library.md §10): a rivet takes the same
+// Place → face → Apply path and commits its head and state.
+it('Add hardware: a blind rivet 4.8 seats on a face and commits installed (set)', () => {
+  const { setCadModel, model } = setup();
+  ribbon('Hardware library');
+  act(() => fireEvent.change(screen.getByLabelText('Hardware type'), { target: { value: 'blind-open' } }));
+  expect(screen.getByLabelText('Metric size').value).toBe('4.8');
+  act(() => fireEvent.click(screen.getByRole('button', { name: 'Add hardware' })));
+  expect(screen.getByRole('heading', { name: 'Place hardware' })).toBeTruthy();
+  place(topFace());
+  expect(
+    screen.getByText('Blind rivet, open end (pop rivet) 4.8 on Board / plate · top face at (120, 60)'),
+  ).toBeTruthy();
+  act(() => fireEvent.click(screen.getByRole('button', { name: 'Apply hardware' })));
+  expect(setCadModel).toHaveBeenCalledOnce();
+  const part = model().parts.at(-1);
+  expect(part.name).toBe('Blind rivet, open end (pop rivet) 4.8');
+  expect(part.features[0].state).toBe('set');
+  expect(part.features[0]).toMatchObject({ kind: 'blind-open', head: 'dome', grip: 5 });
+  expect(model().instances.at(-1)).toMatchObject({ position: [120, 60, 18], rotation: [0, 0, 0] });
+});
+
 it('Apply and place another commits the hole and reopens Hole in Place with the same sizes', () => {
   const { setCadModel, model, rerender } = setup();
   ribbon('Hole');
@@ -510,6 +534,39 @@ it('Tube / member lands with its axis through the view drop point, without a Fit
   });
   expect(instance.position).toEqual([1250, -480, 0]);
   expect(instance.rotation).toEqual([0, 0, 0]);
+  expect(viewport.props.fitKey).toBe(fitKey);
+});
+
+// Phase P (docs/sketch-studio-angle-bar.md §2.5–2.6): the Angle bar is a
+// member like the tube and lands the same way.
+it('Angle bar lands like the tube: its axis through the view drop point, without a Fit', () => {
+  const { setCadModel, model } = setup();
+  const fitKey = viewport.props.fitKey;
+  ribbon('Angle bar');
+  expect(setCadModel).toHaveBeenCalledOnce();
+  const instance = model().instances.at(-1);
+  const part = model().parts.find((p) => p.id === instance.partId);
+  expect(part).toMatchObject({ name: 'Angle bar', material: 'Steel', grain: null });
+  expect(part.features[0]).toMatchObject({
+    type: 'member',
+    start: [0, 0, 0],
+    end: [0, 0, 700],
+    section: { type: 'angle', width: 50, height: 50, wall: 5, rootRadius: 7, toeRadius: 3.5 },
+  });
+  expect(instance.position).toEqual([1250, -480, 0]);
+  expect(instance.rotation).toEqual([0, 0, 0]);
+  expect(viewport.props.selectedId).toBe(instance.id);
+  expect(viewport.props.fitKey).toBe(fitKey);
+});
+
+it('on an empty model the Start list Angle bar lands at the drop point with no Fit', () => {
+  const started = setup(emptyModel());
+  const fitKey = viewport.props.fitKey;
+  act(() => fireEvent.click(within(document.querySelector('.cad-start')).getByRole('button', { name: 'Angle bar' })));
+  started.rerender();
+  expect(started.model().instances).toHaveLength(1);
+  expect(started.model().parts[0].name).toBe('Angle bar');
+  expect(started.model().instances[0].position).toEqual([1250, -480, 0]);
   expect(viewport.props.fitKey).toBe(fitKey);
 });
 
@@ -928,4 +985,43 @@ it('Hardware: Axial offset applies as you type (Phase L), keeps the field, and w
   } finally {
     vi.useRealTimers();
   }
+});
+
+// Phase Q (docs/sketch-studio-hardware-seat-side.md §4.5): Flip side, from the
+// panel and with F, in Place and seated; Apply writes side: 'far'.
+it('Hardware: Flip side (F and the button) moves the chosen holes to the far opening; Apply writes side: far', () => {
+  const { setCadModel, model } = holesSetup();
+  openHardware();
+  place(holeCentre(0));
+  place(holeCentre(2));
+  expect(viewport.props.placement.hint).toContain(' · F flips to the other side');
+  const flip = () => screen.getByRole('button', { name: 'Flip side' });
+  expect(flip().disabled).toBe(false);
+  press('f');
+  expect(viewport.props.placement.place.chosen).toEqual({ 'b1/row/0': 'far', 'b1/row/2': 'far' });
+  expect(chosen().map((li) => li.textContent)).toEqual([
+    'Hole 1 of 4 · Board / plate · far sideRemove',
+    'Hole 3 of 4 · Board / plate · far sideRemove',
+  ]);
+  press('Enter');
+  expect(viewport.props.placement.stage).toBe('shape');
+  // Seated: the button flips back and forth; the instances keep their ids.
+  const first = viewport.props.selectedId;
+  act(() => fireEvent.click(flip()));
+  expect(viewport.props.placement.place.chosen).toEqual({ 'b1/row/0': 'entry', 'b1/row/2': 'entry' });
+  act(() => fireEvent.click(flip()));
+  expect(viewport.props.placement.stage).toBe('shape');
+  expect(viewport.props.selectedId).toBe(first);
+  expect(setCadModel).not.toHaveBeenCalled();
+  act(() => fireEvent.click(screen.getByRole('button', { name: 'Apply hardware' })));
+  expect(setCadModel).toHaveBeenCalledOnce();
+  const after = model();
+  expect(after.connections.map((c) => [c.holeIndex, c.side])).toEqual([
+    [undefined, 'far'],
+    [2, 'far'],
+  ]);
+  expect(after.instances.slice(1).map((i) => i.position)).toEqual([
+    [100, 100, 0],
+    [200, 100, 0],
+  ]);
 });

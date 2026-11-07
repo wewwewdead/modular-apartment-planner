@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { numeric, resolveParameters } from './model.js';
 import { ValueField, VectorFields } from './CadEditors.jsx';
+import NumericInput from '../components/NumericInput.jsx';
 
 export default function ProfileEditor({ sketch, parameters, onChange, solvedProfile }) {
   const profile = sketch.constrained && solvedProfile ? solvedProfile : sketch.profile;
@@ -185,12 +186,7 @@ export default function ProfileEditor({ sketch, parameters, onChange, solvedProf
             </label>
             <label className="cad-field">
               Snap grid (mm)
-              <input
-                type="number"
-                min="0.1"
-                value={snap}
-                onChange={(e) => setSnap(Math.max(0.1, Number(e.target.value)))}
-              />
+              <NumericInput min="0.1" value={snap} onCommit={(v) => setSnap(Math.max(0.1, v))} />
             </label>
             <label>
               <input type="checkbox" checked={construction} onChange={(e) => setConstruction(e.target.checked)} />{' '}

@@ -1,4 +1,4 @@
-import { memo, useRef, useState } from 'react';
+import { memo, startTransition, useRef, useState } from 'react';
 import { formatMeasurement } from '@/annotations/format';
 import { MIN_WALL_LENGTH } from '@/domain/defaults';
 import { describeWallEditRejection, validateWallEdit } from '@/domain/modelGraph';
@@ -368,7 +368,11 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
         },
       },
     });
-    updateWall({ assembly: { ...wall.assembly, detailing } });
+    // The detailing write is a project edit, so it reruns the whole-project
+    // coordination pass (~160 ms on the bench project). As a transition it
+    // lands after the editor's frame has painted; the open itself stays urgent
+    // so the click is answered on the next frame (docs/loading-states.md §6.1).
+    startTransition(() => updateWall({ assembly: { ...wall.assembly, detailing } }));
     editorDispatch({ type: 'OPEN_WALL_DETAIL_EDITOR', floorId, wallId: wall.id, side });
   };
 

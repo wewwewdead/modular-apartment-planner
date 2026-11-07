@@ -3,6 +3,7 @@ import wasmUrl from 'replicad-opencascadejs/wasm?url';
 import { setOC } from 'replicad';
 import { createKernelSession } from './kernel.js';
 let init, session, revision;
+let announced = false;
 // Queue initialization and operations so an export cannot race a build.
 let queue = Promise.resolve();
 let latestBuild = -Infinity;
@@ -14,6 +15,11 @@ self.onmessage = ({ data }) => {
       if (data.type === 'build' && data.revision < latestBuild) throw new Error('Superseded model revision.');
       init ||= initOpenCascade({ locateFile: () => wasmUrl }).then(setOC);
       await init;
+      // Once, so the UI can tell "waking the kernel" from "building the parts".
+      if (!announced) {
+        announced = true;
+        self.postMessage({ status: 'awake' });
+      }
       let result;
       if (data.type === 'build') {
         session?.dispose();

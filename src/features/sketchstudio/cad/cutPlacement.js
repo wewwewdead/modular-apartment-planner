@@ -116,6 +116,20 @@ export function resolveCutPlacement(feature, previousFeatures, bounds, parameter
       // Drill radially into a round member at the true analytic surface.
       direction = normalize([-local[0], -local[1], 0]);
       widthDirection = normalize([direction[1], -direction[0], 0]);
+    } else if (section.type === 'angle') {
+      // An angle (Phase P) has leg A along local x (outside face y = −h/2) and
+      // leg B along local y (outside face x = −w/2), meeting at the heel.
+      // Front and left are the outsides of the legs, rear and right their
+      // insides, one thickness in; the centre must land on the leg.
+      const inside = side.sign > 0 ? section.wall : 0;
+      const across = side.axis === 0 ? 1 : 0;
+      const span = across === 0 ? section.width : section.height;
+      local[side.axis] = -(side.axis === 0 ? section.width : section.height) / 2 + inside;
+      if (local[across] < -span / 2 + inside - 1e-9 || local[across] > span / 2 + 1e-9)
+        throw new Error('Cut offset must land on the angle leg.');
+      direction = [0, 0, 0];
+      direction[side.axis] = -side.sign;
+      widthDirection = side.width;
     } else {
       const half = (side.axis === 0 ? section.width : section.height) / 2;
       local[side.axis] = side.sign * half;

@@ -9,6 +9,8 @@ import { generateWorkshopZip } from '../export/workshopExport';
 import { DEFAULT_BLADE_KERF, DEFAULT_SHEET } from '../utils/nestingOptimizer';
 import { DEFAULT_CUT_KERF_MM } from '../utils/linearStockOptimizer';
 import Toast from '../../components/Toast';
+import NumericInput from '../../components/NumericInput';
+import { BusyButton, LOADING_COPY, afterPaint } from '@/ui/loading';
 import styles from '../styles/craftsman.module.css';
 
 const DEFAULT_KERF = 0.2; // mm, typical laser kerf
@@ -142,6 +144,8 @@ export default function ExportBar({
     if (exporting) return;
     setExporting(true);
     try {
+      // Nesting and the ZIP run on this thread; the busy button paints first.
+      await afterPaint();
       const result = await generateWorkshopZip(
         entities,
         bomRows || [],
@@ -184,9 +188,15 @@ export default function ExportBar({
 
   return (
     <div className={styles.exportBar}>
-      <button type="button" onClick={handleWorkshopExport} className={styles.workshopExportBtn} disabled={exporting}>
-        {exporting ? 'Exporting...' : 'Workshop Package'}
-      </button>
+      <BusyButton
+        onClick={handleWorkshopExport}
+        className={styles.workshopExportBtn}
+        busy={exporting}
+        busyLabel={LOADING_COPY.workshopZip}
+        spinnerTone="inverse"
+      >
+        Workshop Package
+      </BusyButton>
 
       <span className={styles.exportDivider} />
 
@@ -235,13 +245,12 @@ export default function ExportBar({
           </option>
         ))}
       </select>
-      <input
-        type="number"
+      <NumericInput
         className={styles.kerfInput}
         value={templateOverlap}
         min={MIN_OVERLAP_MM}
         step="1"
-        onChange={(e) => setTemplateOverlap(Number(e.target.value) || DEFAULT_OVERLAP_MM)}
+        onCommit={(v) => setTemplateOverlap(v > 0 ? v : DEFAULT_OVERLAP_MM)}
         title="Glue-tab overlap between template pages, in mm"
       />
 
@@ -252,14 +261,13 @@ export default function ExportBar({
         <span>Kerf</span>
       </label>
       {kerfEnabled && (
-        <input
-          type="number"
+        <NumericInput
           className={styles.kerfInput}
           value={kerfWidth}
           min="0.05"
           max="5"
           step="0.05"
-          onChange={(e) => setKerfWidth(Number(e.target.value) || DEFAULT_KERF)}
+          onCommit={(v) => setKerfWidth(v > 0 ? v : DEFAULT_KERF)}
           title="Kerf width in mm"
         />
       )}
@@ -282,14 +290,13 @@ export default function ExportBar({
               </option>
             ))}
           </select>
-          <input
-            type="number"
+          <NumericInput
             className={styles.kerfInput}
             value={bitDiameter}
             min="0.1"
             max="25"
             step="0.05"
-            onChange={(e) => setBitDiameter(Number(e.target.value) || DEFAULT_BIT_DIAMETER)}
+            onCommit={(v) => setBitDiameter(v > 0 ? v : DEFAULT_BIT_DIAMETER)}
             title="Cutter diameter in mm"
           />
         </>
@@ -302,35 +309,32 @@ export default function ExportBar({
           <span className={styles.exportLabel} title="Stock sheet for the nested sheet DXFs in the workshop package">
             Sheet:
           </span>
-          <input
-            type="number"
+          <NumericInput
             className={styles.kerfInput}
             value={sheetWidth}
             min="1"
             step="1"
-            onChange={(e) => setSheetWidth(Number(e.target.value) || DEFAULT_SHEET.width)}
+            onCommit={(v) => setSheetWidth(v > 0 ? v : DEFAULT_SHEET.width)}
             title="Nesting sheet width in mm"
           />
           <span className={styles.nestingSizeX}>x</span>
-          <input
-            type="number"
+          <NumericInput
             className={styles.kerfInput}
             value={sheetHeight}
             min="1"
             step="1"
-            onChange={(e) => setSheetHeight(Number(e.target.value) || DEFAULT_SHEET.height)}
+            onCommit={(v) => setSheetHeight(v > 0 ? v : DEFAULT_SHEET.height)}
             title="Nesting sheet height in mm"
           />
           <span className={styles.exportLabel} title="Blade gap left between nested parts">
             Gap:
           </span>
-          <input
-            type="number"
+          <NumericInput
             className={styles.kerfInput}
             value={bladeKerf}
             min="0"
             step="0.5"
-            onChange={(e) => setBladeKerf(Number(e.target.value) || DEFAULT_BLADE_KERF)}
+            onCommit={(v) => setBladeKerf(v > 0 ? v : DEFAULT_BLADE_KERF)}
             title="Blade gap left between nested parts in mm"
           />
         </>
@@ -343,13 +347,12 @@ export default function ExportBar({
           <span className={styles.exportLabel} title="Saw kerf charged per cut in the workshop package's cutlist.csv">
             Cut kerf:
           </span>
-          <input
-            type="number"
+          <NumericInput
             className={styles.kerfInput}
             value={cutKerf}
             min="0"
             step="0.5"
-            onChange={(e) => setCutKerf(Number(e.target.value) || 0)}
+            onCommit={(v) => setCutKerf(Math.max(0, v))}
             title="Saw kerf per cut, in mm"
           />
         </>

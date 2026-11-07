@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useConfirmDialog } from '@/ui/ConfirmDialog';
 import { useUnsavedChangesGuard } from '@/app/useUnsavedChangesGuard';
 import { createProject } from '@/domain/models';
@@ -10,12 +10,15 @@ import {
   exportProjectFile,
   importProjectFile,
   isFilePickerAbortError,
+  isNotAProjectFileError,
   openProjectFile,
 } from '@/persistence/fileTransfer';
+import { afterPaint, LOADING_COPY } from '@/ui/loading';
 import { useAutosave } from '@/persistence/useAutosave';
 import floorplanReducer, { initializeFloorplanState } from '../store/floorplanReducer';
 
 function getImportErrorMessage(err) {
+  if (isNotAProjectFileError(err)) return LOADING_COPY.badProjectFile;
   const message = typeof err?.message === 'string' ? err.message.trim() : '';
   return message || 'The selected file could not be opened as an Apartment Planner project.';
 }
@@ -29,6 +32,19 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState(false);
   const [projectFileHandle, setProjectFileHandle] = useState(null);
+  /*
+    A project on its way in (§5.3): `{ stage: 'draft', draftId }` or
+    `{ stage: 'reading' | 'unpacking', name }`. Set before any of the work so
+    the clicked control and the bar answer first; cleared in the same commit
+    that puts the project on screen. A failure while the Open Project dialog is
+    up lands on its Project File card rather than in a dialog over it.
+  */
+  const [projectOpening, setProjectOpening] = useState(null);
+  const [projectOpenError, setProjectOpenError] = useState(null);
+  const showLoadModalRef = useRef(false);
+  useEffect(() => {
+    showLoadModalRef.current = showLoadModal;
+  }, [showLoadModal]);
   const importInputRef = useRef(null);
 
   const project = state.project;
@@ -141,7 +157,42 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
 
   const handleLoadClick = useCallback(async () => {
     setSavedProjects(await listProjects());
+    setProjectOpenError(null);
     setShowLoadModal(true);
+  }, []);
+
+  /*
+    Everything after the read: the busy state has painted by now, and the
+    load itself — the reducer's migration pass and the re-render of the whole
+    workspace — runs as a transition so the page keeps answering through it.
+    The modal closes in that same commit, with the project already drawn.
+  */
+  const commitLoadedProject = useCallback(async ({ project: loadedProject, savedAt }, fileHandle) => {
+    await afterPaint();
+    startTransition(() => {
+      dispatch({ type: 'PROJECT_LOAD', project: loadedProject, savedAt });
+      setProjectFileHandle(fileHandle);
+      setShowLoadModal(false);
+      setProjectOpening(null);
+    });
+  }, []);
+
+  const failProjectOpen = useCallback(
+    async (err) => {
+      setProjectOpening(null);
+      const message = getImportErrorMessage(err);
+      if (showLoadModalRef.current) {
+        setProjectOpenError(message);
+        return;
+      }
+      await confirm(message, { title: 'Could not open project', variant: 'alert' });
+    },
+    [confirm],
+  );
+
+  const trackOpenProgress = useCallback(({ stage, name }) => {
+    setProjectOpenError(null);
+    setProjectOpening({ stage, name });
   }, []);
 
   const handleOpenProjectFile = useCallback(async () => {
@@ -155,16 +206,16 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
     }
 
     try {
-      const { project: loadedProject, savedAt, fileHandle } = await openProjectFile();
-      dispatch({ type: 'PROJECT_LOAD', project: loadedProject, savedAt });
-      setProjectFileHandle(fileHandle);
-      setShowLoadModal(false);
+      // The picker owns the wait until a file is chosen; the progress callback
+      // is the first moment there is a name to show.
+      const result = await openProjectFile({ onProgress: trackOpenProgress });
+      await commitLoadedProject(result, result.fileHandle);
     } catch (err) {
       if (isFilePickerAbortError(err)) return;
       console.warn('[open] Failed to import project file:', err);
-      await confirm(getImportErrorMessage(err), { title: 'Could not open project', variant: 'alert' });
+      await failProjectOpen(err);
     }
-  }, [confirm, state.isDirty]);
+  }, [commitLoadedProject, confirm, failProjectOpen, state.isDirty, trackOpenProgress]);
 
   const handleImportFile = useCallback(
     async (event) => {
@@ -177,16 +228,16 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
       }
 
       try {
-        const { project: loadedProject, savedAt } = await importProjectFile(file);
-        dispatch({ type: 'PROJECT_LOAD', project: loadedProject, savedAt });
-        setProjectFileHandle(null);
-        setShowLoadModal(false);
+        trackOpenProgress({ stage: 'reading', name: file.name });
+        await afterPaint();
+        const result = await importProjectFile(file, { onProgress: trackOpenProgress });
+        await commitLoadedProject(result, null);
       } catch (err) {
         console.warn('[import] Failed to import project file:', err);
-        await confirm(getImportErrorMessage(err), { title: 'Could not open project', variant: 'alert' });
+        await failProjectOpen(err);
       }
     },
-    [confirm, state.isDirty],
+    [commitLoadedProject, confirm, failProjectOpen, state.isDirty, trackOpenProgress],
   );
 
   const handleLoadDraft = useCallback(
@@ -194,15 +245,17 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
       if (state.isDirty && !(await confirm('Unsaved changes will be lost. Continue?'))) return;
 
       try {
-        const { project: loadedProject, savedAt } = await loadProject(projectId);
-        dispatch({ type: 'PROJECT_LOAD', project: loadedProject, savedAt });
-        setProjectFileHandle(null);
-        setShowLoadModal(false);
+        setProjectOpenError(null);
+        setProjectOpening({ stage: 'draft', draftId: projectId });
+        await afterPaint();
+        const result = await loadProject(projectId);
+        await commitLoadedProject(result, null);
       } catch (err) {
         console.warn('[load] Failed to load project:', err);
+        setProjectOpening(null);
       }
     },
-    [confirm, state.isDirty],
+    [commitLoadedProject, confirm, state.isDirty],
   );
 
   const handleDeleteDraft = useCallback(
@@ -312,6 +365,8 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
         isSidebarCollapsed,
         isPropertiesCollapsed,
         projectFileHandle,
+        projectOpening,
+        projectOpenError,
       },
       workspaceRefs: {
         importInputRef,
@@ -332,6 +387,8 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
       isSidebarCollapsed,
       orderedFloors,
       projectFileHandle,
+      projectOpenError,
+      projectOpening,
       resolvedDocument,
       savedProjects,
       showLoadModal,
@@ -348,7 +405,10 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
         toggleSidebar: () => setIsSidebarCollapsed((value) => !value),
         toggleProperties: () => setIsPropertiesCollapsed((value) => !value),
         openLoadModal: handleLoadClick,
-        closeLoadModal: () => setShowLoadModal(false),
+        closeLoadModal: () => {
+          setProjectOpenError(null);
+          setShowLoadModal(false);
+        },
         openNewProjectModal: () => setShowNewProjectModal(true),
         closeNewProjectModal: () => setShowNewProjectModal(false),
       },

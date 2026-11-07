@@ -1,5 +1,5 @@
 import { getSectionLimitedDepth } from '@/domain/sectionModels';
-import { useNumericDraft } from '../useNumericDraft';
+import { useNumericDraft } from '@/hooks/useNumericDraft';
 import canvasStyles from './SvgCanvas.module.css';
 import styles from './SectionViewControls.module.css';
 

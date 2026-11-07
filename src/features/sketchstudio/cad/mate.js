@@ -1,5 +1,5 @@
 import { Quaternion, Vector3 } from 'three';
-import { translateInstance, turnInstance } from './movement.js';
+import { translateInstance, translateInstances, turnInstance, turnInstances } from './movement.js';
 
 const unit = (v) => new Vector3(...v).normalize();
 
@@ -46,4 +46,29 @@ export function mateInstance(model, { instanceId, base, moving, target, center, 
   });
   const turned = result.angle > 1e-9 ? turnInstance(reset, instanceId, result.quaternion, center, parameters) : reset;
   return translateInstance(turned, instanceId, result.translation);
+}
+
+// A group mated as one body (docs/sketch-studio-part-groups.md §3.6): every
+// rigid mover reset to its pose before the mate (`bases`, id → { position,
+// rotation }), then the same turn about `center` and translation, so the
+// members keep their relative poses. mateTransform is unchanged.
+export function mateNodes(model, { movers, bases, moving, target, center, offset = 0 }, parameters = {}) {
+  if (!movers?.length || movers.some((id) => !model.instances.some((i) => i.id === id)))
+    throw new Error('The moving group no longer exists.');
+  const reset = {
+    ...model,
+    instances: model.instances.map((i) =>
+      bases[i.id] ? { ...i, position: [...bases[i.id].position], rotation: [...bases[i.id].rotation] } : i,
+    ),
+  };
+  const result = mateTransform({
+    movingPoint: moving.point,
+    movingNormal: moving.normal,
+    targetPoint: target.point,
+    targetNormal: target.normal,
+    center,
+    offset,
+  });
+  const turned = result.angle > 1e-9 ? turnInstances(reset, movers, result.quaternion, center, parameters) : reset;
+  return translateInstances(turned, movers, result.translation);
 }

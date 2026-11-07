@@ -24,11 +24,47 @@ tile's centre). There is no welcome dialog: click
 a plane, or its label, and the sketch starts on it straight away (the view
 turns square to it and the sketch bar opens). The Properties panel lists the
 other ways in under **Start**: **New sketch**, **Board / plate**, **Tube /
-member**, **Design parameters**, the examples and **Import 2D profiles**.
+member**, **Angle bar**, **Design parameters**, the examples and **Import 2D
+profiles**.
 
-**Where a new Board or Tube lands.** **Board / plate** and **Tube / member**
-(Solid tab or the Start list) put the new part on the ground (Z = 0) at the
-centre of your current view, snapped to the Move part grid (1 mm when moving
+**Angle bar.** **Angle bar** (Solid tab, right after Tube / member, or the
+Start list) adds a steel member with a hot-rolled angle section: L 50×50×5
+with a 7 mm root radius and 3.5 mm toe radii (EN 10056-1), 700 mm long. In
+its member feature the section fields read **Leg A (width)** (along the
+member's local X), **Leg B (height)** (local Y), **Thickness**, **Root
+radius** (the fillet between the legs) and **Toe radius** (the inner corner
+of each leg tip); radii of 0 give a sharp-cornered L. **Standard size** sets
+all five from the equal-angle list (L 20×20×3 … L 100×100×10) and reads
+Custom when the values match none (or any is an expression). Any other size
+is a custom angle: type Leg A, Leg B (they need not be equal) and Thickness.
+While the radii are still the automatic ones (a standard size, a new Angle
+bar, or radii you never typed), they follow the size: the standard size's
+radii on an exact match, else those of the standard size with the nearest
+thickness, scaled down to fit (toe radius at most half the thickness, root +
+toe at most half of the shorter leg less the thickness, to 0.1 mm), so a
+custom size like L 63×50×3 or a 10 mm leg never fails on the radii. They
+depend only on the current legs and thickness, so typing 60 through 6 ends
+with the radii of 60. Once you type a radius yourself (or give one as an
+expression) it stays, and a size it does not fit shows the radius error.
+Switching a member's Type to Angle takes the same automatic radii. The heel
+(outside corner) sits at local (−w/2, −h/2): the member's axis runs through
+the centre of the section's bounding box, as for every member. The cutting
+list names member sections (SHS 40×40×2, CHS Ø48.3×3, Flat 40×10, Round Ø20,
+L 50×50×5, a custom L 75×40×4); the CSV is unchanged.
+
+**Member properties.** A member's feature (Tube / member, Angle bar, every
+section type) shows its size first. **Length (mm)** is the distance from
+start to end; typing a length keeps the start and moves the end along the
+member's axis (straight up, +Z, when start and end coincide); it must be more
+than 0, and gaps and mitres trim from it. While either end point holds an
+expression the Length is read-only: edit the end points instead. Below it
+the **Stock section (mm)** fields, then two folded groups: **End points (part
+mm)** (the raw Start and End X/Y/Z) and **Ends & gaps** (Gap at start / end
+in mm, Mitre at start / end in degrees).
+
+**Where a new Board or Tube lands.** **Board / plate**, **Tube / member** and
+**Angle bar** (Solid tab or the Start list) put the new part on the ground
+(Z = 0) at the centre of your current view, snapped to the Move part grid (1 mm when moving
 freely), and the camera does not move. A board is centred on that point (its
 Position is its corner, so a 600 × 400 board dropped at the origin reads
 Position −300, −200, 0); a tube stands upright with its axis through it. On a
@@ -421,8 +457,8 @@ which resolve the true radial surface.
 
 ### Hardware and metric threads
 
-**Hardware library** in Solid or Assemble adds bolts, nuts, spacers and 22
-kinds of screw. The **Hardware type** list is grouped:
+**Hardware library** in Solid or Assemble adds bolts, nuts, spacers, 22 kinds
+of screw and 15 kinds of rivet. The **Hardware type** list is grouped:
 
 - **Bolts, nuts & spacers**: hex bolt, hex nut, washer, threaded standoff,
   self-clinching nut, standoff and stud (PEM style), rivet nut, threaded insert.
@@ -441,6 +477,18 @@ kinds of screw. The **Hardware type** list is grouped:
   (DIN 571).
 - **Special**: knurled thumb screw (DIN 464 / DIN 653), wing screw (DIN 316),
   eye bolt (DIN 444), carriage bolt with square neck (DIN 603).
+- **Blind rivets**: open end or pop rivet (ISO 15977–15984 / DIN 7337), closed
+  end or sealed (ISO 15973–15976 / ISO 16585), multi-grip (ISO 15977 type,
+  manufacturer lengths), peel type (manufacturer), structural with a locked
+  mandrel (Monobolt / Magna-Lok / Hemlok type, manufacturer), hammer drive or
+  pin rivet (manufacturer).
+- **Solid, tubular & special rivets**: solid rivet (DIN 660 / 661 / 662 / 674,
+  ISO 1051; 10–16 mm from DIN 124 / 302), semi-tubular (DIN 7338), tubular
+  (DIN 7340), split or bifurcated (manufacturer gauge tables), self-piercing
+  or SPR (Henrob / Böllhoff type), lockbolt with a swaged collar (Huck C6L /
+  Magna-Grip type), plastic push rivet or panel clip.
+- **Blind rivet nuts & studs**: blind rivet nut or rivnut, blind rivet stud
+  (PEM / Böllhoff type tables).
 
 The **Metric size** list shows the sizes of the chosen kind: M2–M12 for bolts,
 nuts and machine, socket and special screws; ST2.9–ST6.3 for tapping screws;
@@ -479,7 +527,72 @@ installation hole, minimum sheet thickness and installation notes; the
 quantities CSV retains these details. The supplied size suggestions must be
 replaced by the purchased product's dimensions when manufacturing fit matters.
 
-Countersunk, raised countersunk and bugle heads are flush: the seating plane is
+**Rivets.** Rivet sizes are body diameters: 2.4–6.4 for blind rivets (3.2,
+4.0, 4.8 and 6.4 for the closed-end, multi-grip, peel and drive kinds; 4.8,
+6.4, 9.5 and 12.7 for structural ones), 1–16 for solid rivets (2–5 for split
+rivets), 2–10 for tubular and 3–10 for semi-tubular rivets, 3.3 and 5.3 for
+self-piercing rivets, 4.8–12.7 for lockbolts and 5–10 (the panel hole) for push
+rivets; rivet nuts take M3–M12 and rivet studs M4–M8 with their metric pitch.
+Rivet kinds have no Drive or Point. Their **Head style** choices are dome
+(protruding), countersunk 120° and large flange for blind rivets; round,
+countersunk 90°, raised countersunk (oval), pan (flat round), universal
+(MS20470) and countersunk 100° (MS20426) for solid rivets; flat or truss for
+semi-tubular, flat or round for tubular, round or countersunk for split,
+countersunk or flat for self-piercing rivets; flat, reduced (semi-flush) or
+countersunk flanges for rivet nuts (flat or reduced for studs); dome or
+countersunk 100° for lockbolts. Kinds without a published table
+(multi-grip, peel, structural, drive, tubular, split, self-piercing, rivet
+nut and stud, lockbolt, push rivet) use manufacturer-typical proportions,
+and their cut-list note says "proportional defaults, no standard table".
+A pop rivet, multi-grip, peel, drive and closed-end rivet default to
+aluminium, a tubular rivet to brass, a push rivet to nylon and the others to
+steel; switching the type takes the new kind's material unless you chose a
+different one.
+
+Every rivet has a **State** select. **Installed (set)**, the default, draws the
+head on the sheet, the body across the grip and a schematic blind-side upset
+below it: a barrel bulb for open-end, structural and closed-end rivets (the
+closed one ends in a domed cup), two lobes for a multi-grip rivet, four petals
+folded flat for a peel rivet, a flared tail for drive and self-piercing rivets,
+a shop head for a solid rivet, a rolled lip for tubular rivets, two legs bent
+flat for a split rivet, a bulge for rivet nuts and studs, a swaged collar for a
+lockbolt and spread legs for a push rivet. A set blind rivet shows the recess
+the broken mandrel leaves in its head (the structural rivet's locked pin sits
+higher). **As supplied (unset)** draws the plain body with its mandrel or pin:
+the mandrel standing above the head (the **Mandrel protrusion** field) and its
+head under the body end, the drive or push pin raised, the split rivet's slot
+open, a lockbolt's pin without its collar (its note says "collar not shown as
+supplied"). The mandrel protrusion field shows only as supplied, the upset
+height field only when set.
+
+The **Grip / clamped thickness (mm)** field is the sheet stack the rivet
+clamps, measured down from the seating plane; the upset starts there. A grip
+must be shorter than the rivet, a countersunk head no deeper than the grip, and
+for a blind or solid rivet the upset must fit in the tail left below the grip
+(the panel says which rule an entry breaks). The library does not pick a body
+length for a grip: grip ranges differ per manufacturer. For reference, ISO
+15977 gives these grip ranges by body length: Ø3.2 — 6: 1–3, 8: 3–5,
+10: 5–6.5, 12: 6.5–8.5, 16: 8.5–12.5, 20: 12.5–16.5, 25: 16.5–21; Ø4.0 and
+Ø4.8 — 6: 1.5–2.5, 8: 2.5–4, 10: 4–6, 12: 6–8, 16: 8–12, 20: 12–15, 25: 15–20,
+30: 20–25; Ø6.4 — 12: 3–6, 16: 6–10, 20: 10–14, 25: 14–18, 30: 18–23. The
+default length and grip of each size are a mid-range pair from that table.
+
+Blind rivet nuts and studs also have a **Body** select: a round body or a
+hexagon body (the body field then reads across flats, and the hexagon runs
+over the grip when set and over the whole body as supplied). Two rivet nuts are
+in the list on purpose: **Rivet nut** in Bolts, nuts & spacers is the Phase J
+PEM-style flanged bush that stands up out of the seating plane, unchanged;
+**Blind rivet nut (rivnut)** is the blind-side insert with its body through the
+sheet and a bulge below it. Not modeled as kinds: grooved rivets (a plain blind
+rivet stands in), explosive and friction-lock aerospace rivets, Cherry-type
+bulbed aerospace rivets (use the structural blind rivet), pull-through or
+T-rivets, collar variants beyond the one flange, rivet washers and backing
+plates, hollow-wall anchors, and hot-driven structural rivets above the 16 mm
+size. Sheet deformation, mandrel grooves, knurled tubular heads, petal curl
+and the far-side countersink are not drawn.
+
+Countersunk (90°, and the 100° and 120° rivet heads), raised countersunk and
+bugle heads are flush: the seating plane is
 the top rim of the head and the cone runs below it, so seating one in a plain
 hole puts the cone inside the plate. No countersink is cut in the hole, and the
 hole has no countersink option. A set screw's socket end is on the seating
@@ -491,7 +604,7 @@ screws (those are the security Torx, spanner and one-way drives on any screw).
 
 With a hole selected, **Attach to selected hole** creates a concentric connection.
 The hardware seating plane follows that hole, including subsequent hole moves
-and assembly rotations. Bolts, studs and screws extend into the hole; spacer/nut bodies
+and assembly rotations. Bolts, studs, screws and rivets extend into the hole; spacer/nut bodies
 extend outward. Set axial offset under **Connections / welds** to place hardware
 on the other side of a plate or space stacked hardware. Installation holes are
 not automatically cut or inferred from thread size. When the selected hole is a
@@ -515,7 +628,7 @@ list takes a hole out again, **Re-place** chooses the holes from scratch, and
 **Axial offset (mm)** sets the same offset on every connection. Esc removes the
 last chosen hole, and cancels the command when none is chosen. With no hole
 chosen, a click on a plain flat face seats a single one there (its seating
-plane on the face, bolts, studs and screws pointing into it, also on an underside or a
+plane on the face, bolts, studs, screws and rivets pointing into it, also on an underside or a
 turned part) and a click on empty ground stands it on the ground; the square
 slides that single one on the face, and **Apply** adds it as an ordinary part,
 which **Move part** can still move. The sizes are the panel fields in both
@@ -555,8 +668,12 @@ editor, or under Exact placement while placing) to locate a cut by **Cut
 side**, **Along member (%)** (or distance from the finished start) and
 across-side offset. Pockets are a rectangular recess and do not require a
 sketch. On round members the cutting direction is radial at the actual
-cylindrical surface. Member references follow changes to length, section,
-endpoints and weld gaps, before assembly placement.
+cylindrical surface. On an angle the sides are the faces of its legs:
+**Front — outside of leg A**, **Rear — inside of leg A**, **Left — outside of
+leg B**, **Right — inside of leg B** (the inside faces are one thickness in
+from the heel); an offset that puts the centre off the leg is refused ("Cut
+offset must land on the angle leg."). Member references follow changes to
+length, section, endpoints and weld gaps, before assembly placement.
 
 **Specified depth from surface** makes a blind cut. **Through all** also cuts
 the opposite tube wall. **View cut close up** looks at the cutting location;
@@ -762,12 +879,12 @@ Licenses and source/build links are in public/cad-notices/NOTICE.txt.
   for Hole on a board corner (vertex snap) with the depth arrow dragged blind
   and back to Through all, Edit hole with preview, Pocket's corner grip and a
   typed depth, Add hardware seated on the board top, and the Transform gizmo.
-- Run node scripts/verify-hole-row.mjs (CAD_VERIFY_URL=http://localhost:5180/sketch)
+- Run node scripts/verify-hole-row.mjs (CAD*VERIFY_URL=http://localhost:5180/sketch)
   for Hole row: corner and grid snaps for the first hole, the rubber row and
   ↑ ↓ count, the second click 150 mm along +X, the end square with a typed
   spacing, Apply (camera held), Move holes moving the whole row, and the
-  detail sheet's "4 ×" note in the workshop ZIP, then the live fields: _Holes
-  in row_ 6 typed without Enter in Shape, and _Spacing (mm)_ 60 typed without
+  detail sheet's "4 ×" note in the workshop ZIP, then the live fields: \_Holes
+  in row* 6 typed without Enter in Shape, and _Spacing (mm)_ 60 typed without
   Enter in the tree editor, undone in one step.
 - Run node scripts/verify-sketch-cad-offline.mjs against the production preview
   on port 5181, after a build. It uses a hidden Electron window and a separate

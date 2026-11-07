@@ -202,14 +202,26 @@ function regionPath(regions) {
     .join(' ');
 }
 
-function ElevationSceneLayer({ scene, annotationScene, showTitle = true, selectedId = null, selectedType = null }) {
+/**
+ * `drawables`, when given, is the scene's visibility result already resolved
+ * (the plan canvas runs that pass after paint, in slices); without it the pass
+ * runs here, synchronously, as sheets and PDFs want.
+ */
+function ElevationSceneLayer({
+  scene,
+  annotationScene,
+  showTitle = true,
+  selectedId = null,
+  selectedType = null,
+  drawables: resolvedDrawables = null,
+}) {
   const clipPrefix = useId();
   const presentation = isPresentationStyle(usePlanStyle());
   if (!scene) return null;
 
   const titleX = (scene.bounds.minX + scene.bounds.maxX) / 2;
   const titleY = -scene.bounds.maxZ - 500;
-  const drawables = getVisibleElevationDrawables(scene);
+  const drawables = resolvedDrawables || getVisibleElevationDrawables(scene);
   const styles = presentation ? PRESENTATION_STYLE_MAP : STYLE_MAP;
   const hasGround = Number.isFinite(scene.groundLevel);
 

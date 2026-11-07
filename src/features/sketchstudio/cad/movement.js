@@ -65,23 +65,64 @@ export function cleanRotation(quaternion) {
   return score(candidates[1]) < score(candidates[0]) ? candidates[1] : candidates[0];
 }
 
-// Turn an instance by a world-space rotation about a world point.
-export function turnInstance(model, id, turn, center, parameters = {}) {
-  const instance = model.instances.find((i) => i.id === id);
-  if (!instance) throw new Error('The selected part no longer exists.');
+const turnQuaternion = (turn) => {
   const quaternion = Array.isArray(turn) ? new Quaternion(...turn) : turn.clone();
   if (quaternion.lengthSq() < 1e-12) throw new Error('Rotation cannot be zero.');
-  quaternion.normalize();
-  const pivot = new Vector3(...vector(center, parameters));
+  return quaternion.normalize();
+};
+
+// One instance's share of a world turn about a world pivot: the move of its
+// origin and its new (clean) XYZ rotation.
+function turnedPose(instance, quaternion, pivot, parameters) {
   const rotation = vector(instance.rotation || [0, 0, 0], parameters).map(MathUtils.degToRad);
   const orientation = new Quaternion().setFromEuler(new Euler(...rotation, 'ZYX')).premultiply(quaternion);
   const position = new Vector3(...vector(instance.position || [0, 0, 0], parameters));
   const delta = position.clone().sub(pivot).applyQuaternion(quaternion).add(pivot).sub(position).toArray();
+  return { delta, rotation: cleanRotation(orientation) };
+}
+
+// Turn an instance by a world-space rotation about a world point.
+export function turnInstance(model, id, turn, center, parameters = {}) {
+  const instance = model.instances.find((i) => i.id === id);
+  if (!instance) throw new Error('The selected part no longer exists.');
+  const quaternion = turnQuaternion(turn);
+  const pivot = new Vector3(...vector(center, parameters));
+  const { delta, rotation } = turnedPose(instance, quaternion, pivot, parameters);
   const next = translateInstance(model, id, delta);
   return {
     ...next,
-    instances: next.instances.map((i) => (i.id === id ? { ...i, rotation: cleanRotation(orientation) } : i)),
+    instances: next.instances.map((i) => (i.id === id ? { ...i, rotation } : i)),
   };
+}
+
+// Turn several instances rigidly, as one body, by a world-space rotation
+// about a world point (a group, docs/sketch-studio-part-groups.md §3.5): the
+// same per-instance maths as turnInstance, in one model update. `ids` are the
+// rigid movers (groups.js rigidMovers); the anchoring check has already
+// replaced turnInstance's refusal of attached parts.
+export function turnInstances(model, ids, turn, center, parameters = {}) {
+  const movers = new Set(ids);
+  if (!movers.size) throw new Error('Nothing to turn.');
+  for (const id of movers)
+    if (!model.instances.some((i) => i.id === id)) throw new Error('A selected part no longer exists.');
+  const quaternion = turnQuaternion(turn);
+  const pivot = new Vector3(...vector(center, parameters));
+  return {
+    ...model,
+    instances: model.instances.map((instance) => {
+      if (!movers.has(instance.id)) return instance;
+      const { delta, rotation } = turnedPose(instance, quaternion, pivot, parameters);
+      return { ...instance, position: shiftedPosition(instance.position, delta), rotation };
+    }),
+  };
+}
+
+// turnInstances about a world axis through a world point.
+export function rotateInstancesAbout(model, ids, axis, degrees, center, parameters = {}) {
+  const direction = new Vector3(...vector(axis));
+  if (direction.lengthSq() < 1e-12) throw new Error('Rotation axis cannot be zero.');
+  const turn = new Quaternion().setFromAxisAngle(direction.normalize(), MathUtils.degToRad(degrees));
+  return turnInstances(model, ids, turn, center, parameters);
 }
 
 const boundsCenter = (bounds) => {
@@ -132,18 +173,37 @@ export function translateInstance(model, id, delta) {
   if (!model.instances.some((i) => i.id === id)) throw new Error('The selected part no longer exists.');
   return {
     ...model,
-    instances: model.instances.map((instance) => {
-      if (instance.id !== id) return instance;
-      return {
-        ...instance,
-        position: (instance.position || [0, 0, 0]).map((value, axis) => {
-          const distance = Math.round(delta[axis] * 1e6) / 1e6;
-          if (!distance) return value;
-          return typeof value === 'number'
-            ? Math.round((value + distance) * 1e6) / 1e6
-            : `=(${String(value).replace(/^=/, '')})+(${distance})`;
-        }),
-      };
-    }),
+    instances: model.instances.map((instance) =>
+      instance.id === id ? { ...instance, position: shiftedPosition(instance.position, delta) } : instance,
+    ),
+  };
+}
+
+// A position moved by a world delta: numbers stay numbers (1e-6 mm), and an
+// expression keeps its parameters live with an explicit offset.
+export function shiftedPosition(position, delta) {
+  return (position || [0, 0, 0]).map((value, axis) => {
+    const distance = Math.round(delta[axis] * 1e6) / 1e6;
+    if (!distance) return value;
+    return typeof value === 'number'
+      ? Math.round((value + distance) * 1e6) / 1e6
+      : `=(${String(value).replace(/^=/, '')})+(${distance})`;
+  });
+}
+
+// Move several instances by one world delta, as one body (§3.5): `ids` are
+// the rigid movers; no attached refusal (the anchoring check replaces it).
+export function translateInstances(model, ids, delta) {
+  if (!Array.isArray(delta) || delta.length !== 3 || !delta.every(Number.isFinite))
+    throw new Error('Movement requires three finite distances.');
+  const movers = new Set(ids);
+  if (!movers.size) throw new Error('Nothing to move.');
+  for (const id of movers)
+    if (!model.instances.some((i) => i.id === id)) throw new Error('A selected part no longer exists.');
+  return {
+    ...model,
+    instances: model.instances.map((instance) =>
+      movers.has(instance.id) ? { ...instance, position: shiftedPosition(instance.position, delta) } : instance,
+    ),
   };
 }

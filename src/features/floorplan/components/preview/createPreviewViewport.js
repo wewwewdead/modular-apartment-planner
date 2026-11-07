@@ -8,7 +8,24 @@ import {
   disposeMaterialPalette,
 } from './materials';
 import { UNLIT_LENS_EMISSIVE_INTENSITY, ensureOutlines } from './buildPreviewObjects';
-import { SOURCE_ONLY_LAYER } from './previewBatching';
+import { SOURCE_ONLY_LAYER, remergeFloorOutlines, unitOutlineGeometry } from './previewBatching';
+import { ghostMaterialFor, ghostMaterialsOf } from './materials';
+import {
+  CROSSFADE_MS,
+  DEFAULT_VIEW_MODE,
+  TIERS,
+  VIEW_MODES,
+  applyViewModeToWorld,
+  choosePickTarget,
+  effectiveRenderStyle,
+  isSeeThrough,
+  paletteOpacities,
+  resolveViewMode,
+  setGhostDepthWrite,
+  tierOf,
+  viewModePolicy,
+  writeOpacities,
+} from './viewMode';
 import { disposeScene } from './disposeScene';
 import { freezeStaticMatrices } from './staticMatrices';
 import { createInspectNavigation } from './createInspectNavigation';
@@ -30,7 +47,7 @@ import { SKY_ENVIRONMENT_INTENSITY, STUDIO_ENVIRONMENT_INTENSITY, createEnvironm
 import { createGroundMaterial, createGroundPlane, disposeGroundMaterial } from './createGroundPlane';
 import { REFINE_PROFILES, createProgressiveRenderer } from './createProgressiveRenderer';
 import { canvasPixelRatio } from './previewResolution';
-import { compileScenePrograms } from './compileScenePrograms';
+import { compileScenePrograms, createBackgroundWarmup } from './compileScenePrograms';
 import { FRAME_ACTION, nextFrameAction, shouldPresizeRefine, wantsAnotherFrame } from './refineSchedule';
 import { PREVIEW_PERF_ENABLED, createPreviewPerfRecorder, publishPreviewPerf } from './previewPerf';
 import { DEFAULT_RENDER_STYLE, renderStyleConfig, toneMappingConstant } from './renderStyle';
@@ -203,6 +220,31 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
   timer.connect(document);
 
   let style = renderStyleConfig(DEFAULT_RENDER_STYLE);
+  /*
+   * The see-through mode (`viewMode.js`). `viewMode` is the one on screen;
+   * `requestedViewMode` the one last asked for, which runs ahead of it while a
+   * first toggle's ghost programs link in the background. Each request takes a
+   * token, so a compile that resolves for a request since replaced is ignored.
+   * `viewModeFade` is the crossfade in flight, if any: `previous` is the mode
+   * being left, `from`/`to` the opacities it runs between.
+   */
+  let viewMode = DEFAULT_VIEW_MODE;
+  let requestedViewMode = DEFAULT_VIEW_MODE;
+  let viewModeToken = 0;
+  let viewModeFade = null;
+  // How many twins the palette had when their opacities were last written, so
+  // a twin a rebuild makes (a first roof, in X-ray) is given its opacity.
+  let knownGhostCount = 0;
+  // Which variants (plain mesh, instanced batch) of each twin a warm-up has
+  // already been issued for: a program is per variant.
+  const ghostWarmupVariants = new WeakMap();
+  /*
+   * The mode the *style* follows: the see-through side of a fade, whichever
+   * way it runs, so ambient occlusion stays off and the outlines stay up for
+   * the whole of it, and change only when it lands.
+   */
+  const styleViewMode = () => (viewModeFade && !isSeeThrough(viewMode) ? viewModeFade.previous : viewMode);
+  const effectiveStyle = () => effectiveRenderStyle(style, styleViewMode());
 
   const camera = new THREE.PerspectiveCamera(42, 1, 10, 100000);
   /*
@@ -223,6 +265,14 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
   let viewPresetHandler = null;
   let renderStatusHandler = null;
   let lastReportedConverged = null;
+  /*
+   * Where the pane is on its way to a first picture, for the panel's loading
+   * state: 'building' until a world arrives, 'compiling' while its programs
+   * link, 'ready' once a frame of it is on the canvas. Waking from suspension
+   * goes back through 'waking' until the catch-up frame is drawn.
+   */
+  let loadPhase = 'building';
+  let loadStatusHandler = null;
   const renderer = new THREE.WebGLRenderer({
     // Nothing is drawn to the default framebuffer except one full-screen quad,
     // which has no edges to antialias. The multisampling that matters is on the
@@ -232,6 +282,14 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     powerPreference: 'high-performance',
   });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  // Without KHR_parallel_shader_compile the links run on this thread whatever
+  // the gate does; the panel says so rather than pretending otherwise.
+  const parallelShaderCompile = renderer.extensions.has('KHR_parallel_shader_compile');
+  const emitLoadPhase = (next) => {
+    if (loadPhase === next) return;
+    loadPhase = next;
+    loadStatusHandler?.({ phase: next, parallelShaderCompile });
+  };
   renderer.toneMapping = toneMappingConstant(style.toneMapping);
   renderer.toneMappingExposure = style.exposure;
   // PCFSoftShadowMap is deprecated as of three 0.18x and silently falls back to
@@ -261,6 +319,19 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
   container.appendChild(renderer.domElement);
 
   const environment = createEnvironment(renderer, { look });
+  /*
+   * The studio environment is not built until its programs have linked in the
+   * background (see `prepareStudioEnvironment`); until then the scene has no
+   * environment, which nothing sees — no frame of a world is drawn before the
+   * first-world gate, and that gate compiles only once this has landed, so the
+   * programs it links are the ones with the environment in them.
+   */
+  let disposed = false;
+  let studioEnvironmentReady = false;
+  const studioEnvironmentPrepared = environment.prepareStudioEnvironment().then(() => {
+    studioEnvironmentReady = true;
+    if (!disposed) applySun();
+  });
 
   const inspectNavigation = createInspectNavigation({
     camera,
@@ -409,6 +480,19 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     shadowsDirty = true;
   };
 
+  /*
+   * Whether the key light's shadow pass runs at all (see `applySun`). Coming
+   * back on, the map is whatever the last daylight pass left — the model or the
+   * sun may have moved since — so the light's own `needsUpdate` forces one
+   * fresh pass at the next sample regardless of whether the re-aim moved it.
+   */
+  const setKeyLightShadowPass = (on) => {
+    if (keyLight.shadow.autoUpdate === on) return;
+    keyLight.shadow.autoUpdate = on;
+    keyLight.shadow.needsUpdate = on;
+    if (on) markShadowsDirty();
+  };
+
   /**
    * Aim the key light, optionally from a different point on the sun's disc.
    *
@@ -463,7 +547,12 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     // centre, so orbiting the camera re-aims the light to exactly where it
     // already was — and marking that dirty would re-render the shadow map on
     // every frame of every drag for no change at all.
-    if (previousLightPosition.distanceToSquared(keyLight.position) > 1e-6) {
+    //
+    // Nor while the light is dark: its own pass is skipped then (see
+    // `setKeyLightShadowPass`), and the global flag would only re-render every
+    // *other* shadow-casting light — the lamps, at night — once per sample for
+    // a beam that is not there.
+    if (keyLight.intensity > 0 && previousLightPosition.distanceToSquared(keyLight.position) > 1e-6) {
       markShadowsDirty();
     }
   };
@@ -642,6 +731,18 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       return;
     }
 
+    // Nothing to show before the first world, and drawing the empty stage
+    // would link its ground and sky programs on this thread; the panel's
+    // placeholder covers the canvas until then. `setWorld` restarts the loop.
+    if (!worldRoot) {
+      renderLoopRunning = false;
+      return;
+    }
+
+    // A see-through crossfade is a scene change on every frame it runs — and
+    // the only per-frame cost the modes have.
+    if (viewModeFade) stepViewModeFade(timestamp);
+
     emitCompassHeading();
     // Held in front of the camera rather than fixed in the world, so it has to
     // be repositioned after the camera has settled for this frame.
@@ -661,8 +762,10 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       lastMovementAt = timestamp;
       progressive.reset();
       progressive.renderInteractive();
+      if (worldRoot) emitLoadPhase('ready');
     } else if (action === FRAME_ACTION.REFINE) {
       progressive.renderSample();
+      if (worldRoot) emitLoadPhase('ready');
     } else if (shouldPresizeRefine({ action, nowMs: timestamp, lastMovementMs: lastMovementAt })) {
       // Still nothing on the canvas — this only resizes the offscreen chain for
       // the refine that is a frame or two away, so the first sample is a render
@@ -749,6 +852,18 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
    */
   let lightCompileGate = null;
   const LIGHT_COMPILE_GATE_MAX_MS = 4000;
+  // The background box's stand-in for the compile (see createBackgroundWarmup),
+  // one per background texture, alive as long as that background is.
+  let backgroundWarmup = null;
+  const compileExtras = () => {
+    const background = scene.background?.isCubeTexture ? scene.background : null;
+    if (backgroundWarmup?.material.uniforms.envMap.value !== background) {
+      backgroundWarmup?.geometry.dispose();
+      backgroundWarmup?.material.dispose();
+      backgroundWarmup = createBackgroundWarmup(background);
+    }
+    return { extras: backgroundWarmup ? [backgroundWarmup] : [], standalone: progressive.getCompileWarmups() };
+  };
   const hasUnpreparedMaterial = (root) => {
     let found = false;
     root?.traverse((node) => {
@@ -762,13 +877,28 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     if (navigationMode !== 'inspect' || typeof renderer.compile !== 'function') return;
     let compiling = null;
     try {
-      compiling = compileScenePrograms(renderer, scene, activeCamera, progressive.getSceneRenderTarget());
+      // After the studio environment, whose arrival changes every lit program.
+      compiling = studioEnvironmentPrepared.then(() =>
+        compileScenePrograms(renderer, scene, activeCamera, progressive.getSceneRenderTarget(), compileExtras()),
+      );
     } catch {
       return;
     }
+    holdFramesUntil(compiling);
+  };
+  /*
+   * The hold itself, shared by the world gate above and a see-through mode's
+   * first toggle (`requestViewMode`): the same inspect-only rule (the render
+   * loop only honours the gate in inspect mode), the same limit, and a later
+   * gate superseding an earlier one.
+   */
+  const holdFramesUntil = (compiling) => {
     if (typeof compiling?.then !== 'function') return;
     const gate = {};
     lightCompileGate = gate;
+    // Only on the way to a picture: a gate over a picture already on screen
+    // holds that picture, which is not a loading state.
+    if (loadPhase === 'building' || loadPhase === 'waking') emitLoadPhase('compiling');
     const release = () => {
       if (lightCompileGate !== gate) return;
       lightCompileGate = null;
@@ -789,7 +919,13 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       let compiling = null;
       try {
         // Against the target the scene is drawn into; see `compileScenePrograms`.
-        compiling = compileScenePrograms(renderer, scene, activeCamera, progressive.getSceneRenderTarget());
+        compiling = compileScenePrograms(
+          renderer,
+          scene,
+          activeCamera,
+          progressive.getSceneRenderTarget(),
+          compileExtras(),
+        );
       } catch {
         return;
       }
@@ -866,14 +1002,26 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       return;
     }
 
-    const preferredTarget = pickContext.activeFloorId
-      ? targets.find((target) => target.floorId === pickContext.activeFloorId) || null
-      : null;
+    // What you can see before what you can see through (§3.6): in X-ray a
+    // click on a ghosted wall with a column behind it is a click on the column.
+    // Glass and the hidden window glow count as see-through there too — they
+    // are no more what the eye lands on than the ghost wall around them.
+    const seeThrough = isSeeThrough(viewMode);
+    const isGhostHit = ({ hit }) => {
+      const material = hit?.object?.material;
+      if (!material || Array.isArray(material)) return false;
+      if (material.userData?.ghostTwin === true) return true;
+      return seeThrough && (material.visible === false || tierOf(material) === TIERS.GLAZING);
+    };
+    const chosenEntry = choosePickTarget(
+      targets.map((target) => ({ target, hit: targetHits.get(target) })),
+      { activeFloorId: pickContext.activeFloorId, isGhostHit },
+    );
 
     // The hit point in the world root's frame — the frame the descriptors were
     // built in, which is plan millimetres (x, elevation, y). The root sits at the
     // origin, so this is the identity today, but it is the frame that matters.
-    const chosen = preferredTarget || targets[0];
+    const chosen = chosenEntry?.target || targets[0];
     const hit = targetHits.get(chosen);
     pickHandler(chosen, hit?.point ? { point: worldRoot.worldToLocal(hit.point.clone()) } : null);
   };
@@ -1063,15 +1211,34 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
    * still hold. Only ever additive: switching back hides the lines rather than
    * destroying them, since rebuilding is exactly what the next switch would cost.
    */
-  function applyOutlineVisibility(root) {
-    if (!root) return;
-    if (style.outlines && ensureOutlines(root, materialPalette)) {
+  function applyOutlineVisibility(root, outlines = effectiveStyle().outlines) {
+    if (!root) return false;
+    let cut = false;
+    if (outlines && ensureOutlines(root, materialPalette)) {
       // New nodes arrive on auto-update; the world they joined is frozen.
       freezeStaticMatrices(root);
+      cut = true;
     }
     root.traverse((object) => {
-      if (object.isLineSegments) object.visible = style.outlines;
+      if (object.isLineSegments) object.visible = outlines;
     });
+    return cut;
+  }
+
+  /**
+   * Both roots' outlines, as the style on screen wants them.
+   *
+   * Lines cut lazily for the world root — a Realistic world switched to Shaded
+   * or to a see-through mode — would each be a draw call of their own, so they
+   * are folded into each floor's merged outline in the batch root straight away
+   * (`remergeFloorOutlines`). Turning X-ray on in Realistic then costs the same
+   * one outline call per floor that Shaded does.
+   */
+  function applyOutlines() {
+    const outlines = effectiveStyle().outlines;
+    const cut = applyOutlineVisibility(worldRoot, outlines);
+    if (cut && remergeFloorOutlines(worldRoot, batchRoot, materialPalette)) freezeStaticMatrices(batchRoot);
+    applyOutlineVisibility(batchRoot, outlines);
   }
 
   function rebuildGround() {
@@ -1173,9 +1340,11 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
         : mixNumber(WINDOW_GLOW_DAY, WINDOW_GLOW_NIGHT, nightfallAmount);
     }
     glow.emissiveIntensity = intensity;
-    const walking = navigationMode === 'walk';
-    glow.opacity = walking ? 0 : WINDOW_GLOW_OPACITY;
-    glow.visible = !walking;
+    // Seen through a ghosted wall the pane is a tan board floating in the
+    // room, so a see-through mode hides it too — for the whole of its fades.
+    const hidden = navigationMode === 'walk' || viewModePolicy(styleViewMode(), TIERS.GLOW).hidden;
+    glow.opacity = hidden ? 0 : WINDOW_GLOW_OPACITY;
+    glow.visible = !hidden;
   }
 
   function applyGroundColor() {
@@ -1201,12 +1370,212 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
   function applyStyleToRenderer() {
     renderer.toneMapping = toneMappingConstant(style.toneMapping);
     renderer.toneMappingExposure = style.exposure;
-    applyRenderStyleToPalette(materialPalette, style);
-    progressive.setStyle(style);
-    applyOutlineVisibility(worldRoot);
-    applyOutlineVisibility(batchRoot);
+    // The palette, the passes and the outlines follow the see-through mode as
+    // well as the style; tone mapping, grid and ground are the style's alone.
+    const drawn = effectiveStyle();
+    applyRenderStyleToPalette(materialPalette, drawn);
+    progressive.setStyle(drawn);
+    applyOutlines();
     if (gridHelper) gridHelper.visible = style.grid;
     rebuildGround();
+  }
+
+  /**
+   * The parts of the style a see-through mode changes — ambient occlusion off,
+   * outlines on — and the window glow it hides. No ground rebuild and no tone
+   * mapping: those belong to the style, and a mode toggle must not pay for them.
+   */
+  function applyViewModeStyle() {
+    const drawn = effectiveStyle();
+    applyRenderStyleToPalette(materialPalette, drawn);
+    progressive.setStyle(drawn);
+    applyOutlines();
+    applyWindowGlow();
+  }
+
+  function prefersReducedMotion() {
+    try {
+      return Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+    } catch {
+      return false;
+    }
+  }
+
+  const outlinesShownIn = (mode) => Boolean(effectiveRenderStyle(style, mode).outlines);
+
+  /** A twin made since the opacities were last written gets the mode's. */
+  function syncNewGhostOpacities() {
+    const count = ghostMaterialsOf(materialPalette).length;
+    if (count === knownGhostCount) return;
+    knownGhostCount = count;
+    if (viewModeFade) {
+      viewModeFade.to = paletteOpacities(materialPalette, viewMode, { outlinesShown: outlinesShownIn(viewMode) });
+      setGhostDepthWrite(materialPalette, true);
+      return;
+    }
+    writeOpacities(paletteOpacities(materialPalette, viewMode));
+  }
+
+  /**
+   * Land the mode for good: final materials and shadow casters, final
+   * opacities, ghosts no longer writing depth, this mode's AO and outlines, and
+   * a fresh shadow map.
+   */
+  function settleViewMode() {
+    viewModeFade = null;
+    applyViewModeToWorld(worldRoot, batchRoot, materialPalette, viewMode);
+    writeOpacities(paletteOpacities(materialPalette, viewMode));
+    knownGhostCount = ghostMaterialsOf(materialPalette).length;
+    setGhostDepthWrite(materialPalette, false);
+    applyViewModeStyle();
+    markShadowsDirty();
+    invalidate();
+  }
+
+  /**
+   * Put `next` on screen, with the crossfade unless the user has asked for less
+   * motion (docs/preview-xray-mode.md §3.8).
+   *
+   * Entering a see-through mode the twins arrive at their source's opacity,
+   * writing depth like the solid surfaces they stand in for, and fade to their
+   * ghost opacity; leaving, they fade back up and only then hand the mesh its
+   * base material back. Shadows change once, when the fade lands: a ghost that
+   * is still nearly opaque keeps its shadow, and a wall that is solid again
+   * gets its own back the moment it is. A toggle mid-fade lands the running
+   * fade at once and starts from there.
+   */
+  function beginViewModeTransition(next) {
+    if (viewModeFade) settleViewMode();
+    const previous = viewMode;
+    if (next === previous) return;
+    viewMode = next;
+
+    if (!worldRoot || CROSSFADE_MS <= 0 || prefersReducedMotion()) {
+      settleViewMode();
+      return;
+    }
+
+    const from = paletteOpacities(materialPalette, previous, { outlinesShown: outlinesShownIn(previous) });
+    viewModeFade = { previous, from, to: new Map(), startedAt: null };
+    applyViewModeToWorld(worldRoot, batchRoot, materialPalette, viewMode, { during: previous });
+    viewModeFade.to = paletteOpacities(materialPalette, viewMode, { outlinesShown: outlinesShownIn(viewMode) });
+    knownGhostCount = ghostMaterialsOf(materialPalette).length;
+    writeOpacities(from);
+    setGhostDepthWrite(materialPalette, true);
+    applyViewModeStyle();
+    invalidate();
+  }
+
+  /** One frame of the crossfade, ease-out cubic; lands it on the last. */
+  function stepViewModeFade(timestamp) {
+    const fade = viewModeFade;
+    if (fade.startedAt === null) fade.startedAt = timestamp;
+    const t = Math.min(1, Math.max(0, (timestamp - fade.startedAt) / CROSSFADE_MS));
+    if (t >= 1) {
+      settleViewMode();
+      return;
+    }
+    const eased = 1 - (1 - t) ** 3;
+    for (const [material, to] of fade.to) {
+      const from = fade.from.get(material) ?? (material.userData?.ghostTwin ? 1 : to);
+      material.opacity = from + (to - from) * eased;
+    }
+    sceneDirty = true;
+  }
+
+  /**
+   * Make the twins `mode` ghosts with, and a warm-up object for every
+   * (twin, plain-or-instanced) pair no compile has been issued for yet — plus
+   * the outline, which a Realistic pane has never drawn. Each warm-up borrows
+   * the real mesh's geometry, so the program it compiles is the one the real
+   * draw will look up. Empty on every toggle after a pane's first.
+   */
+  function prepareGhostTwins(mode) {
+    const warmups = [];
+    const visit = (node) => {
+      if (!node.isMesh) return;
+      const base = node.userData.baseMaterial || node.material;
+      if (!base || Array.isArray(base) || base.userData?.ghostTwin) return;
+      const tier = tierOf(base);
+      if (!viewModePolicy(mode, tier).ghost) return;
+      const twin = ghostMaterialFor(materialPalette, base, { tier });
+      const variant = node.isInstancedMesh ? 'instanced' : 'mesh';
+      let variants = ghostWarmupVariants.get(twin);
+      if (!variants) {
+        variants = new Set();
+        ghostWarmupVariants.set(twin, variants);
+      }
+      if (variants.has(variant)) return;
+      variants.add(variant);
+      warmups.push(
+        node.isInstancedMesh ? new THREE.InstancedMesh(node.geometry, twin, 1) : new THREE.Mesh(node.geometry, twin),
+      );
+    };
+    worldRoot?.traverse(visit);
+    batchRoot?.traverse(visit);
+    const outline = materialPalette.outline;
+    if (
+      outline &&
+      outlinesShownIn(mode) &&
+      !ghostWarmupVariants.has(outline) &&
+      !renderer.properties.get(outline).currentProgram
+    ) {
+      ghostWarmupVariants.set(outline, new Set(['line']));
+      warmups.push(new THREE.LineSegments(unitOutlineGeometry('box'), outline));
+    }
+    return warmups;
+  }
+
+  /**
+   * Ask for a see-through mode (§3.7).
+   *
+   * Everything the mode needs is made first — the twins, and warm-ups for the
+   * programs nobody has compiled yet. With nothing to compile (every toggle
+   * after a pane's first) the mode lands at once: a traversal and some
+   * uniforms. Otherwise the new programs are compiled off the main thread
+   * against the scene's own lights and target, the swap waits for them, and in
+   * inspect mode the gate holds the last picture meanwhile so the button and
+   * the picture change together; in walk mode nothing is held and the swap
+   * lands when the programs are ready. Never longer than the gate's limit.
+   */
+  function requestViewMode(nextMode) {
+    const mode = resolveViewMode(nextMode);
+    if (mode === requestedViewMode) return;
+    requestedViewMode = mode;
+    viewModeToken += 1;
+    const token = viewModeToken;
+    let timeout = 0;
+    const commit = () => {
+      if (disposed || token !== viewModeToken) return;
+      window.clearTimeout(timeout);
+      beginViewModeTransition(requestedViewMode);
+    };
+
+    const warmups = worldRoot && typeof renderer.compile === 'function' ? prepareGhostTwins(mode) : [];
+    if (!warmups.length) {
+      commit();
+      return;
+    }
+
+    const stage = new THREE.Group();
+    for (const warmup of warmups) stage.add(warmup);
+    let compiling = null;
+    try {
+      compiling = studioEnvironmentPrepared.then(() =>
+        compileScenePrograms(renderer, scene, activeCamera, progressive.getSceneRenderTarget(), {
+          extras: [stage],
+          includeScene: false,
+        }),
+      );
+    } catch {
+      commit();
+      return;
+    }
+    // Registered before the gate's own release, so the frame the gate lets
+    // through is already the new mode's.
+    timeout = window.setTimeout(commit, LIGHT_COMPILE_GATE_MAX_MS);
+    compiling.then(commit, commit);
+    if (navigationMode === 'inspect') holdFramesUntil(compiling);
   }
 
   /**
@@ -1239,7 +1608,7 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       environmentCalibration = SKY_ENVIRONMENT_INTENSITY;
     } else {
       scene.background = style.sky ? environment.studioBackdrop() : null;
-      scene.environment = environment.studioEnvironment();
+      scene.environment = studioEnvironmentReady ? environment.studioEnvironment() : null;
     }
 
     // The style's own figure is a multiplier on a *calibrated* environment, so
@@ -1362,7 +1731,19 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     // whose sun has set — where the pass would otherwise be re-rendered once per
     // accumulated sample, because the jittered re-aim keeps marking a beam that
     // is not there as dirty.
-    keyLight.castShadow = keyLight.intensity > 0;
+    //
+    // The pass is dropped with the light's own shadow flags, never with
+    // `castShadow`. The number of shadow-casting directional lights is part of
+    // every program's identity in three — lit or not, the GTAO normal pass and
+    // the background box included — so flipping `castShadow` at sunset (or on
+    // the Night switch) re-keyed every program in the scene and the next frame
+    // linked them all on the main thread: 0.7 s of frozen page at the exact
+    // minute the slider crossed the horizon. `castShadow` stays as it was set
+    // at creation; `WebGLShadowMap.render` skips a light whose shadow has
+    // `autoUpdate` and `needsUpdate` both false, whatever the global flag the
+    // per-sample `markShadowsDirty` raises. The map left bound holds the last
+    // daylight pass, which a light of intensity zero multiplies by nothing.
+    setKeyLightShadowPass(keyLight.intensity > 0);
 
     renderer.toneMappingExposure = exposure;
 
@@ -1431,6 +1812,109 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       getCamera: () => activeCamera,
       getViewPreset: () => viewPresetName,
       getScene: () => scene,
+      debug: {
+        viewMode: () => viewMode,
+        // Identity of every instanced batch: the same ids after a rebuild mean
+        // the cache refilled them rather than building fresh ones.
+        batches: () =>
+          (batchRoot?.children || []).flatMap((group) =>
+            group.children.filter((child) => child.isInstancedMesh).map((child) => child.uuid),
+          ),
+        // What each instanced batch is drawing with right now: the probe below
+        // raycasts the source meshes, never the batches, so this is how a
+        // script proves the batch that actually draws a material holds its
+        // ghost in a see-through mode (§12, the framed wall's core).
+        batchMaterials: () =>
+          (batchRoot?.children || []).flatMap((group) =>
+            group.children
+              .filter((child) => child.isInstancedMesh)
+              .map((child) => {
+                const material = child.material;
+                const base = child.userData.baseMaterial || material;
+                return {
+                  batch: child.uuid,
+                  group: group.name,
+                  count: child.count,
+                  baseKey: base?.userData?.paletteKey || null,
+                  paletteKey: material?.userData?.paletteKey || null,
+                  ghost: material?.userData?.ghostTwin === true,
+                  opacity: material?.opacity ?? null,
+                  transparent: Boolean(material?.transparent),
+                  depthWrite: material?.depthWrite ?? null,
+                  castShadow: child.castShadow,
+                };
+              }),
+          ),
+        // Draw calls the scene pass would make, frustum aside: what the colour
+        // pass draws, counted structurally so post-processing passes (GTAO's
+        // normal pass re-draws the scene) do not muddy a mode-to-mode compare.
+        drawables: () => {
+          let count = 0;
+          scene.traverseVisible((node) => {
+            if (!(node.isMesh || node.isLine || node.isPoints)) return;
+            if (!node.layers.test(activeCamera.layers)) return;
+            const material = node.material;
+            if (!material || Array.isArray(material) || material.visible === false) return;
+            count += material.transparent && material.side === THREE.DoubleSide && !material.forceSinglePass ? 2 : 1;
+          });
+          return count;
+        },
+        probe: (clientX, clientY) => {
+          if (!worldRoot) return [];
+          const rect = renderer.domElement.getBoundingClientRect();
+          const pointer = new THREE.Vector2(
+            ((clientX - rect.left) / rect.width) * 2 - 1,
+            -(((clientY - rect.top) / rect.height) * 2 - 1),
+          );
+          raycaster.setFromCamera(pointer, activeCamera);
+          return raycaster.intersectObject(worldRoot, true).map((hit) => {
+            const target = resolvePickTarget(hit.object);
+            const material = hit.object.material;
+            return {
+              kind: target?.kind || null,
+              sourceId: target?.sourceId || null,
+              floorId: target?.floorId || null,
+              paletteKey: material?.userData?.paletteKey || null,
+              mesh: hit.object.uuid,
+              ghost: material?.userData?.ghostTwin === true,
+              // What the hit mesh is drawn with now, for a script to check a
+              // ghost's policy (opacity, depth writes, shadow) on the very mesh.
+              baseKey: (hit.object.userData.baseMaterial || material)?.userData?.paletteKey || null,
+              opacity: material?.opacity ?? null,
+              depthWrite: material?.depthWrite ?? null,
+              castShadow: hit.object.castShadow,
+              distance: Math.round(hit.distance),
+            };
+          });
+        },
+        project: ([x, y, z]) => {
+          const rect = renderer.domElement.getBoundingClientRect();
+          const v = new THREE.Vector3(x, y, z).project(activeCamera);
+          return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height, z: v.z };
+        },
+        centers: (kind) => {
+          const out = [];
+          worldRoot?.traverse((node) => {
+            if (!node.isMesh) return;
+            // The target may sit on the object's group rather than on each mesh.
+            const target = resolvePickTarget(node);
+            if (target?.kind !== kind) return;
+            const box = new THREE.Box3().setFromObject(node);
+            if (box.isEmpty()) return;
+            const c = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            out.push({
+              mesh: node.uuid,
+              paletteKey: (node.userData.baseMaterial || node.material)?.userData?.paletteKey || null,
+              sourceId: target.sourceId,
+              floorId: target.floorId || null,
+              center: c.toArray(),
+              size: size.toArray(),
+            });
+          });
+          return out;
+        },
+      },
     });
     unpublishPerf = publishPreviewPerf(perf);
   }
@@ -1464,6 +1948,7 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
         return;
       }
 
+      if (loadPhase === 'ready') emitLoadPhase('waking');
       invalidate();
     },
     setRenderStyle(styleName) {
@@ -1474,6 +1959,19 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       // Sky and ground colour both depend on the style, and the sun is the only
       // thing that knows what they should be.
       applySun();
+    },
+    /**
+     * Solid, X-ray or Wireframe (`viewMode.js`). Runtime only: no rebuild, no
+     * sourceKey, nothing persisted. The first toggle in a pane's life may wait a
+     * moment for its ghost programs to link off the main thread; every later
+     * one is a traversal.
+     */
+    setViewMode(mode) {
+      requestViewMode(mode);
+    },
+    /** The mode on screen (which lags the last request while it compiles). */
+    getViewMode() {
+      return viewMode;
     },
     setSun(nextSun) {
       sunState = nextSun || null;
@@ -1537,8 +2035,19 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       if (!isSameRoot) scene.add(worldRoot);
       batchRoot = nextBatchRoot;
       if (batchRoot && batchRoot.parent !== scene) scene.add(batchRoot);
-      applyOutlineVisibility(worldRoot);
-      applyOutlineVisibility(batchRoot);
+      applyOutlines();
+      // Freshly built meshes arrive holding their base materials and casting
+      // as built, so a see-through mode has to reach them before anything
+      // draws them — and before the unprepared-material check below, which is
+      // what catches a twin of a family the scene has never drawn (the first
+      // roof put up in X-ray) and gates it. Untouched floors and refilled
+      // batch groups come back stamped and are skipped.
+      if (viewMode !== VIEW_MODES.SOLID || viewModeFade) {
+        if (applyViewModeToWorld(worldRoot, batchRoot, materialPalette, viewMode, { during: viewModeFade?.previous })) {
+          markShadowsDirty();
+        }
+        syncNewGhostOpacities();
+      }
       rebuildGround();
       // Occlusion is faded out beyond the model's own box, so the box has to
       // follow the model.
@@ -1564,9 +2073,17 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       scheduleShaderWarmup();
       // Not debounced: a moved light count, or a material nothing has drawn
       // with, means the very next frame would compile, so the background
-      // compile has to be under way before it. Not for the first world: there
-      // is no picture on the canvas yet to hold.
-      if (hadWorld && (lightsChanged || hasUnpreparedMaterial(worldRoot) || hasUnpreparedMaterial(batchRoot))) {
+      // compile has to be under way before it.
+      //
+      // The first world most of all. Every program in it is new, and the frame
+      // that first draws with one asks three for its uniforms — `onFirstUse`,
+      // whose getProgramInfoLog / getActiveUniform cannot answer until the link
+      // is done, so drawing at once made the driver finish all of them on this
+      // thread: 1.4–1.9 s of frozen page when an assembly editor opened. Held
+      // behind the gate, the links run in parallel and are finished by the
+      // time the first frame queries them. Nothing is on the canvas to hold
+      // yet; the panel's placeholder covers the wait.
+      if (!hadWorld || lightsChanged || hasUnpreparedMaterial(worldRoot) || hasUnpreparedMaterial(batchRoot)) {
         startLightCompileGate();
       }
     },
@@ -1596,9 +2113,12 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       // markShadowsDirty + invalidate, which is the same path a style or sun
       // change takes to restart the progressive refine.
       applySun();
-      // The lamps switch by intensity, so the count the renderer sees no longer
-      // moves with the switch; the warm-up stays for whatever the rig itself
-      // changes between day and night, and costs nothing when that is nothing.
+      // The lamps switch by intensity and the key light keeps `castShadow`
+      // (its pass is dropped by its own shadow flags), so nothing the renderer
+      // counts moves with the switch and no program changes. The warm-up is a
+      // safety net for a future rig change that does move one; it runs after
+      // the first frame, so it must never be what keeps that frame quick, and
+      // it costs nothing when there is nothing to compile.
       scheduleShaderWarmup();
     },
     resetView() {
@@ -1674,6 +2194,16 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     setViewPresetHandler(handler) {
       viewPresetHandler = typeof handler === 'function' ? handler : null;
     },
+    /**
+     * Told `{ phase, parallelShaderCompile }` whenever the pane moves between
+     * 'building', 'compiling', 'waking' and 'ready'; called once at once with
+     * where it is now.
+     */
+    setLoadStatusHandler(handler) {
+      loadStatusHandler = typeof handler === 'function' ? handler : null;
+      loadStatusHandler?.({ phase: loadPhase, parallelShaderCompile });
+    },
+    getLoadPhase: () => loadPhase,
     setRenderStatusHandler(handler) {
       renderStatusHandler = typeof handler === 'function' ? handler : null;
       lastReportedConverged = null;
@@ -1778,6 +2308,10 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       resize();
     },
     dispose() {
+      disposed = true;
+      backgroundWarmup?.geometry.dispose();
+      backgroundWarmup?.material.dispose();
+      backgroundWarmup = null;
       window.cancelAnimationFrame(animationFrame);
       renderLoopRunning = false;
       if (shaderWarmupTimer) {

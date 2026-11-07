@@ -412,6 +412,7 @@ function Toolbar({
           <button
             key={key}
             className={activeViewKey === key ? styles.segmentedBtnActive : styles.segmentedBtn}
+            aria-pressed={activeViewKey === key}
             onClick={() => editorDispatch({ type: 'SET_VIEW_MODE', viewMode: vm })}
           >
             {label}

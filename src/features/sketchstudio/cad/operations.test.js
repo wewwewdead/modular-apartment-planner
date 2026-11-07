@@ -9,6 +9,7 @@ import { createOperationDraft, operationModel, operationProblem } from './operat
 import sketchStudioReducer from '../store/sketchStudioReducer.js';
 import initialState from '../store/sketchStudioInitialState.js';
 import { buildCutList, planLinearStock } from './fabrication.js';
+import { angleSectionArea, angleSectionProfile } from './stockSections.js';
 const require = createRequire(import.meta.url);
 beforeAll(
   async () =>
@@ -52,6 +53,33 @@ describe('guided solid operations', () => {
       try {
         const area = kind === 'tube' ? 304 : Math.PI * (400 - 324);
         expect(session.snapshot().parts[0].volume).toBeCloseTo(area * (500 - 2 + 18), 3);
+      } finally {
+        session.dispose();
+      }
+    });
+  // Phase P (docs/sketch-studio-angle-bar.md §2.11): an angle's end section is its L.
+  for (const radii of [{ rootRadius: 7, toeRadius: 3.5 }, {}])
+    it(`extrudes the copied L section of an inclined angle${radii.rootRadius ? ' with root and toe radii' : ''}`, () => {
+      const created = createPart('angle');
+      const member = created.part.features[0];
+      member.section = { type: 'angle', width: 50, height: 50, wall: 5, ...radii };
+      member.end = [300, 400, 0];
+      member.gapEnd = 2;
+      const model = { ...emptyModel(), parts: [created.part], instances: [created.instance] };
+      const draft = createOperationDraft({ type: 'extrude', model, partId: created.part.id });
+      expect(draft.sketches[0]).toMatchObject({ name: 'Copied member section', plane: 'custom' });
+      expect(draft.sketches[0].profile).toEqual(angleSectionProfile(member.section));
+      expect(draft.sketches[0].profile.segments.filter((s) => s.type === 'arc')).toHaveLength(radii.rootRadius ? 3 : 0);
+      expect(draft.sketches[0].normal).toEqual([0.6, 0.8, 0]);
+      // The Place stage opens straight on the copied end, as for a tube.
+      expect(
+        createOperationDraft({ type: 'extrude', model, partId: created.part.id, placement: { stage: 'place' } })
+          .placement,
+      ).toMatchObject({ stage: 'shape', memberEnd: true });
+      const session = createKernelSession(operationModel(draft));
+      try {
+        // The copy lines up with the member's own section: one prism, 498 + 18 long.
+        expect(session.snapshot().parts[0].volume).toBeCloseTo(angleSectionArea(member.section) * (500 - 2 + 18), 3);
       } finally {
         session.dispose();
       }

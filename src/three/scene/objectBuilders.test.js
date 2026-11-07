@@ -132,17 +132,28 @@ describe('buildFloorPreviewObjects', () => {
     floor.walls = [wall];
 
     const descriptors = buildFloorPreviewObjects(floor).filter((entry) => entry.kind === 'wall');
-    const core = descriptors.find((entry) => entry.metadata.assemblySide === 'core');
+    // An undetailed framed wall draws its real frame, not a stand-in slab
+    // (docs/preview-xray-mode.md §13).
+    const members = descriptors.filter((entry) => entry.metadata.assemblySide === 'core');
     const interior = descriptors.find((entry) => entry.metadata.assemblySide === 'interior');
     const exterior = descriptors.find((entry) => entry.metadata.assemblySide === 'exterior');
-    expect(core.materialKey).toBe('wallFramingTimber');
+    expect(members.length).toBeGreaterThan(1);
+    expect(descriptors.some((entry) => entry.id.endsWith(':core'))).toBe(false);
+    for (const member of members) {
+      expect(member.materialKey).toBe('wallFramingTimber');
+      expect(member.metadata.wallDetailKind).toBe('framing');
+      expect(member.metadata.framingKind).toEqual(expect.any(String));
+      expect(member.metadata.wallAssembly).toMatchObject({
+        preset: 'plywood',
+        system: 'framed',
+        framing: { material: 'timber', spacing: 400 },
+      });
+    }
+    expect(new Set(members.map((member) => member.metadata.framingKind))).toEqual(
+      new Set(['stud', 'bottom_track', 'top_track', 'noggin']),
+    );
     expect(interior.materialKey).toBe('wallPlywood');
     expect(exterior.materialKey).toBe('wallPlywood');
-    expect(core.metadata.wallAssembly).toMatchObject({
-      preset: 'plywood',
-      system: 'framed',
-      framing: { material: 'timber', spacing: 400 },
-    });
   });
 
   it('keeps mixed inside and outside board materials distinct in 3D', () => {
@@ -476,10 +487,12 @@ describe('rainscreen facades in 3D', () => {
     const descriptors = buildFloorPreviewObjects(floor).filter((entry) => entry.kind === 'wall');
     const cassettes = descriptors.filter((entry) => entry.metadata.boardMaterial === 'rainscreen');
 
-    // Seven across by three up over the wall's resolved span, plus the core and
-    // the fibre-cement lining, which are still one box each.
+    // Seven across by three up over the wall's resolved span, plus the
+    // fibre-cement lining, still one box, and the frame's 19 members (16 studs,
+    // two tracks, one noggin row) that every framed wall now draws (§13).
     expect(cassettes).toHaveLength(21);
-    expect(descriptors).toHaveLength(23);
+    expect(descriptors.filter((entry) => entry.metadata.wallDetailKind === 'framing')).toHaveLength(19);
+    expect(descriptors).toHaveLength(41);
     expect(cassettes.every((entry) => entry.geometry === 'box' && entry.size.z === 8)).toBe(true);
     expect(cassettes.filter((entry) => entry.size.x === 900 && entry.size.y === 1800)).toHaveLength(12);
 
@@ -569,7 +582,7 @@ describe('rainscreen facades in 3D', () => {
     expect(doorway).toEqual([]);
   });
 
-  it('leaves a fibre-cement wall building exactly the three boxes it always built', () => {
+  it('builds a fibre-cement wall as its 19 frame members and the two boards it always had', () => {
     const floor = createFloor('Ground Floor', 0);
     floor.walls = [
       createWall({ x: 0, y: 0 }, { x: 6000, y: 0 }, 100, { height: 2700, assembly: { preset: 'fiber_cement' } }),
@@ -577,26 +590,166 @@ describe('rainscreen facades in 3D', () => {
     const wallId = floor.walls[0].id;
 
     const descriptors = buildFloorPreviewObjects(floor).filter((entry) => entry.kind === 'wall');
+    const boards = descriptors.filter((entry) => entry.metadata.boardMaterial);
+    const members = descriptors.filter((entry) => entry.metadata.wallDetailKind === 'framing');
 
     // Pinned rather than compared to a sibling: subdividing a board that is not
     // a rainscreen would be a silent regression everywhere else in the app.
-    expect(descriptors).toHaveLength(3);
-    expect(descriptors.map((entry) => entry.id)).toEqual([
-      `${wallId}-segment-1:core`,
-      `${wallId}-segment-1:interior`,
-      `${wallId}-segment-1:exterior`,
-    ]);
-    expect(descriptors.map((entry) => entry.materialKey)).toEqual([
-      'wallFramingSteel',
-      'wallFiberCement',
-      'wallFiberCement',
-    ]);
-    expect(descriptors.map((entry) => entry.size)).toEqual([
-      { x: 6000, y: 2700, z: 75 },
+    expect(boards.map((entry) => entry.id)).toEqual([`${wallId}-segment-1:interior`, `${wallId}-segment-1:exterior`]);
+    expect(boards.map((entry) => entry.materialKey)).toEqual(['wallFiberCement', 'wallFiberCement']);
+    expect(boards.map((entry) => entry.size)).toEqual([
       { x: 6000, y: 2700, z: 6 },
       { x: 6000, y: 2700, z: 6 },
     ]);
-    expect(descriptors.map((entry) => entry.center.y)).toEqual([0, -40.5, 40.5]);
+    expect(boards.map((entry) => entry.center.y)).toEqual([-40.5, 40.5]);
+
+    // The frame the plan draws, in 3D (§13): a stud every 400 from 0 to 6000,
+    // a track top and bottom and the one noggin row, all 75 deep on the wall's
+    // centreline. No stand-in slab is left between the boards.
+    expect(descriptors).toHaveLength(21);
+    expect(members).toHaveLength(19);
+    const kinds = members.map((entry) => entry.metadata.framingKind);
+    expect(kinds.filter((kind) => kind === 'stud')).toHaveLength(16);
+    expect(kinds.filter((kind) => kind === 'bottom_track')).toHaveLength(1);
+    expect(kinds.filter((kind) => kind === 'top_track')).toHaveLength(1);
+    expect(kinds.filter((kind) => kind === 'noggin')).toHaveLength(1);
+    for (const member of members) {
+      expect(member.id).toMatch(new RegExp(`^${wallId}:auto:.*:3d$`));
+      expect(member.materialKey).toBe('wallFramingSteel');
+      expect(member.metadata.assemblySide).toBe('core');
+      expect(member.size.z).toBe(75);
+      expect(member.center.y).toBe(0);
+    }
+    expect(descriptors.some((entry) => entry.id.endsWith(':core'))).toBe(false);
+  });
+
+  // The schematic core and the real members used to share the framing keys,
+  // so X-ray (which tiers by material) kept a 75 mm slab solid between two
+  // ghosted boards and a HardieFlex wall never went see-through
+  // (docs/preview-xray-mode.md §12). Since §13 every framed wall draws its real
+  // members and the core is only the fallback for a wall with no derivable
+  // frame — but the two keys must still not drift back together.
+  function framedWallObjects({ detailed = false, hiddenSides = null, framing = {}, detailing = null } = {}) {
+    const floor = createFloor('Ground Floor', 0);
+    const wall = {
+      ...createWall({ x: 0, y: 0 }, { x: 3000, y: 0 }, 100, {
+        height: 2700,
+        assembly: { preset: 'fiber_cement', framing: { spacing: 400, nogginRows: 1, ...framing } },
+      }),
+      id: 'wall_core',
+    };
+    if (detailed) {
+      wall.assembly.detailing = createWallDetailing({ enabled: true, sides: { interior: { enabled: true } } });
+    } else if (detailing) {
+      wall.assembly.detailing = createWallDetailing(detailing);
+    }
+    floor.walls = [wall];
+    const options = hiddenSides ? { hiddenBoardSides: new Map([['wall_core', hiddenSides]]) } : {};
+    return buildFloorPreviewObjects(floor, options).filter((entry) => entry.metadata?.wallId === 'wall_core');
+  }
+  const keysOf = (entries) => new Set(entries.map((entry) => entry.materialKey));
+  const framingOf = (entries) => entries.filter((entry) => entry.metadata.wallDetailKind === 'framing');
+  const coresOf = (entries) => entries.filter((entry) => entry.id.endsWith(':core'));
+
+  it('dresses real framing members in the framing keys and the fallback core in the core keys', () => {
+    // An undetailed, fully boarded wall draws studs, not a slab.
+    const plain = framedWallObjects();
+    expect(framingOf(plain).length).toBeGreaterThan(1);
+    expect(keysOf(framingOf(plain))).toEqual(new Set(['wallFramingSteel']));
+    expect(coresOf(plain)).toEqual([]);
+    expect(plain.some((entry) => entry.materialKey.startsWith('wallCore'))).toBe(false);
+
+    const timber = framedWallObjects({ framing: { material: 'timber' } });
+    expect(framingOf(timber).length).toBeGreaterThan(1);
+    expect(keysOf(framingOf(timber))).toEqual(new Set(['wallFramingTimber']));
+    expect(coresOf(timber)).toEqual([]);
+
+    // A detailed face and a stripped face draw the same studs.
+    for (const members of [
+      framingOf(framedWallObjects({ detailed: true })),
+      framingOf(framedWallObjects({ hiddenSides: ['interior'] })),
+    ]) {
+      expect(members.length).toBeGreaterThan(1);
+      expect(keysOf(members)).toEqual(new Set(['wallFramingSteel']));
+    }
+  });
+
+  it('falls back to one core box per segment for a framed wall with no derivable frame', () => {
+    // A custom frame with every member deleted, detailing since switched off:
+    // the generator yields nothing, and the wall must not vanish or thin out.
+    const emptied = { enabled: false, framing: { mode: 'custom', members: [] } };
+    for (const [framing, key] of [
+      [{}, 'wallCoreSteel'],
+      [{ material: 'timber' }, 'wallCoreTimber'],
+    ]) {
+      const objects = framedWallObjects({ framing, detailing: emptied });
+      expect(framingOf(objects)).toEqual([]);
+      const cores = coresOf(objects);
+      expect(cores.map((entry) => entry.id)).toEqual(['wall_core-segment-1:core']);
+      expect(keysOf(cores)).toEqual(new Set([key]));
+      expect(cores[0].metadata.assemblySide).toBe('core');
+      expect(cores[0].size).toEqual({ x: 3000, y: 2700, z: 75 });
+      expect(objects.filter((entry) => entry.metadata.boardMaterial)).toHaveLength(2);
+    }
+
+    // The same with a face stripped: still a core, never an empty gap.
+    const stripped = framedWallObjects({ detailing: emptied, hiddenSides: ['interior'] });
+    expect(coresOf(stripped)).toHaveLength(1);
+    expect(stripped.filter((entry) => entry.metadata.boardMaterial)).toHaveLength(1);
+  });
+
+  // The scene cache carries a mesh over a rebuild when its descriptor id and
+  // contents are unchanged, so detailing a wall or stripping a face must not
+  // re-describe a frame that has not moved.
+  it('draws the same members, under the same ids, boarded, stripped and detailed', () => {
+    const paths = {
+      boarded: framingOf(framedWallObjects()),
+      stripped: framingOf(framedWallObjects({ hiddenSides: ['interior'] })),
+      strippedBoth: framingOf(framedWallObjects({ hiddenSides: ['interior', 'exterior'] })),
+      detailed: framingOf(framedWallObjects({ detailed: true })),
+    };
+    expect(paths.boarded.length).toBeGreaterThan(1);
+    const ids = paths.boarded.map((entry) => entry.id);
+    expect(ids.every((id) => id.startsWith('wall_core:auto:') && id.endsWith(':3d'))).toBe(true);
+    for (const members of Object.values(paths)) {
+      expect(members.map((entry) => entry.id)).toEqual(ids);
+      expect(members.map((entry) => [entry.center, entry.size, entry.baseElevation])).toEqual(
+        paths.boarded.map((entry) => [entry.center, entry.size, entry.baseElevation]),
+      );
+    }
+  });
+
+  // The frame is cached per wall object while its floor is the same object, so
+  // a drag on one floor does not re-derive every other floor's studs. A door
+  // added to the floor leaves the wall object alone and replaces the floor —
+  // the cache must notice, or the doorway would stay full of studs.
+  it('re-derives the frame when the floor changes under an unchanged wall', () => {
+    const floor = createFloor('Ground Floor', 0);
+    const wall = createWall({ x: 0, y: 0 }, { x: 3000, y: 0 }, 100, {
+      height: 2700,
+      assembly: { preset: 'fiber_cement' },
+    });
+    floor.walls = [wall];
+    const framing = (entries) => entries.filter((entry) => entry.metadata.wallDetailKind === 'framing');
+
+    const first = framing(buildFloorPreviewObjects(floor));
+    // Same wall, same floor: the very same descriptors come back.
+    const again = framing(buildFloorPreviewObjects(floor));
+    expect(again).toHaveLength(first.length);
+    again.forEach((entry, index) => expect(entry).toBe(first[index]));
+
+    const door = createDoor(wall.id, 1500, 900);
+    door.height = 2100;
+    door.sillHeight = 0;
+    const withDoor = framing(buildFloorPreviewObjects({ ...floor, doors: [door] }));
+    const kinds = new Set(withDoor.map((entry) => entry.metadata.framingKind));
+    expect(kinds.has('trimmer')).toBe(true);
+    expect(kinds.has('header')).toBe(true);
+    // And nothing stands in the doorway: no full-height stud between the jambs.
+    const doorway = withDoor.filter(
+      (entry) => entry.metadata.framingKind === 'stud' && entry.center.x > 1100 && entry.center.x < 1900,
+    );
+    expect(doorway).toEqual([]);
   });
 });
 
@@ -674,10 +827,15 @@ describe('a wall built off the axis it was drawn on', () => {
     expect(onAxis[0].geometry).toBe('box');
   });
 
-  it('moves the core and both skins a framed wall draws as', () => {
+  it('moves the frame and both skins a framed wall draws as', () => {
     const { onAxis } = expectDisplaced({ assembly: { preset: 'fiber_cement' } });
 
-    expect(onAxis.map((entry) => entry.metadata.assemblySide)).toEqual(['core', 'interior', 'exterior']);
+    // Every member of the frame (§13), then the two boards.
+    const sides = onAxis.map((entry) => entry.metadata.assemblySide);
+    expect(sides.slice(-2)).toEqual(['interior', 'exterior']);
+    expect(sides.slice(0, -2).length).toBeGreaterThan(1);
+    expect(sides.slice(0, -2).every((side) => side === 'core')).toBe(true);
+    expect(onAxis.slice(0, -2).every((entry) => entry.metadata.wallDetailKind === 'framing')).toBe(true);
   });
 
   it('moves every stud, board and screw a detailed wall draws as', () => {

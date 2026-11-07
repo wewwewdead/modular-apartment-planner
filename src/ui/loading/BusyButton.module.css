@@ -1,0 +1,46 @@
+/*
+ * Both faces of the button share one grid cell, so the button is always as
+ * wide as the wider of them and never jumps when it goes busy.
+ */
+.faces {
+  display: inline-grid;
+  justify-items: center;
+  align-items: center;
+}
+
+.face {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.face[data-hidden='true'] {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.busyText::after {
+  content: attr(data-label);
+}
+
+.button[data-busy='true'] {
+  cursor: progress;
+}
+
+/* A disabled busy button keeps its full ink: it is working, not unavailable. */
+.button[data-busy='true']:disabled {
+  opacity: 1;
+}
+
+.error {
+  display: inline-block;
+  margin-left: 8px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-danger);
+  vertical-align: middle;
+}

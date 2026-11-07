@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import templates from '../templates/index';
 import TemplateThumbnail from './TemplateThumbnail';
 import Toast from '../../components/Toast';
+import { BusyButton, LOADING_COPY } from '@/ui/loading';
 import styles from '../styles/craftsman.module.css';
 
 const DIFFICULTY_COLORS = {
@@ -48,23 +49,29 @@ export default function TemplateGallery({ onLoadTemplate, onBack }) {
 
       <div className={styles.templateGrid}>
         {templates.map((t) => (
-          <button
+          // The card keeps its size while its module loads; the other cards
+          // stay pickable only once this one has landed.
+          <BusyButton
             key={t.id}
-            type="button"
             className={styles.templateCard}
+            busy={loading === t.id}
+            busyLabel={LOADING_COPY.templateCard}
+            spinnerTone="dark"
+            disabled={Boolean(loading) && loading !== t.id}
             onClick={() => handleLoad(t)}
-            disabled={loading === t.id}
           >
-            <TemplateThumbnail templateId={t.id} />
-            <span className={styles.templateCardName}>{loading === t.id ? 'Loading...' : t.name}</span>
-            <span className={styles.templateCardDesc}>{t.description}</span>
-            <div className={styles.templateCardMeta}>
-              <span className={styles.templateCardBadge} style={{ color: DIFFICULTY_COLORS[t.difficulty] }}>
-                {t.difficulty}
+            <span className={styles.templateCardBody}>
+              <TemplateThumbnail templateId={t.id} />
+              <span className={styles.templateCardName}>{t.name}</span>
+              <span className={styles.templateCardDesc}>{t.description}</span>
+              <span className={styles.templateCardMeta}>
+                <span className={styles.templateCardBadge} style={{ color: DIFFICULTY_COLORS[t.difficulty] }}>
+                  {t.difficulty}
+                </span>
+                <span>{t.estimatedTime}</span>
               </span>
-              <span>{t.estimatedTime}</span>
-            </div>
-          </button>
+            </span>
+          </BusyButton>
         ))}
       </div>
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={clearToast} />}

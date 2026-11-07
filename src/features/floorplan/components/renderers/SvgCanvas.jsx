@@ -7,7 +7,7 @@ import { useFloorOverhangs } from '@/features/floorplan/hooks/useFloorOverhangs'
 import { getOrderedFloors } from '@/domain/floorModels';
 import { resolveRoofSectionCut } from '@/domain/roofModels';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
-import { buildProjectSectionScene } from '@/sections/scene';
+import { getProjectSectionScene } from '@/sections/sectionSceneCache';
 import { getSectionVisibilityMessage, SECTION_VISIBILITY_REASONS } from '@/sections/diagnostics';
 import { usePhaseFilteredFloor } from '@/hooks/usePhaseFilteredFloor';
 import { useEditorTool } from '@/editor/useEditorTool';
@@ -32,6 +32,7 @@ import ElectricalDeviceChip from './ElectricalDeviceChip';
 import SectionViewControls from './SectionViewControls';
 import CanvasOverlayControls from './CanvasOverlayControls';
 import CanvasStatusBar from './CanvasStatusBar';
+import { DeferredDrawingContext, DeferredDrawingOverlayHost } from './DeferredDrawing';
 import { RenderProfilerScope, useRenderProfile } from './renderProfiling';
 import styles from './SvgCanvas.module.css';
 
@@ -60,6 +61,11 @@ export default function SvgCanvas() {
   const cursorChannelRef = useRef(null);
   const svgRectRef = useRef(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  // The HTML layer the section / elevation views put their bar and pill in.
+  // Its presence is also what tells those renderers there is a frame to wait
+  // for, so they paint their paper first and resolve their drawing after.
+  const [drawingOverlayHost, setDrawingOverlayHost] = useState(null);
+  const deferredDrawing = useMemo(() => ({ overlayHost: drawingOverlayHost }), [drawingOverlayHost]);
   /*
    * Pan and wheel-zoom are drawn as a CSS transform on the <svg> for as long as
    * the gesture lasts and committed to the store once it settles (see
@@ -877,12 +883,16 @@ export default function SvgCanvas() {
   const hasTrussSectionCut = Boolean((floor?.sectionCuts || []).length);
   const floorSectionCutCount = (filteredFloor?.sectionCuts || []).length;
 
-  // Section scene memos
+  // Section scenes, for the status bar's diagnostics and the section controls.
+  // `getProjectSectionScene` hands back the very scene the section renderer
+  // draws (same filtered project, floor and cut), so the diagnostics no longer
+  // cost a second build — and the renderer's visibility pass, cached on that
+  // scene, is paid once.
   const roofSectionScene = useMemo(() => {
     if (modelTarget !== 'roof' || viewMode !== 'section_view') return null;
     const { floor: roofFloor, sectionCut } = resolveRoofSectionCut(project, activeFloorId, activeSectionCutId);
     if (!roofFloor || !sectionCut) return null;
-    return buildProjectSectionScene(filteredProject, roofFloor.id, sectionCut.id);
+    return getProjectSectionScene(filteredProject, roofFloor.id, sectionCut.id);
   }, [activeFloorId, activeSectionCutId, filteredProject, modelTarget, project, viewMode]);
 
   const roofSectionReason = roofHiddenByPhase
@@ -895,7 +905,7 @@ export default function SvgCanvas() {
     const cuts = filteredFloor.sectionCuts || [];
     const sectionCut = (activeSectionCutId && cuts.find((entry) => entry.id === activeSectionCutId)) || cuts[0] || null;
     if (!sectionCut) return null;
-    return buildProjectSectionScene(filteredProject, filteredFloor.id, sectionCut.id);
+    return getProjectSectionScene(filteredProject, filteredFloor.id, sectionCut.id);
   }, [activeSectionCutId, filteredFloor, filteredProject, modelTarget, viewMode]);
 
   const trussSectionMessage = getSectionVisibilityMessage(
@@ -908,7 +918,7 @@ export default function SvgCanvas() {
     const cuts = filteredFloor.sectionCuts || [];
     const sectionCut = (activeSectionCutId && cuts.find((entry) => entry.id === activeSectionCutId)) || cuts[0] || null;
     if (!sectionCut) return null;
-    return buildProjectSectionScene(filteredProject, filteredFloor.id, sectionCut.id);
+    return getProjectSectionScene(filteredProject, filteredFloor.id, sectionCut.id);
   }, [activeSectionCutId, filteredFloor, filteredProject, modelTarget, viewMode]);
 
   const floorRoofSectionReason = roofHiddenByPhase
@@ -973,99 +983,102 @@ export default function SvgCanvas() {
           onPointerUp={handleMouseUp}
           onDoubleClick={handleDoubleClick}
         >
-          <CanvasZoomProvider value={viewport.zoom}>
-            {/* Geometry moving under the pointer — a drag that rewrites the
+          <DeferredDrawingContext.Provider value={deferredDrawing}>
+            <CanvasZoomProvider value={viewport.zoom}>
+              {/* Geometry moving under the pointer — a drag that rewrites the
                 project, or a wall drag's live preview — tells the presentation
                 plan to skip its unions for the length of the gesture. */}
-            <PlanStyleProvider value={planStyle} dragging={dragGestureMutating || Boolean(wallDragPreview)}>
-              <g
-                className={planStyle === PLAN_STYLES.PRESENTATION ? styles.styleFadeA : styles.styleFadeB}
-                transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}
-              >
-                {viewMode === 'plan' && showGrid && (
-                  <>
-                    <GridRenderer />
-                    {showMinorGrid && (
+              <PlanStyleProvider value={planStyle} dragging={dragGestureMutating || Boolean(wallDragPreview)}>
+                <g
+                  className={planStyle === PLAN_STYLES.PRESENTATION ? styles.styleFadeA : styles.styleFadeB}
+                  transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}
+                >
+                  {viewMode === 'plan' && showGrid && (
+                    <>
+                      <GridRenderer />
+                      {showMinorGrid && (
+                        <rect
+                          x={gridRect.x}
+                          y={gridRect.y}
+                          width={gridRect.width}
+                          height={gridRect.height}
+                          fill="url(#grid-minor)"
+                          style={{ pointerEvents: 'none' }}
+                        />
+                      )}
                       <rect
                         x={gridRect.x}
                         y={gridRect.y}
                         width={gridRect.width}
                         height={gridRect.height}
-                        fill="url(#grid-minor)"
+                        fill="url(#grid-major)"
                         style={{ pointerEvents: 'none' }}
                       />
-                    )}
-                    <rect
-                      x={gridRect.x}
-                      y={gridRect.y}
-                      width={gridRect.width}
-                      height={gridRect.height}
-                      fill="url(#grid-major)"
-                      style={{ pointerEvents: 'none' }}
+                    </>
+                  )}
+                  {modelTarget === 'roof' ? (
+                    <RoofScene
+                      roofSystem={roofSystem}
+                      roofHiddenByPhase={roofHiddenByPhase}
+                      viewMode={viewMode}
+                      selectedId={selectedId}
+                      selectedType={selectedType}
+                      activeTool={activeTool}
+                      toolState={toolState}
+                      viewport={viewport}
+                      filteredProject={filteredProject}
+                      activeFloorId={activeFloorId}
+                      activeSectionCutId={activeSectionCutId}
                     />
-                  </>
-                )}
-                {modelTarget === 'roof' ? (
-                  <RoofScene
-                    roofSystem={roofSystem}
-                    roofHiddenByPhase={roofHiddenByPhase}
-                    viewMode={viewMode}
-                    selectedId={selectedId}
-                    selectedType={selectedType}
-                    activeTool={activeTool}
-                    toolState={toolState}
-                    viewport={viewport}
-                    filteredProject={filteredProject}
-                    activeFloorId={activeFloorId}
-                    activeSectionCutId={activeSectionCutId}
-                  />
-                ) : modelTarget === 'truss' ? (
-                  <TrussScene
-                    filteredFloor={filteredFloor}
-                    floorTrussSystems={floorTrussSystems}
-                    hasProjectTrusses={hasProjectTrusses}
-                    trussesHiddenByPhase={trussesHiddenByPhase}
-                    viewMode={viewMode}
-                    selectedId={selectedId}
-                    selectedType={selectedType}
-                    activeTool={activeTool}
-                    toolState={toolState}
-                    viewport={viewport}
-                    activeTrussContext={activeTrussContext}
-                    filteredProject={filteredProject}
-                    activeSectionCutId={activeSectionCutId}
-                  />
-                ) : (
-                  <FloorScene
-                    floor={floor}
-                    filteredFloor={filteredFloor}
-                    filteredProject={filteredProject}
-                    pickFloor={ceilingPickFloor}
-                    floorBelow={floorBelow}
-                    showFloorBelowUnderlay={showFloorBelowUnderlay}
-                    floorOverhangs={floorOverhangs}
-                    selectedOverhangEdge={selectedOverhangEdge}
-                    sunStudy={sunStudy}
-                    structuralLoadPath={derived?.structuralLoadPath}
-                    viewMode={viewMode}
-                    selectedId={selectedId}
-                    selectedType={selectedType}
-                    activeTool={activeTool}
-                    toolState={toolState}
-                    zoom={viewport.zoom}
-                    previewContent={previewContent}
-                    regionSelection={regionSelection}
-                    activeSectionCutId={activeSectionCutId}
-                    roofHiddenByPhase={roofHiddenByPhase}
-                    hasProjectRoof={hasProjectRoof}
-                    railingsHiddenByPhase={railingsHiddenByPhase}
-                    hasProjectRailings={hasProjectRailings}
-                  />
-                )}
-              </g>
-            </PlanStyleProvider>
-          </CanvasZoomProvider>
+                  ) : modelTarget === 'truss' ? (
+                    <TrussScene
+                      filteredFloor={filteredFloor}
+                      floorTrussSystems={floorTrussSystems}
+                      hasProjectTrusses={hasProjectTrusses}
+                      trussesHiddenByPhase={trussesHiddenByPhase}
+                      viewMode={viewMode}
+                      selectedId={selectedId}
+                      selectedType={selectedType}
+                      activeTool={activeTool}
+                      toolState={toolState}
+                      viewport={viewport}
+                      activeTrussContext={activeTrussContext}
+                      filteredProject={filteredProject}
+                      activeSectionCutId={activeSectionCutId}
+                    />
+                  ) : (
+                    <FloorScene
+                      floor={floor}
+                      filteredFloor={filteredFloor}
+                      filteredProject={filteredProject}
+                      pickFloor={ceilingPickFloor}
+                      floorBelow={floorBelow}
+                      showFloorBelowUnderlay={showFloorBelowUnderlay}
+                      floorOverhangs={floorOverhangs}
+                      selectedOverhangEdge={selectedOverhangEdge}
+                      sunStudy={sunStudy}
+                      structuralLoadPath={derived?.structuralLoadPath}
+                      viewMode={viewMode}
+                      selectedId={selectedId}
+                      selectedType={selectedType}
+                      activeTool={activeTool}
+                      toolState={toolState}
+                      zoom={viewport.zoom}
+                      previewContent={previewContent}
+                      regionSelection={regionSelection}
+                      activeSectionCutId={activeSectionCutId}
+                      roofHiddenByPhase={roofHiddenByPhase}
+                      hasProjectRoof={hasProjectRoof}
+                      railingsHiddenByPhase={railingsHiddenByPhase}
+                      hasProjectRailings={hasProjectRailings}
+                    />
+                  )}
+                </g>
+              </PlanStyleProvider>
+            </CanvasZoomProvider>
+          </DeferredDrawingContext.Provider>
         </svg>
+        <DeferredDrawingOverlayHost hostRef={setDrawingOverlayHost} />
         <CanvasOverlayControls
           onResetCenter={handleResetCenterPoint}
           onToggleFocus={handleToggleFocus}

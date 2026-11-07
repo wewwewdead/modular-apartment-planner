@@ -12,6 +12,7 @@ import { furnitureExample, bracketExample } from './examples.js';
 import { buildCutList, planLinearStock } from './fabrication.js';
 import { createHardware, hardwareDefaults } from './hardware.js';
 import { mapPlacement } from './placement.js';
+import { angleSectionArea, angleSectionProfile } from './stockSections.js';
 const require = createRequire(import.meta.url);
 beforeAll(
   async () =>
@@ -677,11 +678,125 @@ describe('hole rows in the kernel', () => {
     );
     try {
       const metrics = plain.snapshot().parts[0].features.hole;
-      expect(Object.keys(metrics)).toEqual(['cut', 'removedVolume', 'bounds', 'volume']);
+      // Phase Q adds the far opening (a hole exactly as deep as the plate is through).
+      expect(Object.keys(metrics)).toEqual(['cut', 'exits', 'removedVolume', 'bounds', 'volume']);
+      expect(metrics.exits).toHaveLength(1);
+      expect(metrics.exits[0]).toBeCloseTo(5, 6);
       expect(metrics.row).toBeUndefined();
       expect(metrics.removedVolume).toBeCloseTo(Math.PI * 25 * 5, 3);
     } finally {
       plain.dispose();
+    }
+  });
+});
+
+// Phase P (docs/sketch-studio-angle-bar.md §2.8): a hot-rolled angle is its
+// L outline with root and toe radii, extruded; a radius-free angle is still
+// the box-minus-box solid.
+describe('angle bar in the kernel', () => {
+  const angle = (section, extra = {}) => ({
+    id: 'f',
+    type: 'member',
+    start: [0, 0, 0],
+    end: [0, 0, 700],
+    section,
+    ...extra,
+  });
+  const L50 = { type: 'angle', width: 50, height: 50, wall: 5, rootRadius: 7, toeRadius: 3.5 };
+  // First moment of area about local x = 0 (Green: ∮ x²/2 dy), the arcs
+  // finely sampled through their three points.
+  const firstMomentX = (profile) => {
+    const points = [profile.start];
+    for (const segment of profile.segments) {
+      if (segment.type === 'line') points.push(segment.end);
+      else {
+        const [a, m, b] = [points.at(-1), segment.mid, segment.end];
+        const d = 2 * (a[0] * (m[1] - b[1]) + m[0] * (b[1] - a[1]) + b[0] * (a[1] - m[1]));
+        const sq = (p) => p[0] * p[0] + p[1] * p[1];
+        const c = [
+          (sq(a) * (m[1] - b[1]) + sq(m) * (b[1] - a[1]) + sq(b) * (a[1] - m[1])) / d,
+          (sq(a) * (b[0] - m[0]) + sq(m) * (a[0] - b[0]) + sq(b) * (m[0] - a[0])) / d,
+        ];
+        const r = Math.hypot(a[0] - c[0], a[1] - c[1]);
+        const t0 = Math.atan2(a[1] - c[1], a[0] - c[0]),
+          tm = Math.atan2(m[1] - c[1], m[0] - c[0]);
+        let t1 = Math.atan2(b[1] - c[1], b[0] - c[0]);
+        // Sweep through the mid point (every arc here is a quarter circle).
+        const wrap = (x) => Math.atan2(Math.sin(x), Math.cos(x));
+        const ccw = wrap(tm - t0) > 0;
+        while (ccw ? t1 < t0 : t1 > t0) t1 += ccw ? 2 * Math.PI : -2 * Math.PI;
+        for (let k = 1; k <= 4000; k++) {
+          const t = t0 + ((t1 - t0) * k) / 4000;
+          points.push([c[0] + r * Math.cos(t), c[1] + r * Math.sin(t)]);
+        }
+      }
+    }
+    return points.reduce((sum, p, i) => {
+      const q = points[(i + 1) % points.length];
+      return sum + ((p[0] * p[0] + p[0] * q[0] + q[0] * q[0]) / 6) * (q[1] - p[1]);
+    }, 0);
+  };
+  it('builds L 50×50×5 r7 / r3.5 × 700 at the EN area and within the 50 × 50 × 700 box', () => {
+    const session = createKernelSession(fixture([angle(L50)]));
+    try {
+      const part = session.snapshot().parts[0];
+      const expected = angleSectionArea(L50) * 700;
+      expect(Math.abs(part.volume - expected) / expected).toBeLessThan(1e-3);
+      const [min, max] = part.bounds;
+      [-25, -25, 0].forEach((x, i) => expect(min[i]).toBeCloseTo(x, 2));
+      [25, 25, 700].forEach((x, i) => expect(max[i]).toBeCloseTo(x, 2));
+      expect(part.features.f.volume).toBeCloseTo(part.volume, 6);
+    } finally {
+      session.dispose();
+    }
+  });
+  it('keeps the radius-free angle exactly t(w + h − t) · L, with or without zero radii', () => {
+    for (const section of [
+      { type: 'angle', width: 50, height: 40, wall: 5 },
+      { type: 'angle', width: 50, height: 40, wall: 5, rootRadius: 0, toeRadius: 0 },
+    ]) {
+      const session = createKernelSession(fixture([angle(section)]));
+      try {
+        const part = session.snapshot().parts[0];
+        expect(part.volume).toBeCloseTo(5 * 85 * 700, 3);
+        expect(part.bounds[0][0]).toBeCloseTo(-25, 4);
+        expect(part.bounds[1][1]).toBeCloseTo(20, 4);
+      } finally {
+        session.dispose();
+      }
+    }
+  });
+  it('drills the default hole through one leg from every member side of the Angle bar', () => {
+    for (const side of ['front', 'rear', 'left', 'right']) {
+      const created = createPart('angle');
+      const cut = createCutFeature('hole', created.part);
+      cut.placement.side = side;
+      created.part.features.push(cut);
+      const session = createKernelSession({ ...emptyModel(), parts: [created.part], instances: [created.instance] });
+      try {
+        const metrics = session.snapshot().parts[0].features[cut.id];
+        expect(metrics.cut.position[2]).toBeCloseTo(350, 5);
+        // Ø6 through the 5 mm leg, and nothing of the other leg.
+        expect(metrics.removedVolume).toBeCloseTo(Math.PI * 9 * 5, 3);
+      } finally {
+        session.dispose();
+      }
+    }
+  });
+  it('mitres a hot-rolled angle with the shared end planes (V = A·L + (tan s − tan e)·Sx)', () => {
+    const f = angle(L50, { end: [500, 0, 0], angleStart: 45, angleEnd: -45, gapStart: 2, gapEnd: 2 });
+    const m = memberMetrics(f);
+    expect(m.centerline).toBe(496);
+    expect(m.longPoint).toBeCloseTo(546);
+    const session = createKernelSession(fixture([f]));
+    try {
+      const volume = session.snapshot().parts[0].volume;
+      const expected = angleSectionArea(L50) * 496 + 2 * firstMomentX(angleSectionProfile(L50));
+      expect(Math.abs(volume - expected) / expected).toBeLessThan(1e-3);
+      // The heel side (local −x) is the short side: less than the square volume.
+      expect(volume).toBeLessThan(angleSectionArea(L50) * 496);
+    } finally {
+      session.dispose();
     }
   });
 });

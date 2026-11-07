@@ -10,6 +10,13 @@ export default function ConnectionEditor({ model, selectedId, onChange }) {
     model.parts
       .find((p) => p.id === model.instances.find((i) => i.id === id)?.partId)
       ?.features.filter((f) => ['hardware', 'cylinder', 'hole', 'member'].includes(f.type)) || [];
+  // Phase Q: a concentric connection to a hole seats on its drill side (no
+  // key) or on its far opening (side: 'far').
+  const targetIsHole = (c) => featureOptions(c.to).some((f) => f.id === c.toFeatureId && f.type === 'hole');
+  const seatSide = (c, side) => {
+    const { side: _side, ...rest } = c;
+    return side === 'far' ? { ...rest, side: 'far' } : rest;
+  };
   return (
     <div>
       <label className="cad-field">
@@ -84,6 +91,15 @@ export default function ConnectionEditor({ model, selectedId, onChange }) {
                 </select>
               </label>
             ))}
+          {c.type === 'concentric' && targetIsHole(c) && (
+            <label className="cad-field">
+              Seat side
+              <select value={c.side === 'far' ? 'far' : 'drill'} onChange={(e) => update(seatSide(c, e.target.value))}>
+                <option value="drill">Drill side</option>
+                <option value="far">Far side</option>
+              </select>
+            </label>
+          )}
           {['align', 'face-offset'].includes(c.type) && (
             <>
               <label className="cad-field">

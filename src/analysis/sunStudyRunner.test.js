@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { computeSunStudy, sunDirectionInPlan } from './sunStudyRunner';
+import { computeDayStudy, computeSunStudy, sunDirectionInPlan } from './sunStudyRunner';
 import { createSunStudyState } from './sunStudyState';
 import { createProject, createWall } from '@/domain/models';
 import { BUILDING_COMMANDS, executeBuildingCommand } from '@/domain/buildingCommands';
+import { benchSunProject } from '@/geometry/__fixtures__/benchShadowCase';
 
 const MANILA = { latitude: 14.5995, longitude: 120.9842, timeZone: 'Asia/Manila' };
 
@@ -206,5 +207,64 @@ describe('sunDirectionInPlan', () => {
 
     expect(direction.x).toBeCloseTo(1, 6);
     expect(direction.y).toBeCloseTo(0, 6);
+  });
+});
+
+describe('the All day readouts on the bench fixture', () => {
+  // docs/all-day-shadow-freeze.md §4.4: the day union fell back to its
+  // unmerged pieces and the readout summed every overlap — 111,900 m² for an
+  // envelope of about 4,932 m².
+  const project = benchSunProject();
+
+  it('reports the true envelope area from a merged envelope (U1, U2)', () => {
+    const day = computeDayStudy({
+      project,
+      sunStudy: createSunStudyState({ enabled: true, mode: 'range', date: '2026-12-21' }),
+    });
+
+    expect(day.envelope.length).toBeLessThanOrEqual(10);
+    expect(Math.abs(day.envelopeAreaMm2 / 1e6 - 4932) / 4932).toBeLessThan(0.01);
+  });
+
+  it('measures a target against the merged envelope, not against every overlapping piece', () => {
+    // A plot over the bench building: with the unmerged fallback its overlaps
+    // with thousands of pieces summed far past its own area.
+    const { envelope } = computeDayStudy({
+      project,
+      sunStudy: createSunStudyState({ enabled: true, mode: 'range', date: '2026-12-21' }),
+    });
+    const box = envelope[0].outline.reduce(
+      (bounds, point) => ({
+        minX: Math.min(bounds.minX, point.x),
+        minY: Math.min(bounds.minY, point.y),
+        maxX: Math.max(bounds.maxX, point.x),
+        maxY: Math.max(bounds.maxY, point.y),
+      }),
+      { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
+    );
+    const plot = [
+      { x: box.minX, y: box.minY },
+      { x: box.maxX, y: box.minY },
+      { x: box.maxX, y: box.maxY },
+      { x: box.minX, y: box.maxY },
+    ];
+    const plotAreaM2 = ((box.maxX - box.minX) * (box.maxY - box.minY)) / 1e6;
+    const withTarget = executeBuildingCommand(project, {
+      type: BUILDING_COMMANDS.CONFIGURE_SITE_LOCATION,
+      latitude: 14.5995,
+      longitude: 120.9842,
+      timeZone: 'Asia/Manila',
+    }).project;
+    withTarget.building.site = { ...withTarget.building.site, boundary: plot };
+
+    const day = computeDayStudy({
+      project: withTarget,
+      sunStudy: createSunStudyState({ enabled: true, mode: 'range', date: '2026-12-21', targetId: 'property' }),
+    });
+
+    // The plot is the envelope's bounding box, so the fraction is exactly the
+    // envelope's share of it.
+    expect(day.targetShadowFraction).toBeCloseTo(day.envelopeAreaMm2 / 1e6 / plotAreaM2, 3);
+    expect(day.targetShadowFraction).toBeLessThan(1);
   });
 });

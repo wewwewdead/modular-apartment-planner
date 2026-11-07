@@ -59,7 +59,9 @@ function createWindow() {
     height: 900,
     show: false,
     autoHideMenuBar: true,
-    backgroundColor: '#1a1a2e',
+    // The app's page background (--color-background), so the frame shown before
+    // the first paint is the paper the UI draws on, not a navy flash.
+    backgroundColor: '#fafaf8',
     // The installed exe has the icon baked in; launches out of node_modules
     // (desktop shortcut, `npm run app`) need it set explicitly or the window
     // and taskbar show Electron's default.

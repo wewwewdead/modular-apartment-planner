@@ -202,6 +202,11 @@
   font-size: 11px;
   padding: 4px 10px;
 }
+/* Ribbon buttons are BusyButtons: keep icon-over-label inside both of their faces. */
+.cad-ribbon button[data-busy] > span > span {
+  flex-direction: column;
+  gap: 4px;
+}
 .cad-ribbon svg {
   height: 20px;
   width: 20px;
@@ -539,6 +544,12 @@
 }
 .cad-form details {
   padding: 3px 0;
+}
+/* A derived value shown in a field's place (a member's Length while its end
+   points hold expressions, Phase P.1). */
+.cad-field input[readonly] {
+  background: #f3f6f8;
+  color: #5b6c7c;
 }
 .cad-help {
   color: #768594;
@@ -1188,4 +1199,95 @@
 }
 .cad-placement-label[hidden] {
   display: none;
+}
+/* Part groups (docs/sketch-studio-part-groups.md §4.8): nested tree rows,
+   12 px per level, a disclosure caret on group rows, the open-group chip over
+   the view and the group panel in Properties. */
+.cad-tree-node > .cad-tree-item,
+.cad-tree-node > .cad-tree-rename,
+.cad-tree-node > .cad-tree-group-row,
+.cad-tree-node > .cad-feature-list {
+  margin-left: calc(var(--cad-tree-depth, 0) * 12px);
+  width: calc(100% - var(--cad-tree-depth, 0) * 12px);
+}
+.cad-tree-group-row {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+.cad-tree-group-row .cad-tree-item {
+  flex: 1;
+  min-width: 0;
+}
+.cad-tree .cad-tree-caret {
+  flex: none;
+  width: 18px;
+  padding: 0 !important;
+  justify-content: center !important;
+  border-color: transparent;
+  background: transparent;
+  color: #5b6b7b;
+  font-size: 10px;
+}
+.cad-tree .cad-tree-group.is-open {
+  box-shadow: inset 2px 0 0 #246e9a;
+}
+/* Over the view, top centre (clear of the preview badge and the view cube). */
+.cad-model-view > .cad-group-chip {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  border: 1px solid #246e9a;
+  border-radius: 4px;
+  background: #d7e8f5;
+  color: #14558f;
+  padding: 5px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px #0000001f;
+}
+.cad-group-members {
+  list-style: none;
+  margin: 4px 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cad-group-members button {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  font-size: 12px;
+}
+.cad-move-by {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 5px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+.cad-move-by label {
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+  min-width: 0;
+}
+.cad-move-by input {
+  width: 100%;
+  min-width: 0;
+}
+.cad-move-by .cad-axis-x {
+  color: #c62f2f;
+}
+.cad-move-by .cad-axis-y {
+  color: #2f8f2f;
+}
+.cad-move-by .cad-axis-z {
+  color: #2f5fc6;
+}
+.cad-group-actions {
+  flex-wrap: wrap;
 }

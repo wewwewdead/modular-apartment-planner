@@ -57,6 +57,20 @@ import * as THREE from 'three';
  *
  * The individual meshes cost geometry memory they already cost, and they cost
  * nothing on the GPU: a geometry that is never rendered is never uploaded.
+ *
+ * ## Base materials, and the see-through modes
+ *
+ * X-ray and Wireframe (`viewMode.js`) swap a mesh's material for a transparent
+ * twin and stop it casting, at runtime, on meshes and batches alike. Batching
+ * therefore never reads the material or the shadow flag a mesh happens to be
+ * holding: it reads the one the mesh was *built* with — `userData.baseMaterial`
+ * and `userData.castShadowBuilt`, recorded by the first mode change that
+ * touched it. Bucketing by whatever was on the mesh would split a floor's
+ * ghosted walls from its solid ones, and `batchesStillFit` would see a
+ * different material on every rebuild — every drag frame in X-ray would fall
+ * off the refill path, and the draw-call count would no longer be Solid's. The
+ * batch is built with the base; the mode is then applied to it like to any
+ * other mesh.
  */
 
 /**
@@ -178,11 +192,24 @@ function isBatchableMaterial(material) {
   return true;
 }
 
+/**
+ * The material a mesh was built with, whatever a see-through mode has it
+ * holding now (see "Base materials" above).
+ */
+function baseMaterialOf(node) {
+  return node.userData?.baseMaterial || node.material;
+}
+
+/** Whether a mesh was built to cast, whatever a see-through mode has it doing now. */
+function castShadowBuiltOf(node) {
+  return node.userData?.castShadowBuilt ?? node.castShadow;
+}
+
 function isBatchableMesh(node) {
   if (!node.isMesh || node.isInstancedMesh || node.isBatchedMesh) return false;
   if (node.visible === false) return false;
   if (!node.geometry?.userData?.batchUnit) return false;
-  if (!isBatchableMaterial(node.material)) return false;
+  if (!isBatchableMaterial(baseMaterialOf(node))) return false;
   // A door leaf is the one thing the walk is allowed through and the one thing
   // a click on a wall must not resolve to, so it keeps its own mesh and its own
   // draw call rather than being one instance among five hundred.
@@ -259,9 +286,12 @@ function batchesStillFit(previousBatchGroup, buckets, outlineVertexCount) {
     const bucket = bucketList[index];
     if (!batch?.isInstancedMesh) return false;
     if (batch.userData.unitKey !== bucket.unitKey) return false;
-    if (batch.material !== bucket.material) return false;
+    // The batch's *built* material and shadow flag: a see-through mode may have
+    // it drawing a ghost twin that casts nothing, and that is still this bucket.
+    if ((batch.userData.baseMaterial || batch.material) !== bucket.material) return false;
     if (batch.count !== bucket.meshes.length) return false;
-    if (batch.castShadow !== bucket.castShadow || batch.receiveShadow !== bucket.receiveShadow) return false;
+    if ((batch.userData.castShadowBuilt ?? batch.castShadow) !== bucket.castShadow) return false;
+    if (batch.receiveShadow !== bucket.receiveShadow) return false;
   }
 
   if (outlineVertexCount > 0) {
@@ -301,13 +331,15 @@ export function buildFloorBatchGroup(floorGroup, materialPalette, previousBatchG
     if (!isBatchableMesh(node)) return;
 
     const unit = node.geometry.userData.batchUnit;
-    const key = `${unit.key}|${node.material.uuid}|${node.castShadow ? 1 : 0}|${node.receiveShadow ? 1 : 0}`;
+    const material = baseMaterialOf(node);
+    const castShadow = castShadowBuiltOf(node);
+    const key = `${unit.key}|${material.uuid}|${castShadow ? 1 : 0}|${node.receiveShadow ? 1 : 0}`;
     let bucket = buckets.get(key);
     if (!bucket) {
       bucket = {
         unitKey: unit.key,
-        material: node.material,
-        castShadow: node.castShadow,
+        material,
+        castShadow,
         receiveShadow: node.receiveShadow,
         meshes: [],
       };
@@ -326,6 +358,9 @@ export function buildFloorBatchGroup(floorGroup, materialPalette, previousBatchG
   if (!reusing) {
     batchGroup.name = `${floorGroup.name}-batches`;
     batchGroup.userData = { ...floorGroup.userData, previewBatchGroup: true };
+    // Fresh batches hold base materials, whatever the floor group says was
+    // applied to it: the mode has to walk this group in its own right.
+    delete batchGroup.userData.viewModeApplied;
   }
   batchGroup.visible = floorGroup.visible;
   // Identity today — floor groups carry their elevation in the descriptors
@@ -355,7 +390,14 @@ export function buildFloorBatchGroup(floorGroup, materialPalette, previousBatchG
       // `unitKey` is what shape the batch draws, which is otherwise unreadable
       // once the geometry is shared: it names the bucket for anyone comparing a
       // batch against the meshes it replaced.
-      batch.userData = { previewBatch: true, unitKey: bucket.unitKey };
+      batch.userData = {
+        previewBatch: true,
+        unitKey: bucket.unitKey,
+        // What the bucket was, for `batchesStillFit` and for a see-through
+        // mode that swaps the material or drops the shadow at runtime.
+        baseMaterial: bucket.material,
+        castShadowBuilt: bucket.castShadow,
+      };
     }
 
     bucket.meshes.forEach((mesh, index) => {
@@ -403,4 +445,72 @@ export function buildFloorBatchGroup(floorGroup, materialPalette, previousBatchG
   }
 
   return batchGroup;
+}
+
+/**
+ * Fold every outline a floor now has back into its batch group's one merged
+ * outline, after `ensureOutlines` has cut the ones a style skipped.
+ *
+ * The Realistic style builds no outlines, and a see-through mode turns them on
+ * (`viewMode.effectiveRenderStyle`): left as cut, they would be a draw call per
+ * mesh — hundreds of them, on the toggle a user expects to cost nothing — until
+ * the next rebuild of each floor merged them. Only the merged line object is
+ * touched: the instanced batches and their buffers are left exactly as they
+ * are, and the merged outline stays the group's last child, where
+ * `batchesStillFit` looks for it — so the next drag still refills.
+ *
+ * Floor groups are paired with batch groups by name (`<floor>-batches`), the one
+ * thing a refilled batch group is guaranteed to have kept. Returns whether
+ * anything was added, so the caller knows to re-freeze the batch root.
+ */
+export function remergeFloorOutlines(root, batchRoot, materialPalette) {
+  if (!root || !batchRoot) return false;
+  const batchGroups = new Map(batchRoot.children.map((group) => [group.name, group]));
+  let added = false;
+
+  for (const floorGroup of root.children) {
+    const batchGroup = batchGroups.get(`${floorGroup.name}-batches`);
+    if (!batchGroup) continue;
+
+    const lines = [];
+    floorGroup.traverse((node) => {
+      if (node.isLineSegments) lines.push(node);
+    });
+    let vertexCount = 0;
+    for (const line of lines) vertexCount += line.geometry?.attributes?.position?.count || 0;
+    if (!vertexCount) continue;
+
+    const last = batchGroup.children[batchGroup.children.length - 1];
+    const merged = last?.isLineSegments ? last : null;
+    const current = merged?.geometry.attributes.position.count || 0;
+    // Already the whole floor, and nothing left drawing on its own.
+    if (current === vertexCount && lines.every((line) => !line.layers.isEnabled(0))) continue;
+
+    floorGroup.updateMatrixWorld(true);
+    const toFloorSpace = new THREE.Matrix4().copy(floorGroup.matrixWorld).invert();
+    if (merged && current === vertexCount) {
+      const attribute = merged.geometry.attributes.position;
+      writeMergedOutline(lines, toFloorSpace, attribute.array);
+      attribute.needsUpdate = true;
+      merged.geometry.boundingSphere = null;
+      merged.geometry.boundingBox = null;
+    } else {
+      const positions = new Float32Array(vertexCount * 3);
+      writeMergedOutline(lines, toFloorSpace, positions);
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      if (merged) {
+        merged.geometry.dispose();
+        merged.geometry = geometry;
+      } else {
+        const outline = new THREE.LineSegments(geometry, materialPalette.outline);
+        outline.userData = { previewBatch: true };
+        outline.visible = lines[0]?.visible !== false;
+        batchGroup.add(outline);
+        added = true;
+      }
+    }
+    for (const line of lines) line.layers.set(SOURCE_ONLY_LAYER);
+  }
+  return added;
 }

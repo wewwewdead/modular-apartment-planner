@@ -114,25 +114,7 @@
   line-height: 1.4;
 }
 
-.status[data-status='running'] {
-  animation: solar-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes solar-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .status[data-status='running'] {
-    animation: none;
-  }
-}
+/* A run in flight shows the loading kit's pill (its spinner is the motion), so the line itself sits still. */
 
 /* --- Summary --- */
 

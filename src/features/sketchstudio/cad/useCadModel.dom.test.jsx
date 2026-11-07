@@ -87,3 +87,23 @@ describe('CAD worker recovery in the UI', () => {
     expect(result.current.status).toBe('cancelled');
   });
 });
+describe('kernel boot reporting', () => {
+  it('reports the kernel awake once the worker says its WASM has loaded', async () => {
+    class WorkerMock {
+      postMessage(data) {
+        queueMicrotask(() => {
+          // What kernel.worker.js sends once, after OpenCascade has initialised.
+          this.onmessage({ data: { status: 'awake' } });
+          this.onmessage({ data: { ...data, result: { parts: [], instances: [] } } });
+        });
+      }
+      terminate() {}
+    }
+    vi.stubGlobal('Worker', WorkerMock);
+    const model = emptyModel();
+    const { result } = renderHook(() => useCadModel(model));
+    expect(result.current.kernelAwake).toBe(false);
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.kernelAwake).toBe(true);
+  });
+});

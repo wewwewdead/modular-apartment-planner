@@ -12,6 +12,12 @@
 //           one concentric connection per hole (holeIndex when > 0)
 //   Shape   no handles; the Chosen holes list rebuilds the result on Remove;
 //           Axial offset writes every connection
+//   side    (Phase Q, docs/sketch-studio-hardware-seat-side.md) a chosen hole
+//           is seated on the opening that was clicked: 'entry' (where it
+//           was drilled from) or 'far' (where it comes out; connection
+//           side: 'far'); Flip side / F moves every chosen hole that has
+//           another opening to the other side, through a stack of coaxial
+//           holes (an angle bar on a board: the board's underside)
 //
 // Nothing new is persisted: placement.holes and draft.extraInstances are
 // draft-only, and the result of Apply is what N rounds of the Phase J tool
@@ -29,6 +35,8 @@ export const HARDWARE_HINTS = {
     'Hardware: click the holes it goes in (click one again to remove it · Shift+click picks a whole row) · Enter seats it in the chosen holes · a flat face or empty ground seats a single one · Esc cancels',
   chosen: (count) =>
     `Hardware: ${holesText(count)} chosen · click more holes, or a chosen one to remove it · Enter seats it in them · Esc removes the last one`,
+  // Appended while a chosen hole has another opening (Phase Q).
+  flip: ' · F flips to the other side',
   // One hole keeps the Phase J text verbatim.
   seated: (count) =>
     count === 1
@@ -39,6 +47,7 @@ export const HARDWARE_HINTS = {
 export const HOLES_PENDING =
   'Click another hole centre to add it, or press Enter to seat the hardware in the chosen holes.';
 export const NO_HOLES = 'Click the holes the hardware goes in first.';
+export const NO_OTHER_SIDE = 'None of the chosen holes comes out of the material: there is no other side to seat on.';
 
 const fmt = (value) => String(Number(Number(value).toFixed(2)));
 const num = (value, parameters, fallback = 0) => {
@@ -55,8 +64,10 @@ export const hardwareName = (feature) =>
   feature ? `${HARDWARE_TYPES[feature.kind] || 'Hardware'} ${feature.size || ''}`.trim() : 'Hardware';
 
 // The identity of a chosen hole: which instance, which hole feature, which
-// hole of a row (0 for a single hole).
+// hole of a row (0 for a single hole). Not the side: a hole is chosen once,
+// on one of its openings.
 export const holeKey = (hole) => `${hole.instanceId}/${hole.featureId}/${hole.index || 0}`;
+const sideOf = (hole) => (hole?.side === 'far' ? 'far' : 'entry');
 const infoKey = (info) =>
   holeKey({ instanceId: info.instanceId, featureId: info.holeFeatureId, index: info.holeIndex });
 // A click that picks a hole: an attachable hole centre (Alt never snaps).
@@ -69,12 +80,14 @@ export const chosenHoles = (draft) => draft?.placement?.holes || [];
 
 // The placement while holes are being chosen: the status line says what
 // Enter does (operationProblem would say "Click in the viewport…").
-const choosing = (draft, holes) => ({
+// `note`: what a side choice could not do (Phase Q), shown in the hint.
+const choosing = (draft, holes, note = '') => ({
   ...draft,
   placement: {
     ...draft.placement,
     holes,
     problem: holes.length ? `${holesText(holes.length)} chosen · Enter seats the hardware in them.` : '',
+    sideNote: note,
   },
 });
 
@@ -87,6 +100,8 @@ function holeOfClick(draft, info, ctx) {
     ...seat,
     featureId: info.holeFeatureId,
     index: info.holeIndex || 0,
+    // The opening clicked (Phase Q): the hardware seats on it.
+    side: info.holeSide === 'far' ? 'far' : 'entry',
     point: tidyPoint(info.point, 1e-6),
     normal: [...info.normal],
     faceFrame: info.faceFrame || null,
@@ -95,11 +110,21 @@ function holeOfClick(draft, info, ctx) {
 
 // ---------------------------------------------------------------- Place
 
-// A click on an attachable hole centre: add it, or remove it when chosen.
+// A click on an attachable hole centre: add it, or remove it when chosen on
+// this opening; the other opening of a chosen hole moves it to this side
+// (Phase Q), keeping its place in the list.
 export function toggleHole(draft, info, ctx) {
   const holes = chosenHoles(draft);
   const key = infoKey(info);
-  if (holes.some((h) => holeKey(h) === key))
+  const chosen = holes.find((h) => holeKey(h) === key);
+  if (chosen && sideOf(chosen) !== sideOf({ side: info.holeSide })) {
+    const hole = holeOfClick(draft, info, ctx);
+    return choosing(
+      draft,
+      holes.map((h) => (h === chosen ? hole : h)),
+    );
+  }
+  if (chosen)
     return choosing(
       draft,
       holes.filter((h) => holeKey(h) !== key),
@@ -107,35 +132,44 @@ export function toggleHole(draft, info, ctx) {
   return choosing(draft, [...holes, holeOfClick(draft, info, ctx)]);
 }
 
-// Double-click: the hole under the cursor is chosen (added when absent, never
-// removed: the two clicks of the pair already toggled it).
+// Double-click: the hole under the cursor is chosen on the opening clicked
+// (added when absent, never removed: the two clicks of the pair already
+// toggled it).
 export function chooseHole(draft, info, ctx) {
   if (!picksHole(info)) return draft;
   const holes = chosenHoles(draft);
-  if (holes.some((h) => holeKey(h) === infoKey(info))) return draft;
-  return choosing(draft, [...holes, holeOfClick(draft, info, ctx)]);
+  const chosen = holes.find((h) => holeKey(h) === infoKey(info));
+  if (chosen && sideOf(chosen) === sideOf({ side: info.holeSide })) return draft;
+  const hole = holeOfClick(draft, info, ctx);
+  return choosing(draft, chosen ? holes.map((h) => (h === chosen ? hole : h)) : [...holes, hole]);
 }
 
 // Every centre of a hole row on one instance, as chosen-hole records (empty
-// when the snapshot has none, e.g. the instance is not built yet).
-function rowHoles(ctx, instanceId, featureId, faceFrame = null) {
-  const centres = holeCentres(ctx).filter(
-    (h) => h.instanceId === instanceId && h.featureId === featureId && h.attachable,
-  );
-  if (!centres.length) return [];
-  const instance = ctx.model.instances.find((i) => i.id === instanceId);
+// when the snapshot has none, e.g. the instance is not built yet), on the
+// `side` opening when every centre has one, else on the drill side.
+function rowHoles(ctx, instanceId, featureId, faceFrame = null, side = 'entry') {
+  const all = holeCentres(ctx).filter((h) => h.instanceId === instanceId && h.featureId === featureId && h.attachable);
+  const entries = all.filter((h) => sideOf(h) === 'entry');
+  const far = side === 'far' ? all.filter((h) => h.side === 'far') : [];
+  const centres = far.length && far.length === entries.length ? far : entries;
+  // The clicked face's frame only fits the side clicked.
+  return centres.map((h) => openingRecord(h, ctx, sideOf(h) === side ? faceFrame : null));
+}
+// A holeCentres candidate as a chosen-hole record.
+function openingRecord(h, ctx, faceFrame = null) {
+  const instance = ctx.model.instances.find((i) => i.id === h.instanceId);
   const part = ctx.model.parts.find((p) => p.id === instance?.partId);
-  const name = instance?.name || part?.name || 'Part';
-  return centres.map((h) => ({
-    instanceId,
+  return {
+    instanceId: h.instanceId,
     partId: instance?.partId || null,
-    name,
-    featureId,
+    name: instance?.name || part?.name || 'Part',
+    featureId: h.featureId,
     index: h.index || 0,
+    side: sideOf(h),
     point: tidyPoint(h.point, 1e-6),
     normal: [...h.normal],
     faceFrame,
-  }));
+  };
 }
 const isRow = (ctx, instanceId, featureId) => {
   const instance = ctx.model.instances.find((i) => i.id === instanceId);
@@ -144,24 +178,33 @@ const isRow = (ctx, instanceId, featureId) => {
 };
 
 // Shift+click on a hole of a row: every centre of that row on that instance
-// on when any is off, else all off. A single hole: a plain click.
+// on when any is off, else all off. A single hole: a plain click. Phase Q:
+// the row takes the clicked opening's side when every centre of the row has
+// that opening (else the drill side, and the hint says so); chosen holes of
+// the row on the other side move to it.
 export function toggleRowHoles(draft, info, ctx) {
   if (!isRow(ctx, info.instanceId, info.holeFeatureId)) return toggleHole(draft, info, ctx);
   // The clicked hole first: it throws when the instance is not built.
   const clicked = holeOfClick(draft, info, ctx);
-  const row = rowHoles(ctx, info.instanceId, info.holeFeatureId, info.faceFrame || null);
+  const row = rowHoles(ctx, info.instanceId, info.holeFeatureId, info.faceFrame || null, clicked.side);
   if (row.length < 2) return toggleHole(draft, info, ctx);
+  const side = sideOf(row[0]);
+  const note = side !== clicked.side ? 'not every hole of the row comes out, so the row is on the drill side' : '';
   const holes = chosenHoles(draft);
-  const keys = new Set(holes.map(holeKey));
+  const chosen = new Map(holes.map((h) => [holeKey(h), h]));
   const rowKeys = new Set(row.map(holeKey));
-  if (row.every((h) => keys.has(holeKey(h))))
+  if (row.every((h) => chosen.has(holeKey(h)) && sideOf(chosen.get(holeKey(h))) === side))
     return choosing(
       draft,
       holes.filter((h) => !rowKeys.has(holeKey(h))),
     );
   // The clicked one keeps the exact clicked point; the rest in row order.
-  const added = row.filter((h) => !keys.has(holeKey(h))).map((h) => (holeKey(h) === holeKey(clicked) ? clicked : h));
-  return choosing(draft, [...holes, ...added]);
+  const records = new Map(
+    row.map((h) => [holeKey(h), holeKey(h) === holeKey(clicked) && clicked.side === side ? clicked : h]),
+  );
+  const kept = holes.map((h) => (rowKeys.has(holeKey(h)) && sideOf(h) !== side ? records.get(holeKey(h)) : h));
+  const added = row.filter((h) => !chosen.has(holeKey(h))).map((h) => records.get(holeKey(h)));
+  return choosing(draft, [...kept, ...added], note);
 }
 
 // Attach to selected hole on a hole row (spec §3.4): Place opens with every
@@ -202,6 +245,7 @@ export function hardwareReplace(draft) {
       hardware: draft.feature ? { ...draft.feature } : p.hardware,
       holes: [],
       problem: '',
+      sideNote: '',
     },
   };
 }
@@ -247,6 +291,8 @@ export function finishHardware(draft, _ctx = null) {
     // Which hole of a row (Phase K); omitted for the first so a single
     // hole's connection stays byte-identical to the Phase J one.
     ...(hole.index > 0 ? { holeIndex: hole.index } : {}),
+    // Seated on the far opening (Phase Q); the drill side writes no key.
+    ...(hole.side === 'far' ? { side: 'far' } : {}),
     offset: draft.connections?.[0]?.offset ?? 0,
   }));
   const first = holes[0];
@@ -270,6 +316,7 @@ export function finishHardware(draft, _ctx = null) {
       hostInstanceId: instances[0].id,
       holes,
       problem: '',
+      sideNote: '',
     },
   };
 }
@@ -281,6 +328,86 @@ export function removeChosenHole(draft, key, ctx) {
   if (draft.placement?.stage !== 'shape') return choosing(draft, holes);
   if (!holes.length) return hardwareReplace(draft);
   return finishHardware({ ...draft, placement: { ...draft.placement, holes } }, ctx);
+}
+
+// ---------------------------------------------------------------- side
+
+// The other opening of a chosen hole (a holeCentres candidate), or null: a
+// hole that stops in the material has only its drill side.
+function otherOpening(hole, centres) {
+  return (
+    centres.find(
+      (h) =>
+        h.instanceId === hole.instanceId &&
+        h.featureId === hole.featureId &&
+        (h.index || 0) === (hole.index || 0) &&
+        sideOf(h) !== sideOf(hole),
+    ) || null
+  );
+}
+
+// Openings this close (mm) are one: parts stacked face to face.
+const STACKED = 0.05;
+// The other side of a chosen hole: through it to its other opening, then on
+// through every attachable hole of a part stacked against that opening on
+// the same axis (its opening on the same spot, facing back): an angle bar
+// lying on a board with coaxial holes flips from the bar's top to the
+// board's underside, where a screw from below puts its head. null: the hole
+// stops in the material.
+function otherSide(hole, centres) {
+  let end = otherOpening(hole, centres);
+  if (!end) return null;
+  const passed = new Set([holeKey(hole)]);
+  for (;;) {
+    const next = centres.find(
+      (h) =>
+        h.attachable &&
+        !passed.has(holeKey(h)) &&
+        Math.hypot(...h.point.map((v, i) => v - end.point[i])) <= STACKED &&
+        h.normal.reduce((sum, v, i) => sum + v * end.normal[i], 0) < -0.999,
+    );
+    const beyond = next ? otherOpening(next, centres) : null;
+    if (!beyond) return end;
+    passed.add(holeKey(next));
+    end = beyond;
+  }
+}
+
+// Whether Flip side can move any chosen hole (the button, F and the hint).
+export function canFlipSide(draft, ctx, centres = null) {
+  const holes = chosenHoles(draft);
+  if (draft?.placement?.tool !== 'hardware' || !holes.length) return false;
+  const list = centres || holeCentres(ctx);
+  return holes.some((hole) => otherOpening(hole, list));
+}
+
+// Flip side (Phase Q §4.5, tight areas): every chosen hole that has the
+// other opening moves to the other side (otherSide: through a stack of
+// coaxial holes to its far end), in Place (the rings move) and seated in
+// Shape (the result is rebuilt; ids of holes that stay and the offset are
+// kept). Holes with no other opening stay, and the hint says how many; two
+// chosen holes of one stack end up as one. Draft-only: Apply is one history
+// step.
+export function flipHardwareSide(draft, ctx) {
+  const p = draft.placement;
+  const holes = chosenHoles(draft);
+  if (p?.tool !== 'hardware' || !holes.length) throw new Error(NO_HOLES);
+  const centres = holeCentres(ctx);
+  let stuck = 0;
+  const seen = new Set();
+  const flipped = holes
+    .map((hole) => {
+      const other = otherSide(hole, centres);
+      if (other) return openingRecord(other, ctx);
+      stuck += 1;
+      return hole;
+    })
+    .filter((hole) => !seen.has(holeKey(hole)) && seen.add(holeKey(hole)));
+  if (stuck === holes.length) throw new Error(NO_OTHER_SIDE);
+  const note = stuck ? `${holesText(stuck)} ${stuck === 1 ? 'has' : 'have'} no far opening` : '';
+  if (p.stage !== 'shape' || !draft.connections?.length) return choosing(draft, flipped, note);
+  const next = finishHardware({ ...draft, placement: { ...p, holes: flipped } }, ctx);
+  return { ...next, placement: { ...next.placement, sideNote: note } };
 }
 
 // Axial offset (mm, or an expression): the same offset on every connection.
@@ -308,18 +435,24 @@ export function hardwareRings(draft, ctx) {
   return chosenHoles(draft).map((h) => ({ frame: placeFrame(h.point, h.normal), radius }));
 }
 
-// The view parts for the layer: chosen keys (HUD), the hint and the rings.
+// The view parts for the layer: chosen keys (HUD; the value is the side
+// chosen), the hint and the rings.
 export function chosenView(draft, ctx, view) {
   const p = draft.placement;
   const holes = chosenHoles(draft);
   view.place = {
     ...view.place,
-    chosen: Object.fromEntries(holes.map((h) => [holeKey(h), true])),
+    chosen: Object.fromEntries(holes.map((h) => [holeKey(h), sideOf(h)])),
     chosenCount: holes.length,
   };
   if (p.stage === 'place') view.hint = holes.length ? HARDWARE_HINTS.chosen(holes.length) : HARDWARE_HINTS.place;
   const seated = p.stage === 'shape' && draft.connections?.length;
   if (seated) view.hint = HARDWARE_HINTS.seated(holes.length || draft.connections.length);
+  // Phase Q: what Flip side could not move, and F while it can move one.
+  if (holes.length && (p.stage === 'place' || seated)) {
+    if (p.sideNote) view.hint += ` · ${p.sideNote}`;
+    if (canFlipSide(draft, ctx, view.holeCentres || null)) view.hint += HARDWARE_HINTS.flip;
+  }
   if (holes.length && (p.stage === 'place' || seated))
     view.shape = { kind: 'rings', circles: hardwareRings(draft, ctx) };
   return view;
@@ -346,9 +479,11 @@ const rowCountOf = (ctx, hole, feature) => {
 export function holeLabel(hole, ctx) {
   const feature = featureOf(ctx, hole);
   const count = feature?.row ? rowCountOf(ctx, hole, feature) : null;
-  if (count) return `Hole ${(hole.index || 0) + 1} of ${count} · ${hole.name}`;
+  // Seated on the far opening (Phase Q).
+  const far = sideOf(hole) === 'far' ? ' · far side' : '';
+  if (count) return `Hole ${(hole.index || 0) + 1} of ${count} · ${hole.name}${far}`;
   const diameter = feature ? num(feature.diameter, ctx.parameters, null) : null;
-  return `Hole · ${hole.name}${diameter != null ? ` · Ø ${fmt(diameter)}` : ''}`;
+  return `Hole · ${hole.name}${diameter != null ? ` · Ø ${fmt(diameter)}` : ''}${far}`;
 }
 
 // Hardware already seated in this hole (washers and nuts stack): the part
@@ -375,11 +510,12 @@ export function chosenHoleRows(draft, ctx) {
     const label = holeLabel(hole, ctx);
     const has = seatedIn(hole, ctx);
     const [what, ...rest] = label.split(' · ');
-    const on = rest.filter((part) => part !== hole.name);
+    const on = rest.filter((part) => part !== hole.name && part !== 'far side');
+    const far = sideOf(hole) === 'far' ? ', far side' : '';
     return {
       key: holeKey(hole),
       label: has.length ? `${label} · has ${listText(has)}` : label,
-      removeLabel: `Remove ${[what.toLowerCase(), ...on].join(' ')} on ${hole.name}`,
+      removeLabel: `Remove ${[what.toLowerCase(), ...on].join(' ')} on ${hole.name}${far}`,
     };
   });
 }

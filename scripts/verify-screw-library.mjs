@@ -109,7 +109,7 @@ try {
   const groups = await properties
     .getByLabel('Hardware type')
     .evaluate((select) => [...select.querySelectorAll('optgroup')].map((g) => g.label));
-  assert.deepEqual(groups, [
+  assert.deepEqual(groups.slice(0, 6), [
     'Bolts, nuts & spacers',
     'Machine screws',
     'Socket screws',

@@ -1,6 +1,8 @@
 import { memo } from 'react';
-import { buildProjectSectionScene } from '@/sections/scene';
+import { getProjectSectionScene } from '@/sections/sectionSceneCache';
 import { getSectionVisibilityMessage } from '@/sections/diagnostics';
+import { cuttingSection, LOADING_COPY } from '@/ui/loading';
+import DeferredSceneDrawing from './DeferredSceneDrawing';
 import SectionSceneLayer from './SectionSceneLayer';
 
 function EmptyState({ message }) {
@@ -48,13 +50,23 @@ function TrussSectionRenderer({ project, floor, activeSectionCutId }) {
     return <EmptyState message="Add a section cut on the active floor to view trusses in section." />;
   }
 
-  const scene = buildProjectSectionScene(project, floor.id, sectionCut.id);
+  // Built once per project and shared with the canvas's diagnostics; it used
+  // to be rebuilt on every render of this component.
+  const scene = getProjectSectionScene(project, floor.id, sectionCut.id);
   if (!scene) return null;
   const trussMessage = getSectionVisibilityMessage('truss', scene.diagnostics?.truss?.reason);
 
   return (
     <g className="truss-section-view">
-      <SectionSceneLayer scene={scene} />
+      <DeferredSceneDrawing
+        kind="section"
+        scene={scene}
+        viewKey={`${floor.id}:${sectionCut.id}`}
+        label={cuttingSection(sectionCut.label)}
+        detail={LOADING_COPY.cuttingSectionDetail}
+      >
+        {(drawnScene, drawables) => <SectionSceneLayer scene={drawnScene} drawables={drawables} />}
+      </DeferredSceneDrawing>
       <SectionDiagnosticMessage scene={scene} message={trussMessage} />
     </g>
   );

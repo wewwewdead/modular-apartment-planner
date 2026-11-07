@@ -3,8 +3,11 @@
 // buttons), ] / [ turn the part by the angle snap step about Z (counter-
 // clockwise / clockwise seen from +Z), Shift+] / Shift+[ about X. D starts or
 // stops the Measure tool, with or without a selection; S starts New sketch
-// (never while another tool runs). A pure mapping from the key event and
-// workspace state to an action.
+// (never while another tool runs). X toggles Solid ↔ X-ray and Shift+X
+// Wireframe ↔ Solid (viewMode.js), with or without a selection and while a
+// tool runs. A pure mapping from the key event and workspace state to an
+// action.
+import { viewKeyAction } from './viewMode.js';
 
 // The turn step when the angle snap is 0 (free).
 export const DEFAULT_TURN_STEP = 15;
@@ -24,7 +27,7 @@ const editable = (target) =>
  * @param {boolean} [state.toolGizmo] A boolean operation's tool gizmo is shown (busy, but R / M still
  *   switch it between rotate and move; spec §6 of docs/sketch-studio-direct-placement.md).
  * @returns {null | {type: 'gizmo', mode: 'rotate' | 'translate'} | {type: 'turn', axis: 'X' | 'Z', degrees: number}
- *   | {type: 'tool', tool: 'measure' | 'sketch'}}
+ *   | {type: 'tool', tool: 'measure' | 'sketch'} | {type: 'view', wireframe: boolean}}
  */
 export function placementKeyAction(
   event,
@@ -32,6 +35,9 @@ export function placementKeyAction(
 ) {
   if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return null;
   if (editable(event.target) || dragging) return null;
+  // X / Shift+X: a view toggle, so no selection needed and any tool may run.
+  const view = viewKeyAction(event, { dragging });
+  if (view) return view;
   const key = event.key?.toLowerCase();
   // Measure needs no selection; the other tools keep D out while they run.
   if (key === 'd' && !event.repeat && (!busy || measuring)) return { type: 'tool', tool: 'measure' };

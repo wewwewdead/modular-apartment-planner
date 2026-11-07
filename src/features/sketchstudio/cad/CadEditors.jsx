@@ -4,8 +4,10 @@ import { enableConstraints, addConstraint, CONSTRAINT_TYPES } from './constraint
 import { HardwareFields } from './HardwarePanel.jsx';
 import { METRIC_THREADS, holePreset } from './hardware.js';
 import { CUT_SIDES, cutWidthDirection } from './cutPlacement.js';
+import { ANGLE_SIZES, angleRadiiAutomatic, angleRadiiFor, angleSizeOf } from './stockSections.js';
 import { defaultPitch, flipRow, setRowLength } from './placementRows.js';
 import ExpressionInput, { ParameterContext } from './ExpressionInput.jsx';
+import NumericInput from '../components/NumericInput.jsx';
 import { FieldSessionContext, LIVE_DEBOUNCE_MS, liveFieldValue, stepFieldValue } from './liveField.js';
 
 // A Properties field (Phase L, docs/sketch-studio-live-fields.md §3). The
@@ -226,6 +228,8 @@ export function FeatureForm({
   targetPartId,
   operationLabel = 'Operation',
 }) {
+  // Parameter values, for an angle's automatic radii when a leg is an =expression.
+  const { values } = useContext(ParameterContext);
   if (feature.type === 'hardware') return <HardwareFields feature={feature} onChange={onChange} />;
   if (['hole', 'pocket'].includes(feature.type))
     return (
@@ -261,281 +265,443 @@ export function FeatureForm({
     circular: 'Circular pattern',
     reverse: 'Flip direction (against the sketch normal)',
     throughAll: 'Through all (ignores length)',
-  };
-  return (
-    <div className="cad-form">
-      {fields.map(([key, value]) => {
-        if (key === 'operation')
-          return (
-            <label className="cad-field" key={key}>
-              {operationLabel}
-              <select aria-label="Operation" value={value} onChange={(e) => update(key, e.target.value)}>
-                {['add', 'cut', 'intersect', 'replace'].map((mode) => (
-                  <option key={mode}>{mode}</option>
-                ))}
-              </select>
-            </label>
-          );
-        if (
-          ['start', 'end', 'position', 'origin', 'rotation', 'direction', 'normal', 'axis', 'step'].includes(key) &&
-          Array.isArray(value) &&
-          value.length === 3
-        )
-          return (
-            <VectorFields key={key} label={labels[key] || key} value={value} onChange={(next) => update(key, next)} />
-          );
-        if (key === 'plane' || key === 'side')
-          return (
-            <label className="cad-field" key={key}>
-              {key === 'plane' ? 'Mirror plane' : 'Retain side'}
-              <select
-                aria-label={key === 'plane' ? 'Mirror plane' : 'Retain side'}
-                value={value}
-                onChange={(e) => update(key, e.target.value)}
-              >
-                {(key === 'plane' ? ['XY', 'XZ', 'YZ'] : ['positive', 'negative']).map((v) => (
-                  <option key={v}>{v}</option>
-                ))}
-              </select>
-            </label>
-          );
-        if (key === 'reference') {
-          const kind = feature.type === 'shell' ? 'faces' : 'edges';
-          const options = referenceOptions.filter((r) => r[kind] > 0);
-          const selected = options.findIndex(
-            (r) =>
-              r.plane === value.plane &&
-              Math.abs(r.offset - Number(value.offset)) < 1e-5 &&
-              r[kind] === value.expectedCount,
-          );
-          return (
-            <fieldset key={key}>
-              <legend>{feature.type === 'shell' ? 'Faces to open' : 'Edges to modify'}</legend>
-              <label className="cad-field">
-                Geometry reference
-                <select
-                  aria-label="Geometry reference"
-                  value={selected < 0 ? '' : String(selected)}
-                  onChange={(e) => {
-                    const r = options[Number(e.target.value)];
-                    if (r) update(key, { plane: r.plane, offset: r.offset, expectedCount: r[kind] });
-                  }}
-                >
-                  <option value="">Custom reference</option>
-                  {options.map((r, i) => (
-                    <option key={i} value={i}>
-                      {r.label} · {r[kind]} {kind}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {!options.length && (
-                <p className="cad-help">
-                  No axis-aligned boundary matches are available. Enter a custom plane and count below.
-                </p>
-              )}
-              <details>
-                <summary>Exact plane reference</summary>
-                <label className="cad-field">
-                  Reference plane
-                  <select
-                    aria-label="Reference plane"
-                    value={value.plane || 'XY'}
-                    onChange={(e) => update(key, { ...value, plane: e.target.value })}
-                  >
-                    {['XY', 'XZ', 'YZ'].map((p) => (
-                      <option key={p}>{p}</option>
-                    ))}
-                  </select>
-                </label>
-                <ValueField
-                  key="offset"
-                  label="Plane offset (mm)"
-                  value={value.offset}
-                  onChange={(offset) => update(key, { ...value, offset })}
-                />
-                <ValueField
-                  key="expected-count"
-                  label={`Expected ${kind}`}
-                  value={value.expectedCount}
-                  onChange={(expectedCount) => update(key, { ...value, expectedCount })}
-                />
-              </details>
-            </fieldset>
-          );
+    ...(feature.type === 'member'
+      ? {
+          start: 'Start',
+          end: 'End',
+          gapStart: 'Gap at start (mm)',
+          gapEnd: 'Gap at end (mm)',
+          angleStart: 'Mitre at start (degrees)',
+          angleEnd: 'Mitre at end (degrees)',
         }
-        if (key === 'sections')
-          return (
-            <fieldset key={key}>
-              <legend>Following sections, in order</legend>
-              {value.map((id, index) => (
-                <div key={index}>
-                  <select
-                    aria-label={`Loft section ${index + 2}`}
-                    value={id}
-                    onChange={(e) =>
-                      update(
-                        key,
-                        value.map((v, i) => (i === index ? e.target.value : v)),
-                      )
-                    }
-                  >
-                    <option value="">Choose section…</option>
-                    {model.sketches
-                      .filter((s) => s.id === id || (s.id !== feature.sketchId && !value.includes(s.id)))
-                      .map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                  </select>
-                  <div className="cad-inline">
-                    <button
-                      type="button"
-                      disabled={!index}
-                      onClick={() => {
-                        const next = [...value];
-                        [next[index - 1], next[index]] = [next[index], next[index - 1]];
-                        update(key, next);
-                      }}
-                    >
-                      Move up
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        update(
-                          key,
-                          value.filter((_, i) => i !== index),
-                        )
-                      }
-                    >
-                      Remove section
-                    </button>
-                  </div>
-                </div>
+      : {}),
+  };
+  const renderField = ([key, value]) => {
+    if (key === 'operation')
+      return (
+        <label className="cad-field" key={key}>
+          {operationLabel}
+          <select aria-label="Operation" value={value} onChange={(e) => update(key, e.target.value)}>
+            {['add', 'cut', 'intersect', 'replace'].map((mode) => (
+              <option key={mode}>{mode}</option>
+            ))}
+          </select>
+        </label>
+      );
+    if (
+      ['start', 'end', 'position', 'origin', 'rotation', 'direction', 'normal', 'axis', 'step'].includes(key) &&
+      Array.isArray(value) &&
+      value.length === 3
+    )
+      return <VectorFields key={key} label={labels[key] || key} value={value} onChange={(next) => update(key, next)} />;
+    if (key === 'plane' || key === 'side')
+      return (
+        <label className="cad-field" key={key}>
+          {key === 'plane' ? 'Mirror plane' : 'Retain side'}
+          <select
+            aria-label={key === 'plane' ? 'Mirror plane' : 'Retain side'}
+            value={value}
+            onChange={(e) => update(key, e.target.value)}
+          >
+            {(key === 'plane' ? ['XY', 'XZ', 'YZ'] : ['positive', 'negative']).map((v) => (
+              <option key={v}>{v}</option>
+            ))}
+          </select>
+        </label>
+      );
+    if (key === 'reference') {
+      const kind = feature.type === 'shell' ? 'faces' : 'edges';
+      const options = referenceOptions.filter((r) => r[kind] > 0);
+      const selected = options.findIndex(
+        (r) =>
+          r.plane === value.plane &&
+          Math.abs(r.offset - Number(value.offset)) < 1e-5 &&
+          r[kind] === value.expectedCount,
+      );
+      return (
+        <fieldset key={key}>
+          <legend>{feature.type === 'shell' ? 'Faces to open' : 'Edges to modify'}</legend>
+          <label className="cad-field">
+            Geometry reference
+            <select
+              aria-label="Geometry reference"
+              value={selected < 0 ? '' : String(selected)}
+              onChange={(e) => {
+                const r = options[Number(e.target.value)];
+                if (r) update(key, { plane: r.plane, offset: r.offset, expectedCount: r[kind] });
+              }}
+            >
+              <option value="">Custom reference</option>
+              {options.map((r, i) => (
+                <option key={i} value={i}>
+                  {r.label} · {r[kind]} {kind}
+                </option>
               ))}
-              <button
-                type="button"
-                onClick={() =>
-                  update(key, [
-                    ...value,
-                    model.sketches.find((s) => s.id !== feature.sketchId && !value.includes(s.id))?.id || '',
-                  ])
+            </select>
+          </label>
+          {!options.length && (
+            <p className="cad-help">
+              No axis-aligned boundary matches are available. Enter a custom plane and count below.
+            </p>
+          )}
+          <details>
+            <summary>Exact plane reference</summary>
+            <label className="cad-field">
+              Reference plane
+              <select
+                aria-label="Reference plane"
+                value={value.plane || 'XY'}
+                onChange={(e) => update(key, { ...value, plane: e.target.value })}
+              >
+                {['XY', 'XZ', 'YZ'].map((p) => (
+                  <option key={p}>{p}</option>
+                ))}
+              </select>
+            </label>
+            <ValueField
+              key="offset"
+              label="Plane offset (mm)"
+              value={value.offset}
+              onChange={(offset) => update(key, { ...value, offset })}
+            />
+            <ValueField
+              key="expected-count"
+              label={`Expected ${kind}`}
+              value={value.expectedCount}
+              onChange={(expectedCount) => update(key, { ...value, expectedCount })}
+            />
+          </details>
+        </fieldset>
+      );
+    }
+    if (key === 'sections')
+      return (
+        <fieldset key={key}>
+          <legend>Following sections, in order</legend>
+          {value.map((id, index) => (
+            <div key={index}>
+              <select
+                aria-label={`Loft section ${index + 2}`}
+                value={id}
+                onChange={(e) =>
+                  update(
+                    key,
+                    value.map((v, i) => (i === index ? e.target.value : v)),
+                  )
                 }
               >
-                Add section
-              </button>
-            </fieldset>
-          );
-        if (key === 'section')
-          return (
-            <fieldset key={key} className="cad-section-fields">
-              <legend>Stock section (mm)</legend>
-              <label className="cad-field">
-                Type
-                <select
-                  value={value.type}
-                  onChange={(e) => {
-                    const type = e.target.value;
+                <option value="">Choose section…</option>
+                {model.sketches
+                  .filter((s) => s.id === id || (s.id !== feature.sketchId && !value.includes(s.id)))
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+              </select>
+              <div className="cad-inline">
+                <button
+                  type="button"
+                  disabled={!index}
+                  onClick={() => {
+                    const next = [...value];
+                    [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                    update(key, next);
+                  }}
+                >
+                  Move up
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
                     update(
                       key,
-                      ['pipe', 'round-bar'].includes(type)
-                        ? {
-                            type,
-                            diameter: value.diameter || 40,
-                            ...(type === 'pipe' ? { wall: value.wall || 2 } : {}),
-                          }
-                        : {
-                            type,
-                            width: value.width || 40,
-                            height: value.height || 40,
-                            ...(type !== 'bar' ? { wall: value.wall || 2 } : {}),
-                          },
-                    );
-                  }}
+                      value.filter((_, i) => i !== index),
+                    )
+                  }
                 >
-                  {[
-                    ['tube', 'Square / rectangular tube'],
-                    ['pipe', 'Round pipe / tube'],
-                    ['bar', 'Solid rectangular bar'],
-                    ['round-bar', 'Solid round bar'],
-                    ['angle', 'Angle'],
-                  ].map(([type, label]) => (
-                    <option key={type} value={type}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {Object.entries(value)
-                .filter(([field]) => field !== 'type')
-                .map(([field, amount]) => (
-                  <ValueField
-                    key={field}
-                    label={field === 'diameter' ? 'Outside diameter' : field === 'wall' ? 'Wall thickness' : field}
-                    value={amount}
-                    onChange={(next) => update(key, { ...value, [field]: next })}
-                  />
-                ))}
-            </fieldset>
-          );
-        if (key === 'sketchId' || key === 'profileId' || key === 'toolPartId')
-          return (
-            <label className="cad-field" key={key}>
-              <span>
-                {key === 'toolPartId'
-                  ? 'Tool part'
-                  : key === 'profileId'
-                    ? 'Cross section'
-                    : feature.type === 'sweep'
-                      ? 'Path sketch'
-                      : 'Profile sketch'}
-              </span>
+                  Remove section
+                </button>
+              </div>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() =>
+              update(key, [
+                ...value,
+                model.sketches.find((s) => s.id !== feature.sketchId && !value.includes(s.id))?.id || '',
+              ])
+            }
+          >
+            Add section
+          </button>
+        </fieldset>
+      );
+    if (key === 'section') {
+      // An angle (Phase P) names its fields by leg, always shows both
+      // radii (absent reads 0; nothing is written until edited) and offers
+      // the standard sizes.
+      const angle = value.type === 'angle';
+      const sectionLabels = angle
+        ? {
+            width: 'Leg A (width)',
+            height: 'Leg B (height)',
+            wall: 'Thickness',
+            rootRadius: 'Root radius',
+            toeRadius: 'Toe radius',
+          }
+        : { diameter: 'Outside diameter', wall: 'Wall thickness' };
+      // An angle's legs and thickness as numbers (an =expression by its
+      // value; NaN when it does not resolve) for its automatic radii.
+      const dimensions = (section) =>
+        Object.fromEntries(
+          ['width', 'height', 'wall'].map((dim) => {
+            try {
+              return [dim, numeric(section[dim], values)];
+            } catch {
+              return [dim, NaN];
+            }
+          }),
+        );
+      const sectionFields = angle
+        ? ['width', 'height', 'wall', 'rootRadius', 'toeRadius'].map((field) => [field, value[field] ?? 0])
+        : Object.entries(value).filter(([field]) => field !== 'type');
+      return (
+        <fieldset key={key} className="cad-section-fields">
+          <legend>Stock section (mm)</legend>
+          <label className="cad-field">
+            Type
+            <select
+              value={value.type}
+              onChange={(e) => {
+                const type = e.target.value;
+                const next = ['pipe', 'round-bar'].includes(type)
+                  ? {
+                      type,
+                      diameter: value.diameter || 40,
+                      ...(type === 'pipe' ? { wall: value.wall || 2 } : {}),
+                    }
+                  : {
+                      type,
+                      width: value.width || 40,
+                      height: value.height || 40,
+                      ...(type !== 'bar' ? { wall: value.wall || 2 } : {}),
+                    };
+                // To an angle: the automatic radii for these legs and
+                // thickness (Phase P.1) — the standard size's on an exact
+                // match, else the nearest thickness's, scaled to fit; 0
+                // for an expression or an invalid section.
+                if (type === 'angle') Object.assign(next, angleRadiiFor(dimensions(next)));
+                update(key, next);
+              }}
+            >
+              {[
+                ['tube', 'Square / rectangular tube'],
+                ['pipe', 'Round pipe / tube'],
+                ['bar', 'Solid rectangular bar'],
+                ['round-bar', 'Solid round bar'],
+                ['angle', 'Angle'],
+              ].map(([type, label]) => (
+                <option key={type} value={type}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {angle && (
+            <label className="cad-field">
+              Standard size
               <select
-                aria-label={
-                  key === 'toolPartId'
-                    ? 'Tool part'
-                    : key === 'profileId'
-                      ? 'Cross section'
-                      : feature.type === 'sweep'
-                        ? 'Path sketch'
-                        : 'Profile sketch'
-                }
-                value={value}
-                onChange={(e) => update(key, e.target.value)}
+                aria-label="Standard size"
+                value={angleSizeOf(value)?.label ?? 'custom'}
+                onChange={(e) => {
+                  const size = ANGLE_SIZES.find((s) => s.label === e.target.value);
+                  if (!size) return;
+                  const { width, height, wall, rootRadius, toeRadius } = size;
+                  update(key, { ...value, width, height, wall, rootRadius, toeRadius });
+                }}
               >
-                <option value="">Choose…</option>
-                {(key === 'toolPartId' ? model.parts.filter((p) => p.id !== targetPartId) : model.sketches).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
+                <option value="custom">Custom</option>
+                {ANGLE_SIZES.map((size) => (
+                  <option key={size.label} value={size.label}>
+                    {size.label}
                   </option>
                 ))}
               </select>
             </label>
-          );
-        if (typeof value === 'boolean')
-          return (
-            <label key={key}>
-              <input type="checkbox" checked={value} onChange={(e) => update(key, e.target.checked)} />{' '}
-              {labels[key] || key}
-            </label>
-          );
-        if (Array.isArray(value) || (value && typeof value === 'object'))
-          return (
-            <details key={key} open={['section', 'position', 'start', 'end', 'reference'].includes(key)}>
-              <summary>{key}</summary>
-              <JsonEditor
-                key={JSON.stringify(value)}
-                value={value}
-                label={`${key} values`}
-                onApply={(v) => update(key, v)}
-              />
-            </details>
-          );
-        return <ValueField key={key} label={labels[key] || key} value={value} onChange={(v) => update(key, v)} />;
-      })}
-    </div>
+          )}
+          {sectionFields.map(([field, amount]) => (
+            <ValueField
+              key={field}
+              label={sectionLabels[field] ?? field}
+              value={amount}
+              onChange={(next) => {
+                const section = { ...value, [field]: next };
+                // Phase P.1 (§8.2.2): an angle's radii follow its legs and
+                // thickness while they are still the automatic ones.
+                if (
+                  angle &&
+                  ['width', 'height', 'wall'].includes(field) &&
+                  angleRadiiAutomatic(value, dimensions(value))
+                )
+                  Object.assign(section, angleRadiiFor(dimensions(section)));
+                update(key, section);
+              }}
+            />
+          ))}
+        </fieldset>
+      );
+    }
+    if (key === 'sketchId' || key === 'profileId' || key === 'toolPartId')
+      return (
+        <label className="cad-field" key={key}>
+          <span>
+            {key === 'toolPartId'
+              ? 'Tool part'
+              : key === 'profileId'
+                ? 'Cross section'
+                : feature.type === 'sweep'
+                  ? 'Path sketch'
+                  : 'Profile sketch'}
+          </span>
+          <select
+            aria-label={
+              key === 'toolPartId'
+                ? 'Tool part'
+                : key === 'profileId'
+                  ? 'Cross section'
+                  : feature.type === 'sweep'
+                    ? 'Path sketch'
+                    : 'Profile sketch'
+            }
+            value={value}
+            onChange={(e) => update(key, e.target.value)}
+          >
+            <option value="">Choose…</option>
+            {(key === 'toolPartId' ? model.parts.filter((p) => p.id !== targetPartId) : model.sketches).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      );
+    if (typeof value === 'boolean')
+      return (
+        <label key={key}>
+          <input type="checkbox" checked={value} onChange={(e) => update(key, e.target.checked)} /> {labels[key] || key}
+        </label>
+      );
+    if (Array.isArray(value) || (value && typeof value === 'object'))
+      return (
+        <details key={key} open={['section', 'position', 'start', 'end', 'reference'].includes(key)}>
+          <summary>{key}</summary>
+          <JsonEditor
+            key={JSON.stringify(value)}
+            value={value}
+            label={`${key} values`}
+            onApply={(v) => update(key, v)}
+          />
+        </details>
+      );
+    return <ValueField key={key} label={labels[key] || key} value={value} onChange={(v) => update(key, v)} />;
+  };
+  // A member (Phase P.1, docs/sketch-studio-angle-bar.md §8.2): its size
+  // first — Length, then the stock section — and the raw end points and the
+  // end treatment folded away below. Absent gaps / mitres read 0 (nothing is
+  // written until one is edited).
+  if (feature.type === 'member') {
+    const ends = ['gapStart', 'gapEnd', 'angleStart', 'angleEnd'];
+    const shown = new Set(['section', 'start', 'end', ...ends]);
+    return (
+      <div className="cad-form">
+        <MemberLengthField feature={feature} onChange={onChange} />
+        {'section' in feature && renderField(['section', feature.section])}
+        <details className="cad-member-details">
+          <summary>End points (part mm)</summary>
+          {['start', 'end'].filter((key) => key in feature).map((key) => renderField([key, feature[key]]))}
+        </details>
+        <details className="cad-member-details">
+          <summary>Ends & gaps</summary>
+          {ends.map((key) => renderField([key, feature[key] ?? 0]))}
+        </details>
+        {fields.filter(([key]) => !shown.has(key)).map(renderField)}
+      </div>
+    );
+  }
+  return <div className="cad-form">{fields.map(renderField)}</div>;
+}
+
+// A member's Length (Phase P.1, docs/sketch-studio-angle-bar.md §8.2.1):
+// |end − start| with the model parameters, rounded like the Size readout.
+// Editing it keeps start and moves end along the current axis (+Z when start
+// and end coincide), written as numbers; Esc puts back the exact end the
+// session began with. Read-only while either end point holds an expression.
+function MemberLengthField({ feature, onChange }) {
+  const { values } = useContext(ParameterContext);
+  const [error, setError] = useState('');
+  // The end the current typing session began with: { session, end }.
+  const original = useRef(null);
+  const expression = [feature.start, feature.end].some(
+    (point) => !Array.isArray(point) || point.some((v) => typeof v !== 'number'),
+  );
+  let start = null,
+    length = null,
+    axis = [0, 0, 1];
+  try {
+    start = vector(feature.start, values);
+    const delta = vector(feature.end, values).map((v, i) => v - start[i]);
+    length = Math.hypot(...delta);
+    if (length > 1e-9) axis = delta.map((v) => v / length);
+  } catch {
+    // An end point that does not resolve: the rebuild reports it.
+  }
+  const shownLength = length == null ? '' : +length.toFixed(3);
+  if (expression)
+    return (
+      <>
+        <label className="cad-field">
+          <span>Length (mm)</span>
+          <input aria-label="Length (mm)" readOnly value={shownLength} />
+        </label>
+        <p className="cad-help">End points use expressions — edit them under End points.</p>
+      </>
+    );
+  return (
+    <>
+      <ValueField
+        key="member-length"
+        label="Length (mm)"
+        value={shownLength}
+        onChange={(next, meta) => {
+          if (meta?.session && original.current?.session !== meta.session)
+            original.current = { session: meta.session, end: feature.end };
+          if (meta?.revert) {
+            setError('');
+            if (original.current?.session === meta.session) onChange({ ...feature, end: original.current.end });
+            return;
+          }
+          let amount = NaN;
+          try {
+            amount = numeric(next, values, 'Length');
+          } catch {
+            // Reported below as not a length.
+          }
+          if (!(amount > 0)) {
+            // A live value waits for Enter / blur (Phase L); a commit reports it.
+            if (!meta?.live) setError('Length must be more than 0.');
+            return;
+          }
+          setError('');
+          if (!start) return;
+          const end = start.map((s, i) => Math.round((s + axis[i] * amount) * 1e9) / 1e9);
+          onChange({ ...feature, end });
+        }}
+      />
+      <p className="cad-help">Start to end along the axis; gaps and mitres trim from this.</p>
+      {error && <p role="alert">{error}</p>}
+    </>
   );
 }
 
@@ -704,6 +870,16 @@ export function CutLocationFields({ feature, model, onChange, metrics, bounds })
   const members = cutMembers(model, feature);
   const setPlacement = (key, value) => update('placement', { ...placement, [key]: value });
   const sketchPocket = feature.type === 'pocket' && feature.shape !== 'rectangle';
+  // On an angle (Phase P) the member sides are the faces of its legs.
+  const angleSides =
+    placement?.type === 'member' && members.find((m) => m.id === placement.featureId)?.section?.type === 'angle'
+      ? {
+          front: 'Front — outside of leg A',
+          rear: 'Rear — inside of leg A',
+          left: 'Left — outside of leg B',
+          right: 'Right — inside of leg B',
+        }
+      : null;
   return (
     <>
       {!sketchPocket && (
@@ -766,7 +942,7 @@ export function CutLocationFields({ feature, model, onChange, metrics, bounds })
                     : ['top', 'bottom', 'front', 'rear', 'left', 'right']
                   ).map((s) => (
                     <option key={s} value={s}>
-                      {s[0].toUpperCase() + s.slice(1)}
+                      {angleSides?.[s] ?? s[0].toUpperCase() + s.slice(1)}
                     </option>
                   ))}
                 </select>
@@ -1111,12 +1287,7 @@ export function SketchForm({ onCreate }) {
         <>
           <label className="cad-field">
             Snap (mm)
-            <input
-              type="number"
-              min="0.1"
-              value={grid}
-              onChange={(e) => setGrid(Math.max(0.1, Number(e.target.value)))}
-            />
+            <NumericInput min="0.1" value={grid} onCommit={(v) => setGrid(Math.max(0.1, v))} />
           </label>
           <svg
             className="cad-sketch-pad"

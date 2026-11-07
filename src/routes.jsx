@@ -46,7 +46,7 @@ export function RootLayout() {
    */
   return (
     <>
-      <RouteProgress active={navigation.state === 'loading'} />
+      <RouteProgress active={navigation.state === 'loading'} pathname={navigation.location?.pathname} />
       <Suspense fallback={<RouteHydrateFallback />}>
         <ErrorBoundary key={location.pathname}>
           <Outlet />

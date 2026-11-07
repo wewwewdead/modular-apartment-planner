@@ -3,6 +3,7 @@ import { duplicateMaterialAsCustom } from '../data/customMaterials';
 import { useCustomMaterialList } from '../hooks/useCustomMaterials';
 import { GRAIN_ANGLE_PRESETS, normalizeGrainAngle } from '../utils/grainUtils';
 import { formatMaterialPrice, groupMaterialsByCategory } from './customMaterialFormHelpers';
+import NumericInput from '../../components/NumericInput';
 import styles from '../styles/craftsman.module.css';
 
 const MIXED_SELECT_VALUE = '__mixed__';
@@ -59,15 +60,13 @@ function GrainControl({ grainAngle, isMixedGrainAngle, onGrainAngleChange }) {
 
       <label className={styles.fieldLabel}>
         Grain Angle (deg, 0 = along sheet length)
-        <input
-          type="number"
+        <NumericInput
           className={styles.thicknessInput}
           value={isMixedGrainAngle || grainAngle == null ? '' : grainAngle}
           placeholder={isMixedGrainAngle ? 'Mixed' : 'Unconstrained'}
           step="1"
-          onChange={(event) =>
-            onGrainAngleChange(event.target.value === '' ? null : normalizeGrainAngle(event.target.value))
-          }
+          allowEmpty
+          onCommit={(angle) => onGrainAngleChange(angle == null ? null : normalizeGrainAngle(angle))}
         />
       </label>
       <p className={styles.hint}>
@@ -153,14 +152,14 @@ export default function MaterialPicker({
           <span className={styles.fieldHint}> — default: {currentMaterial.thickness}mm</span>
         )}
       </label>
-      <input
-        type="number"
+      <NumericInput
         className={styles.thicknessInput}
         value={thicknessValue}
         placeholder={thicknessPlaceholder}
         min="0.1"
         step="0.5"
-        onChange={(e) => onThicknessChange(e.target.value ? Number(e.target.value) : null)}
+        allowEmpty
+        onCommit={onThicknessChange}
       />
 
       {materialHasGrain(currentMaterial) && onGrainAngleChange && (

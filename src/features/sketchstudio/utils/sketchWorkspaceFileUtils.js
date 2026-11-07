@@ -94,7 +94,11 @@ export async function importSketchWorkspaceFile(file) {
   };
 }
 
-export async function openSketchWorkspaceFile() {
+/**
+ * `onFileChosen(name)` fires between the picker closing and the read starting,
+ * which is the moment a "Reading …" state can name the file.
+ */
+export async function openSketchWorkspaceFile({ onFileChosen } = {}) {
   if (!canUseSketchOpenFilePicker()) {
     throw new Error('Direct file open is not supported in this browser.');
   }
@@ -105,6 +109,7 @@ export async function openSketchWorkspaceFile() {
     types: SKETCH_WORKSPACE_FILE_TYPES,
   });
   const file = await handle.getFile();
+  onFileChosen?.(file?.name || handle.name || null);
   const { workspace, fileName } = await importSketchWorkspaceFile(file);
 
   return {

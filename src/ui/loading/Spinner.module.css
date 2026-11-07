@@ -1,0 +1,42 @@
+/*
+ * The one spinner. 12 px is the floor (§3 rule 7): any smaller and the ring
+ * reads as a speck. Lifted from RouteProgress so every busy state turns at the
+ * same speed.
+ */
+.spinner {
+  display: inline-block;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--color-accent-subtle);
+  border-top-color: var(--color-accent);
+  animation: loadingSpin 0.7s linear infinite;
+}
+
+.spinner[data-tone='dark'] {
+  border-color: rgba(184, 245, 229, 0.16);
+  border-top-color: var(--dark-accent-active);
+}
+
+/* On an accent-filled button the ring has to be the button's own ink. */
+.spinner[data-tone='inverse'] {
+  border-color: rgba(255, 255, 255, 0.28);
+  border-top-color: currentColor;
+}
+
+@keyframes loadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/*
+ * Reduced motion: a still ring with one solid quarter still reads as "busy";
+ * the global rule would otherwise freeze it at an arbitrary angle.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

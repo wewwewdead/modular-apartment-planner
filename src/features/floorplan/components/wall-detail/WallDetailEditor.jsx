@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, memo, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEditorState, useProject } from '@/features/floorplan/context/FloorplanContext';
 import {
   WALL_ASSEMBLY_PRESETS,
@@ -108,6 +108,10 @@ import {
 } from './WallDetailUiKit';
 import styles from './WallDetailEditor.module.css';
 
+import DetailEditorShell from './DetailEditorShell';
+import { wallElevationSilhouette } from '@/features/floorplan/components/preview/loadingSilhouettes';
+import { LOADING_COPY, PanePlaceholder, loadingClock, useAfterPaint, wallEditorDetail } from '@/ui/loading';
+
 const ThreePreviewPanel = lazy(() => import('@/features/floorplan/components/preview/ThreePreviewPanel'));
 
 /**
@@ -125,6 +129,8 @@ const WallLivePreview = memo(function WallLivePreview({
   selectionId,
   selectionSide,
   onPick,
+  silhouette,
+  loadingSince,
 }) {
   return (
     <ThreePreviewPanel
@@ -137,9 +143,37 @@ const WallLivePreview = memo(function WallLivePreview({
       }
       selectionAccent="assembly"
       onAssemblyPick={onPick}
+      paneKind="wall"
+      loadingLabel={LOADING_COPY.livePreview}
+      compilingLabel={LOADING_COPY.compilingWall}
+      silhouette={silhouette}
+      loadingSince={loadingSince}
     />
   );
 });
+
+/** The opening shell's panel headers: the real sections' titles, in order. */
+const WALL_SHELL_LEFT_SECTIONS = Object.freeze([
+  { id: 'face', step: 1, title: 'Wall face' },
+  { id: 'assembly', step: 2, title: 'Complete wall assembly' },
+  { id: 'panels', step: 3, title: 'Panel layout' },
+  { id: 'framing', step: 4, title: 'Framing' },
+  { id: 'fasteners', step: 5, title: 'Fasteners' },
+  { id: 'dimensions', step: 6, title: 'Construction dimensions' },
+]);
+const WALL_SHELL_RIGHT_SECTIONS = Object.freeze([
+  { id: 'selection', title: 'Selection' },
+  { id: 'takeoff', title: 'Exact takeoff' },
+  { id: 'schedule', title: 'Dimension schedule' },
+  { id: 'asBuilt', title: 'Site / as-built comparison' },
+  { id: 'checks', title: 'Coordination checks' },
+]);
+
+/*
+ * What the last opening of each wall face laid out, so the next one can say
+ * how much it is laying out before deriving anything (§7: real numbers only).
+ */
+const lastBoardCounts = new Map();
 
 const CANVAS_TOOLS = Object.freeze({
   SELECT: 'select',
@@ -644,7 +678,56 @@ function FastenerGraphic({
   );
 }
 
-export default function WallDetailEditor() {
+/*
+ * `mountShellFirst` (the workspace sets it) paints the editor's frame first and
+ * renders the body after that paint, as a transition (§6.1) — the same
+ * contract as the ceiling editor. Without it the body renders in one pass.
+ */
+export default function WallDetailEditor({ mountShellFirst = false }) {
+  const { project } = useProject();
+  const { wallDetailEditor, dispatch: editorDispatch } = useEditorState();
+  const openKey = wallDetailEditor ? `${wallDetailEditor.floorId}:${wallDetailEditor.wallId}` : null;
+  const [openedAt] = useState(loadingClock);
+  const [readyFor, setReadyFor] = useState(mountShellFirst ? null : openKey);
+  const ready = !mountShellFirst || readyFor === openKey;
+  useAfterPaint(() => {
+    if (!ready) startTransition(() => setReadyFor(openKey));
+  }, [openKey, ready]);
+
+  const floor = ready ? null : project.floors.find((entry) => entry.id === wallDetailEditor?.floorId) || null;
+  const wall = floor?.walls.find((entry) => entry.id === wallDetailEditor?.wallId) || null;
+  const silhouette = useMemo(() => wallElevationSilhouette(wall, floor), [wall, floor]);
+
+  if (wallDetailEditor && !ready && wall) {
+    const side = wallDetailEditor.side || wall.assembly?.detailing?.activeSide || WALL_DETAIL_SIDES.INTERIOR;
+    const boards = lastBoardCounts.get(`${wall.id}:${side}`);
+    return (
+      <DetailEditorShell
+        dialogLabel="Wall assembly detail editor"
+        eyebrow="Construction-detail workspace"
+        title="Wall-local assembly editor"
+        subtitle={wall.id}
+        closeTitle="Close the wall detail editor and return to the floorplan"
+        onClose={() => editorDispatch({ type: 'CLOSE_WALL_DETAIL_EDITOR' })}
+        leftLabel="Wall detailing steps"
+        leftSections={WALL_SHELL_LEFT_SECTIONS}
+        rightLabel="Selection, numbers, and checks"
+        rightSections={WALL_SHELL_RIGHT_SECTIONS}
+        focus={readFocusModePreference()}
+        silhouette={silhouette}
+        label={LOADING_COPY.wallEditor}
+        detail={boards === undefined ? undefined : wallEditorDetail(boards)}
+        previewLabel={LOADING_COPY.livePreview}
+        previewKind="wall"
+        since={openedAt}
+      />
+    );
+  }
+
+  return <WallDetailEditorBody openedAt={openedAt} />;
+}
+
+function WallDetailEditorBody({ openedAt }) {
   const { project, dispatch, canUndo = false, canRedo = false } = useProject();
   const { wallDetailEditor, dispatch: editorDispatch } = useEditorState();
   const svgRef = useRef(null);
@@ -868,6 +951,17 @@ export default function WallDetailEditor() {
   const fastenerGuideLayouts =
     face && bounds ? face.fasteners.guides.map((guide) => deriveFastenerGuideLayout(guide, bounds, { panels })) : [];
   const fastenerGuideDraftLayout = bounds ? deriveFastenerGuideLayout(fastenerGuideDraft, bounds, { panels }) : null;
+  // Keyed on the wall and its floor's openings, so the 3D pane's memo holds.
+  const floorDoors = floor?.doors;
+  const floorWindows = floor?.windows;
+  const previewSilhouette = useMemo(
+    () => wallElevationSilhouette(wall, { doors: floorDoors, windows: floorWindows }),
+    [wall, floorDoors, floorWindows],
+  );
+  const boardCount = panels.length;
+  useEffect(() => {
+    if (wall?.id) lastBoardCounts.set(`${wall.id}:${activeSide}`, boardCount);
+  }, [wall?.id, activeSide, boardCount]);
 
   if (!wallDetailEditor) {
     shortcutHandlerRef.current = null;
@@ -3711,7 +3805,18 @@ export default function WallDetailEditor() {
                   <span>Live wall preview</span>
                   <small>Updates after every committed panel, frame, screw, gap, or assembly edit</small>
                 </div>
-                <Suspense fallback={<div className={styles.previewLoading}>Loading live wall preview…</div>}>
+                <Suspense
+                  fallback={
+                    <PanePlaceholder
+                      overlay
+                      tone="dark"
+                      label={LOADING_COPY.livePreview}
+                      silhouette={previewSilhouette}
+                      since={openedAt}
+                      data-preview-pane="wall"
+                    />
+                  }
+                >
                   <WallLivePreview
                     className={styles.wallPreviewPanel}
                     project={previewProject}
@@ -3720,6 +3825,8 @@ export default function WallDetailEditor() {
                     selectionId={selection?.id || null}
                     selectionSide={activeSide}
                     onPick={handlePreviewPick}
+                    silhouette={previewSilhouette}
+                    loadingSince={openedAt}
                   />
                 </Suspense>
               </div>

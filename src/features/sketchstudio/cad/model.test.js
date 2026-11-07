@@ -7,6 +7,7 @@ import {
   removeInstance,
   removeEmptyParts,
   removePart,
+  resolveSection,
   validateReferences,
 } from './model.js';
 
@@ -206,4 +207,112 @@ it('removeEmptyParts keeps an empty part that another part still uses as a Boole
     ),
   };
   expect(removeEmptyParts(model)).toBe(model);
+});
+
+// Phase P (docs/sketch-studio-angle-bar.md §2.1, §2.3–2.5): the angle's
+// optional root / toe radii, and the Angle bar part.
+it('resolves angle radii only when the section has them, and validates them', () => {
+  const sharp = { type: 'angle', width: 50, height: 40, wall: 5 };
+  // Absent radii add no keys: an old angle serialises (cut-list key, CSV) as before.
+  expect(JSON.stringify(resolveSection(sharp))).toBe('{"type":"angle","width":50,"height":40,"wall":5}');
+  expect(resolveSection({ ...sharp, rootRadius: 0, toeRadius: 0 })).toEqual({ ...sharp, rootRadius: 0, toeRadius: 0 });
+  expect(resolveSection({ ...sharp, rootRadius: '=r', toeRadius: 2.5 }, { r: 6 })).toEqual({
+    ...sharp,
+    rootRadius: 6,
+    toeRadius: 2.5,
+  });
+  expect(() => resolveSection({ ...sharp, rootRadius: -1 })).toThrow('Root radius cannot be negative.');
+  expect(() => resolveSection({ ...sharp, toeRadius: -0.5 })).toThrow('Toe radius cannot be negative.');
+  expect(() => resolveSection({ ...sharp, toeRadius: 5 })).toThrow('Toe radius must be less than the thickness.');
+  // Leg B (40) − thickness (5) = 35 is the shorter room for r1 + r2.
+  expect(() => resolveSection({ ...sharp, rootRadius: 32, toeRadius: 3 })).toThrow(
+    'Root and toe radii do not fit on the legs.',
+  );
+  expect(resolveSection({ ...sharp, rootRadius: 31, toeRadius: 3 }).rootRadius).toBe(31);
+  expect(() => resolveSection({ ...sharp, rootRadius: 'nope' })).toThrow(/^Root radius:/);
+  // The existing thickness rule still comes first.
+  expect(() => resolveSection({ ...sharp, wall: 40, rootRadius: 1 })).toThrow('Wall thickness exceeds the section.');
+  // Other sections never pick up angle keys.
+  expect(resolveSection({ type: 'tube', width: 40, height: 40, wall: 2, rootRadius: 3 })).toEqual({
+    type: 'tube',
+    width: 40,
+    height: 40,
+    wall: 2,
+  });
+});
+
+it("createPart('angle') is an L 50×50×5 hot-rolled angle bar member, 700 long, in steel", () => {
+  const { part, instance } = createPart('angle');
+  expect(part).toMatchObject({ name: 'Angle bar', material: 'Steel', grain: null });
+  expect(part.features).toHaveLength(1);
+  expect(part.features[0]).toMatchObject({
+    type: 'member',
+    start: [0, 0, 0],
+    end: [0, 0, 700],
+    section: { type: 'angle', width: 50, height: 50, wall: 5, rootRadius: 7, toeRadius: 3.5 },
+    gapStart: 0,
+    gapEnd: 0,
+    angleStart: 0,
+    angleEnd: 0,
+  });
+  expect(instance).toMatchObject({ partId: part.id, position: [0, 0, 0], rotation: [0, 0, 0] });
+  // The tube and the board are unchanged.
+  const tube = createPart('member').part;
+  expect(tube).toMatchObject({ name: 'Square tube', material: 'Steel', grain: null });
+  expect(tube.features[0].section).toEqual({ type: 'tube', width: 40, height: 40, wall: 2 });
+  expect(createPart().part).toMatchObject({ name: 'Board / plate', material: 'Plywood', grain: 'X' });
+});
+
+// Part groups (docs/sketch-studio-part-groups.md §3.1).
+it('gives new and old saves an empty groups list without a version bump', () => {
+  expect(emptyModel().groups).toEqual([]);
+  const old = emptyModel();
+  delete old.groups;
+  expect(normalizeModel(old).groups).toEqual([]);
+  const saved = {
+    ...emptyModel(),
+    groups: [{ id: 'g', name: 'Frame', parentId: null }],
+    instances: [
+      { id: 'a', partId: 'p', groupId: 'g' },
+      { id: 'b', partId: 'p', groupId: 'g' },
+    ],
+  };
+  expect(normalizeModel(JSON.parse(JSON.stringify(saved))).groups).toEqual(saved.groups);
+});
+
+it('validates groups: ids, names, parents, cycles and instance group references', () => {
+  const withGroups = (groups, instances = []) => normalizeModel({ ...emptyModel(), groups, instances });
+  const group = (id, parentId = null) => ({ id, name: id, parentId });
+  expect(() => withGroups({})).toThrow('Model groups must be a list.');
+  expect(() => withGroups([group('g'), group('g')])).toThrow('Missing or duplicate groups ID: g');
+  expect(() => withGroups([{ id: 'g', parentId: null }])).toThrow('Invalid group: g');
+  expect(() => withGroups([group('g', 'nope')])).toThrow('Group g names an unknown parent group: nope');
+  expect(() => withGroups([group('a', 'b'), group('b', 'a')])).toThrow('Circular group nesting: a');
+  expect(() => withGroups([group('g')], [{ id: 'i', partId: 'p', groupId: 'other' }])).toThrow(
+    'Instance i names an unknown group: other',
+  );
+  expect(withGroups([group('a'), group('b', 'a')], [{ id: 'i', partId: 'p', groupId: 'b' }]).groups).toHaveLength(2);
+});
+
+it('removeInstance dissolves a two-member group it leaves with one part, and is unchanged without groups', () => {
+  const model = normalizeModel({
+    ...emptyModel(),
+    groups: [{ id: 'g', name: 'Pair', parentId: null }],
+    instances: [
+      { id: 'a', partId: 'p', groupId: 'g' },
+      { id: 'b', partId: 'p', groupId: 'g' },
+      { id: 'c', partId: 'p' },
+    ],
+  });
+  const next = removeInstance(model, 'a');
+  expect(next.groups).toEqual([]);
+  expect(next.instances).toEqual([
+    { id: 'b', partId: 'p' },
+    { id: 'c', partId: 'p' },
+  ]);
+  // A third member keeps the group.
+  expect(removeInstance(removeInstance(model, 'c'), 'zzz').groups).toHaveLength(1);
+  // Without groups the result is exactly the old one (no groups key added).
+  const plain = { instances: [{ id: 'a' }], connections: [], marks: [], sheets: [] };
+  expect(removeInstance(plain, 'a')).toEqual({ instances: [], connections: [], marks: [], sheets: [] });
 });

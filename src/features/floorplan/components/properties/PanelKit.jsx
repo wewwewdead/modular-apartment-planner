@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useId, useRef, useState } from 'react';
-import { useNumericDraft } from '../useNumericDraft';
+import { useNumericDraft } from '@/hooks/useNumericDraft';
 import styles from './PanelKit.module.css';
 
 /**

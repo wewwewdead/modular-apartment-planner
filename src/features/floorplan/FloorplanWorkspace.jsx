@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ClipboardProvider } from '@/app/ClipboardProvider';
 import Modal from '@/ui/Modal';
 import NewProjectModal from '@/ui/NewProjectModal';
@@ -15,6 +15,17 @@ import SvgCanvas from './components/renderers/SvgCanvas';
 import SheetCanvas from './components/renderers/SheetCanvas';
 import WallDetailEditor from './components/wall-detail/WallDetailEditor';
 import CeilingDetailEditor from './components/ceiling-detail/CeilingDetailEditor';
+import { floorSilhouette } from './components/preview/loadingSilhouettes';
+import {
+  BusyButton,
+  LOADING_COPY,
+  LoadingBar,
+  LoadingPill,
+  PanePlaceholder,
+  loadingClock,
+  mainPreviewDetail,
+  readingFile,
+} from '@/ui/loading';
 
 const ThreePreviewPanel = lazy(() => import('./components/preview/ThreePreviewPanel'));
 
@@ -257,6 +268,22 @@ function EditorShell({
    * back out.
    */
   const isCoveredByDetailEditor = Boolean(wallDetailEditor || ceilingDetailEditor);
+  /*
+    The main preview's first build, from mount to its first frame (§5.2): one
+    placeholder timeline shared by the Suspense fallback and the panel's own
+    overlay, the active floor's slabs breathing underneath. The silhouette is
+    keyed on that floor's slabs and walls, so an edit elsewhere never rebuilds
+    it; once the picture is up the panel stops drawing it anyway.
+  */
+  const [previewSince] = useState(loadingClock);
+  const activeFloorModel = project.floors.find((floor) => floor.id === activeFloorId) || null;
+  const activeSlabs = activeFloorModel?.slabs;
+  const activeWalls = activeFloorModel?.walls;
+  const previewSilhouette = useMemo(
+    () => floorSilhouette({ slabs: activeSlabs, walls: activeWalls }),
+    [activeSlabs, activeWalls],
+  );
+  const previewDetail = mainPreviewDetail(project.floors.length);
 
   // Focus only means anything over the model workspace; the sheet view has no
   // second pane to choose between.
@@ -345,13 +372,30 @@ function EditorShell({
             )}
             {focusedPanel !== 'canvas' && (
               <div className={styles.preview}>
-                <Suspense fallback={<div className={styles.previewFallback}>Loading 3D preview...</div>}>
+                <Suspense
+                  fallback={
+                    <PanePlaceholder
+                      className={styles.previewFallback}
+                      tone="paper"
+                      label={LOADING_COPY.mainPreview}
+                      detail={previewDetail}
+                      silhouette={previewSilhouette}
+                      since={previewSince}
+                      data-preview-pane="model"
+                    />
+                  }
+                >
                   <ThreePreviewPanel
                     project={project}
                     activeFloorId={activeFloorId}
                     isFocused={focusedPanel === 'preview'}
                     onToggleFocus={handleTogglePreviewFocus}
                     suspended={isCoveredByDetailEditor}
+                    loadingLabel={LOADING_COPY.mainPreview}
+                    loadingDetail={previewDetail}
+                    silhouette={previewSilhouette}
+                    loadingSince={previewSince}
+                    placeholderTone="paper"
                   />
                 </Suspense>
               </div>
@@ -388,9 +432,20 @@ const MemoizedEditorShell = memo(EditorShell);
 
 function FloorplanShell() {
   const { state, actions, selectors } = useFloorplanContext();
-  const { showLoadModal, showNewProjectModal, savedProjects, isSidebarCollapsed, isPropertiesCollapsed } =
-    selectors.workspaceUi;
+  const {
+    showLoadModal,
+    showNewProjectModal,
+    savedProjects,
+    isSidebarCollapsed,
+    isPropertiesCollapsed,
+    projectOpening,
+    projectOpenError,
+  } = selectors.workspaceUi;
   const { importInputRef } = selectors.workspaceRefs;
+  // A file names itself; a draft's own card is already saying "Opening…".
+  const openingFile = projectOpening && projectOpening.stage !== 'draft';
+  const openingLabel =
+    projectOpening?.stage === 'unpacking' ? LOADING_COPY.unpackingArchive : readingFile(projectOpening?.name);
 
   return (
     <>
@@ -414,9 +469,12 @@ function FloorplanShell() {
         onToggleProperties={actions.workspace.toggleProperties}
       />
 
-      {state.editor.wallDetailEditor && <WallDetailEditor />}
+      <LoadingBar active={Boolean(projectOpening)} placement="viewport" />
+      {openingFile ? <LoadingPill label={openingLabel} placement="viewport" /> : null}
 
-      {state.editor.ceilingDetailEditor && <CeilingDetailEditor />}
+      {state.editor.wallDetailEditor && <WallDetailEditor mountShellFirst />}
+
+      {state.editor.ceilingDetailEditor && <CeilingDetailEditor mountShellFirst />}
 
       {showNewProjectModal && (
         <NewProjectModal onConfirm={actions.project.createProject} onClose={actions.workspace.closeNewProjectModal} />
@@ -432,13 +490,18 @@ function FloorplanShell() {
                   Open a saved .json project or a shared .apz archive from your computer.
                 </span>
               </div>
-              <button
-                className={modalStyles.modalBtn}
-                onClick={actions.project.openProjectFile}
-                style={{ alignSelf: 'flex-start' }}
-              >
-                Open Project File
-              </button>
+              <div>
+                <BusyButton
+                  className={modalStyles.modalBtn}
+                  onClick={actions.project.openProjectFile}
+                  busy={Boolean(openingFile)}
+                  busyLabel={LOADING_COPY.opening}
+                  disabled={Boolean(projectOpening)}
+                  error={projectOpenError}
+                >
+                  Open Project File
+                </BusyButton>
+              </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -467,15 +530,19 @@ function FloorplanShell() {
                         </span>
                       </div>
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
+                        <BusyButton
                           className={modalStyles.modalBtn}
                           onClick={() => actions.project.loadDraft(savedProject.id)}
+                          busy={projectOpening?.draftId === savedProject.id}
+                          busyLabel={LOADING_COPY.draftCard}
+                          disabled={Boolean(projectOpening)}
                         >
                           Load
-                        </button>
+                        </BusyButton>
                         <button
                           className={modalStyles.modalBtnDanger}
                           onClick={() => actions.project.deleteDraft(savedProject.id, savedProject.name)}
+                          disabled={Boolean(projectOpening)}
                         >
                           Delete
                         </button>

@@ -54,6 +54,9 @@ const MARKER_PX = 6;
 const FEATURE_KINDS = ['vertex', 'midpoint', 'face centre', 'mark', 'hole centre'];
 // Existing hole / pocket centres on the hovered face snap within this of its plane (mm).
 const HOLE_CENTRE_PLANE = 0.05;
+// Hardware (Phase Q): openings this close in depth (mm) are a tie the screen
+// distance breaks.
+const OPENING_DEPTH_TIE = 0.5;
 const fmt = (value) => String(Number(Number(value).toFixed(2)));
 const escape = (text) =>
   String(text).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
@@ -354,13 +357,22 @@ export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pic
         : `${v.names?.[hover.instanceId] || 'Part'} ${faceLabel(hover.normal).replace(' face', '')}`;
     // Hardware (Phase J) names what is being seated: "Threaded standoff M3 · …".
     const what = v.tool === 'hardware' && v.place?.name ? `${v.place.name} · ` : '';
-    // Over a hole it can go in (Phase M): whether a click adds or removes it.
-    const choice =
+    // Over a hole it can go in (Phase M): whether a click adds or removes it;
+    // over the other opening of a chosen hole (Phase Q), that a click moves
+    // the hardware to this side.
+    const chosenSide =
       v.tool === 'hardware' && hover.snapKind === 'hole centre' && hover.holeAttachable
-        ? v.place?.chosen?.[`${hover.instanceId}/${hover.holeFeatureId}/${hover.holeIndex || 0}`]
-          ? ' · chosen · click to remove'
-          : ' · click to add'
-        : '';
+        ? v.place?.chosen?.[`${hover.instanceId}/${hover.holeFeatureId}/${hover.holeIndex || 0}`] || null
+        : undefined;
+    const side = hover.holeSide === 'far' ? ' · far side' : '';
+    const choice =
+      chosenSide === undefined
+        ? ''
+        : !chosenSide
+          ? `${side} · click to add`
+          : chosenSide === true || chosenSide === (hover.holeSide || 'entry')
+            ? `${side} · chosen · click to remove`
+            : `${side} · chosen on the other side · click to seat it on this side`;
     showHud(
       `<span class="cad-gizmo-snap">${escape(hover.snapKind)}</span> · ${escape(what + where + choice)}<div class="cad-gizmo-typed">${coordinates(hover.point)}</div>`,
     );
@@ -433,7 +445,12 @@ export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pic
   // cannot do it: outside the rim the rim's own vertices are always nearer
   // the pointer than the centre, and inside it a through hole has no face
   // under the pointer at all. The hole's face must look at the camera and
-  // nothing may stand in front of it. Returns the click info, or null.
+  // nothing may stand in front of it. Phase Q: every opening of a through
+  // hole is a candidate (view.holeCentres' side), and of two openings that
+  // overlap on screen the one nearest the camera wins: the angle bar's hole,
+  // not the board's coaxial one under it. Openings apart on screen (a row
+  // seen at a slant) keep the nearest to the pointer. Returns the click
+  // info, or null.
   const holeOpeningAt = (event, hit) => {
     if (view?.tool !== 'hardware' || view.stage !== 'place' || !view.holeCentres?.length) return null;
     const pointer = pointerOf(event);
@@ -457,8 +474,14 @@ export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pic
       if (depth <= 0) continue;
       const [x, y] = projectPx(h.point);
       const distance = Math.hypot(x - pointer[0], y - pointer[1]);
-      const reach = h.radius / mmPx(h.point) + SNAP_PX;
-      if (distance > reach || (best && distance >= best.distance)) continue;
+      const rim = h.radius / mmPx(h.point);
+      if (distance > rim + SNAP_PX) continue;
+      if (best) {
+        const overlap = Math.hypot(x - best.x, y - best.y) < rim + best.rim;
+        const nearer =
+          overlap && Math.abs(depth - best.depth) > OPENING_DEPTH_TIE ? depth < best.depth : distance < best.distance;
+        if (!nearer) continue;
+      }
       // Something in front: a hit on another part, or on this part off the
       // hole's face plane and nearer the camera than the hole's rim.
       if (hit) {
@@ -468,7 +491,15 @@ export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pic
           Math.abs(h.point.reduce((sum, v, i) => sum + (v - hitPoint[i]) * face.normal[i], 0)) <= HOLE_CENTRE_PLANE;
         if (!(own && (inPlane || !face?.planar)) && depthOf(hitPoint) < depth - h.radius - 1) continue;
       }
-      best = { h, distance, onFace: Boolean(hit && face?.planar && face.instanceId === h.instanceId) };
+      best = {
+        h,
+        distance,
+        depth,
+        x,
+        y,
+        rim,
+        onFace: Boolean(hit && face?.planar && face.instanceId === h.instanceId),
+      };
     }
     if (!best) return null;
     const { h, onFace } = best;
@@ -486,6 +517,7 @@ export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pic
       holeFeatureId: h.featureId,
       holeAttachable: h.attachable,
       holeIndex: h.index || 0,
+      holeSide: h.side || 'entry',
     };
   };
   const faceOf = (hit) => {
@@ -540,6 +572,7 @@ export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pic
             holeFeatureId: hole.featureId,
             holeAttachable: hole.attachable,
             holeIndex: hole.index || 0,
+            holeSide: hole.side || 'entry',
           });
       } else if (candidate?.kind === 'edge') {
         info.point = projectToPlane(candidate.point, hit.point.toArray(), face.normal);

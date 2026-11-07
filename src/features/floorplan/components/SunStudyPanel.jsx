@@ -10,12 +10,16 @@ import {
   SUN_STUDY_KEY_DATES,
 } from '@/analysis/sunStudyState';
 import { SunIcon } from '@/ui/ToolbarIcons';
+import { LoadingBar } from '@/ui/loading';
 import { SUN_HOURS_RAMP } from './renderers/ShadowOverlay';
+import { useNumericDraft } from '@/hooks/useNumericDraft';
 import LocationPicker from './LocationPicker';
 import styles from './SunStudyPanel.module.css';
 
 const RAD = 180 / Math.PI;
 const MINUTES_PER_DAY = 1440;
+// Measured mode switches settle in 50–175 ms; only work slower than this shows a bar.
+const RECOMPUTE_BAR_DELAY_MS = 250;
 
 const MODES = [
   { id: 'instant', label: 'Moment', hint: 'The shadow at one time of day' },
@@ -103,6 +107,24 @@ function formatStudyDate(date) {
     year: 'numeric',
     timeZone: 'UTC',
   });
+}
+
+// Drafted so the box can be cleared and retyped; committing per keystroke wrote
+// Number('') = 0 back over it.
+function ThresholdHoursInput({ value, onCommit }) {
+  const { displayValue, handleChange, handleKeyDown, handleBlur } = useNumericDraft(value ?? '', onCommit);
+  return (
+    <input
+      type="number"
+      min="0"
+      max="24"
+      step="0.5"
+      value={displayValue}
+      onChange={handleChange}
+      onKeyDown={handleKeyDown}
+      onBlur={handleBlur}
+    />
+  );
 }
 
 /**
@@ -478,10 +500,10 @@ export default function SunStudyPanel({
                 </button>
               ))}
             </div>
-            {/* Fades in only if the work outlasts a moment, so a quick switch
-                does not flash a progress bar at you. */}
+            {/* Shows only if the work outlasts a moment, so a quick switch does
+                not flash a progress bar at you. */}
             <div className={styles.progressTrack} data-busy={recomputing || undefined} aria-hidden="true">
-              <span className={styles.progressBar} />
+              <LoadingBar active={recomputing} placement="region" delayMs={RECOMPUTE_BAR_DELAY_MS} />
             </div>
             {/* The day study runs on a worker now; a run that dies must say so
                 rather than leaving a stale overlay pretending to be current. */}
@@ -619,13 +641,9 @@ export default function SunStudyPanel({
                   </label>
                   <label className={styles.field}>
                     <span>Target sun hours</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="24"
-                      step="0.5"
+                    <ThresholdHoursInput
                       value={sunStudy.thresholdHours}
-                      onChange={(event) => onPatch({ thresholdHours: Number(event.target.value) })}
+                      onCommit={(thresholdHours) => onPatch({ thresholdHours })}
                     />
                   </label>
                 </>

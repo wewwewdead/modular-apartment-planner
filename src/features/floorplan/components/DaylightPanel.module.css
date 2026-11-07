@@ -101,26 +101,7 @@
   line-height: 1.4;
 }
 
-/* A run in flight gets a slow pulse; a finished one sits still. */
-.gridStatus[data-status='running'] {
-  animation: daylight-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes daylight-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .gridStatus[data-status='running'] {
-    animation: none;
-  }
-}
+/* A run in flight shows the loading kit's pill (its spinner is the motion), so the line itself sits still. */
 
 /* --- Floor summary --- */
 

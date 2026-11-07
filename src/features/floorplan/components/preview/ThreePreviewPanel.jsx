@@ -27,20 +27,34 @@ import { CameraIcon, ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
 import { VIEW_PRESET_OPTIONS } from './previewCameraMath';
 import { PALETTE_LOOKS } from './materials';
 import { resolveRoofAppearance } from '@/domain/roofCoveringCatalog';
+import { isTypingTarget } from '@/utils/keyboard';
+import {
+  DEFAULT_VIEW_MODE,
+  VIEW_MODES,
+  VIEW_MODE_COPY,
+  VIEW_MODE_ORDER,
+  imageFileSuffix,
+  isSeeThrough,
+  nextViewMode,
+} from './viewMode';
+import { LOADING_COPY, LoadingBar, LoadingPill, PanePlaceholder, Spinner, useDelayedFlag } from '@/ui/loading';
 import styles from './ThreePreviewPanel.module.css';
 
 // ~15 scene rebuilds a second while the project is changing every frame.
 const MIN_SCENE_REBUILD_INTERVAL_MS = 66;
 
-/** `My House` + `iso_northeast` → `my-house-iso_northeast.png`. */
-function imageFileName(projectName, viewPreset) {
+/**
+ * `My House` + `iso_northeast` → `my-house-iso_northeast.png`, and
+ * `my-house-iso_northeast-xray.png` for a picture taken in X-ray.
+ */
+function imageFileName(projectName, viewPreset, viewMode = DEFAULT_VIEW_MODE) {
   const base =
     String(projectName || 'model')
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'model';
-  return `${base}-${viewPreset || 'view'}.png`;
+  return `${base}-${viewPreset || 'view'}${imageFileSuffix(viewMode)}.png`;
 }
 
 /**
@@ -100,8 +114,17 @@ function useHeldWhileSuspended(value, suspended) {
  * over the top of it. It stops rebuilding scenes and stops asking for frames,
  * without unmounting, so the camera and the walk pose survive the overlay; the
  * edits made behind it are caught up in one rebuild when it comes back.
+ *
+ * Until its first picture is on the canvas the pane is covered by a
+ * placeholder (docs/loading-states.md §5.2, §5.4): `loadingLabel` while the
+ * scene is built, `compilingLabel` while its programs link, `loadingDetail`
+ * from 2 s, the caller's `silhouette` breathing underneath, and `loadingSince`
+ * so the timeline carries on from the Suspense fallback the caller showed
+ * first. `paneKind` names the pane for scripts (`data-preview-pane`), and
+ * `placeholderTone` matches the ground the picture will arrive on.
  */
-function ThreePreviewPanel({
+function ThreePreviewPanelBody({
+  onRetryViewport,
   project,
   activeFloorId,
   isFocused = false,
@@ -112,6 +135,13 @@ function ThreePreviewPanel({
   selectionAccent = 'plan',
   onAssemblyPick,
   suspended = false,
+  paneKind = 'model',
+  loadingLabel = LOADING_COPY.mainPreview,
+  compilingLabel,
+  loadingDetail,
+  silhouette = null,
+  loadingSince,
+  placeholderTone = 'dark',
 }) {
   const assemblyDriven = assemblySelection !== undefined;
   // Taken apart here so the overlay effect depends on three primitives: a caller
@@ -137,11 +167,23 @@ function ThreePreviewPanel({
   const [renderStyle, setRenderStyle] = useState(readRenderStylePreference);
   const [interiorLightsOn, setInteriorLightsOn] = useState(readInteriorLightsPreference);
   const [nightMode, setNightMode] = useState(readNightModePreference);
+  // Solid / X-ray / Wireframe. Pane-local and never persisted, like the floor
+  // scope: every pane opens solid, and an assembly pane keeps its own.
+  const [viewMode, setViewMode] = useState(DEFAULT_VIEW_MODE);
+  const sectionRef = useRef(null);
+  // Whether the pointer is over the picture, for the X / Shift+X keys.
+  const hoveredRef = useRef(false);
   // Which View preset is on screen. The viewport reports back when an orbit
   // takes the camera off it, so the menu never claims a view you have left.
   const [viewPreset, setViewPreset] = useState('free');
   // Whether the progressive refine has finished; Save image waits for it.
   const [refined, setRefined] = useState(false);
+  // The viewport's road to a first picture (see `setLoadStatusHandler`).
+  // `presented` latches: after the first frame, a rebuild keeps the model on
+  // screen and only says it is catching up.
+  const [loadStatus, setLoadStatus] = useState({ phase: 'building', parallelShaderCompile: true });
+  const [presented, setPresented] = useState(false);
+  const [viewportError, setViewportError] = useState(null);
   const [walkUiState, setWalkUiState] = useState(() => ({
     navigationMode: 'inspect',
     isLocked: false,
@@ -264,7 +306,16 @@ function ThreePreviewPanel({
   useEffect(() => {
     if (!containerRef.current) return undefined;
 
-    const viewport = createPreviewViewport(containerRef.current, { look: lookRef.current });
+    let viewport;
+    try {
+      viewport = createPreviewViewport(containerRef.current, { look: lookRef.current });
+    } catch (error) {
+      // No WebGL context (blocked, lost, or a driver three refuses): the
+      // placeholder becomes the error instead of a box that never fills.
+      console.warn('[preview] Could not start the 3D viewport:', error);
+      queueMicrotask(() => setViewportError(error));
+      return undefined;
+    }
     viewportRef.current = viewport;
     sceneCacheRef.current = createPreviewSceneCache({ lightPool: resolveLightPoolPolicy(lightPoolKindRef.current) });
 
@@ -322,9 +373,14 @@ function ThreePreviewPanel({
     const viewport = viewportRef.current;
     viewport?.setViewPresetHandler(setViewPreset);
     viewport?.setRenderStatusHandler(({ converged }) => setRefined(converged));
+    viewport?.setLoadStatusHandler((status) => {
+      setLoadStatus(status);
+      if (status.phase === 'ready') setPresented(true);
+    });
     return () => {
       viewport?.setViewPresetHandler(null);
       viewport?.setRenderStatusHandler(null);
+      viewport?.setLoadStatusHandler(null);
     };
   }, []);
 
@@ -348,8 +404,8 @@ function ThreePreviewPanel({
     if (!viewport) return;
     const dataUrl = viewport.captureImage();
     if (!dataUrl) return;
-    downloadDataUrl(dataUrl, imageFileName(project?.name, viewPreset));
-  }, [project?.name, viewPreset]);
+    downloadDataUrl(dataUrl, imageFileName(project?.name, viewPreset, viewMode));
+  }, [project?.name, viewPreset, viewMode]);
 
   useEffect(() => {
     viewportRef.current?.setPickContext({ activeFloorId });
@@ -485,6 +541,33 @@ function ThreePreviewPanel({
   }, [renderStyle]);
 
   useEffect(() => {
+    viewportRef.current?.setViewMode?.(viewMode);
+  }, [viewMode]);
+
+  /*
+   * X toggles X-ray, Shift+X toggles Wireframe (§3.9) — while the pointer is
+   * over the picture, the pane holds focus, or the walk holds the mouse. Never
+   * while typing, never with Ctrl/Cmd/Alt (Ctrl+X is the plan's cut), and never
+   * from a pane that is asleep under an assembly editor.
+   */
+  const walkLocked = walkUiState.isLocked;
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (suspended || event.repeat) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (String(event.key).toLowerCase() !== 'x') return;
+      if (isTypingTarget(event.target)) return;
+      const section = sectionRef.current;
+      const focused = Boolean(section && document.activeElement && section.contains(document.activeElement));
+      if (!hoveredRef.current && !focused && !walkLocked) return;
+      event.preventDefault();
+      setViewMode((mode) => nextViewMode(mode, { wireframe: event.shiftKey }));
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [suspended, walkLocked]);
+
+  useEffect(() => {
     viewportRef.current?.setInteriorLighting({ lightsOn: interiorLightsOn, night: nightMode });
     persistInteriorLightsPreference(interiorLightsOn);
     persistNightModePreference(nightMode);
@@ -493,6 +576,33 @@ function ThreePreviewPanel({
   useEffect(() => {
     viewportRef.current?.setActiveFloorContext(walkFloorContext);
   }, [walkFloorContext]);
+
+  /*
+   * Loading, in the order the pane goes through it. Before the first picture:
+   * the placeholder, its words naming the build and then the compile. After
+   * it: a woken pane re-drawing the edits made behind an overlay keeps the old
+   * picture up under a thin bar, with words only if it takes a while.
+   */
+  const firstPictureState = viewportError
+    ? 'error'
+    : presented
+      ? 'ready'
+      : loadStatus.phase === 'compiling'
+        ? 'compiling'
+        : 'loading';
+  const placeholderLabel =
+    firstPictureState === 'compiling' ? compilingLabel || loadingLabel : loadingLabel || LOADING_COPY.mainPreview;
+  const placeholderDetail =
+    firstPictureState === 'compiling' && !loadStatus.parallelShaderCompile
+      ? LOADING_COPY.mainThreadCompile
+      : loadingDetail;
+  const catchingUp = presented && !suspended && (loadStatus.phase === 'waking' || loadStatus.phase === 'compiling');
+  // Realistic keeps refining after the camera stops; say so, but not for the
+  // moment-long restarts an orbit causes.
+  const refining = useDelayedFlag(presented && renderStyle === 'realistic' && !refined, {
+    delayMs: 300,
+    minVisibleMs: 400,
+  });
 
   const resetLabel = navigationMode === 'walk' ? 'Reset Walk' : 'Reset View';
   const walkPhysicsOn = walkUiState.physicsMode;
@@ -505,18 +615,26 @@ function ThreePreviewPanel({
         ? `Look: mouse · ${walkControlsHint}`
         : `Click preview to capture mouse · ${walkControlsHint}`
       : 'Orbit: drag · Pan: right drag · Zoom: wheel · Inspect: click object';
+  const viewModeCopy = VIEW_MODE_COPY[viewMode] || VIEW_MODE_COPY[VIEW_MODES.SOLID];
   const secondaryFooter =
     navigationMode === 'walk'
       ? walkPhysicsOn
         ? 'Physical walk: gravity holds you to the floors, walls are solid, and the stairs are how you change levels.'
         : 'No-clip flight: free movement through anything. Press C to land back in the physical walk.'
-      : renderStyle === 'realistic'
-        ? 'Realistic: sky lighting, ambient occlusion, soft sun shadows. The image keeps refining for a moment after the camera stops.'
-        : 'Shaded: flat drawing view with outlines and the ground grid.';
+      : isSeeThrough(viewMode)
+        ? viewModeCopy.footer
+        : renderStyle === 'realistic'
+          ? 'Realistic: sky lighting, ambient occlusion, soft sun shadows. The image keeps refining for a moment after the camera stops.'
+          : 'Shaded: flat drawing view with outlines and the ground grid.';
 
   return (
     <section
+      ref={sectionRef}
       className={`${styles.panel} ${className}`}
+      data-preview-pane={paneKind}
+      data-view-mode={viewMode}
+      data-loading-state={firstPictureState}
+      aria-busy={firstPictureState === 'ready' || firstPictureState === 'error' ? 'false' : 'true'}
       data-roof-colour={roofColourHex}
       data-closure-colour={closureColourHex}
     >
@@ -525,7 +643,7 @@ function ThreePreviewPanel({
           <span className={styles.eyebrow}>3D Preview</span>
           <span className={styles.title}>
             {activeFloor
-              ? `${visibleFloorCount === 1 ? '1 floor' : `${visibleFloorCount} floors`} · ${visibleCount} objects`
+              ? `${visibleFloorCount === 1 ? '1 floor' : `${visibleFloorCount} floors`} · ${visibleCount} objects${viewModeCopy.titleSuffix}`
               : 'No active floor'}
           </span>
         </div>
@@ -567,6 +685,21 @@ function ThreePreviewPanel({
             >
               Night
             </button>
+          </div>
+          <div className={styles.modeToggle} role="group" aria-label={VIEW_MODE_COPY.groupLabel}>
+            {VIEW_MODE_ORDER.map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className={viewMode === mode ? styles.modeButtonActive : styles.modeButton}
+                onClick={() => setViewMode(mode)}
+                title={VIEW_MODE_COPY[mode].title}
+                aria-label={VIEW_MODE_COPY[mode].name}
+                aria-pressed={viewMode === mode}
+              >
+                {VIEW_MODE_COPY[mode].label}
+              </button>
+            ))}
           </div>
           <select
             className={styles.floorSelect}
@@ -619,11 +752,7 @@ function ThreePreviewPanel({
               className={`${styles.button} ${styles.saveImageButton}`}
               onClick={handleSaveImage}
               disabled={!refined || !sceneDescriptor.hasVisibleObjects}
-              title={
-                refined
-                  ? 'Save the picture on screen as a PNG'
-                  : 'Save image — available once the picture has finished refining'
-              }
+              title={refined ? 'Save the picture on screen as a PNG' : LOADING_COPY.refiningTooltip}
               aria-label="Save image"
             >
               <CameraIcon />
@@ -645,9 +774,49 @@ function ThreePreviewPanel({
         </div>
       </div>
 
-      <div className={styles.viewportWrap}>
+      <div
+        className={`${styles.viewportWrap} ${isFocused ? styles.viewportWrapFocused : ''}`}
+        // Focusable from a click, never by Tab, so the X key keeps working
+        // after the pointer has left the picture for the pane's own controls.
+        tabIndex={-1}
+        onPointerDown={(event) => {
+          // Explicitly: the orbit controls take the pointer, and a canvas that
+          // swallows the press may leave focus wherever it was.
+          if (!event.currentTarget.contains(document.activeElement)) {
+            event.currentTarget.focus({ preventScroll: true });
+          }
+        }}
+        onPointerEnter={() => {
+          hoveredRef.current = true;
+        }}
+        onPointerLeave={() => {
+          hoveredRef.current = false;
+        }}
+      >
         <div ref={containerRef} className={styles.viewport} />
+        <PanePlaceholder
+          overlay
+          tone={placeholderTone}
+          active={firstPictureState !== 'ready'}
+          state={firstPictureState === 'ready' ? 'loading' : firstPictureState}
+          label={placeholderLabel}
+          detail={placeholderDetail}
+          showDetail={firstPictureState === 'compiling' && Boolean(placeholderDetail)}
+          silhouette={silhouette}
+          since={loadingSince}
+          error={viewportError ? { message: LOADING_COPY.previewFailed, onRetry: onRetryViewport } : null}
+        />
+        <LoadingBar active={catchingUp} placement="region" tone={placeholderTone} />
+        <LoadingPill active={catchingUp} label={LOADING_COPY.catchingUp} placement="region" tone={placeholderTone} />
         <CompassOverlay className={styles.compassDock} needleRef={compassNeedleRef} />
+        {/* Over the picture, not in the footer: anything that changed the pane's
+            size would restart the very refine it reports on. */}
+        {refining ? (
+          <span className={styles.refining} role="status">
+            <Spinner />
+            {LOADING_COPY.refining}
+          </span>
+        ) : null}
         {navigationMode === 'walk' && (
           <div className={styles.walkOverlay}>
             <span className={styles.walkOverlayTitle}>
@@ -715,6 +884,17 @@ function ThreePreviewPanel({
       </div>
     </section>
   );
+}
+
+/*
+ * "Try again" after a failed start remounts the whole pane: every effect that
+ * wires the viewport up runs once per mount, so a fresh mount is the only
+ * honest retry.
+ */
+function ThreePreviewPanel(props) {
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => setAttempt((value) => value + 1), []);
+  return <ThreePreviewPanelBody key={attempt} {...props} onRetryViewport={retry} />;
 }
 
 export default memo(ThreePreviewPanel);

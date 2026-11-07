@@ -15,6 +15,11 @@ import {
   applyRenderStyleToPalette,
   applyRoofAppearanceToPalette,
   createMaterialPalette,
+  disposeMaterialPalette,
+  ghostMaterialFor,
+  ghostMaterialsOf,
+  ghostSourceOf,
+  syncGhostMaterials,
 } from './materials';
 
 /** Relative luminance in linear light — how much of the light a surface sends back. */
@@ -115,7 +120,13 @@ describe('metalness', () => {
   });
 
   it('makes the real metals metal', () => {
-    for (const key of ['wallFramingSteel', 'ceilingFraming', 'railing_handrail', 'fixtureAccentMetal']) {
+    for (const key of [
+      'wallFramingSteel',
+      'wallCoreSteel',
+      'ceilingFraming',
+      'railing_handrail',
+      'fixtureAccentMetal',
+    ]) {
       expect(palette[key].metalness, key).toBe(1);
     }
   });
@@ -147,6 +158,8 @@ describe('detail assignment', () => {
       'wallPlywood',
       'wallFramingSteel',
       'wallFramingTimber',
+      'wallCoreSteel',
+      'wallCoreTimber',
       'slab',
       'roof',
       'column',
@@ -313,5 +326,126 @@ describe('the roof covering family and the edge kit', () => {
     });
     expect(live.roof_tile.roughness).toBe(0.85);
     expect(live.roof_metal.roughness).toBe(0.75);
+  });
+});
+
+describe('ghost twins for the see-through modes', () => {
+  it('names every material after its key and remembers the glass it was built as', () => {
+    const live = createMaterialPalette();
+    for (const [key, material] of Object.entries(live)) {
+      if (!material?.isMaterial) continue;
+      // Aliases keep their first key; everything else is its own.
+      if (key === 'roof') expect(material.userData.paletteKey).toBe('roof_slab');
+      else if (key === 'roofGutter' || key === 'roofDownpipe') expect(material.userData.paletteKey).toBe('roofTrim');
+      else expect(material.userData.paletteKey).toBe(key);
+    }
+    expect(live.window.userData.baseOpacity).toBe(live.window.opacity);
+    expect(live.wall.userData.baseOpacity).toBeUndefined();
+    // After the classic look rewrote it, not before.
+    const classic = createMaterialPalette({ look: PALETTE_LOOKS.CLASSIC });
+    expect(classic.window.userData.baseOpacity).toBe(0.28);
+  });
+
+  it('makes a transparent twin once, and never flips the source', () => {
+    const live = createMaterialPalette();
+    const twin = ghostMaterialFor(live, live.wall);
+    expect(ghostMaterialFor(live, live.wall)).toBe(twin);
+    expect(ghostMaterialsOf(live)).toEqual([twin]);
+    expect(ghostSourceOf(live, twin)).toBe(live.wall);
+
+    expect(twin).not.toBe(live.wall);
+    expect(twin.transparent).toBe(true);
+    expect(twin.depthWrite).toBe(false);
+    // One pass, not three's back-then-front pair: see `ghostMaterialFor`.
+    expect(twin.forceSinglePass).toBe(true);
+    expect(twin.side).toBe(live.wall.side);
+    expect(twin.userData).toMatchObject({ ghostTwin: true, ownedByPalette: true, paletteKey: 'wall' });
+    expect(live.wall.transparent).toBe(false);
+    expect(live.wall.depthWrite).toBe(true);
+  });
+
+  it('keeps the twin in the detailed program family its source compiles', () => {
+    const live = createMaterialPalette();
+    for (const key of ['wall', 'slab', 'roof_metal', 'column', 'fixture_sofa', 'railing_handrail']) {
+      const twin = ghostMaterialFor(live, live[key]);
+      expect(twin.customProgramCacheKey()).toBe(live[key].customProgramCacheKey());
+      expect(twin.userData.detailFamily).toEqual(live[key].userData.detailFamily);
+      expect(typeof twin.onBeforeCompile).toBe('function');
+    }
+  });
+
+  it('cools the colour from the source every time, so a re-sync never compounds', () => {
+    const live = createMaterialPalette();
+    const twin = ghostMaterialFor(live, live.roof_metal);
+    const first = twin.color.getHex();
+    expect(first).not.toBe(live.roof_metal.color.getHex());
+    syncGhostMaterials(live);
+    syncGhostMaterials(live);
+    expect(twin.color.getHex()).toBe(first);
+  });
+
+  it('follows the roof appearance and the style relief', () => {
+    const live = createMaterialPalette();
+    const twin = ghostMaterialFor(live, live.roof_metal);
+    const before = twin.color.getHex();
+    applyRoofAppearanceToPalette(live, {
+      covering: { kind: 'metal', hex: '#703731', finish: 'unpainted' },
+      trims: { hex: '#703731' },
+      soffit: { hex: '#E4E2D5' },
+      closures: [],
+    });
+    expect(twin.color.getHex()).not.toBe(before);
+    expect(twin.metalness).toBe(live.roof_metal.metalness);
+    expect(twin.roughness).toBe(live.roof_metal.roughness);
+
+    applyRenderStyleToPalette(live, renderStyleConfig(RENDER_STYLES.SHADED));
+    expect(twin.userData.detailScale).toBe(0);
+    applyRenderStyleToPalette(live, renderStyleConfig(RENDER_STYLES.REALISTIC));
+    expect(twin.userData.detailScale).toBe(1);
+  });
+
+  it('disposes the twins with the palette', () => {
+    const live = createMaterialPalette();
+    const twin = ghostMaterialFor(live, live.wall);
+    let disposed = 0;
+    twin.addEventListener('dispose', () => {
+      disposed += 1;
+    });
+    disposeMaterialPalette(live);
+    expect(disposed).toBe(1);
+    expect(ghostMaterialsOf(live)).toEqual([]);
+  });
+
+  it('leaves a non-material alone', () => {
+    const live = createMaterialPalette();
+    expect(ghostMaterialFor(live, null)).toBeNull();
+    expect(ghostMaterialFor(null, live.wall)).toBe(live.wall);
+    expect(new THREE.MeshBasicMaterial().userData.paletteKey).toBeUndefined();
+  });
+});
+
+describe('the framed wall schematic core', () => {
+  // Solid must not change when a framed wall's core moved off the framing keys
+  // (docs/preview-xray-mode.md §12): same look, separate instances, so only the
+  // see-through modes can tell a stand-in slab from the studs it stands for.
+  it('looks exactly like the framing it stands for, as its own materials', () => {
+    for (const look of Object.values(PALETTE_LOOKS)) {
+      const live = createMaterialPalette({ look });
+      for (const [core, framing] of [
+        ['wallCoreSteel', 'wallFramingSteel'],
+        ['wallCoreTimber', 'wallFramingTimber'],
+      ]) {
+        expect(live[core], core).not.toBe(live[framing]);
+        expect(live[core].type, core).toBe(live[framing].type);
+        expect(live[core].color.getHex(), core).toBe(live[framing].color.getHex());
+        expect(live[core].roughness, core).toBe(live[framing].roughness);
+        expect(live[core].metalness, core).toBe(live[framing].metalness);
+        expect(live[core].envMapIntensity, core).toBe(live[framing].envMapIntensity);
+        expect(live[core].side, core).toBe(live[framing].side);
+        expect(live[core].userData.detailFamily, core).toEqual(live[framing].userData.detailFamily);
+        expect(live[core].userData.paletteKey, core).toBe(core);
+      }
+      disposeMaterialPalette(live);
+    }
   });
 });

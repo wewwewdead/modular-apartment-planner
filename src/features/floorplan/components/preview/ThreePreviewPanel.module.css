@@ -199,9 +199,24 @@
   overflow: hidden;
 }
 
+/* Takes focus from a click so the X / Shift+X keys follow the pane; the picture
+   itself is the focus cue, a ring round it would only frame the canvas. */
+.viewportWrap:focus {
+  outline: none;
+}
+
+/* Focused, the side panels float over the picture's edges (position: fixed,
+   above the pane), so anything pinned to those edges would sit underneath
+   them. Only the focused pane takes the insets: a detail editor's pane inside
+   the same layout must not inherit them. */
+.viewportWrapFocused {
+  --pane-inset-left: var(--focus-overlay-left, 0px);
+  --pane-inset-right: var(--focus-overlay-right, 0px);
+}
+
 .compassDock {
   position: absolute;
-  right: 16px;
+  right: calc(16px + var(--pane-inset-right, 0px));
   bottom: 16px;
   z-index: 2;
   pointer-events: none;
@@ -216,12 +231,12 @@
 /* Walk overlay and inspect card stay light for contrast against 3D scene */
 .walkOverlay {
   position: absolute;
-  left: 16px;
+  left: calc(16px + var(--pane-inset-left, 0px));
   top: 16px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-width: min(320px, calc(100% - 32px));
+  max-width: min(320px, calc(100% - 32px - var(--pane-inset-left, 0px) - var(--pane-inset-right, 0px)));
   padding: 12px 14px;
   border: 1px solid rgba(45, 78, 109, 0.18);
   border-radius: var(--radius-md);
@@ -281,12 +296,12 @@
 .inspectCard {
   position: absolute;
   top: 16px;
-  right: 16px;
+  right: calc(16px + var(--pane-inset-right, 0px));
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-width: 220px;
-  max-width: min(280px, calc(100% - 32px));
+  max-width: min(280px, calc(100% - 32px - var(--pane-inset-left, 0px) - var(--pane-inset-right, 0px)));
   padding: 12px 14px;
   border: 1px solid rgba(15, 143, 116, 0.18);
   border-radius: var(--radius-md);
@@ -398,5 +413,35 @@
 
   .floorSelect {
     max-width: 100%;
+  }
+}
+
+/* "Refining…" over the picture's corner while a realistic image keeps improving. */
+.refining {
+  position: absolute;
+  left: calc(12px + var(--pane-inset-left, 0px));
+  bottom: 12px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-glass);
+  backdrop-filter: blur(6px);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  pointer-events: none;
+  animation: refiningIn var(--duration-smooth) var(--ease-out) both;
+}
+
+@keyframes refiningIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }

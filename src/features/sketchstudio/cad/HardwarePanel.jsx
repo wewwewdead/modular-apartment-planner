@@ -1,23 +1,29 @@
 import { useRef, useState } from 'react';
 import {
+  BODIES,
   DRIVES,
   HARDWARE_GROUPS,
   HARDWARE_TYPES,
   HEAD_STYLES,
   POINTS,
+  RIVET_KINDS,
   SCREW_KINDS,
+  STATES,
   catalogOf,
   drivesFor,
   hardwareDefaults,
   hardwareDimensions,
   hardwareFieldLabels,
+  hardwareMaterial,
   headsFor,
   pointsFor,
   resolveHardware,
   sizesFor,
+  withBody,
   withDrive,
   withHead,
   withPoint,
+  withState,
 } from './hardware.js';
 import { ValueField } from './CadEditors.jsx';
 import MaterialSelect from './MaterialSelect.jsx';
@@ -42,29 +48,50 @@ function Choice({ label, value, options, names, onChange }) {
 // The sizes of the library, the tree editor and Place. Screws (Phase N,
 // docs/sketch-studio-screw-library.md §7) add Head style / Drive / Point
 // selects where their standard offers a choice; a head, drive or point change
-// re-derives the dependent sizes from the standard.
+// re-derives the dependent sizes from the standard. Rivets (Phase O,
+// docs/sketch-studio-rivet-library.md §7) add a State select (installed / as
+// supplied) and, for the rivet nut and stud, a Body select.
 export function HardwareFields({ feature, onChange }) {
   const update = (key, value) => onChange({ ...feature, [key]: value });
   const screw = SCREW_KINDS[feature.kind] ? resolveHardware(feature) : null;
+  const rivet = RIVET_KINDS[feature.kind] ? resolveHardware(feature) : null;
   const heads = headsFor(feature.kind);
   const drives = screw ? drivesFor(feature.kind, screw.head) : [];
   // A saved drive 'none' on a recessed kind stays selectable.
   const driveOptions = screw?.drive === 'none' && !drives.includes('none') ? [...drives, 'none'] : drives;
   const points = pointsFor(feature.kind);
-  const shown = screw || feature;
+  const shown = screw || rivet || feature;
   return (
     <div className="cad-form">
       <p className="cad-help">
-        Generic editable envelope. Enter supplier dimensions for purchased hardware. Threads, knurls, drill flutes and
-        clinching deformation are not modeled; drive recesses are schematic.
+        Generic editable envelope. Enter supplier dimensions for purchased hardware. Threads, knurls, drill flutes,
+        rivet grooves and clinching deformation are not modeled; drive recesses and blind-side upsets are schematic.
       </p>
       {heads.length > 1 && (
         <Choice
           label="Head style"
-          value={screw.head}
+          value={shown.head}
           options={heads}
           names={HEAD_STYLES}
           onChange={(head) => onChange(withHead(feature, head))}
+        />
+      )}
+      {rivet && (
+        <Choice
+          label="State"
+          value={rivet.state}
+          options={Object.keys(STATES)}
+          names={STATES}
+          onChange={(state) => onChange(withState(feature, state))}
+        />
+      )}
+      {rivet?.body && (
+        <Choice
+          label="Body"
+          value={rivet.body}
+          options={Object.keys(BODIES)}
+          names={BODIES}
+          onChange={(body) => onChange(withBody(feature, body))}
         />
       )}
       {driveOptions.length > 1 && (
@@ -116,16 +143,23 @@ export default function HardwarePanel({ onAdd, canAttach, attachRow = false, rea
     const sizes = sizesFor(kind);
     const remembered = lastSizes.current[catalogOf(kind)];
     const size = sizes.includes(feature.size) ? feature.size : sizes.includes(remembered) ? remembered : undefined;
-    setFeature({ ...hardwareDefaults(kind, size), material: feature.material });
+    const next = hardwareDefaults(kind, size);
+    // The new kind's default material (a pop rivet is aluminium), unless one
+    // other than the old kind's default was chosen.
+    const material = feature.material === hardwareMaterial(feature.kind) ? next.material : feature.material;
+    setFeature({ ...next, material });
   };
-  // A new size keeps the chosen head, drive and point.
+  // A new size keeps the chosen head, drive and point (rivets: head, state
+  // and body).
   const changeSize = (size) => {
     lastSizes.current[catalogOf(feature.kind)] = size;
     let next = hardwareDefaults(feature.kind, size);
-    if (SCREW_KINDS[feature.kind]) {
+    if (SCREW_KINDS[feature.kind] || RIVET_KINDS[feature.kind]) {
       if (feature.head && feature.head !== next.head) next = withHead(next, feature.head);
       if (feature.drive && feature.drive !== next.drive) next = withDrive(next, feature.drive);
       if (feature.point && feature.point !== next.point) next = withPoint(next, feature.point);
+      if (feature.state && feature.state !== next.state) next = withState(next, feature.state);
+      if (feature.body && feature.body !== next.body) next = withBody(next, feature.body);
     }
     setFeature({ ...next, material: feature.material });
   };

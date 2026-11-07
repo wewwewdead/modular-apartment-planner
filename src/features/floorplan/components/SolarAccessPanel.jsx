@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { SunIcon } from '@/ui/ToolbarIcons';
 import { siteSupportsSunStudy } from '@/analysis/sunStudyState';
+import { LOADING_COPY, LoadingPill, solarTracing } from '@/ui/loading';
 import styles from './SolarAccessPanel.module.css';
 
 const PERIODS = [
@@ -127,11 +128,16 @@ export default function SolarAccessPanel({
           )}
 
           <div className={styles.status} data-status={status}>
+            {/* Answers the press at once with the tracer's own counts; a superseded
+                run stays on the plan, dimmed, until this one lands. */}
             {status === 'running' && (
-              <span>
-                {progress ? `Tracing ${progress.done} of ${progress.total} sensors` : 'Building the model…'}
-                {stale ? ' · showing the previous run' : ''}
-              </span>
+              <LoadingPill
+                placement="inline"
+                delayMs={0}
+                label={progress ? solarTracing(progress.done, progress.total) : LOADING_COPY.analysisBuildingModel}
+                detail={stale ? LOADING_COPY.recomputingRun : null}
+                showDetail={stale}
+              />
             )}
             {status === 'ready' && study && (
               <span>

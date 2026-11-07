@@ -29,6 +29,15 @@ const DEG = Math.PI / 180;
 const DEFAULT_MIN_ALTITUDE_DEG = 1;
 
 /**
+ * A moment resolving to more regions than this is treated as a union that fell
+ * back, and is merged piece by piece before it joins the day envelope. A
+ * handful of masses casts a handful of shadows at most; thousands of regions
+ * are unmerged pieces, and an unmerged set fed into a further union is what
+ * once sent polygon-clipping into an 8 s loop (docs/all-day-shadow-freeze.md).
+ */
+const MOMENT_FALLBACK_REGION_LIMIT = 8;
+
+/**
  * Horizontal displacement from a point at `height` to the ground point its
  * shadow lands on.
  *
@@ -116,33 +125,45 @@ export function massShadowPieces(mass, { altitude, azimuth, northAngle = 0 }) {
  * @param {object} [options]
  * @param {number} [options.northAngle]
  * @param {number} [options.minAltitudeDeg]
+ * @param {object} [options.stats]  Filled by `unionRegions` (`merged`, `appended`, `strategy`).
  * @returns {Array<{outline: Array, holes: Array}>} Empty when the sun is down.
  */
 export function castShadows(masses = [], sun, options = {}) {
-  const { northAngle = 0, minAltitudeDeg = DEFAULT_MIN_ALTITUDE_DEG } = options;
-  if (!sun || !(sun.altitude > minAltitudeDeg * DEG)) return [];
+  const { northAngle = 0, minAltitudeDeg = DEFAULT_MIN_ALTITUDE_DEG, stats = null } = options;
+  if (!sun || !(sun.altitude > minAltitudeDeg * DEG)) {
+    if (stats) Object.assign(stats, { merged: 0, appended: 0, strategy: 'single' });
+    return [];
+  }
 
   const pieces = [];
   for (const mass of masses) {
     pieces.push(...massShadowPieces(mass, { altitude: sun.altitude, azimuth: sun.azimuth, northAngle }));
   }
 
-  return unionRegions(pieces);
+  return unionRegions(pieces, { stats });
 }
 
 /**
  * Ground ever touched by shadow across a series of sun positions — the
  * "shadow range" diagram planning authorities ask for.
  *
- * Unioning every time step at once is far cheaper than unioning them
- * pairwise, because polygon-clipping sweeps all the input rings together.
+ * Each moment is resolved to its own shadow first, then the moments are merged
+ * one at a time, in chronological order. The one-call union of a day's moments
+ * throws on real projects (consecutive moments share the footprint's edges
+ * exactly), and its old fallback returned every piece unmerged: 8,408
+ * overlapping regions, a 22x area and a frozen slider on the bench fixture
+ * (docs/all-day-shadow-freeze.md). Incremental, each step is a union of two
+ * simple polygons — milliseconds, and it does not throw.
  *
  * @param {Array} masses
  * @param {Array} sunSamples  From `sampleDaySunPositions`.
  * @param {object} [options]
+ * @param {object} [options.stats]  Filled with the day union's `unionRegions`
+ *   stats plus `moments` (moments merged) and `momentFallbacks` (moments whose
+ *   own union left pieces unmerged or came back as too many regions).
  */
 export function shadowRangeEnvelope(masses = [], sunSamples = [], options = {}) {
-  const { northAngle = 0, minAltitudeDeg = DEFAULT_MIN_ALTITUDE_DEG } = options;
+  const { northAngle = 0, minAltitudeDeg = DEFAULT_MIN_ALTITUDE_DEG, stats = null } = options;
 
   // Collapse each time step to its own shadow first, then merge those.
   //
@@ -152,16 +173,29 @@ export function shadowRangeEnvelope(masses = [], sunSamples = [], options = {}) 
   // Resolving a step to one polygon first turns a union of thousands of
   // overlapping quads into a union of a few dozen simple outlines.
   const perSample = [];
+  let moments = 0;
+  let momentFallbacks = 0;
   for (const sample of sunSamples) {
     if (!(sample.altitude > minAltitudeDeg * DEG)) continue;
 
-    perSample.push(...castShadows(masses, sample, { northAngle, minAltitudeDeg }));
+    const momentStats = {};
+    let moment = castShadows(masses, sample, { northAngle, minAltitudeDeg, stats: momentStats });
+    // The cheap guard: a moment that fell back is merged piece by piece before
+    // it joins the day, never handed to a further union as an unmerged set.
+    if (momentStats.appended > 0 || moment.length > MOMENT_FALLBACK_REGION_LIMIT) {
+      momentFallbacks += 1;
+      moment = unionRegions(moment, { strategy: 'incremental' });
+    }
+    moments += 1;
+    perSample.push(...moment);
   }
 
   // Keep per-moment holes through the final union. Polygon union will retain a
   // hole only when it remains unshaded at every sampled moment — precisely the
   // definition of ground outside the shadow-range envelope.
-  return unionRegions(perSample);
+  const envelope = unionRegions(perSample, { strategy: 'incremental', stats });
+  if (stats) Object.assign(stats, { moments, momentFallbacks });
+  return envelope;
 }
 
 /**
@@ -442,8 +476,10 @@ export function shadowCoverageOfPlot(regions = [], plot = []) {
   // through, so they come back off again.
   const shaded = regions.reduce((total, region) => {
     // Disjoint regions, so their overlaps with the plot simply add up.
-    const outer = intersectionArea(region.outline, plot);
-    const holes = (region.holes || []).reduce((sum, hole) => sum + intersectionArea(hole, plot), 0);
+    // Snapped like the union that made the regions, so the plot's edges and the
+    // shadow's coincident ones cannot throw the sweep line (a throw reads as 0).
+    const outer = intersectionArea(region.outline, plot, { snap: true });
+    const holes = (region.holes || []).reduce((sum, hole) => sum + intersectionArea(hole, plot, { snap: true }), 0);
     return total + Math.max(0, outer - holes);
   }, 0);
 

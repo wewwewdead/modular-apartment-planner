@@ -439,3 +439,64 @@ describe('resolveRow', () => {
     expect(one).toMatchObject({ count: 1, centres: [[20, 40, 10]] });
   });
 });
+
+// Phase P (docs/sketch-studio-angle-bar.md §2.10): on an angle, rear and
+// right are the inside faces of the legs, one thickness in from the heel.
+describe('member-placed cuts on an angle', () => {
+  const angle = (section = {}) => ({
+    id: 'angle',
+    type: 'member',
+    start: [0, 0, 0],
+    end: [0, 0, 700],
+    section: { type: 'angle', width: 50, height: 40, wall: 5, rootRadius: 7, toeRadius: 3.5, ...section },
+  });
+  // Angle part bounds: heel at (−25, −20), legs to x = 25 and y = 20.
+  const BOUNDS = [
+    [-25, -20, 0],
+    [25, 20, 700],
+  ];
+  const hole = (side, offset = 0, extra = {}) => ({
+    type: 'hole',
+    diameter: 6,
+    throughAll: true,
+    placement: { type: 'member', featureId: 'angle', side, along: 50, offset },
+    ...extra,
+  });
+  const resolve = (feature, member = angle()) => resolveCutPlacement(feature, [member], BOUNDS);
+  it('puts front / left on the outsides of the legs and rear / right on their insides', () => {
+    expect(resolve(hole('front', 10))).toMatchObject({ position: [10, -20, 350], direction: [0, 1, 0] });
+    expect(resolve(hole('rear', 10))).toMatchObject({ position: [-10, -15, 350], direction: [0, -1, 0] });
+    expect(resolve(hole('left', 10))).toMatchObject({ position: [-25, -10, 350], direction: [1, 0, 0] });
+    expect(resolve(hole('right', 10))).toMatchObject({ position: [-20, 10, 350], direction: [-1, 0, 0] });
+    // Through all from an inside face reaches just through its own leg.
+    expect(resolve(hole('rear')).depth).toBeCloseTo(5.01, 9);
+    expect(resolve(hole('right')).depth).toBeCloseTo(5.01, 9);
+    // Width directions are the side's, as for every flat member.
+    expect(resolve(hole('rear')).widthDirection).toEqual(CUT_SIDES.rear.width);
+    // Radius-free angles use the same faces.
+    expect(resolve(hole('right', 10), angle({ rootRadius: undefined, toeRadius: undefined }))).toMatchObject({
+      position: [-20, 10, 350],
+    });
+  });
+  it('rejects an offset that puts the centre off the leg, inclusive of the leg ends', () => {
+    const off = 'Cut offset must land on the angle leg.';
+    // Leg A: x ∈ [−25, 25] outside, [−20, 25] inside (rear x = −offset).
+    expect(resolve(hole('front', 25)).position[0]).toBe(25);
+    expect(resolve(hole('front', -25)).position[0]).toBe(-25);
+    expect(() => resolve(hole('front', 25.5))).toThrow(off);
+    expect(resolve(hole('rear', 20)).position[0]).toBe(-20);
+    expect(() => resolve(hole('rear', 21))).toThrow(off);
+    expect(() => resolve(hole('rear', -26))).toThrow(off);
+    // Leg B: y ∈ [−20, 20] outside (left y = −offset), [−15, 20] inside.
+    expect(() => resolve(hole('left', -21))).toThrow(off);
+    expect(resolve(hole('left', 20)).position[1]).toBe(-20);
+    expect(() => resolve(hole('right', -16))).toThrow(off);
+    expect(resolve(hole('right', -15)).position[1]).toBe(-15);
+  });
+  it('leaves a tube with the same width and height on its bounding faces', () => {
+    const tube = { ...angle(), section: { type: 'tube', width: 50, height: 40, wall: 5 } };
+    expect(resolve(hole('rear', 10), tube)).toMatchObject({ position: [-10, 20, 350], direction: [0, -1, 0] });
+    expect(resolve(hole('right', 10), tube)).toMatchObject({ position: [25, 10, 350], direction: [-1, 0, 0] });
+    expect(resolve(hole('rear', 40), tube).position[0]).toBe(-40);
+  });
+});

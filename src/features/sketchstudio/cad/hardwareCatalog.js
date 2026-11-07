@@ -222,3 +222,104 @@ export const TORX_A_BY_DIAMETER = [
   [6, 5.52],
   [6.3, 5.52],
 ];
+
+// ---------------------------------------------------------------- Phase O
+// The rivet library (docs/sketch-studio-rivet-library.md §3, §5): the six
+// pitch-less size catalogs (the key is the body Ø) and the per-size tables.
+// Key order is kept by the lists: integer-like object keys ('2', '10') would
+// otherwise be enumerated before '2.5'.
+const sized = (keys) => Object.fromEntries(keys.map((key) => [key, { diameter: Number(key) }]));
+export const RIVET_SIZE_LISTS = {
+  blind: ['2.4', '3.0', '3.2', '4.0', '4.8', '5.0', '6.0', '6.4'],
+  solid: ['1', '1.2', '1.6', '2', '2.5', '3', '3.5', '4', '5', '6', '8', '10', '12', '16'],
+  tube: ['2', '2.5', '3', '4', '5', '6', '8', '10'],
+  structural: ['4.8', '6.4', '8.0', '9.5', '12.7'],
+  spr: ['3.3', '5.3'],
+  push: ['5', '6', '6.3', '8', '10'],
+};
+export const BLIND_SIZES = sized(RIVET_SIZE_LISTS.blind);
+export const SOLID_SIZES = sized(RIVET_SIZE_LISTS.solid);
+export const TUBE_SIZES = sized(RIVET_SIZE_LISTS.tube);
+export const STRUCTURAL_SIZES = sized(RIVET_SIZE_LISTS.structural);
+export const SPR_SIZES = sized(RIVET_SIZE_LISTS.spr);
+export const PUSH_SIZES = sized(RIVET_SIZE_LISTS.push);
+
+const BLIND_FOUR = ['3.2', '4.0', '4.8', '6.4'];
+const M_NUT = ['M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12'];
+export const RIVET_TABLES = {
+  // 1 ISO 15977 protruding (dome) head, ISO 15978 / DIN 7337 B 120°
+  // countersunk, large flange (manufacturer); mandrel d1; default length and
+  // the mid of its ISO 15977 grip range; mandrel protrusion as supplied.
+  'blind-open': table(RIVET_SIZE_LISTS.blind, {
+    domeDk: [4.8, 6, 6.5, 8, 9.5, 9.5, 12, 13],
+    domeK: [0.8, 1, 1, 1.3, 1.5, 1.6, 2, 2.2],
+    cskDk: [4.8, 6, 6, 7.5, 9, 9, 11, 12],
+    cskK: [0.55, 0.9, 0.9, 1, 1.2, 1.2, 1.5, 1.6],
+    lfDk: [7, 9, 9.5, 12, 16, 16, 18, 19],
+    lfK: [1, 1.1, 1.2, 1.5, 1.9, 1.9, 2.3, 2.5],
+    dm: [1.55, 2, 2, 2.45, 2.95, 2.95, 3.5, 3.9],
+    l: [6, 8, 8, 10, 10, 10, 12, 12],
+    g: [2, 4, 4, 5, 5, 5, 4.5, 4.5],
+    ml: [27, 27, 27, 27, 27, 27, 30, 30],
+  }),
+  // 2 ISO 15973–15976 closed end: the heads and mandrel of blind-open.
+  'blind-closed': table(BLIND_FOUR, { l: [8, 9.5, 11, 14], g: [2.5, 4, 4.5, 6] }),
+  // 3–4 manufacturer-typical lengths and grips.
+  'blind-multigrip': table(BLIND_FOUR, { l: [9.5, 11, 13, 16], g: [4, 4.5, 5, 7] }),
+  'blind-peel': table(BLIND_FOUR, { l: [9, 12, 15, 18], g: [2, 3, 4, 5] }),
+  // 5 Monobolt / Magna-Lok style lengths and grips.
+  'blind-structural': table(['4.8', '6.4', '9.5', '12.7'], { l: [11, 14.5, 20, 26], g: [4, 5, 8, 10] }),
+  // 6 drive / pin rivet tables.
+  'blind-drive': table(BLIND_FOUR, { l: [6, 8, 10, 12], g: [2.5, 3, 4, 4.5] }),
+  // 7 DIN 660 round, DIN 661 / 302 countersunk 90°, DIN 662 oval (raised
+  // countersunk, dome w), DIN 674 flat round (pan); 10–16 from DIN 124 / 302
+  // and IS 1929 (approximate); rule values where the DIN table has no row.
+  solid: table(RIVET_SIZE_LISTS.solid, {
+    roundDk: [1.8, 2.1, 2.8, 3.5, 4.4, 5.2, 6.2, 7, 8.8, 10.5, 14, 16, 19, 25],
+    roundK: [0.6, 0.7, 1, 1.2, 1.5, 1.8, 2.1, 2.4, 3, 3.6, 4.8, 7, 8.4, 11],
+    cskDk: [1.8, 2.1, 2.8, 3.5, 4.4, 5.2, 6.2, 7, 8.8, 10.5, 14, 16, 19, 25],
+    cskK: [0.4, 0.45, 0.6, 0.75, 0.95, 1.1, 1.35, 1.5, 1.9, 2.25, 3, 3, 3.5, 4.5],
+    ovalDk: [2, 2.4, 3.2, 4, 5, 6, 7, 8, 10, 12, 16, 20, 24, 32],
+    ovalK: [0.5, 0.6, 0.8, 1, 1.2, 1.5, 1.8, 2.1, 2.5, 3, 4, 5, 6, 8],
+    ovalW: [0.33, 0.4, 0.53, 0.67, 0.8, 1, 1.17, 1.4, 1.7, 2, 2.67, 3.33, 4, 5.33],
+    panDk: [2.25, 2.7, 3.6, 4.5, 5.6, 6.8, 7.8, 9, 11.2, 13.5, 18, 22.5, 27, 36],
+    panK: [0.5, 0.6, 0.8, 1, 1.3, 1.5, 1.8, 2, 2.5, 3, 4, 5, 6, 8],
+  }),
+  // 8 DIN 7338 flat head, tube bore d4 and depth t, default length.
+  'semi-tubular': table(['3', '4', '5', '6', '8', '10'], {
+    flatDk: [5.5, 7.5, 9.5, 11.5, 15.5, 18],
+    flatK: [0.8, 1, 1, 1.2, 1.2, 1.4],
+    bore: [1.7, 2.7, 3.5, 4.2, 6, 7.5],
+    boreDepth: [3.5, 4, 4, 6, 8, 10],
+    l: [6, 8, 10, 12, 16, 20],
+  }),
+  // 9 DIN 7340 default lengths.
+  tubular: table(RIVET_SIZE_LISTS.tube, { l: [5, 6, 8, 10, 12, 15, 20, 25] }),
+  // 11 Henrob / Böllhoff countersunk SPR heads and lengths.
+  'self-piercing': table(RIVET_SIZE_LISTS.spr, { cskDk: [5.5, 7.75], cskK: [0.7, 1.05], l: [5, 6] }),
+  // 12 PEM / Böllhoff blind rivet nuts (±1 mm between manufacturers).
+  'blind-rivet-nut': table(M_NUT, {
+    body: [5, 6, 7, 9, 11, 13, 16],
+    flatDk: [7, 9, 10, 13, 16, 17, 20],
+    flatK: [0.8, 1, 1, 1.5, 1.5, 1.5, 2],
+    reducedDk: [6, 7, 8, 10, 12, 14, 17],
+    reducedK: [0.5, 0.6, 0.6, 0.8, 1, 1, 1.2],
+    cskDk: [6.5, 9, 10, 12, 14.5, 17, 20],
+    cskK: [0.75, 1.5, 1.5, 1.5, 1.75, 2, 2],
+    l: [9, 11, 12.5, 14.5, 17, 20, 24],
+    g: [1, 1.5, 1.5, 2, 2.5, 3, 3.5],
+  }),
+  // 13 blind rivet studs.
+  'blind-rivet-stud': table(['M4', 'M5', 'M6', 'M8'], {
+    body: [6, 7, 9, 11],
+    flatDk: [9, 10, 13, 16],
+    flatK: [1, 1, 1.5, 1.5],
+    reducedDk: [7, 8, 10, 12],
+    reducedK: [0.6, 0.6, 0.8, 1],
+    l: [8, 9, 11, 13],
+    t: [10, 12, 16, 20],
+    g: [1.5, 1.5, 2, 2.5],
+  }),
+  // 14 Huck C6L / Magna-Grip default grips.
+  lockbolt: table(RIVET_SIZE_LISTS.structural, { g: [4, 6, 8, 10, 12] }),
+};

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useConfirmDialog } from '@/ui/ConfirmDialog';
+import { LOADING_COPY, LoadingBar, LoadingPill, PanePlaceholder, readingFile } from '@/ui/loading';
 import DraftingCanvas from './DraftingCanvas';
 import LeftToolbar from './LeftToolbar';
 import RightPanel from './RightPanel';
@@ -150,6 +151,16 @@ export default function SketchStudioLayout(props) {
     await importSketchFile(file);
   };
 
+  // A sketch file being read: the bar answers at once, the pill names the file
+  // from 300 ms. Errors already surface as the toast below.
+  const readingName = documentPersistence?.reading || null;
+  const fileReading = (
+    <>
+      <LoadingBar active={Boolean(readingName)} placement="viewport" />
+      {readingName ? <LoadingPill label={readingFile(readingName)} placement="viewport" tone="dark" /> : null}
+    </>
+  );
+
   if (ui.workspaceMode === 'model')
     return (
       <main className="sketchStudioPage">
@@ -160,7 +171,13 @@ export default function SketchStudioLayout(props) {
           onChange={handleImportSketchChange}
           style={{ display: 'none' }}
         />
-        <Suspense fallback={<p style={{ padding: 24 }}>Loading solid modeling workspace…</p>}>
+        {fileReading}
+        <Suspense
+          fallback={
+            // Paper, not dark: the workshop that arrives is the light CAD workspace.
+            <PanePlaceholder tone="paper" label={LOADING_COPY.workshopChunk} data-workshop-fallback="" />
+          }
+        >
           <CadWorkspace
             {...props}
             openSketch={handleOpenSketch}
@@ -184,6 +201,7 @@ export default function SketchStudioLayout(props) {
         onChange={handleImportSketchChange}
         style={{ display: 'none' }}
       />
+      {fileReading}
       <section className={`sketchStudioShell${ui.craftsmanMode ? ' has-craftsman' : ''}`}>
         <TopBar
           document={document}

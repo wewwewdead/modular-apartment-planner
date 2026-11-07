@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { buildFloorObjectGroup, buildSelectionOverlay, readAssemblyPart } from './buildPreviewObjects';
-import { SOURCE_ONLY_LAYER } from './previewBatching';
+import { buildFloorObjectGroup, buildSelectionOverlay, ensureOutlines, readAssemblyPart } from './buildPreviewObjects';
+import { SOURCE_ONLY_LAYER, remergeFloorOutlines } from './previewBatching';
+import { VIEW_MODES, applyViewModeToWorld } from './viewMode';
 import { createCollisionIndex } from './previewCollisionIndex';
 import { createPreviewSceneCache } from './previewSceneCache';
 import { createMaterialPalette } from './materials';
@@ -776,5 +777,129 @@ describe('preview batching — the screw that had its turn baked in', () => {
 
   it('folds into the batch it used to be excluded from', () => {
     expect(isFolded(wallFastener(0.4).mesh)).toBe(true);
+  });
+});
+
+describe('preview batching — under a see-through mode', () => {
+  const instancedIn = (batchRoot) => {
+    const batches = [];
+    batchRoot.traverse((node) => {
+      if (node.isInstancedMesh) batches.push(node);
+    });
+    return batches;
+  };
+  const moveFirstWall = (project, dx) => ({
+    ...project,
+    floors: project.floors.map((floor, index) =>
+      index === 0
+        ? {
+            ...floor,
+            walls: floor.walls.map((wall, wallIndex) =>
+              wallIndex === 0 ? { ...wall, start: { ...wall.start, x: wall.start.x + dx } } : wall,
+            ),
+          }
+        : floor,
+    ),
+  });
+
+  it('buckets by the built material, so a rebuild in X-ray draws exactly the batches Solid does', () => {
+    const { project } = deserializeProject(demoData);
+    const moved = moveFirstWall(project, 400);
+
+    // Solid, for the reference count.
+    const solidPalette = createMaterialPalette();
+    const solidCache = createPreviewSceneCache();
+    solidCache.build(buildPreviewScene(project, {}), solidPalette);
+    const solid = instancedIn(solidCache.build(buildPreviewScene(moved, {}), solidPalette).batchRoot);
+
+    // X-ray: ghosted, then a floor rebuilt with ghosted meshes carried over.
+    const palette = createMaterialPalette();
+    const cache = createPreviewSceneCache();
+    const first = cache.build(buildPreviewScene(project, {}), palette);
+    applyViewModeToWorld(first.root, first.batchRoot, palette, VIEW_MODES.XRAY);
+    const second = cache.build(buildPreviewScene(moved, {}), palette);
+    applyViewModeToWorld(second.root, second.batchRoot, palette, VIEW_MODES.XRAY);
+    const xray = instancedIn(second.batchRoot);
+
+    expect(xray.length).toBe(solid.length);
+    expect(xray.map((batch) => batch.count)).toEqual(solid.map((batch) => batch.count));
+    expect(xray.map((batch) => batch.userData.baseMaterial.userData.paletteKey)).toEqual(
+      solid.map((batch) => batch.material.userData.paletteKey),
+    );
+    // And the ghosts are really on: walls drawn by a twin that casts nothing.
+    const wallBatches = xray.filter((batch) => batch.userData.baseMaterial === palette.wall);
+    expect(wallBatches.length).toBeGreaterThan(0);
+    for (const batch of wallBatches) {
+      expect(batch.material.userData.ghostTwin).toBe(true);
+      expect(batch.castShadow).toBe(false);
+      expect(batch.userData.castShadowBuilt).toBe(true);
+    }
+    solidCache.dispose();
+    cache.dispose();
+  });
+
+  it('refills the batch it already has when a wall is dragged in X-ray', () => {
+    const palette = createMaterialPalette();
+    const cache = createPreviewSceneCache();
+    const { project } = deserializeProject(demoData);
+
+    const first = cache.build(buildPreviewScene(project, {}), palette);
+    applyViewModeToWorld(first.root, first.batchRoot, palette, VIEW_MODES.XRAY);
+    const groupsBefore = first.batchRoot.children.slice();
+    const materialsBefore = groupsBefore.map((group) => group.children.map((child) => child.material));
+    const disposed = [];
+    groupsBefore.forEach((group) =>
+      group.children.forEach((child) => child.addEventListener?.('dispose', () => disposed.push(child))),
+    );
+
+    let previous = project;
+    for (const dx of [200, 400, 600]) {
+      previous = moveFirstWall(previous, dx);
+      const next = cache.build(buildPreviewScene(previous, {}), palette);
+      applyViewModeToWorld(next.root, next.batchRoot, palette, VIEW_MODES.XRAY);
+      // The refill path: the same groups, nothing allocated, nothing freed.
+      expect(next.batchRoot.children).toEqual(groupsBefore);
+    }
+    expect(disposed).toEqual([]);
+    expect(groupsBefore.map((group) => group.children.map((child) => child.material))).toEqual(materialsBefore);
+    cache.dispose();
+  });
+
+  it('folds lazily cut outlines into one merged line per floor, and still refills after', () => {
+    const palette = createMaterialPalette();
+    palette.outlinesEnabled = false; // the Realistic style
+    const cache = createPreviewSceneCache();
+    const { project } = deserializeProject(demoData);
+    const { root, batchRoot } = cache.build(buildPreviewScene(project, {}), palette);
+    expect(batchRoot.children.every((group) => !group.children.some((child) => child.isLineSegments))).toBe(true);
+
+    // A see-through mode turns outlines on: cut, then merge.
+    palette.outlinesEnabled = true;
+    expect(ensureOutlines(root, palette)).toBe(true);
+    expect(remergeFloorOutlines(root, batchRoot, palette)).toBe(true);
+
+    for (const floorGroup of root.children) {
+      const batchGroup = batchRoot.children.find((group) => group.name === `${floorGroup.name}-batches`);
+      if (!batchGroup) continue;
+      const lines = [];
+      floorGroup.traverse((node) => {
+        if (node.isLineSegments) lines.push(node);
+      });
+      if (!lines.length) continue;
+      const merged = batchGroup.children.filter((child) => child.isLineSegments);
+      expect(merged).toHaveLength(1);
+      expect(batchGroup.children[batchGroup.children.length - 1]).toBe(merged[0]);
+      const vertices = lines.reduce((total, line) => total + line.geometry.attributes.position.count, 0);
+      expect(merged[0].geometry.attributes.position.count).toBe(vertices);
+      // None of them draws on its own any more.
+      expect(lines.every((line) => isFolded(line))).toBe(true);
+    }
+    // Nothing left to do the second time.
+    expect(remergeFloorOutlines(root, batchRoot, palette)).toBe(false);
+
+    const groupsBefore = batchRoot.children.slice();
+    const next = cache.build(buildPreviewScene(moveFirstWall(project, 300), {}), palette);
+    expect(next.batchRoot.children).toEqual(groupsBefore);
+    cache.dispose();
   });
 });

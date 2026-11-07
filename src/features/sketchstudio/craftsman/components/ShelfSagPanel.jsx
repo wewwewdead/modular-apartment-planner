@@ -10,6 +10,7 @@ import {
   estimateShelfSag,
 } from '../physics/shelfSag';
 import { resolveMaterialPhysics } from '../physics/woodProperties';
+import NumericInput from '../../components/NumericInput';
 import styles from '../styles/craftsman.module.css';
 
 const LOAD_TYPE_OPTIONS = [
@@ -92,14 +93,13 @@ export default function ShelfSagPanel({ entity }) {
       <label className={styles.fieldLabel} htmlFor="shelf-sag-span">
         Span between supports (mm)
       </label>
-      <input
+      <NumericInput
         id="shelf-sag-span"
-        type="number"
         min="1"
         step="1"
         className={styles.thicknessInput}
         value={effectiveSpan}
-        onChange={(event) => setSpanMm(Number(event.target.value) || defaults.spanMm)}
+        onCommit={(v) => setSpanMm(v > 0 ? v : defaults.spanMm)}
       />
       <p className={styles.fieldHint}>
         {formatMm(defaults.widthMm)} deep x {formatMm(defaults.thicknessMm)} thick, from the drawn part.
@@ -108,14 +108,13 @@ export default function ShelfSagPanel({ entity }) {
       <label className={styles.fieldLabel} htmlFor="shelf-sag-load">
         Load (kg per metre)
       </label>
-      <input
+      <NumericInput
         id="shelf-sag-load"
-        type="number"
         min="0"
         step="1"
         className={styles.thicknessInput}
         value={loadKgPerM}
-        onChange={(event) => setLoadKgPerM(Number(event.target.value) || 0)}
+        onCommit={(v) => setLoadKgPerM(Math.max(0, v))}
       />
       <p className={styles.fieldHint}>{DEFAULT_BOOK_LOAD_KG_PER_M} kg/m is a densely packed run of hardcover books.</p>
 

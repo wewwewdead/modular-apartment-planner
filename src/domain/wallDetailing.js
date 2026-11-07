@@ -914,7 +914,9 @@ export function deriveAutomaticWallFraming(wall, floor) {
  * though detailing has not been switched on for documentation. The layout comes
  * entirely from `assembly.framing`, which every framed wall has; the detailing
  * flag governs drawing and takeoff, not whether the studs exist. The 3D preview
- * uses it to show the frame behind a wall whose boards are hidden.
+ * uses it to draw the frame of every framed wall, detailed or not, behind its
+ * boards — the way a ceiling's furring is always built — so X-ray and Wireframe
+ * have real studs to show (docs/preview-xray-mode.md §13).
  */
 export function deriveWallFramingMembers(wall, floor, { includeWhenDisabled = false } = {}) {
   const detailing = resolveWallDetailing(wall);

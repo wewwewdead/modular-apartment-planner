@@ -22,6 +22,10 @@ export function emptyModel() {
     connections: [],
     // Measure marks (see marks.js): display and snapping only; the kernel ignores them.
     marks: [],
+    // Part groups (groups.js, docs/sketch-studio-part-groups.md): { id, name,
+    // parentId } records; an instance names its group in `groupId`. An editing
+    // aid only: the kernel, drawings and cut list never read either key.
+    groups: [],
     sheets: [
       {
         id: 'assembly-sheet',
@@ -56,7 +60,7 @@ export function normalizeModel(value) {
     throw new Error('Unsupported solid-model schema.');
   const defaults = emptyModel();
   const result = { ...defaults, ...value, fabrication: { ...DEFAULT_FABRICATION, ...value.fabrication } };
-  for (const key of ['parameters', 'sketches', 'parts', 'instances', 'connections', 'sheets', 'marks']) {
+  for (const key of ['parameters', 'sketches', 'parts', 'instances', 'connections', 'sheets', 'marks', 'groups']) {
     if (!Array.isArray(result[key])) throw new Error(`Model ${key} must be a list.`);
     const ids = new Set();
     for (const item of result[key]) {
@@ -87,6 +91,7 @@ export function normalizeModel(value) {
     )
       throw new Error(`Invalid assembly instance: ${instance.id}`);
   }
+  validateGroups(result);
   // Marks on a part that no longer exists are not an error here: they are
   // simply not drawn.
   for (const mark of result.marks)
@@ -109,8 +114,110 @@ export function removeOrphanedConnections(model) {
   };
 }
 
-export function removeInstance(model, id) {
+// Groups (docs/sketch-studio-part-groups.md §3.1): a list of unique ids, a
+// string name, a parent that is null or another group, no parent cycles, and
+// instances that name an existing group or none. A group with fewer than two
+// children is not an error here: operations dissolve it (pruneGroups).
+function validateGroups(model) {
+  const groups = new Map(model.groups.map((group) => [group.id, group]));
+  for (const group of model.groups) {
+    if (typeof group.name !== 'string') throw new Error(`Invalid group: ${group.id}`);
+    if (group.parentId != null && !groups.has(group.parentId))
+      throw new Error(`Group ${group.id} names an unknown parent group: ${group.parentId}`);
+    const seen = new Set([group.id]);
+    for (let parent = group.parentId; parent != null; parent = groups.get(parent)?.parentId) {
+      if (seen.has(parent)) throw new Error(`Circular group nesting: ${group.id}`);
+      seen.add(parent);
+    }
+  }
+  for (const instance of model.instances)
+    if (instance.groupId != null && !groups.has(instance.groupId))
+      throw new Error(`Instance ${instance.id} names an unknown group: ${instance.groupId}`);
+}
+
+const withoutGroupId = (instance) => {
+  const { groupId: _groupId, ...rest } = instance;
+  return rest;
+};
+
+// Keeps the group invariant (§3.1): every group has at least two children
+// (instances plus child groups); a thinner one dissolves and its child moves
+// up to the group's parent, repeatedly, so a chain of one-child groups goes at
+// once. It also repairs what a hand-edited file can hold, so such a file opens
+// instead of being refused: an instance groupId naming no group is dropped, a
+// group whose parent is missing (or sits in a parent cycle) becomes top level.
+// Returns the same object when nothing changes. Runs on raw saves too (before
+// normalizeModel): a missing groups list counts as empty, anything that is not
+// a model (null, no instances list, a groups value that is not a list) is
+// returned untouched for normalizeModel to judge.
+export function pruneGroups(model) {
+  if (!model || typeof model !== 'object' || !Array.isArray(model.instances)) return model;
+  if (model.groups != null && !Array.isArray(model.groups)) return model;
+  const source = model.groups || [];
+  if (!source.length && !model.instances.some((i) => i && i.groupId != null)) return model;
+  let changed = false;
+  let groups = source.map((group) => ({ ...group }));
+  let instances = model.instances.map((instance) => ({ ...instance }));
+  const byId = () => new Map(groups.map((group) => [group?.id, group]));
+  // Repair: parents that are missing or cyclic, instances naming no group.
+  let ids = byId();
+  for (const group of groups) {
+    if (!group || group.parentId == null) continue;
+    let cyclic = false;
+    const seen = new Set([group.id]);
+    for (let parent = group.parentId; parent != null; parent = ids.get(parent)?.parentId) {
+      if (!ids.has(parent) || seen.has(parent)) {
+        cyclic = true;
+        break;
+      }
+      seen.add(parent);
+    }
+    if (cyclic) {
+      group.parentId = null;
+      changed = true;
+    }
+  }
+  instances = instances.map((instance) => {
+    if (!instance || instance.groupId == null || ids.has(instance.groupId)) return instance;
+    changed = true;
+    return withoutGroupId(instance);
+  });
+  // Dissolve groups with fewer than two children until none is left.
+  for (;;) {
+    const counts = new Map(groups.map((group) => [group?.id, 0]));
+    for (const instance of instances)
+      if (instance?.groupId != null) counts.set(instance.groupId, counts.get(instance.groupId) + 1);
+    for (const group of groups) if (group?.parentId != null) counts.set(group.parentId, counts.get(group.parentId) + 1);
+    const thin = groups.find((group) => group && counts.get(group.id) < 2);
+    if (!thin) break;
+    changed = true;
+    const parent = thin.parentId ?? null;
+    groups = groups
+      .filter((group) => group !== thin)
+      .map((group) => (group?.parentId === thin.id ? { ...group, parentId: parent } : group));
+    instances = instances.map((instance) => {
+      if (instance?.groupId !== thin.id) return instance;
+      return parent == null ? withoutGroupId(instance) : { ...instance, groupId: parent };
+    });
+    ids = byId();
+  }
+  if (!changed) return model;
+  // Keep untouched records as the same objects.
   return {
+    ...model,
+    groups: groups.map((group) => {
+      const old = source.find((g) => g?.id === group?.id);
+      return old && old.parentId === group.parentId ? old : group;
+    }),
+    instances: instances.map((instance, index) => {
+      const old = model.instances[index];
+      return old && old.groupId === instance?.groupId ? old : instance;
+    }),
+  };
+}
+
+export function removeInstance(model, id) {
+  return pruneGroups({
     ...model,
     instances: model.instances.filter((instance) => instance.id !== id),
     connections: model.connections.filter((connection) => connection.from !== id && connection.to !== id),
@@ -122,7 +229,7 @@ export function removeInstance(model, id) {
         ? { annotations: sheet.annotations.filter((annotation) => annotation.instanceId !== id) }
         : {}),
     })),
-  };
+  });
 }
 
 // Removes a part definition with every instance of it (Phase M.1,
@@ -251,6 +358,24 @@ export function resolveSection(section, parameters = {}) {
     if (s.type !== 'bar') s.wall = positive(section.wall, parameters, 'Wall thickness');
     if (s.wall * (s.type === 'tube' ? 2 : 1) >= Math.min(s.width, s.height))
       throw new Error('Wall thickness exceeds the section.');
+    // A hot-rolled angle's root and toe radii (Phase P): optional, absent ≡ 0.
+    // Only the keys the section has are copied, so an old radius-free angle
+    // resolves (and serialises in the cut list) exactly as before.
+    if (s.type === 'angle') {
+      for (const [key, label] of [
+        ['rootRadius', 'Root radius'],
+        ['toeRadius', 'Toe radius'],
+      ]) {
+        if (section[key] == null) continue;
+        s[key] = numeric(section[key], parameters, label);
+        if (s[key] < 0) throw new Error(`${label} cannot be negative.`);
+      }
+      const r1 = s.rootRadius || 0,
+        r2 = s.toeRadius || 0;
+      if (r2 >= s.wall) throw new Error('Toe radius must be less than the thickness.');
+      if (r1 + r2 >= Math.min(s.width, s.height) - s.wall)
+        throw new Error('Root and toe radii do not fit on the legs.');
+    }
   } else throw new Error(`Unknown section: ${s.type}`);
   return s;
 }
@@ -375,28 +500,33 @@ export function validateReferences(model) {
   return diagnostics;
 }
 
+// kind: 'board', 'member' (a square tube) or 'angle' (Phase P: an L 50×50×5
+// hot-rolled angle bar, the same member feature with an angle section).
 export function createPart(kind = 'board') {
   const id = uid('part');
-  const feature =
-    kind === 'member'
-      ? {
-          id: uid('feature'),
-          type: 'member',
-          start: [0, 0, 0],
-          end: [0, 0, 700],
-          section: { type: 'tube', width: 40, height: 40, wall: 2 },
-          gapStart: 0,
-          gapEnd: 0,
-          angleStart: 0,
-          angleEnd: 0,
-        }
-      : { id: uid('feature'), type: 'box', width: 600, depth: 400, height: 18 };
+  const member = kind === 'member' || kind === 'angle';
+  const feature = member
+    ? {
+        id: uid('feature'),
+        type: 'member',
+        start: [0, 0, 0],
+        end: [0, 0, 700],
+        section:
+          kind === 'angle'
+            ? { type: 'angle', width: 50, height: 50, wall: 5, rootRadius: 7, toeRadius: 3.5 }
+            : { type: 'tube', width: 40, height: 40, wall: 2 },
+        gapStart: 0,
+        gapEnd: 0,
+        angleStart: 0,
+        angleEnd: 0,
+      }
+    : { id: uid('feature'), type: 'box', width: 600, depth: 400, height: 18 };
   return {
     part: {
       id,
-      name: kind === 'member' ? 'Square tube' : 'Board / plate',
-      material: kind === 'member' ? 'Steel' : 'Plywood',
-      grain: kind === 'member' ? null : 'X',
+      name: kind === 'angle' ? 'Angle bar' : kind === 'member' ? 'Square tube' : 'Board / plate',
+      material: member ? 'Steel' : 'Plywood',
+      grain: member ? null : 'X',
       features: [feature],
     },
     instance: { id: uid('instance'), partId: id, name: '', position: [0, 0, 0], rotation: [0, 0, 0], visible: true },

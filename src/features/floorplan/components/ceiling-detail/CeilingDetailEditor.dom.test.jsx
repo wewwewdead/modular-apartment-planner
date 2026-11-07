@@ -377,6 +377,50 @@ describe('stranded beam ceiling attachment height', () => {
   });
 });
 
+describe('typing into the drop below attachment', () => {
+  const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+
+  // Keydown, native setter, then an input event with an inputType: what a
+  // keystroke looks like. A bare change event is the spinner path instead.
+  function typeText(input, text) {
+    const deleting = text.length < input.value.length;
+    fireEvent.keyDown(input, { key: deleting ? 'Backspace' : text.slice(-1) });
+    nativeSetter.call(input, text);
+    fireEvent.input(input, { inputType: deleting ? 'deleteContentBackward' : 'insertText' });
+  }
+
+  const ceilingUpdates = () =>
+    mocks.dispatch.mock.calls.map(([action]) => action).filter((action) => action.type === 'CEILING_UPDATE');
+
+  it('can be backspaced to an empty box without committing', () => {
+    const { container } = mountBeamHungCeiling(['beam_s', 'beam_n']);
+    const field = numberField(container, 'Drop below attachment');
+    fireEvent.focus(field);
+
+    typeText(field, '15');
+    typeText(field, '1');
+    typeText(field, '');
+
+    expect(field.value).toBe('');
+    expect(ceilingUpdates()).toEqual([]);
+  });
+
+  it('commits a retyped drop once, on blur', () => {
+    const { container } = mountBeamHungCeiling(['beam_s', 'beam_n']);
+    const field = numberField(container, 'Drop below attachment');
+    fireEvent.focus(field);
+
+    typeText(field, '');
+    for (const text of ['2', '25', '250']) typeText(field, text);
+    expect(ceilingUpdates()).toEqual([]);
+
+    fireEvent.blur(field);
+    const updates = ceilingUpdates();
+    expect(updates).toHaveLength(1);
+    expect(updates[0].ceiling.detailing.suspension.drop).toBe(250);
+  });
+});
+
 /**
  * Selecting something is what re-lays-out the workspace — the status bar grows
  * from "Nothing selected" to a longer label — and the canvas contain-fits itself

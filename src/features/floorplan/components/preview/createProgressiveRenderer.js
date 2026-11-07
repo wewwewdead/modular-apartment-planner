@@ -385,7 +385,34 @@ export function createProgressiveRenderer({ renderer, scene, camera: initialCame
 
   applyRenderScale(INTERACTIVE_SCALE);
 
+  /*
+   * The passes' own full-screen materials, as meshes a compile can see. Each
+   * of them draws into an offscreen target, so compiled with the scene's
+   * target bound they get exactly the programs they will draw with; linked in
+   * the background with the scene's, the first frame no longer waits on them.
+   * (The output pass draws to the canvas and builds its defines on first use,
+   * and the normal pass is an override — those two still link there.)
+   */
+  let compileWarmups = null;
+  const warmupGeometry = new THREE.BufferGeometry();
+
   return {
+    /** Meshes carrying the passes' materials, for `compileScenePrograms`'s `standalone`. */
+    getCompileWarmups() {
+      if (!compileWarmups) {
+        compileWarmups = [
+          gtaoPass.gtaoMaterial,
+          gtaoPass.pdMaterial,
+          gtaoPass.copyMaterial,
+          gtaoPass.blendMaterial,
+          accumulationMaterial,
+        ]
+          .filter(Boolean)
+          .map((material) => new THREE.Mesh(warmupGeometry, material));
+      }
+      return compileWarmups;
+    },
+
     /** How many samples have landed in the current accumulation. */
     get sampleCount() {
       return sampleIndex;
@@ -637,6 +664,7 @@ export function createProgressiveRenderer({ renderer, scene, camera: initialCame
 
     dispose() {
       accumulationQuad.dispose();
+      warmupGeometry.dispose();
       accumulationMaterial.dispose();
       accumulationTarget.dispose();
       outputPass.dispose?.();

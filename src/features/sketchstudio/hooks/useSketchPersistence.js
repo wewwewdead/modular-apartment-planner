@@ -32,6 +32,8 @@ export default function useSketchPersistence(state, dispatch) {
     status: 'idle',
     error: null,
   });
+  // The file being read right now, by name: the Reading … pill names it.
+  const [readingFileName, setReadingFileName] = useState(null);
   const persistedWorkspaceSnapshotRef = useRef(null);
 
   // Document snapshot excludes viewport so dirty detection is not triggered by pan/zoom.
@@ -225,6 +227,7 @@ export default function useSketchPersistence(state, dispatch) {
         return;
       }
 
+      setReadingFileName(file.name || null);
       try {
         const { workspace, fileName } = await importSketchWorkspaceFile(file);
         applyWorkspace(workspace, {
@@ -238,6 +241,8 @@ export default function useSketchPersistence(state, dispatch) {
           status: 'error',
           error: err.message || 'Failed to open sketch.',
         }));
+      } finally {
+        setReadingFileName(null);
       }
     },
     [applyWorkspace, shouldConfirmWorkspaceReplacement],
@@ -249,7 +254,9 @@ export default function useSketchPersistence(state, dispatch) {
     }
 
     try {
-      const { workspace, fileHandle, fileName } = await openSketchWorkspaceFile();
+      const { workspace, fileHandle, fileName } = await openSketchWorkspaceFile({
+        onFileChosen: setReadingFileName,
+      });
       applyWorkspace(workspace, {
         fileHandle,
         fileName,
@@ -265,6 +272,8 @@ export default function useSketchPersistence(state, dispatch) {
         status: 'error',
         error: err.message || 'Failed to open sketch.',
       }));
+    } finally {
+      setReadingFileName(null);
     }
   }, [applyWorkspace, shouldConfirmWorkspaceReplacement]);
 
@@ -345,6 +354,7 @@ export default function useSketchPersistence(state, dispatch) {
   const documentPersistence = useMemo(
     () => ({
       ...documentPersistenceMeta,
+      reading: readingFileName,
       isDirty: documentIsDirty,
       hasFileHandle: Boolean(documentFileHandle),
       desiredFileName: desiredSketchFileName,
@@ -354,7 +364,14 @@ export default function useSketchPersistence(state, dispatch) {
         documentName: state.document.name,
       }),
     }),
-    [desiredSketchFileName, documentFileHandle, documentIsDirty, documentPersistenceMeta, state.document.name],
+    [
+      desiredSketchFileName,
+      documentFileHandle,
+      documentIsDirty,
+      documentPersistenceMeta,
+      readingFileName,
+      state.document.name,
+    ],
   );
 
   return {

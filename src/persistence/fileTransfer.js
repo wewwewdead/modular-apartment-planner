@@ -94,12 +94,25 @@ async function pickSaveFileHandle(project) {
   });
 }
 
-export async function importProjectFile(file) {
+/** A file that is neither JSON nor a zip; the UI words it (loadingCopy `badProjectFile`). */
+export const NOT_A_PROJECT_FILE = 'not-a-project-file';
+
+export function isNotAProjectFileError(error) {
+  return error?.code === NOT_A_PROJECT_FILE;
+}
+
+/**
+ * `onProgress` hears `{ stage: 'reading' | 'unpacking', name }` as the file is
+ * read and, for an archive, unpacked — so the screen can say which.
+ */
+export async function importProjectFile(file, { onProgress } = {}) {
   if (!file) {
     throw new Error('No project file selected.');
   }
 
+  onProgress?.({ stage: 'reading', name: file.name || '' });
   if (await isZipFile(file)) {
+    onProgress?.({ stage: 'unpacking', name: file.name || '' });
     return deserializeProject(await readProjectArchive(file));
   }
 
@@ -107,13 +120,18 @@ export async function importProjectFile(file) {
   try {
     json = JSON.parse(await file.text());
   } catch {
-    throw new Error('Selected file is not valid JSON.');
+    // A .json that will not parse is a broken project; anything else that is
+    // not a zip was never a project file at all.
+    if (/\.json$/i.test(file.name || '')) throw new Error('Selected file is not valid JSON.');
+    const error = new Error('Selected file is not a project file or archive.');
+    error.code = NOT_A_PROJECT_FILE;
+    throw error;
   }
 
   return deserializeProject(json);
 }
 
-export async function openProjectFile() {
+export async function openProjectFile({ onProgress } = {}) {
   if (!canUseOpenFilePicker()) {
     throw new Error('Direct file open is not supported in this browser.');
   }
@@ -127,7 +145,7 @@ export async function openProjectFile() {
   // Archives must not be adopted as the save target: Ctrl+S writes plain JSON and would
   // overwrite the container, dropping its thumbnail and manifest.
   const isArchive = await isZipFile(file);
-  const result = await importProjectFile(file);
+  const result = await importProjectFile(file, { onProgress });
 
   return {
     ...result,

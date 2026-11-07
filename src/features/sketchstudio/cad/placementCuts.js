@@ -18,7 +18,7 @@
 //
 // Nothing new is persisted: features keep their existing fields, and the
 // draft's `placement` record is draft-only (Phase H rule).
-import { SCREW_KINDS, createHardware, hardwareDimensions } from './hardware.js';
+import { RIVET_KINDS, SCREW_KINDS, createHardware, hardwareDimensions } from './hardware.js';
 import { numeric, uid, vector } from './model.js';
 import { mapPlacement, unmapPlacement } from './placement.js';
 import {
@@ -296,6 +296,9 @@ export function resolvedCut(draft, ctx) {
 
 // The resolved hole / pocket centres of every part, in world coordinates, as
 // snap candidates ('hole centre', spec §7); `skip` = the edited feature.
+// side 'entry' is the opening the hole was drilled from (normal: out of that
+// face); a hole that comes out of the material also has a 'far' opening
+// (Phase Q, the kernel's metrics `exits`), normal along the drill direction.
 export function holeCentres(ctx, skip = null) {
   const out = [];
   for (const metrics of ctx.snapshot?.parts || []) {
@@ -313,21 +316,24 @@ export function holeCentres(ctx, skip = null) {
       const centres = entry.row?.centres?.length ? entry.row.centres : [entry.cut.position];
       // The hole's radius (Phase M: hardware picks a hole by its opening).
       const radius = feature.type === 'hole' ? num(feature.diameter, ctx.parameters, 0) / 2 : null;
+      const unit = normalize(entry.cut.direction);
       for (const instance of ctx.snapshot.instances || []) {
         if (instance.partId !== part.id || !instance.placement) continue;
-        const normal = neg(normalize(mapPlacement(entry.cut.direction, instance.placement, true)));
-        centres.forEach((centre, index) =>
+        const drill = normalize(mapPlacement(entry.cut.direction, instance.placement, true));
+        const normal = neg(drill);
+        centres.forEach((centre, index) => {
+          const hole = { instanceId: instance.id, featureId: id, index, type: feature.type, attachable, radius };
+          out.push({ ...hole, side: 'entry', point: mapPlacement(centre, instance.placement), normal });
+          const exit = entry.exits?.[index];
+          if (typeof exit !== 'number') return;
+          const far = centre.map((x, i) => x + unit[i] * exit);
           out.push({
-            instanceId: instance.id,
-            featureId: id,
-            index,
-            type: feature.type,
-            attachable,
-            point: mapPlacement(centre, instance.placement),
-            normal,
-            radius,
-          }),
-        );
+            ...hole,
+            side: 'far',
+            point: mapPlacement(far, instance.placement),
+            normal: drill.map((v) => v || 0),
+          });
+        });
       }
     }
   }
@@ -675,8 +681,12 @@ function hardwareView(draft, ctx, view) {
   } catch {
     length = 0;
   }
-  // Bolts, studs and (Phase N) every screw kind point into the face.
-  const into = ['bolt', 'stud'].includes(feature?.kind) || Boolean(SCREW_KINDS[feature?.kind]);
+  // Bolts, studs, (Phase N) every screw kind and (Phase O) every rivet point
+  // into the face.
+  const into =
+    ['bolt', 'stud'].includes(feature?.kind) ||
+    Boolean(SCREW_KINDS[feature?.kind]) ||
+    Boolean(RIVET_KINDS[feature?.kind]);
   view.shape = {
     kind: 'prism',
     frame: p.frame,

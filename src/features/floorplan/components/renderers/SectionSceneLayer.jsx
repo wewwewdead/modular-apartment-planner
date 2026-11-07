@@ -124,10 +124,15 @@ function regionsPath(regions) {
   return outlinesPath(regions.flatMap(({ outline, holes }) => [outline, ...holes]));
 }
 
-function SectionSceneLayer({ scene, showTitle = true }) {
+/**
+ * `drawables`, when given, is the scene's visibility result already resolved
+ * (the plan canvas runs that pass after paint, in slices); without it the pass
+ * runs here, synchronously, as sheets and PDFs want.
+ */
+function SectionSceneLayer({ scene, showTitle = true, drawables: resolvedDrawables = null }) {
   const clipPrefix = useId();
   if (!scene) return null;
-  const drawables = getVisibleSectionDrawables(scene);
+  const drawables = resolvedDrawables || getVisibleSectionDrawables(scene);
 
   const titleX = (scene.bounds.minX + scene.bounds.maxX) / 2;
   const titleY = -scene.bounds.maxZ - 500;

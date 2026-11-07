@@ -49,6 +49,9 @@ export default function OperationPanel({
   // removeLabel }) and their Remove.
   chosenHoles = [],
   onRemoveHole = () => {},
+  // Flip side (Phase Q): whether a chosen hole has another opening, and the flip.
+  canFlipSide = false,
+  onFlipSide = () => {},
   onError = () => {},
 }) {
   const p = draft.placement;
@@ -189,6 +192,15 @@ export default function OperationPanel({
               (p.mode === 'placed' || p.mode === 'plane' || p.memberEnd || (p.mode === 'cut' && !sketchPocket(f))) && (
                 <button onClick={onReplace}>{p.tool === 'sweep' ? 'Redraw path' : 'Re-place'}</button>
               )}
+            {hardware && holeCount > 0 && (p.stage === 'place' || seated) && (
+              <button
+                disabled={!canFlipSide}
+                title="Seat it on the other side of every chosen hole (F)"
+                onClick={() => onFlipSide()}
+              >
+                Flip side
+              </button>
+            )}
             {cutTool && !draft.editing && p.stage === 'shape' && onApplyAgain && (
               <button
                 className="cad-primary"

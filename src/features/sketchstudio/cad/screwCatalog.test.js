@@ -77,7 +77,7 @@ const variants = (kind) =>
 describe('the kinds', () => {
   it('has exactly the 22 screw kinds in spec order, after the nine Phase J kinds, unchanged', () => {
     expect(Object.keys(SCREW_KINDS)).toEqual(SCREW_KEYS);
-    expect(Object.keys(HARDWARE_TYPES)).toHaveLength(31);
+    expect(Object.keys(HARDWARE_TYPES)).toHaveLength(46);
     expect(Object.entries(HARDWARE_TYPES).slice(0, 9)).toEqual(Object.entries(OLD_TYPES));
     SCREW_KEYS.forEach((key) => expect(HARDWARE_TYPES[key]).toBe(SCREW_KINDS[key].label));
     expect(HARDWARE_TYPES['socket-cap']).toBe('Socket head cap screw');
@@ -91,6 +91,9 @@ describe('the kinds', () => {
       'Tapping & self-drilling',
       'Wood & construction',
       'Special',
+      'Blind rivets',
+      'Solid, tubular & special rivets',
+      'Blind rivet nuts & studs',
     ]);
     expect(HARDWARE_GROUPS[0].kinds).toEqual(Object.keys(OLD_TYPES));
     expect(HARDWARE_GROUPS.flatMap((g) => g.kinds).sort()).toEqual(Object.keys(HARDWARE_TYPES).sort());

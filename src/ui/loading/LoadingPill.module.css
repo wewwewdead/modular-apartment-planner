@@ -1,0 +1,127 @@
+/*
+ * Spinner + words, floating. The words are in the DOM from the start (the live
+ * region announces them at once) but only fade in after the delay, so a fast
+ * wait never flashes a pill.
+ */
+.pill {
+  z-index: 10001;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 14px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-elevated);
+  box-shadow: var(--shadow-floating);
+  font-family: var(--font-ui);
+  color: var(--color-text-secondary);
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity var(--duration-smooth) var(--ease-out),
+    transform var(--duration-smooth) var(--ease-out);
+}
+
+/* Due at --words-delay, revealed by the compositor even if the page is busy. */
+.pill[data-words='scheduled'] {
+  animation: pillReveal var(--duration-smooth) var(--ease-out) var(--words-delay, 300ms) both;
+}
+
+@keyframes pillReveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.pill[data-placement='viewport'] {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+}
+
+.pill[data-placement='region'] {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+}
+
+/* Inline: sits in the flow of a panel, under the control that started it. */
+.pill[data-placement='inline'] {
+  position: relative;
+  align-items: flex-start;
+  align-self: flex-start;
+  box-shadow: none;
+  transform: translateY(-2px);
+}
+
+.pill[data-words='shown'] {
+  opacity: 1;
+}
+
+.pill[data-words='shown'][data-placement='viewport'],
+.pill[data-words='shown'][data-placement='region'] {
+  transform: translateX(-50%) translateY(0);
+}
+
+.pill[data-words='shown'][data-placement='inline'] {
+  transform: none;
+}
+
+.pill[data-tone='dark'] {
+  border-color: var(--dark-border);
+  background: rgba(17, 24, 32, 0.92);
+  color: var(--dark-text-muted);
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.detail {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  padding-left: 20px;
+  animation: pillDetailIn var(--duration-smooth) var(--ease-out) both;
+}
+
+.pill[data-tone='dark'] .detail {
+  color: var(--dark-text-tertiary);
+}
+
+.action {
+  pointer-events: auto;
+  margin: 4px 0 0 20px;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-card-bg);
+  color: var(--color-text-primary);
+  font: 600 11px var(--font-ui);
+  cursor: pointer;
+}
+
+.action:hover {
+  background: var(--color-card-bg-hover);
+}
+
+@keyframes pillDetailIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

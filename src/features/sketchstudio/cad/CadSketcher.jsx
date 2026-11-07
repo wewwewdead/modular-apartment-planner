@@ -10,6 +10,7 @@ import {
 } from './sketchTools.js';
 import { describeEntity, entitiesToProfile, entityPolyline, hitEntity } from './sketchProfile.js';
 import ExpressionInput from './ExpressionInput.jsx';
+import NumericInput from '../components/NumericInput.jsx';
 import { evaluateEntry } from './parameters.js';
 
 // The value an "=expression" in the HUD will place, or why it cannot.
@@ -242,13 +243,12 @@ export default function CadSketcher({ viewport, session, snap, onSnapChange, onF
         </button>
         <label>
           Snap (mm){' '}
-          <input
+          <NumericInput
             aria-label="Sketch snap (mm)"
-            type="number"
             min="0"
             step="0.5"
             value={snap}
-            onChange={(e) => onSnapChange(Math.max(0, Number(e.target.value) || 0))}
+            onCommit={(v) => onSnapChange(Math.max(0, v))}
             title="Grid snap; 0 for free placement. Points and edges still snap."
           />
         </label>

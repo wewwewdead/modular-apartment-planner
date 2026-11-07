@@ -112,7 +112,7 @@ export const starPrism = (own, a, z0, height) =>
     height,
   );
 // A cross recess: two arms of half width w, span s, as one 12-vertex prism.
-const crossPrism = (own, s, w, z0, height) => {
+export const crossPrism = (own, s, w, z0, height) => {
   const h = s / 2;
   return prism(
     own,
@@ -134,8 +134,8 @@ const crossPrism = (own, s, w, z0, height) => {
     height,
   );
 };
-const cylinder = (own, diameter, height, z0 = 0) => own(cad.makeCylinder(diameter / 2, height, [0, 0, z0]));
-const box = (own, [x0, y0, z0], [x1, y1, z1]) => own(cad.makeBox([x0, y0, z0], [x1, y1, z1]));
+export const cylinder = (own, diameter, height, z0 = 0) => own(cad.makeCylinder(diameter / 2, height, [0, 0, z0]));
+export const box = (own, [x0, y0, z0], [x1, y1, z1]) => own(cad.makeBox([x0, y0, z0], [x1, y1, z1]));
 
 // The radius the shank starts at under the head (a shoulder screw's shoulder).
 const shankTop = (v) => (v.kind === 'shoulder' ? v.bodyDiameter : v.diameter) / 2;

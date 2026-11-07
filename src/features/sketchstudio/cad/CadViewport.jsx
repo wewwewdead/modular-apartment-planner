@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { mapPlacement } from './placement.js';
-import { instanceMatrix, instanceOrientation, placementMatrix } from './movement.js';
+import { instanceMatrix, instanceOrientation } from './movement.js';
 import {
   RING_SIZE,
   gizmoRingRadius,
@@ -39,7 +39,9 @@ import {
   markSnapPoints,
   measureCandidates,
   mmPerPixelAt,
+  pendingDelta,
 } from './marks.js';
+import { attachmentRoot } from './groups.js';
 import {
   rotationReadout,
   snapLabel,
@@ -50,17 +52,38 @@ import {
   typedTranslation,
   typingSupported,
 } from './gizmoHud.js';
+import {
+  BODY_COLORS,
+  DEFAULT_VIEW_MODE,
+  EDGE_ALPHA,
+  EDGE_COLOR,
+  EDGE_RENDER_ORDER,
+  VIEW_MODE_COPY,
+  bodyAppearance,
+  bodyColorKey,
+  createMaterialCache,
+  isHardwarePart,
+  isSeeThrough,
+  resolveViewMode,
+} from './viewMode.js';
 
 export default function CadViewport({
   ref,
   snapshot,
   model,
   selectedId,
+  // Part groups (docs/sketch-studio-part-groups.md §4.4): every selected part
+  // (a group's members; drives the selected look and Isolate), and what the
+  // gizmo moves: the instance id, a group id, 'selection', or null.
+  selectedIds: selectedIdsProp,
+  movingKey: movingKeyProp,
   onSelect,
   isolated,
   view,
   perspective,
   exploded,
+  // Solid / X-ray / Wireframe (viewMode.js); pane-local state in the workspace.
+  viewMode = DEFAULT_VIEW_MODE,
   section,
   fitKey,
   previewShown = false,
@@ -113,6 +136,12 @@ export default function CadViewport({
   // The committed model has parts (a model opened with parts gets the
   // one-time first-geometry fit; an empty one never does).
   const hasInstances = Boolean(model?.instances?.length);
+  // Without the group props (older callers, tests) the single selection is both.
+  const selectedIds = selectedIdsProp ?? (selectedId ? [selectedId] : []);
+  const selectedKey = selectedIds.join('|');
+  const movingKey = movingKeyProp === undefined ? selectedId : movingKeyProp;
+  // A group or several parts: one rigid body with World axes only (§3.5).
+  const movingBody = Boolean(movingKey) && !(selectedIds.length === 1 && selectedIds[0] === movingKey);
   useImperativeHandle(
     ref,
     () => ({
@@ -122,6 +151,14 @@ export default function CadViewport({
         const group = sceneRef.current?.group.children.find((g) => g.userData.instanceId === id);
         if (!group) return null;
         const box = new THREE.Box3().setFromObject(group);
+        return box.isEmpty() ? null : [box.min.toArray(), box.max.toArray()];
+      },
+      // The union of the displayed world boxes of these parts' visible
+      // groups (a group's pivot, flip and mate centre), or null.
+      getBounds(ids) {
+        const ctx = sceneRef.current;
+        if (!ctx) return null;
+        const box = unionBox(ctx.group.children.filter((g) => g.visible && ids.includes(g.userData.instanceId)));
         return box.isEmpty() ? null : [box.min.toArray(), box.max.toArray()];
       },
       getCanvas: () => sceneRef.current?.renderer.domElement || null,
@@ -218,6 +255,7 @@ export default function CadViewport({
   }, [onMeasure, onSelectMark]);
   const [error, setError] = useState(null);
   const placing = Boolean(placement);
+  const shownViewMode = resolveViewMode(viewMode);
   // Which Measure click is next, and whether the last click found nothing (the hint line).
   const [measureStage, setMeasureStage] = useState('first');
   const [measureMissed, setMeasureMissed] = useState(false);
@@ -321,6 +359,12 @@ export default function CadViewport({
       rotateSnap: 15,
       rotateSpace: 'world',
       hasFitted: false,
+      // The parts' body and edge materials: shared, kept for the viewport's
+      // life and disposed only on unmount, so a view mode, a sketch dim or an
+      // edit never destroys a linked program (docs/sketch-studio-xray-mode.md §3.4).
+      materials: createMaterialCache(),
+      viewMode: DEFAULT_VIEW_MODE,
+      lastRenderMs: null,
     };
     // The handle under the pointer and whether it is being dragged, plus the
     // rotate state (browser checks).
@@ -334,6 +378,36 @@ export default function CadViewport({
       dial: ctx.drag?.dial?.mode || null,
       feedback: rotateLayer.children.map((c) => c.name),
       picked: ctx.pickedPivot || null,
+      // What the gizmo moves: the selection key and the parts it carries.
+      moving: ctx.movingId || null,
+      movingIds: (ctx.movingGroups || []).map((g) => g.userData.instanceId),
+    });
+    // The view mode as drawn (browser checks): linked programs, cached
+    // materials, the last render's duration and every part's look.
+    element.cadViewMode = () => ({
+      mode: ctx.viewMode,
+      programs: renderer.info?.programs?.length ?? 0,
+      materials: ctx.materials.size(),
+      lastRenderMs: ctx.lastRenderMs,
+      bodies: group.children.map((g) => {
+        const [mesh, edges] = g.children;
+        const box = new THREE.Box3().setFromObject(g);
+        return {
+          id: g.userData.instanceId,
+          partId: g.userData.partId,
+          visible: g.visible,
+          opacity: mesh.material.opacity,
+          transparent: mesh.material.transparent,
+          depthWrite: mesh.material.depthWrite,
+          renderOrder: mesh.renderOrder,
+          color: `#${mesh.material.color.getHexString()}`,
+          edgeOpacity: edges.material.opacity,
+          edgeColor: `#${edges.material.color.getHexString()}`,
+          edgeRenderOrder: edges.renderOrder,
+          // World box as displayed (aims pixel probes).
+          bounds: box.isEmpty() ? null : [box.min.toArray(), box.max.toArray()],
+        };
+      }),
     });
     // Screen position (client px) of a world point; used by browser checks
     // to aim at a part or gizmo without reading pixels.
@@ -380,7 +454,9 @@ export default function CadViewport({
       });
     };
     const render = () => {
+      const start = performance.now();
       renderer.render(scene, ctx.camera);
+      ctx.lastRenderMs = performance.now() - start;
       placeLabels();
       ctx.placePlaneLabels?.();
     };
@@ -520,32 +596,41 @@ export default function CadViewport({
     if (measureHud) measureHud.hidden = true;
     const measureAt = (event) => {
       const caster = rayAt(event);
-      const hit = caster
+      const hits = caster
         .intersectObjects(group.children, true)
-        .find((hit) => hit.object.isMesh && hit.object.parent.visible);
+        .filter((hit) => hit.object.isMesh && hit.object.parent.visible);
+      // X-ray / Wireframe: a glass body hides nothing, so the occluder is the
+      // first body that is opaque in this mode (none in Wireframe).
+      const occluder = isSeeThrough(ctx.viewMode) ? hits.find((hit) => hit.object.material.opacity === 1) : hits[0];
       const rect = renderer.domElement.getBoundingClientRect();
       group.updateMatrixWorld(true);
       const projected = new THREE.Vector3();
-      return measureCandidates({
-        pointer: [event.clientX - rect.left, event.clientY - rect.top],
-        groups: group.children.map((g) => ({
-          instanceId: g.userData.instanceId,
-          matrix: g.matrix,
-          placement: g.userData.placement,
-          bounds: g.userData.bounds,
-          visible: g.visible,
-          positions: g.children[1]?.geometry.getAttribute('position')?.array,
-        })),
-        marks: markSnapPoints(ctx.drawnMarks),
-        ray: caster.ray,
-        camera: ctx.camera,
-        project: (v) => {
-          projected.copy(v).project(ctx.camera);
-          return [((projected.x + 1) / 2) * rect.width, ((1 - projected.y) / 2) * rect.height];
-        },
-        hit: hit ? { point: hit.point.toArray(), instanceId: hit.object.userData.instanceId } : null,
-        height: rect.height,
-      });
+      const candidates = (hit) =>
+        measureCandidates({
+          pointer: [event.clientX - rect.left, event.clientY - rect.top],
+          groups: group.children.map((g) => ({
+            instanceId: g.userData.instanceId,
+            matrix: g.matrix,
+            placement: g.userData.placement,
+            bounds: g.userData.bounds,
+            visible: g.visible,
+            positions: g.children[1]?.geometry.getAttribute('position')?.array,
+          })),
+          marks: markSnapPoints(ctx.drawnMarks),
+          ray: caster.ray,
+          camera: ctx.camera,
+          project: (v) => {
+            projected.copy(v).project(ctx.camera);
+            return [((projected.x + 1) / 2) * rect.width, ((1 - projected.y) / 2) * rect.height];
+          },
+          hit: hit ? { point: hit.point.toArray(), instanceId: hit.object.userData.instanceId } : null,
+          height: rect.height,
+        });
+      const found = candidates(occluder);
+      // Nothing to snap to and no solid face behind the glass: the glass face
+      // under the cursor is still a point on a part.
+      if (!found && hits[0] && hits[0] !== occluder) return candidates(hits[0]);
+      return found;
     };
     const drawMeasure = () => {
       clearLayer(measureLayer);
@@ -717,18 +802,18 @@ export default function CadViewport({
       hud.hidden = false;
       placeHud();
     };
-    // Show drag.turn: the gizmo at turn · attach and the displayed mesh spun
-    // about the gizmo center; the kernel rebuild follows on release.
+    // Show drag.turn: the gizmo at turn · attach and the displayed meshes
+    // (one part, or every part of a group) spun about the gizmo center; the
+    // kernel rebuild follows on release.
     const showTurn = () => {
       const turn = new THREE.Quaternion(...drag.turn);
       pivot.quaternion.multiplyQuaternions(turn, drag.attach);
       const c = drag.start;
-      new THREE.Matrix4()
+      const motion = new THREE.Matrix4()
         .makeTranslation(c.x, c.y, c.z)
         .multiply(new THREE.Matrix4().makeRotationFromQuaternion(turn))
-        .multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z))
-        .multiply(drag.groupStart)
-        .decompose(drag.group.position, drag.group.quaternion, drag.group.scale);
+        .multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+      moveGroups(drag.groups, motion);
       updateMarks();
     };
     const dialOptions = () => ({ snap: ctx.rotateSnap, free: Boolean(ctx.altDown) });
@@ -766,7 +851,7 @@ export default function CadViewport({
       if (!drag) return;
       pivot.position.copy(drag.start);
       pivot.quaternion.copy(drag.attach);
-      drag.groupStart.decompose(drag.group.position, drag.group.quaternion, drag.group.scale);
+      moveGroups(drag.groups, null);
       updateMarks();
       drag = null;
       ctx.drag = null;
@@ -785,18 +870,20 @@ export default function CadViewport({
         ctx.placementLayer.toolDown();
         return;
       }
-      const selected = ctx.group.children.find((g) => g.userData.instanceId === ctx.movingId);
-      if (!selected) return;
+      // The part, or every part of a group (attached ones too: they move on screen).
+      const moving = (ctx.movingGroups || []).filter((g) => g.parent === ctx.group);
+      if (!moving.length) return;
       consumedPointer = true;
-      selected.updateMatrix();
       typed = '';
       ctx.lastSnaps = [];
       drag = {
-        group: selected,
+        groups: moving.map((g) => {
+          g.updateMatrix();
+          return { group: g, start: g.matrix.clone() };
+        }),
         id: ctx.movingId,
         mode: ctx.transformMode,
         start: pivot.position.clone(),
-        groupStart: selected.matrix.clone(),
         grab: ctx.pointer ? [...ctx.pointer] : null,
         // Identity in World space; the part's orientation in Local space.
         attach: pivot.quaternion.clone(),
@@ -816,25 +903,25 @@ export default function CadViewport({
           radius: drag.radius,
           project: projectPx,
         });
-        drag.feedback = createRotateFeedback(rotateLayer, selected, drag.groupStart, AXIS_COLORS[transform.axis]);
+        drag.feedback = createRotateFeedback(rotateLayer, drag.groups, AXIS_COLORS[transform.axis]);
         renderer.domElement.addEventListener('pointermove', dialMove);
         // Readout and start radial from the moment of the grab.
         applyDial(drag.dial.refresh(dialOptions()));
       }
       if (drag.mode !== 'rotate') {
-        // World boxes at drag start: the moving part and every other visible part.
+        // World boxes at drag start: the moving parts (one union box) and
+        // every other visible part.
         ctx.group.updateMatrixWorld(true);
-        const toBox = (object) => {
-          const box = new THREE.Box3().setFromObject(object);
-          return box.isEmpty() ? null : { min: box.min.toArray(), max: box.max.toArray() };
-        };
-        drag.box = toBox(selected);
+        const toBox = (box) => (box.isEmpty() ? null : { min: box.min.toArray(), max: box.max.toArray() });
+        drag.box = toBox(unionBox(moving));
         drag.others = ctx.group.children
-          .filter((g) => g !== selected && g.visible)
-          .map(toBox)
+          .filter((g) => !moving.includes(g) && g.visible)
+          .map((g) => toBox(new THREE.Box3().setFromObject(g)))
           .filter(Boolean);
-        // Drawn mark points (not those riding on this part) pull a face or the centre.
-        drag.markPoints = markSnapPoints(ctx.drawnMarks, { exclude: ctx.movingId }).map((p) => p.point);
+        // Drawn mark points (not those riding on the moving parts) pull a face or the centre.
+        drag.markPoints = markSnapPoints(ctx.drawnMarks, {
+          exclude: new Set(moving.map((g) => g.userData.instanceId)),
+        }).map((p) => p.point);
         const scene = new THREE.Box3().setFromObject(ctx.group);
         drag.threshold = snapThreshold(scene.isEmpty() ? 0 : scene.getSize(new THREE.Vector3()).length());
       }
@@ -872,10 +959,7 @@ export default function CadViewport({
         );
         ctx.lastSnaps = snaps;
         pivot.position.copy(drag.start).add(delta);
-        new THREE.Matrix4()
-          .makeTranslation(delta.x, delta.y, delta.z)
-          .multiply(drag.groupStart)
-          .decompose(drag.group.position, drag.group.quaternion, drag.group.scale);
+        moveGroups(drag.groups, new THREE.Matrix4().makeTranslation(delta.x, delta.y, delta.z));
         updateMarks();
       }
       updateHud();
@@ -908,7 +992,7 @@ export default function CadViewport({
             ? Math.hypot(ctx.pointer[0] - completed.grab[0], ctx.pointer[1] - completed.grab[1])
             : Infinity;
         if (ctx.pivotPick && travel <= CLICK_PX) {
-          completed.groupStart.decompose(completed.group.position, completed.group.quaternion, completed.group.scale);
+          moveGroups(completed.groups, null);
           pickClick = true;
           render();
           return;
@@ -1318,11 +1402,25 @@ export default function CadViewport({
         renderer.domElement.releasePointerCapture(event.pointerId);
     };
     const placementDouble = () => placementLayer.doubleClick();
+    // Double-click a part with no tool running: open the group under the
+    // cursor one level (§3.3). The placement layer's own dblclick keeps
+    // priority (it listens first and only acts while placing); the two
+    // clicks before it have already selected the group.
+    const selectDouble = (event) => {
+      if (!ctx.selectClick || event.button !== 0) return;
+      if (ctx.placing || ctx.sketchMode || ctx.holeMode || ctx.measureMode) return;
+      if (ctx.pivotPick && ctx.transformMode === 'rotate' && ctx.movingId) return;
+      const hit = rayAt(event)
+        .intersectObjects(group.children, true)
+        .find((h) => h.object.isMesh && h.object.parent.visible);
+      if (hit) selectionCallback.current?.(hit.object.userData.instanceId, { open: true });
+    };
     const placementCancel = () => placementLayer.cancelDrag();
     renderer.domElement.addEventListener('pointerdown', placementDown, true);
     renderer.domElement.addEventListener('pointermove', placementMove, true);
     renderer.domElement.addEventListener('pointerup', placementUp, true);
     renderer.domElement.addEventListener('dblclick', placementDouble);
+    renderer.domElement.addEventListener('dblclick', selectDouble);
     renderer.domElement.addEventListener('pointercancel', placementCancel);
     window.addEventListener('blur', placementCancel);
     const holeDown = (event) => {
@@ -1396,6 +1494,8 @@ export default function CadViewport({
     const pointerUp = (event) => {
       const ringClick = pickClick;
       pickClick = false;
+      // Whether this click reached the selection (a dblclick opens a group only then).
+      ctx.selectClick = false;
       if (consumedPointer) {
         consumedPointer = false;
         if (!ringClick) {
@@ -1473,7 +1573,12 @@ export default function CadViewport({
       }
       // A ring click that missed the part keeps the selection.
       if (ringClick) return;
-      selectionCallback.current(hit?.object.userData.instanceId || null);
+      ctx.selectClick = true;
+      // Shift / Ctrl / Cmd+click adds or removes the part's group or the
+      // part (the workspace resolves groups, §3.3).
+      const id = hit?.object.userData.instanceId || null;
+      if (event.shiftKey || event.ctrlKey || event.metaKey) selectionCallback.current(id, { toggle: true });
+      else selectionCallback.current(id);
     };
     // A bounding-box corner of the selected part within PIVOT_SNAP_PX of the
     // click, else the exact surface point under it. A corner snaps even when
@@ -1481,28 +1586,32 @@ export default function CadViewport({
     // line up on screen (a box seen square-on) resolve to the one nearest the
     // clicked surface, or nearest the viewer: the visible one. Returns
     // whether a pivot was picked.
+    // A group (§3.5): any of its parts' corners or surfaces; the point is kept
+    // in the frame of its anchor member (ctx.movingInstance).
     const pickPivot = (hit, screen) => {
       const { instance, parameters } = ctx.movingInstance || {};
-      const selected = ctx.group.children.find((g) => g.userData.instanceId === ctx.movingId);
-      if (!instance || !selected) return false;
-      const onPart = hit?.object.userData.instanceId === ctx.movingId;
+      const moving = ctx.movingGroups || [];
+      if (!instance || !moving.length) return false;
+      const onPart = moving.some((g) => g.userData.instanceId === hit?.object.userData.instanceId);
       const reference = onPart ? hit.point : ctx.camera.position;
-      selected.updateMatrix();
-      const [min, max] = selected.userData.bounds;
       let best = null,
         bestDepth = Infinity;
-      for (const x of [min[0], max[0]])
-        for (const y of [min[1], max[1]])
-          for (const z of [min[2], max[2]]) {
-            const corner = new THREE.Vector3(x, y, z).applyMatrix4(selected.matrix);
-            const [cx, cy] = projectPx(corner.toArray());
-            if (Math.hypot(cx - screen[0], cy - screen[1]) > PIVOT_SNAP_PX) continue;
-            const depth = corner.distanceTo(reference);
-            if (depth < bestDepth) {
-              best = corner;
-              bestDepth = depth;
+      for (const selected of moving) {
+        selected.updateMatrix();
+        const [min, max] = selected.userData.bounds;
+        for (const x of [min[0], max[0]])
+          for (const y of [min[1], max[1]])
+            for (const z of [min[2], max[2]]) {
+              const corner = new THREE.Vector3(x, y, z).applyMatrix4(selected.matrix);
+              const [cx, cy] = projectPx(corner.toArray());
+              if (Math.hypot(cx - screen[0], cy - screen[1]) > PIVOT_SNAP_PX) continue;
+              const depth = corner.distanceTo(reference);
+              if (depth < bestDepth) {
+                best = corner;
+                bestDepth = depth;
+              }
             }
-          }
+      }
       if (!best && !onPart) return false;
       const point = best || hit.point.clone();
       const local = point.clone().applyMatrix4(instanceMatrix(instance, parameters).invert());
@@ -1534,6 +1643,7 @@ export default function CadViewport({
       renderer.domElement.removeEventListener('pointermove', placementMove, true);
       renderer.domElement.removeEventListener('pointerup', placementUp, true);
       renderer.domElement.removeEventListener('dblclick', placementDouble);
+      renderer.domElement.removeEventListener('dblclick', selectDouble);
       renderer.domElement.removeEventListener('pointercancel', placementCancel);
       window.removeEventListener('blur', placementCancel);
       placementLayer.dispose();
@@ -1559,6 +1669,11 @@ export default function CadViewport({
       transform.dispose();
       controls.dispose();
       renderer.dispose();
+      // The parts borrow the cache's materials: their geometry here, the
+      // materials once through the cache; every other layer disposes its own.
+      group.traverse((obj) => obj.geometry?.dispose());
+      group.clear();
+      ctx.materials.dispose();
       scene.traverse((obj) => {
         obj.geometry?.dispose();
         if (obj.material) (Array.isArray(obj.material) ? obj.material : [obj.material]).forEach((m) => m.dispose());
@@ -1620,30 +1735,20 @@ export default function CadViewport({
   useEffect(() => {
     const ctx = sceneRef.current;
     if (!ctx) return;
-    ctx.group.traverse((obj) => {
-      obj.geometry?.dispose();
-      obj.material?.dispose();
-    });
+    // Geometry only: the materials belong to ctx.materials and outlive the meshes.
+    ctx.group.traverse((obj) => obj.geometry?.dispose());
     ctx.group.clear();
     for (const item of snapshot?.instances || []) {
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.Float32BufferAttribute(item.mesh.vertices, 3));
       geometry.setAttribute('normal', new THREE.Float32BufferAttribute(item.mesh.normals, 3));
       geometry.setIndex(item.mesh.triangles);
-      const material = new THREE.MeshStandardMaterial({
-        color: 0x8795a4,
-        roughness: 0.55,
-        metalness: 0.15,
-        side: THREE.DoubleSide,
-      });
-      const mesh = new THREE.Mesh(geometry, material);
+      // Placeholders: the pose effect below gives each part its real look.
+      const mesh = new THREE.Mesh(geometry, ctx.materials.body(BODY_COLORS.metal, 1, { depthWrite: true }));
       mesh.userData.instanceId = item.id;
       const lineGeometry = new THREE.BufferGeometry();
       lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(item.edges.lines, 3));
-      const edges = new THREE.LineSegments(
-        lineGeometry,
-        new THREE.LineBasicMaterial({ color: 0x3e4e5f, transparent: true, opacity: 0.65 }),
-      );
+      const edges = new THREE.LineSegments(lineGeometry, ctx.materials.edge(EDGE_COLOR, EDGE_ALPHA.solid));
       const group = new THREE.Group();
       group.userData = {
         instanceId: item.id,
@@ -1659,49 +1764,54 @@ export default function CadViewport({
   useEffect(() => {
     const ctx = sceneRef.current;
     if (!ctx) return;
+    const mode = resolveViewMode(viewMode);
+    ctx.viewMode = mode;
     const plane = section == null ? null : new THREE.Plane(new THREE.Vector3(0, 0, -1), section);
+    // Section: one call clips every cached body and edge material.
+    ctx.materials.setClippingPlanes(plane ? [plane] : []);
+    const selected = new Set(selectedKey ? selectedKey.split('|') : []);
+    const meshed = new Map((snapshot?.instances || []).map((item) => [item.id, item.placement]));
     ctx.group.children.forEach((group, index) => {
       const instance = model.instances.find((i) => i.id === group.userData.instanceId);
       const part = model.parts.find((p) => p.id === group.userData.partId);
-      group.visible = instance?.visible !== false && (!isolated || group.userData.instanceId === selectedId);
+      // Isolate shows the selection: one part or every part of a group.
+      group.visible = instance?.visible !== false && (!isolated || selected.has(group.userData.instanceId));
       // The model commits before the worker rebuilds, so show the committed
-      // placement at once by moving the old mesh by (new pose) · (meshed pose)⁻¹.
-      if (ctx.drag?.group !== group) {
-        placementDelta(group.userData, instance, model, snapshot?.parameters).decompose(
-          group.position,
-          group.quaternion,
-          group.scale,
-        );
+      // placement at once by moving the old mesh by (new pose) · (meshed pose)⁻¹;
+      // an attached part rides its attachment root's delta (marks.pendingDelta).
+      if (!ctx.drag?.groups.some((d) => d.group === group)) {
+        const delta =
+          instance && group.userData.placement
+            ? pendingDelta(model, instance.id, (id) => meshed.get(id), snapshot?.parameters || {})
+            : new THREE.Matrix4();
+        delta.decompose(group.position, group.quaternion, group.scale);
         if (exploded) group.position.z += index * 85;
       }
-      group.children[0].material.color.set(
-        // While placing an operation the part keeps its own colour, so the
-        // blue ghost and handles read against it.
-        group.userData.instanceId === selectedId && !sketchMode && !placing
-          ? '#3687bd'
-          : /wood|ply|oak|pine/i.test(part?.material || '')
-            ? '#bd956b'
-            : '#8795a4',
-      );
+      // While placing an operation the part keeps its own colour, so the
+      // blue ghost and handles read against it.
+      const selectedLook = selected.has(group.userData.instanceId) && !sketchMode && !placing;
       // While drawing a sketch the model stays visible but dimmed; the part
       // being sketched on is a little stronger than the rest.
+      const support = sketchMode === 'draw' && group.userData.instanceId === sketchSupportId;
+      const dim = sketchMode === 'draw' ? (support ? 0.5 : 0.28) : 1;
+      // The view mode decides which bodies are glass (viewMode.js); the look
+      // is a swap between cached materials, never a flag flipped in place.
+      const look = bodyAppearance({ mode, selected: selectedLook, hardware: isHardwarePart(part), support, dim });
       const [mesh, edges] = group.children;
-      const dim = sketchMode === 'draw' ? (group.userData.instanceId === sketchSupportId ? 0.5 : 0.28) : 1;
-      if (mesh.material.opacity !== dim) {
-        mesh.material.transparent = dim < 1;
-        mesh.material.opacity = dim;
-        mesh.material.depthWrite = dim === 1;
-        mesh.material.needsUpdate = true;
-      }
-      edges.material.opacity = dim < 1 ? 0.35 : 0.65;
-      group.children.forEach((obj) => {
-        obj.material.clippingPlanes = plane ? [plane] : [];
+      mesh.material = ctx.materials.body(BODY_COLORS[bodyColorKey(part, selectedLook)], look.opacity, {
+        depthWrite: look.depthWrite,
       });
+      mesh.renderOrder = look.renderOrder;
+      edges.material = ctx.materials.edge(
+        look.edgeColorKey === 'selected' ? BODY_COLORS.selected : EDGE_COLOR,
+        look.edgeOpacity,
+      );
+      edges.renderOrder = EDGE_RENDER_ORDER;
     });
     // Marks ride on the poses just shown.
     ctx.updateMarks();
     ctx.render();
-  }, [snapshot, model, selectedId, isolated, exploded, section, sketchMode, sketchSupportId, placing]);
+  }, [snapshot, model, selectedKey, isolated, exploded, section, sketchMode, sketchSupportId, placing, viewMode]);
   useEffect(() => {
     const ctx = sceneRef.current;
     if (!ctx) return;
@@ -1718,7 +1828,7 @@ export default function CadViewport({
     if (!ctx) return;
     ctx.model = model;
     ctx.syncPlanes(planesVisible, planesOffset);
-  }, [planesVisible, planesOffset, snapshot, model, selectedId, isolated, exploded]);
+  }, [planesVisible, planesOffset, snapshot, model, selectedKey, isolated, exploded]);
   useEffect(() => {
     sceneRef.current?.clearPlaneHover();
   }, [snapshot]);
@@ -1733,6 +1843,7 @@ export default function CadViewport({
     const ctx = sceneRef.current;
     if (!ctx) return;
     ctx.sketchMode = sketchMode;
+    ctx.selectClick = false;
     ctx.clearPlaneHover();
     // Left button draws while sketching; right-drag pans and the wheel zooms.
     ctx.controls.enableRotate = sketchMode !== 'draw';
@@ -1743,10 +1854,13 @@ export default function CadViewport({
     if (!ctx) return;
     ctx.pickedPivot = null;
     ctx.pivotPick = pivotPick;
-  }, [selectedId, pivotPick]);
+  }, [movingKey, pivotPick]);
   useEffect(() => {
-    sceneRef.current?.placementLayer.setView(placement);
-  }, [placement]);
+    const ctx = sceneRef.current;
+    if (!ctx) return;
+    ctx.placing = placing;
+    ctx.placementLayer.setView(placement);
+  }, [placement, placing]);
   useEffect(() => {
     const ctx = sceneRef.current;
     if (!ctx) return;
@@ -1756,23 +1870,35 @@ export default function CadViewport({
     ctx.transform.detach();
     ctx.placementLayer.detachTool();
     ctx.movingId = null;
+    ctx.movingGroups = [];
     ctx.movingInstance = null;
-    const selected = ctx.group.children.find((g) => g.userData.instanceId === selectedId && g.visible);
-    if (moveEnabled && selected && !exploded) {
-      const [min, max] = selected.userData.bounds;
-      selected.updateMatrix();
-      ctx.pivot.position.set(...min.map((value, i) => (value + max[i]) / 2)).applyMatrix4(selected.matrix);
-      const instance = model.instances.find((i) => i.id === selectedId);
+    const ids = selectedKey ? selectedKey.split('|') : [];
+    // The displayed parts the gizmo carries: the selected part, or every
+    // visible part of a group or multi-selection (§3.5).
+    const moving = movingKey ? ctx.group.children.filter((g) => g.visible && ids.includes(g.userData.instanceId)) : [];
+    if (moveEnabled && moving.length && !exploded) {
+      ctx.group.updateMatrixWorld(true);
+      // The centre of the union of the displayed boxes (one part: its own box).
+      if (movingBody) unionBox(moving).getCenter(ctx.pivot.position);
+      else {
+        const [min, max] = moving[0].userData.bounds;
+        moving[0].updateMatrix();
+        ctx.pivot.position.set(...min.map((value, i) => (value + max[i]) / 2)).applyMatrix4(moving[0].matrix);
+      }
+      // A group keeps a picked pivot in the frame of its anchor member: the
+      // first free part (no attachment) in model order, whose pose a move edits.
+      const anchorId = movingBody ? ids.find((id) => attachmentRoot(model, id) === id) || null : movingKey;
+      const instance = model.instances.find((i) => i.id === anchorId);
       const rotating = transformMode === 'rotate';
       // A picked pivot is kept in the part's own frame, so it stays on the
       // same spot of the part through later moves and turns.
-      const picked = rotating && pivotPick && ctx.pickedPivot?.id === selectedId && instance;
+      const picked = rotating && pivotPick && ctx.pickedPivot?.id === movingKey && instance;
       if (picked)
         ctx.pivot.position
           .set(...ctx.pickedPivot.local)
           .applyMatrix4(instanceMatrix(instance, snapshot?.parameters || {}));
-      // Local space: the rings follow the part's current orientation.
-      const local = rotating && rotateSpace === 'local' && instance;
+      // Local space: the rings follow the part's current orientation (never a group's).
+      const local = rotating && rotateSpace === 'local' && !movingBody && instance;
       if (local) ctx.pivot.quaternion.copy(instanceOrientation(instance, snapshot?.parameters || {}));
       else ctx.pivot.quaternion.identity();
       ctx.rotateSpace = local ? 'local' : 'world';
@@ -1783,11 +1909,25 @@ export default function CadViewport({
       ctx.transform.attach(ctx.pivot);
       // Snap distance from this placement, not the absolute world coordinate.
       ctx.transform.setTranslationSnap(null);
-      ctx.movingId = selectedId;
+      ctx.movingId = movingKey;
+      ctx.movingGroups = moving;
       ctx.movingInstance = instance ? { instance, parameters: snapshot?.parameters || {} } : null;
     } else if (placement?.toolGizmo && !exploded) ctx.placementLayer.attachTool(transformMode);
     ctx.render();
-  }, [snapshot, model, selectedId, moveEnabled, exploded, isolated, transformMode, rotateSpace, pivotPick, placement]);
+  }, [
+    snapshot,
+    model,
+    selectedKey,
+    movingKey,
+    movingBody,
+    moveEnabled,
+    exploded,
+    isolated,
+    transformMode,
+    rotateSpace,
+    pivotPick,
+    placement,
+  ]);
   useEffect(() => {
     const ctx = sceneRef.current;
     if (ctx) ctx.snap = moveSnap;
@@ -1869,7 +2009,7 @@ export default function CadViewport({
     ctx.resize();
   }, [focusTarget]);
   return (
-    <div ref={host} className="cad-viewport" aria-label="Solid model viewport">
+    <div ref={host} className="cad-viewport" aria-label="Solid model viewport" data-view-mode={shownViewMode}>
       <div ref={hudRef} className="cad-gizmo-hud" aria-label="Gizmo readout" />
       <div ref={measureHudRef} className="cad-measure-hud" aria-label="Measure readout" />
       <div ref={placementHudRef} className="cad-placement-hud" aria-label="Placement readout" />
@@ -1877,6 +2017,7 @@ export default function CadViewport({
       <div ref={planeLabelsRef} className="cad-plane-labels" aria-label="Origin planes" />
       {error && <p role="alert">3D display unavailable: {error}</p>}
       <div className="cad-viewport-hint">
+        {isSeeThrough(shownViewMode) && <div className="cad-view-mode-hint">{VIEW_MODE_COPY[shownViewMode].hint}</div>}
         {measureMode && (
           <div>
             {measureStage === 'second'
@@ -1900,7 +2041,11 @@ export default function CadViewport({
           <div>Drag an orange hole center along its plane · Gray centers are locked · Esc cancels</div>
         )}
         {moveEnabled && transformMode === 'rotate' && pivotPick && (
-          <div>Click a point on the selected part to turn about it · corners snap</div>
+          <div>
+            {movingBody
+              ? 'Click a point on the selected group to turn about it · corners snap'
+              : 'Click a point on the selected part to turn about it · corners snap'}
+          </div>
         )}
         {moveEnabled && transformMode === 'rotate'
           ? `Drag a red/green/blue ring around the centre to turn about ${rotateSpace === 'local' ? "the part's own " : ''}X/Y/Z · Alt turns freely · type an angle + Enter · [ ] turn about Z, Shift+[ ] about X · M move · Esc cancels · `
@@ -1976,11 +2121,11 @@ function overlayLine(points, name, opacity = 1, segments = false) {
 }
 
 // Rotate drag feedback, built once per drag and updated in place per move:
-// a ghost of the part's edges at the start pose (sharing the edge geometry),
-// the swept sector, its arc, and radials to the start and current angle.
-function createRotateFeedback(layer, group, startMatrix, color) {
+// a ghost of each moving part's edges at its start pose (sharing the edge
+// geometry, so it is never disposed here), the swept sector, its arc, and
+// radials to the start and current angle. `moving`: [{ group, start }].
+function createRotateFeedback(layer, moving, color) {
   clearRotateFeedback(layer);
-  const edges = group.children[1];
   const overlay = (object, name, order) => {
     object.name = name;
     object.renderOrder = order;
@@ -1988,14 +2133,16 @@ function createRotateFeedback(layer, group, startMatrix, color) {
     layer.add(object);
     return object;
   };
-  if (edges?.geometry) {
+  for (const { group, start } of moving) {
+    const edges = group.children[1];
+    if (!edges?.geometry) continue;
     const ghost = new THREE.LineSegments(
       edges.geometry,
       new THREE.LineBasicMaterial({ color: '#3e4e5f', transparent: true, opacity: 0.3, depthTest: false }),
     );
     ghost.userData.sharedGeometry = true;
     ghost.matrixAutoUpdate = false;
-    ghost.matrix.copy(startMatrix);
+    ghost.matrix.copy(start);
     ghost.matrixWorldNeedsUpdate = true;
     overlay(ghost, 'rotate-ghost', 35);
   }
@@ -2076,7 +2223,22 @@ function clearRotateFeedback(layer) {
   layer.clear();
 }
 
-const IDENTITY = new THREE.Matrix4();
+// Each moving part's group at `motion` · its drag-start matrix (motion null:
+// back at the start). One part or every part of a group moves rigidly.
+function moveGroups(moving, motion) {
+  for (const { group, start } of moving) {
+    const matrix = motion ? motion.clone().multiply(start) : start;
+    matrix.decompose(group.position, group.quaternion, group.scale);
+  }
+}
+
+// The world box around several displayed part groups.
+function unionBox(groups) {
+  const box = new THREE.Box3();
+  for (const g of groups) box.expandByObject(g);
+  return box;
+}
+
 // The ground point under the centre of the view (NDC 0, 0; perspective or
 // orthographic), rounded to `snap` (1 mm when 0). A centre ray that runs
 // along the ground or points away from it falls back to the orbit target.
@@ -2094,18 +2256,6 @@ function groundDropPoint(camera, target, snap) {
   const step = snap > 0 ? snap : 1;
   // + 0 turns a rounded -0 into 0.
   return [...ground.map((n) => Math.round(n / step) * step + 0), 0];
-}
-
-// How far the committed placement is from the one the worker meshed. Attached
-// parts follow their parent in the kernel, so they wait for the rebuild.
-function placementDelta(meshed, instance, model, parameters) {
-  if (!instance || !meshed.placement) return IDENTITY.clone();
-  if (model.connections?.some((c) => c.from === instance.id && c.type !== 'weld')) return IDENTITY.clone();
-  try {
-    return instanceMatrix(instance, parameters || {}).multiply(placementMatrix(meshed.placement).invert());
-  } catch {
-    return IDENTITY.clone();
-  }
 }
 
 const planeOf = (frame) =>

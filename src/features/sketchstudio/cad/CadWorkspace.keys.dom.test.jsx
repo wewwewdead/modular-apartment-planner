@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 // Workstation shortcuts end to end: R / M pick the gizmo, ] / [ turn the
-// selected part (World or Local), D toggles Measure, Delete removes the
-// selected mark, and nothing fires while typing, dragging or in another tool.
+// selected part (World or Local), D toggles Measure, X / Shift+X switch the
+// view mode, Delete removes the selected mark, and nothing fires while typing,
+// dragging or in another tool.
 // The kernel hook and the 3D viewport are stand-ins.
 import { afterEach, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useImperativeHandle } from 'react';
 import * as THREE from 'three';
 import { MemoryRouter } from 'react-router-dom';
@@ -244,4 +245,58 @@ it('keeps a measured mark, reads it along an axis, saves it as a parameter and d
   rerender();
   expect(model().marks).toEqual([]);
   expect(screen.getByText('No marks yet. Click Measure, then two points on the model.')).toBeTruthy();
+});
+
+it('X toggles X-ray and Shift+X Wireframe, with or without a selection and while measuring', () => {
+  const { setCadModel } = setup();
+  const group = screen.getByRole('group', { name: 'See-through mode' });
+  const button = (name) => within(group).getByRole('button', { name, exact: true });
+  const pressed = () =>
+    within(group)
+      .getAllByRole('button')
+      .filter((b) => b.getAttribute('aria-pressed') === 'true');
+  expect(viewport.props.viewMode).toBe('solid');
+  expect(pressed()).toEqual([button('Solid')]);
+  expect(
+    within(group)
+      .getAllByRole('button')
+      .map((b) => b.textContent),
+  ).toEqual(['Solid', 'X-ray', 'Wire']);
+  expect(button('Wireframe').title).toBe('Edges only, every edge visible (Shift+X)');
+  press('x');
+  expect(viewport.props.viewMode).toBe('xray');
+  expect(pressed()).toEqual([button('X-ray')]);
+  press('x');
+  expect(viewport.props.viewMode).toBe('solid');
+  press('X', { shiftKey: true });
+  expect(viewport.props.viewMode).toBe('wireframe');
+  expect(pressed()).toEqual([button('Wireframe')]);
+  // From Wireframe, X goes back to Solid (not X-ray).
+  press('x');
+  expect(viewport.props.viewMode).toBe('solid');
+  // Not while typing, with a modifier, on key repeat or during a drag.
+  press('x', {}, screen.getByLabelText('Standard view'));
+  press('x', { ctrlKey: true });
+  press('x', { repeat: true });
+  viewport.dragging = true;
+  press('x');
+  viewport.dragging = false;
+  expect(viewport.props.viewMode).toBe('solid');
+  // Nothing selected.
+  act(() => viewport.props.onSelect(null));
+  press('x');
+  expect(viewport.props.viewMode).toBe('xray');
+  // While Measure runs (a tool), and Measure keeps running.
+  press('d');
+  expect(viewport.props.measureMode).toBe(true);
+  press('X', { shiftKey: true });
+  expect(viewport.props.viewMode).toBe('wireframe');
+  expect(viewport.props.measureMode).toBe(true);
+  // The buttons pick a mode directly.
+  act(() => fireEvent.click(button('Solid')));
+  expect(viewport.props.viewMode).toBe('solid');
+  act(() => fireEvent.click(button('X-ray')));
+  expect(viewport.props.viewMode).toBe('xray');
+  // A view toggle never touches the model.
+  expect(setCadModel).not.toHaveBeenCalled();
 });

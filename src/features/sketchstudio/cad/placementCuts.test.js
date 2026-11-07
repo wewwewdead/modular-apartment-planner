@@ -451,6 +451,30 @@ describe('hole-centre candidates', () => {
     // A hole draft's view carries them for the viewport's snapping.
     expect(placementView(placeDraft(w, 'hole'), w.ctx).holeCentres).toHaveLength(2);
   });
+  // Phase Q (docs/sketch-studio-hardware-seat-side.md §4.3): a hole that comes
+  // out of the material (metrics exits) has a second, far candidate.
+  it('adds the far opening of a through hole, in world coordinates on a turned instance', () => {
+    const hole = { id: 'h', type: 'hole', diameter: 6, depth: 5, position: [100, 100, 18], direction: [0, 0, -1] };
+    const blind = { ...hole, id: 'b', position: [200, 100, 18] };
+    const cut = (position) => ({ position, direction: [0, 0, -1], widthDirection: [1, 0, 0] });
+    const metrics = {
+      h: { cut: cut([100, 100, 18]), exits: [18] },
+      b: { cut: cut([200, 100, 18]), exits: [null] },
+    };
+    const w = world({ rotation: [90, 0, 30], position: [1000, 0, 0], features: [hole, blind], metrics });
+    const list = holeCentres(w.ctx);
+    expect(list.map((h) => [h.featureId, h.side, h.index])).toEqual([
+      ['h', 'entry', 0],
+      ['h', 'far', 0],
+      ['b', 'entry', 0],
+    ]);
+    const [entry, far] = list;
+    close(entry.point, mapPlacement([100, 100, 18], w.placement));
+    close(entry.normal, mapPlacement([0, 0, 1], w.placement, true));
+    close(far.point, mapPlacement([100, 100, 0], w.placement));
+    close(far.normal, mapPlacement([0, 0, -1], w.placement, true));
+    expect(far).toMatchObject({ instanceId: 'b1', type: 'hole', attachable: true, radius: 3 });
+  });
 });
 
 describe('Hardware', () => {

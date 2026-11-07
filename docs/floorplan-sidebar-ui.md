@@ -125,7 +125,7 @@ Specific moves:
   it.
 - Memory rules that apply: derived values are engraved, never fake inputs
   (properties-panel-kit); typed numeric entry must not be clobbered mid-word
-  (useNumericDraft exists in `components/useNumericDraft.js`; the lifecycle
+  (useNumericDraft exists in `src/hooks/useNumericDraft.js`; the lifecycle
   forms use their own draft state and explicit Apply buttons, keep that model).
 
 ## 4. Phase 1: Fit (must)

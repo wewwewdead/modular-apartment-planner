@@ -40,26 +40,50 @@ import {
   instanceAxis,
   rotateInstance,
   rotateInstanceAbout,
+  rotateInstancesAbout,
   translateInstance,
+  translateInstances,
   turnInstance,
+  turnInstances,
 } from './movement.js';
+import {
+  GROUP_COPY,
+  anchoredMessage,
+  anchoring,
+  childNodes,
+  contains,
+  duplicateNodes,
+  groupKeyAction,
+  groupNodes,
+  isGroupId,
+  isNode,
+  memberIds,
+  nodeName,
+  nodeParent,
+  rigidMovers,
+  topNode,
+  treeRows,
+  ungroupNodes,
+} from './groups.js';
 import { placementKeyAction } from './rotateKeys.js';
+import { DEFAULT_VIEW_MODE, VIEW_MODES, VIEW_MODE_COPY, nextViewMode } from './viewMode.js';
 import { createCutFeature, positionedCut, snapCutPoint } from './cutPlacement.js';
 import { CUT_TOOLS, cutRowDirection, cutTemplate } from './placementCuts.js';
 import { changeRowCount, rowCountLabel } from './placementRows.js';
-import { chosenHoleRows, pickRowHoles, removeChosenHole } from './placementHardware.js';
+import { canFlipSide, chosenHoleRows, flipHardwareSide, pickRowHoles, removeChosenHole } from './placementHardware.js';
 import { mapPlacement, unmapPlacement } from './placement.js';
 import { clone, createPart, normalizeModel, numeric, removeInstance, removePart, uid } from './model.js';
 import { furnitureExample, bracketExample } from './examples.js';
 import { ConstraintEditor, FeatureForm, JsonEditor, SketchForm, ValueField, VectorFields } from './CadEditors.jsx';
 import { buildCutList, cutListCsv } from './fabrication.js';
+import { sectionLabel } from './stockSections.js';
 import CadSketcher from './CadSketcher.jsx';
 import { ExtrudeSummary, SketchOperationPanel, SketchSummary } from './SketchPanels.jsx';
 import { SKETCH_PLANES, planeFrame, sketchConsumer, sketchWorldFrame, toPlane } from './sketchPlane.js';
 import { PLANE_NAMES } from './originPlanes.js';
 import { anchorWorld, formatMm, markOffset, markValue, modelPoses } from './marks.js';
 import { entityPolyline } from './sketchProfile.js';
-import { mateInstance } from './mate.js';
+import { mateInstance, mateNodes } from './mate.js';
 import SheetPreview from './SheetPreview.jsx';
 import { FieldContexts } from './liveField.js';
 import { DesignParametersForm, ParametersPanel } from './ParametersPanel.jsx';
@@ -77,6 +101,8 @@ import {
   sketchView,
 } from './sketchOperations.js';
 import { sheetSvg } from './drawings.js';
+import NumericInput from '../components/NumericInput.jsx';
+import { BusyButton, LOADING_COPY, LoadingBar, PanePlaceholder, kernelBuilding } from '@/ui/loading';
 import './cad.css';
 
 const tabs = ['Sketch', 'Solid', 'Assemble', 'Drawings', 'Manufacture'];
@@ -106,7 +132,14 @@ const icons = {
   Assemble: 'M3 3h7v7H3zM14 14h7v7h-7zM7 14v4h3m4-11h4v3',
   Drawings: 'M5 2h11l4 4v16H5zM8 9h9M8 13h9M8 17h5',
   Manufacture: 'M3 21V10l6 3V7l6 3V3h6v18H3m3-4h2m4 0h2m4 0h1',
+  // Two overlapping squares: a group of parts.
+  Group: 'M3 9h12v12H3zM9 9V3h12v12h-6',
 };
+// Centre of a world box [min, max].
+const boxCentre = ([min, max]) => min.map((v, i) => (v + max[i]) / 2);
+// A face mate moves one part, or a group's rigid movers (§3.6).
+const mateMove = (model, session, parameters) =>
+  session.movers ? mateNodes(model, session, parameters) : mateInstance(model, session, parameters);
 function Icon({ name }) {
   return (
     <svg
@@ -206,7 +239,11 @@ export default function CadWorkspace({
   }, [operationDraft, draftStale, runtime.snapshot, displayPreview]);
   const [tab, setTab] = useState('Solid'),
     [search, setSearch] = useState(''),
-    [selectedId, setSelectedId] = useState(null),
+    // Selection (docs/sketch-studio-part-groups.md §3.2): node ids (instances
+    // and / or groups) in click order, and the group being edited inside
+    // (pane state, never saved).
+    [selection, setSelection] = useState([]),
+    [openGroupId, setOpenGroupId] = useState(null),
     [featureId, setFeatureId] = useState(null),
     [sketchId, setSketchId] = useState(null);
   const [view, setView] = useState('isometric'),
@@ -219,11 +256,46 @@ export default function CadWorkspace({
     // Rotate about the bounding-box centre or a point picked on the part.
     [rotateAbout, setRotateAbout] = useState('centre'),
     [perspective, setPerspective] = useState(false),
+    // Solid / X-ray / Wireframe (viewMode.js): this pane only, never saved.
+    [viewMode, setViewMode] = useState(DEFAULT_VIEW_MODE),
     [exploded, setExploded] = useState(false),
     [isolated, setIsolated] = useState(false),
     [section, setSection] = useState(false),
     [sectionDepth, setSectionDepth] = useState(400),
     [fitKey, setFitKey] = useState(0);
+  // Ids an Undo, a remove or a load took away drop out of a multi-selection;
+  // an operation's new instance lives in the draft model only. A single id is
+  // kept as before (a part just added is selected in the same commit that
+  // adds it; a stale one matches nothing). An open group that is gone closes.
+  const liveSelection = useMemo(
+    () => (selection.length === 1 ? selection : selection.filter((id) => isNode(draftModel, id))),
+    [selection, draftModel],
+  );
+  const openGroup = isGroupId(model, openGroupId) ? openGroupId : null;
+  // The single selected part: every single-part tool keys on it, as before;
+  // a group or a multi-selection has no part, like no selection.
+  const selectedId = liveSelection.length === 1 && !isGroupId(draftModel, liveSelection[0]) ? liveSelection[0] : null;
+  const selectedGroup =
+    liveSelection.length === 1 ? model.groups?.find((g) => g.id === liveSelection[0]) || null : null;
+  // Every part the selection holds (groups expanded), in model order.
+  const selectionMembers = useMemo(() => memberIds(draftModel, liveSelection), [draftModel, liveSelection]);
+  // A group or several parts: moved, turned, hidden and copied as one body (§3.5).
+  const isBody = !selectedId && selectionMembers.length > 0;
+  // What the viewport gizmo moves: the part, the group, or the multi-selection.
+  const movingKey = selectedId || selectedGroup?.id || (isBody ? 'selection' : null);
+  // Programmatic selection of exactly one node (a tool, an added part, a
+  // finished operation): inside its parent group, so a part in a group opens
+  // that group instead of selecting the outer one.
+  const setSelectedId = (id) => {
+    setSelection(id ? [id] : []);
+    if (id) setOpenGroupId(nodeParent(draftModel, id));
+  };
+  // Tree group rows the user collapsed (a group holding the selection opens).
+  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
+  // The group panel's Move by (mm): a ref too, so Enter in a box applies the
+  // value that box just committed.
+  const [moveBy, setMoveBy] = useState([0, 0, 0]);
+  const moveByRef = useRef([0, 0, 0]);
   // Another document opened while this workspace stays mounted (Open, Import,
   // New, a template): frame it once, as a model opened with parts is framed
   // on mount. Parts added in the session never refit (see addPart).
@@ -272,6 +344,8 @@ export default function CadWorkspace({
   const [panel, setPanel] = useState(importProfileIds ? 'import-drafting' : null),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
+    // The export a ribbon button started, so that button alone shows the busy face.
+    [exportingType, setExportingType] = useState(null),
     [drawings, setDrawings] = useState(null),
     [split, setSplit] = useState(false),
     [drawingZoom, setDrawingZoom] = useState(1),
@@ -281,7 +355,7 @@ export default function CadWorkspace({
     [propertiesOpen, setPropertiesOpen] = useState(true);
   useLayoutEffect(() => {
     if (propertiesPanel.current) propertiesPanel.current.scrollTop = 0;
-  }, [selectedId, panel]);
+  }, [movingKey, panel]);
   useLayoutEffect(() => {
     if (featureId && featureHeading.current && propertiesPanel.current) {
       const editor = propertiesPanel.current;
@@ -313,12 +387,31 @@ export default function CadWorkspace({
   const partInstanceLabel = `${partInstanceCount} instance${partInstanceCount === 1 ? '' : 's'}`;
   const sketch = model.sketches.find((s) => s.id === sketchId);
   const sheet = model.sheets.find((s) => s.id === sheetId) || model.sheets[0];
-  const attached = model.connections.some((c) => c.from === selectedId && c.type !== 'weld');
+  const attached = Boolean(selectedId) && model.connections.some((c) => c.from === selectedId && c.type !== 'weld');
+  // A group is anchored when a member is attached to a part outside it (§3.5).
+  const bodyAnchor = isBody ? anchoring(model, selectionMembers) : null;
   const moveHint = attached
     ? 'This part is attached. Edit Connections / welds or move its parent part.'
-    : exploded
-      ? 'Turn off Exploded view to move parts.'
-      : '';
+    : bodyAnchor
+      ? anchoredMessage(model, bodyAnchor)
+      : exploded
+        ? 'Turn off Exploded view to move parts.'
+        : '';
+  // The rigid movers of the selected body, refusing an anchored one.
+  const bodyMovers = () => {
+    if (!isBody) throw new Error('Select a group or several parts first.');
+    const anchor = anchoring(model, selectionMembers);
+    if (anchor) throw new Error(anchoredMessage(model, anchor));
+    return rigidMovers(model, selectionMembers);
+  };
+  // The union of the members' displayed world boxes (what the user sees).
+  const bodyBounds = () => {
+    const bounds = viewport.current?.getBounds?.(selectionMembers);
+    if (!bounds) throw new Error('Rebuild the selected parts before turning them.');
+    return bounds;
+  };
+  const bodyVisible =
+    isBody && selectionMembers.some((id) => model.instances.find((i) => i.id === id)?.visible !== false);
   // A commit from a field's typing session (read off the field channel): the
   // first one pushes history (the pre-typing snapshot); later live commits and
   // the final Enter / blur of the same session replace the model without a new
@@ -360,10 +453,9 @@ export default function CadWorkspace({
   // Placement edits only need the displayed mesh, so they chain while the
   // kernel is still rebuilding the previous placement.
   const placeable = Boolean(
-    part &&
-    runtime.snapshot?.instances.some((i) => i.id === selectedId) &&
+    ((part && runtime.snapshot?.instances.some((i) => i.id === selectedId) && !attached) ||
+      (isBody && !bodyAnchor && runtime.snapshot?.instances.some((i) => selectionMembers.includes(i.id)))) &&
     !['error', 'cancelled'].includes(runtime.status) &&
-    !attached &&
     !exploded &&
     !busy &&
     !operationDraft &&
@@ -378,8 +470,13 @@ export default function CadWorkspace({
     perform(() => {
       if (latestModel.current !== model) throw new Error('The model changed. Try again.');
       const parameters = runtime.snapshot.parameters;
-      const axis = rotateSpace === 'local' ? instanceAxis(instance, axisName, parameters) : WORLD_AXES[axisName];
       const pivot = rotateAbout === 'picked' && moveMode && gizmo === 'rotate' ? viewport.current.getPivot() : null;
+      // A group: World axes (it has none of its own), through the union centre.
+      if (isBody) {
+        const centre = pivot || boxCentre(bodyBounds());
+        return commit(rotateInstancesAbout(model, bodyMovers(), WORLD_AXES[axisName], degrees, centre, parameters));
+      }
+      const axis = rotateSpace === 'local' ? instanceAxis(instance, axisName, parameters) : WORLD_AXES[axisName];
       if (pivot) return commit(rotateInstanceAbout(model, selectedId, axis, degrees, pivot, parameters));
       const bounds = viewport.current.getInstanceBounds(selectedId);
       commit(rotateInstance(model, selectedId, axis, degrees, bounds, parameters));
@@ -411,8 +508,25 @@ export default function CadWorkspace({
         deleteMark(selectedMark.id);
         return;
       }
+      // Ctrl+G / Ctrl+Shift+G / Ctrl+A / Esc (groups.js): before the
+      // placement keys, which ignore every Ctrl chord.
+      const groupAction = groupKeyAction(event, {
+        nodes: liveSelection.length,
+        hasGroup: liveSelection.some((id) => isGroupId(model, id)),
+        openGroupId: openGroup,
+        busy: Boolean(sketchSession || holeMode || mateSession || operationDraft || measureSession || busy),
+        dragging: Boolean(viewport.current?.isDragging?.()),
+      });
+      if (groupAction) {
+        event.preventDefault();
+        if (groupAction.type === 'group') perform(groupSelection);
+        else if (groupAction.type === 'ungroup') perform(ungroupSelection);
+        else if (groupAction.type === 'selectAll') selectAllNodes();
+        else closeGroup();
+        return;
+      }
       const action = placementKeyAction(event, {
-        selected: Boolean(part),
+        selected: Boolean(part) || isBody,
         busy: Boolean(sketchSession || holeMode || mateSession || operationDraft || measureSession),
         measuring: Boolean(measureSession),
         placeable,
@@ -422,8 +536,10 @@ export default function CadWorkspace({
       });
       if (!action) return;
       event.preventDefault();
+      // X / Shift+X: Solid ↔ X-ray, Wireframe ↔ Solid (any tool may be running).
+      if (action.type === 'view') setViewMode(nextViewMode(viewMode, action));
       // R / M while a boolean tool gizmo is shown: switch its mode.
-      if (action.toolGizmo) setGizmo(action.mode);
+      else if (action.toolGizmo) setGizmo(action.mode);
       else if (action.type === 'tool' && action.tool === 'sketch') {
         if (!busy) perform(startSketchPick);
       } else if (action.type === 'tool') {
@@ -438,20 +554,115 @@ export default function CadWorkspace({
   const changePart = (next) => commit({ ...model, parts: model.parts.map((p) => (p.id === next.id ? next : p)) });
   const changeInstance = (next) =>
     commit({ ...model, instances: model.instances.map((i) => (i.id === next.id ? next : i)) });
-  const select = (id) => {
+  const resetSelectionTools = () => {
     setHoleMode(null);
     setOperationDraft(null);
     setSelectedMarkId(null);
-    setSelectedId(id);
     setSketchId(null);
     setFeatureId(null);
     setPanel(null);
   };
-  // A new Board or Tube lands on the ground at the centre of the current view
-  // (the viewport's drop point, snapped to the Move grid; the origin when the
-  // viewport cannot say) and the camera stays where it is: a board's footprint
-  // is centred on the point (a box is built from its corner), a tube's axis
-  // runs up through it.
+  const select = (id) => {
+    resetSelectionTools();
+    setSelectedId(id);
+  };
+  // A selection of sibling nodes inside `open` (the group edited in, or null).
+  const selectNodes = (ids, open) => {
+    resetSelectionTools();
+    setSelection(ids);
+    setOpenGroupId(open);
+  };
+  // Shift / Ctrl+click: add or remove a node. A selection holds siblings
+  // only, so a node at another level replaces it (§3.3).
+  const toggleNode = (node) => {
+    const parent = nodeParent(draftModel, node);
+    const siblings = liveSelection.every((id) => nodeParent(draftModel, id) === parent);
+    const next = !siblings
+      ? [node]
+      : liveSelection.includes(node)
+        ? liveSelection.filter((id) => id !== node)
+        : [...liveSelection, node];
+    selectNodes(next, parent);
+  };
+  // A click in the viewport reports the raw instance id: select its top node
+  // below the open group (a click outside the open group closes it first);
+  // a double-click opens the group under the cursor one level (§3.3).
+  const pickInstance = (instanceId, { toggle = false, open = false } = {}) => {
+    if (!instanceId || !isNode(draftModel, instanceId)) {
+      if (!toggle) select(null);
+      return;
+    }
+    const context = openGroup && contains(draftModel, openGroup, instanceId) ? openGroup : null;
+    const top = topNode(draftModel, instanceId, context);
+    if (open && isGroupId(draftModel, top)) return selectNodes([topNode(draftModel, instanceId, top)], top);
+    if (toggle) return toggleNode(top);
+    selectNodes([top], context);
+  };
+  const treeClick = (id, event) => (event.shiftKey || event.ctrlKey || event.metaKey ? toggleNode(id) : select(id));
+  // Esc or the banner: close one level and select the group just closed.
+  const closeGroup = () => {
+    if (openGroup) selectNodes([openGroup], nodeParent(model, openGroup));
+  };
+  const groupSelection = () => {
+    if (liveSelection.length < 2) throw new Error(GROUP_COPY.tooFew);
+    const { model: next, groupId } = groupNodes(model, liveSelection);
+    commit(next);
+    selectNodes([groupId], nodeParent(next, groupId));
+  };
+  const ungroupSelection = () => {
+    const groupIds = liveSelection.filter((id) => isGroupId(model, id));
+    if (!groupIds.length) throw new Error('Select a group to ungroup.');
+    const parent = nodeParent(model, groupIds[0]);
+    const { model: next, childIds } = ungroupNodes(model, groupIds);
+    commit(next);
+    selectNodes(childIds, parent);
+  };
+  // Ctrl+A: every node of the current context (the open group, or the top level).
+  const selectAllNodes = () => {
+    const { groups, instances } = childNodes(model, openGroup);
+    selectNodes([...groups, ...instances], openGroup);
+  };
+  const toggleBodyVisibility = () => {
+    const members = new Set(selectionMembers);
+    commit({
+      ...model,
+      instances: model.instances.map((i) => (members.has(i.id) ? { ...i, visible: !bodyVisible } : i)),
+    });
+  };
+  const duplicateBody = () => {
+    const { model: next, nodeIds } = duplicateNodes(model, liveSelection);
+    commit(next);
+    selectNodes(nodeIds, nodeParent(next, nodeIds[0]));
+  };
+  const removeBody = () => {
+    commit(selectionMembers.reduce((next, id) => removeInstance(next, id), model));
+    select(null);
+  };
+  const renameGroup = (id, name) => {
+    const trimmed = String(name).trim();
+    if (!trimmed) throw new Error('A group needs a name.');
+    commit({ ...model, groups: model.groups.map((g) => (g.id === id ? { ...g, name: trimmed } : g)) });
+  };
+  const setMoveByAxis = (axis, value) => {
+    const next = moveByRef.current.map((v, i) => (i === axis ? value : v));
+    moveByRef.current = next;
+    setMoveBy(next);
+  };
+  // Move by: a delta and a button, never a live absolute field (§3.5).
+  const moveBodyBy = () =>
+    perform(() => {
+      const delta = moveByRef.current;
+      if (!delta.some((v) => Math.abs(v) > 1e-9)) return;
+      if (!placeable) throw new Error(moveHint || 'The selection cannot be moved now.');
+      commit(translateInstances(model, bodyMovers(), delta));
+      moveByRef.current = [0, 0, 0];
+      setMoveBy([0, 0, 0]);
+    });
+  // A new Board, Tube or Angle bar lands on the ground at the centre of the
+  // current view (the viewport's drop point, snapped to the Move grid; the
+  // origin when the viewport cannot say) and the camera stays where it is: a
+  // board's footprint is centred on the point (a box is built from its
+  // corner), a member's axis (an angle's bounding-box centre) runs up through it.
   const addPart = (kind) => {
     const created = createPart(kind);
     const [x, y] = viewport.current?.viewDropPoint?.() ?? [0, 0, 0];
@@ -552,6 +763,13 @@ export default function CadWorkspace({
       assertDraftCurrent();
       const hole = pick?.snapKind === 'hole centre' ? pick : null;
       changePlacement(finishPlacement(operationDraft, placementContext(), hole));
+    });
+  // Flip side (Phase Q): every chosen hole to its other opening, in Place or
+  // seated in Shape.
+  const flipOperationSide = () =>
+    perform(() => {
+      assertDraftCurrent();
+      changePlacement(flipHardwareSide(operationDraft, placementContext()));
     });
   const [reopen, setReopen] = useState(null);
   // `again` (Hole / Pocket): reopen the tool in Place with the same sizes
@@ -826,6 +1044,40 @@ export default function CadWorkspace({
     if (!info.planar) throw new Error('Pick a flat face. Curved faces cannot be mated yet.');
     if (!runtime.ready) throw new Error('Wait for the model to rebuild first.');
     if (mateSession.stage === 'moving') {
+      // The first pick takes its top node (§3.3, §3.6): a group mates as one
+      // body, its rigid movers from their poses before the mate.
+      const context = openGroup && contains(model, openGroup, info.instanceId) ? openGroup : null;
+      const node = topNode(model, info.instanceId, context);
+      if (isGroupId(model, node)) {
+        const members = memberIds(model, [node]);
+        const anchor = anchoring(model, members);
+        if (anchor) throw new Error(anchoredMessage(model, anchor));
+        const movers = rigidMovers(model, members);
+        const bounds = viewport.current.getBounds(members);
+        if (!bounds) throw new Error('Pick a face of a visible part.');
+        setSelection([node]);
+        setOpenGroupId(context);
+        setMateSession({
+          stage: 'target',
+          instanceId: info.instanceId,
+          nodeId: node,
+          members,
+          movers,
+          moving: { point: info.point, normal: info.normal },
+          bases: Object.fromEntries(
+            movers.map((id) => {
+              const mover = model.instances.find((i) => i.id === id);
+              return [
+                id,
+                { position: [...(mover.position || [0, 0, 0])], rotation: [...(mover.rotation || [0, 0, 0])] },
+              ];
+            }),
+          ),
+          center: boxCentre(bounds),
+          offset: 0,
+        });
+        return;
+      }
       if (model.connections.some((c) => c.from === info.instanceId && c.type !== 'weld'))
         throw new Error('This part is attached to another one. Edit Connections / welds to move it.');
       const moving = model.instances.find((i) => i.id === info.instanceId);
@@ -842,20 +1094,21 @@ export default function CadWorkspace({
       });
       return;
     }
+    if (mateSession.members?.includes(info.instanceId)) throw new Error(GROUP_COPY.outside);
     if (info.instanceId === mateSession.instanceId) throw new Error('Pick a face on a different part.');
     const next = { ...mateSession, stage: 'placed', target: { point: info.point, normal: info.normal } };
-    commit(mateInstance(model, next, runtime.snapshot.parameters));
+    commit(mateMove(model, next, runtime.snapshot.parameters));
     setMateSession(next);
   };
   const changeMateOffset = (offset) =>
     performField(() => {
       const value = numeric(offset, runtime.snapshot?.parameters || {}, 'Offset');
       const next = { ...mateSession, offset: value };
-      commit(mateInstance(model, next, runtime.snapshot?.parameters || {}));
+      commit(mateMove(model, next, runtime.snapshot?.parameters || {}));
       setMateSession(next);
     });
   const finishMate = () => {
-    const id = mateSession?.instanceId;
+    const id = mateSession?.nodeId || mateSession?.instanceId;
     setMateSession(null);
     select(id || null);
     setGizmo('translate');
@@ -924,7 +1177,15 @@ export default function CadWorkspace({
     if (mateSession?.stage === 'placed')
       commit({
         ...model,
-        instances: model.instances.map((i) => (i.id === mateSession.instanceId ? { ...i, ...mateSession.base } : i)),
+        instances: model.instances.map((i) =>
+          mateSession.bases
+            ? mateSession.bases[i.id]
+              ? { ...i, ...mateSession.bases[i.id] }
+              : i
+            : i.id === mateSession.instanceId
+              ? { ...i, ...mateSession.base }
+              : i,
+        ),
       });
     setMateSession(null);
     setPanel(null);
@@ -933,7 +1194,9 @@ export default function CadWorkspace({
     if (!renaming) return;
     const name = renaming.value.trim();
     const target = model.instances.find((i) => i.id === renaming.id);
+    const group = model.groups?.find((g) => g.id === renaming.id);
     setRenaming(null);
+    if (name && group && group.name !== name) return perform(() => renameGroup(group.id, name));
     if (!name || !target) return;
     // Rename what the tree shows: the instance's own name, else its part.
     if (target.name) changeInstance({ ...target, name });
@@ -1085,6 +1348,7 @@ export default function CadWorkspace({
         throw new Error('Export cancelled or the model changed. Export the current design again.');
     };
     setBusy(true);
+    setExportingType(type);
     try {
       const { download, workshopZip, vectorPdf } = await import('./exports.js');
       assertCurrent();
@@ -1129,7 +1393,10 @@ export default function CadWorkspace({
         download(file.stl, `${part.id}.stl`);
       }
     } finally {
-      if (generation === exportGeneration.current) setBusy(false);
+      if (generation === exportGeneration.current) {
+        setBusy(false);
+        setExportingType(null);
+      }
     }
   };
   const commands = [
@@ -1168,6 +1435,7 @@ export default function CadWorkspace({
     },
     { tab: 'Solid', label: 'Board / plate', run: () => addPart('board') },
     { tab: 'Solid', label: 'Tube / member', run: () => addPart('member') },
+    { tab: 'Solid', label: 'Angle bar', run: () => addPart('angle') },
     { tab: 'Solid', label: 'Rear cover example', run: () => loadExample('cover') },
     { tab: 'Solid', label: 'Place holes', run: () => startHoleTool('place') },
     { tab: 'Solid', label: 'Move holes', run: () => startHoleTool('move') },
@@ -1208,6 +1476,8 @@ export default function CadWorkspace({
       tab: 'Assemble',
       label: 'Duplicate instance',
       run: () => {
+        // A group or several parts: copied with their groups and internal connections (§3.6).
+        if (isBody) return duplicateBody();
         if (!instance) throw new Error('Select a part instance.');
         const copy = {
           ...clone(instance),
@@ -1217,6 +1487,18 @@ export default function CadWorkspace({
         commit({ ...model, instances: [...model.instances, copy] });
         select(copy.id);
       },
+    },
+    {
+      tab: 'Assemble',
+      label: 'Group',
+      title: 'Group the selected parts so they move together (Ctrl+G)',
+      run: groupSelection,
+    },
+    {
+      tab: 'Assemble',
+      label: 'Ungroup',
+      title: 'Split the selected group one level (Ctrl+Shift+G)',
+      run: ungroupSelection,
     },
     { tab: 'Assemble', label: 'Mate faces', current: true, run: startMate },
     { tab: 'Assemble', label: 'Measure', run: startMeasure },
@@ -1234,6 +1516,8 @@ export default function CadWorkspace({
       tab: 'Assemble',
       label: 'Hide / show',
       run: () => {
+        // A group: hide every member while any is visible, else show them all.
+        if (isBody) return toggleBodyVisibility();
         if (instance) changeInstance({ ...instance, visible: instance.visible === false });
       },
     },
@@ -1352,13 +1636,27 @@ export default function CadWorkspace({
         commit({ ...model, sheets: [...model.sheets, ...added] });
       },
     },
-    { tab: 'Drawings', label: 'Vector PDF', current: true, run: () => exportFile('pdf') },
+    {
+      tab: 'Drawings',
+      label: 'Vector PDF',
+      current: true,
+      exportType: 'pdf',
+      busyLabel: LOADING_COPY.sheetPdfWorkshop,
+      run: () => exportFile('pdf'),
+    },
     { tab: 'Manufacture', label: 'Cutting list', current: true, run: () => setPanel('cuts') },
     { tab: 'Manufacture', label: 'Fabrication settings', run: () => setPanel('fabrication') },
     { tab: 'Manufacture', label: 'Export CSV', current: true, run: () => exportFile('csv') },
     { tab: 'Manufacture', label: 'STEP assembly', current: true, run: () => exportFile('step') },
     { tab: 'Manufacture', label: 'STL part', current: true, run: () => exportFile('stl') },
-    { tab: 'Manufacture', label: 'Workshop ZIP', current: true, run: () => exportFile('zip') },
+    {
+      tab: 'Manufacture',
+      label: 'Workshop ZIP',
+      current: true,
+      exportType: 'zip',
+      busyLabel: LOADING_COPY.workshopZip,
+      run: () => exportFile('zip'),
+    },
   ];
   const pickingFace = sketchSession?.stage === 'pick' || (mateSession && mateSession.stage !== 'placed');
   // Origin plane tiles: on an empty model at rest, and while picking where a new sketch goes.
@@ -1401,6 +1699,20 @@ export default function CadWorkspace({
         if (next !== operationDraft) setOperationDraft(next);
         return;
       }
+      // F: Flip side (Phase Q) while Hardware has chosen holes, choosing or seated.
+      const p = operationDraft.placement;
+      if (
+        (event.code === 'KeyF' || event.key === 'f' || event.key === 'F') &&
+        !event.repeat &&
+        !event.shiftKey &&
+        p?.tool === 'hardware' &&
+        p.holes?.length &&
+        (p.stage === 'place' || operationDraft.connections?.length)
+      ) {
+        event.preventDefault();
+        flipOperationSide();
+        return;
+      }
       if (event.key === 'Escape') {
         event.preventDefault();
         const back = draftStale ? null : stepBack(operationDraft, placementContext());
@@ -1410,7 +1722,6 @@ export default function CadWorkspace({
         // A focused, enabled control activates itself on Enter.
         const control = event.target instanceof HTMLElement ? event.target.closest('button, a, summary') : null;
         if (control && !control.disabled) return;
-        const p = operationDraft.placement;
         // Enter in a hole row's direction stage takes the default row;
         // Hardware with chosen holes (Phase M) seats it in them.
         if (
@@ -1544,8 +1855,11 @@ export default function CadWorkspace({
           {commands
             .filter((c) => (search ? c.label.toLowerCase().includes(search.toLowerCase()) : c.tab === tab))
             .map((c) => (
-              <button
+              <BusyButton
                 key={c.label}
+                busy={Boolean(c.exportType) && exportingType === c.exportType}
+                busyLabel={c.busyLabel}
+                title={c.title}
                 disabled={
                   busy ||
                   Boolean(operationDraft) ||
@@ -1557,7 +1871,7 @@ export default function CadWorkspace({
               >
                 <Icon name={c.tab} />
                 {c.label}
-              </button>
+              </BusyButton>
             ))}
         </div>
         <div className="cad-main">
@@ -1581,10 +1895,79 @@ export default function CadWorkspace({
                 </button>
                 <details open>
                   <summary>Assembly · {model.instances.length} instances</summary>
-                  {model.instances.map((i) => {
+                  {treeRows(model).map(function treeRow(row) {
+                    if (row.kind === 'group') {
+                      const { group } = row;
+                      // Collapsed by hand, unless it holds the selection.
+                      const expanded =
+                        !collapsedGroups.has(row.id) || liveSelection.some((id) => contains(model, row.id, id));
+                      return (
+                        <div key={row.id} className="cad-tree-node" style={{ '--cad-tree-depth': row.depth }}>
+                          {renaming?.id === row.id ? (
+                            <input
+                              className="cad-tree-rename"
+                              aria-label="Rename group"
+                              autoFocus
+                              value={renaming.value}
+                              onChange={(e) => setRenaming({ ...renaming, value: e.target.value })}
+                              onBlur={commitRename}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') commitRename();
+                                if (e.key === 'Escape') setRenaming(null);
+                              }}
+                            />
+                          ) : (
+                            <div className="cad-tree-group-row">
+                              <button
+                                type="button"
+                                className="cad-tree-caret"
+                                aria-expanded={expanded}
+                                aria-label={`${expanded ? 'Collapse' : 'Expand'} ${group.name}`}
+                                onClick={() =>
+                                  setCollapsedGroups((collapsed) => {
+                                    const next = new Set(collapsed);
+                                    if (expanded) next.add(row.id);
+                                    else next.delete(row.id);
+                                    return next;
+                                  })
+                                }
+                              >
+                                {expanded ? '▾' : '▸'}
+                              </button>
+                              <button
+                                className={`cad-tree-item cad-tree-group ${liveSelection.includes(row.id) ? 'is-selected' : ''} ${openGroup === row.id ? 'is-open' : ''}`}
+                                title="Click to select the group · double-click or F2 to rename · Shift+click to add to the selection"
+                                onClick={(e) => treeClick(row.id, e)}
+                                onDoubleClick={() => setRenaming({ id: row.id, value: group.name })}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'F2') {
+                                    e.preventDefault();
+                                    setRenaming({ id: row.id, value: group.name });
+                                  }
+                                }}
+                              >
+                                <Icon name="Group" />
+                                <span>
+                                  {group.name}
+                                  <small>
+                                    {row.count} parts{row.hidden ? ' · hidden' : ''}
+                                  </small>
+                                </span>
+                              </button>
+                            </div>
+                          )}
+                          {expanded && (
+                            <div className="cad-tree-children" role="group" aria-label={`${group.name} members`}>
+                              {row.children.map(treeRow)}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                    const i = row.instance;
                     const p = model.parts.find((p) => p.id === i.partId);
                     return (
-                      <div key={i.id}>
+                      <div key={i.id} className="cad-tree-node" style={{ '--cad-tree-depth': row.depth }}>
                         {renaming?.id === i.id ? (
                           <input
                             className="cad-tree-rename"
@@ -1600,9 +1983,9 @@ export default function CadWorkspace({
                           />
                         ) : (
                           <button
-                            className={`cad-tree-item ${selectedId === i.id ? 'is-selected' : ''}`}
+                            className={`cad-tree-item ${liveSelection.includes(i.id) ? 'is-selected' : ''}`}
                             title="Double-click or F2 to rename"
-                            onClick={() => select(i.id)}
+                            onClick={(e) => treeClick(i.id, e)}
                             onDoubleClick={() => setRenaming({ id: i.id, value: i.name || p?.name || '' })}
                             onKeyDown={(e) => {
                               if (e.key === 'F2') {
@@ -1729,6 +2112,20 @@ export default function CadWorkspace({
                 {perspective ? 'Perspective' : 'Orthographic'}
               </button>
               <button onClick={() => setFitKey(fitKey + 1)}>Fit</button>
+              <span className="cad-segmented" role="group" aria-label="See-through mode">
+                {[VIEW_MODES.SOLID, VIEW_MODES.XRAY, VIEW_MODES.WIREFRAME].map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={viewMode === mode}
+                    aria-label={VIEW_MODE_COPY[mode].ariaLabel}
+                    title={VIEW_MODE_COPY[mode].title}
+                    onClick={() => setViewMode(mode)}
+                  >
+                    {VIEW_MODE_COPY[mode].label}
+                  </button>
+                ))}
+              </span>
               {[
                 [
                   'translate',
@@ -1764,6 +2161,20 @@ export default function CadWorkspace({
                   onClick={() =>
                     perform(() => {
                       if (latestModel.current !== model) throw new Error('The model changed. Try again.');
+                      // A group flips about the union of its members' boxes, around its centre.
+                      if (isBody) {
+                        const bounds = bodyBounds();
+                        return commit(
+                          rotateInstancesAbout(
+                            model,
+                            bodyMovers(),
+                            flipAxis(direction, bounds),
+                            180,
+                            boxCentre(bounds),
+                            runtime.snapshot.parameters,
+                          ),
+                        );
+                      }
                       const bounds = viewport.current.getInstanceBounds(selectedId);
                       commit(
                         flipInstance(
@@ -1817,13 +2228,12 @@ export default function CadWorkspace({
                 <>
                   <label>
                     Hole snap (mm){' '}
-                    <input
+                    <NumericInput
                       aria-label="Hole snap (mm)"
-                      type="number"
                       min="0"
                       step="0.1"
                       value={holeSnap}
-                      onChange={(e) => setHoleSnap(Math.max(0, Number(e.target.value) || 0))}
+                      onCommit={(v) => setHoleSnap(Math.max(0, v))}
                       title="0 for free placement"
                     />
                   </label>
@@ -1847,8 +2257,10 @@ export default function CadWorkspace({
                       <button
                         key={space}
                         type="button"
-                        aria-pressed={rotateSpace === space}
-                        title={title}
+                        aria-pressed={(isBody ? 'world' : rotateSpace) === space}
+                        // A group has no axes of its own (§3.5).
+                        disabled={isBody && space === 'local'}
+                        title={isBody && space === 'local' ? GROUP_COPY.localDisabled : title}
                         onClick={() => setRotateSpace(space)}
                       >
                         {label}
@@ -1862,7 +2274,7 @@ export default function CadWorkspace({
                       disabled={!placeable}
                       title={
                         moveHint ||
-                        `Turn 90° about the ${rotateSpace === 'local' ? "part's own " : ''}${name} axis · Shift+click turns the other way` +
+                        `Turn 90° about the ${rotateSpace === 'local' && !isBody ? "part's own " : ''}${name} axis · Shift+click turns the other way` +
                           (name === 'Z'
                             ? ' · ] and [ turn by the angle snap'
                             : name === 'X'
@@ -1889,13 +2301,12 @@ export default function CadWorkspace({
                   </span>
                   <label>
                     Angle snap (°){' '}
-                    <input
+                    <NumericInput
                       aria-label="Rotate snap (degrees)"
-                      type="number"
                       min="0"
                       step="1"
                       value={rotateSnap}
-                      onChange={(e) => setRotateSnap(Math.max(0, Number(e.target.value) || 0))}
+                      onCommit={(v) => setRotateSnap(Math.max(0, v))}
                       title="A custom step; 0 for free rotation"
                     />
                   </label>
@@ -1920,13 +2331,12 @@ export default function CadWorkspace({
               {moveMode && gizmo === 'translate' && (
                 <label>
                   Snap (mm){' '}
-                  <input
+                  <NumericInput
                     aria-label="Move snap (mm)"
-                    type="number"
                     min="0"
                     step="1"
                     value={moveSnap}
-                    onChange={(e) => setMoveSnap(Math.max(0, Number(e.target.value) || 0))}
+                    onCommit={(v) => setMoveSnap(Math.max(0, v))}
                     title="0 for free movement"
                   />
                 </label>
@@ -1936,13 +2346,7 @@ export default function CadWorkspace({
               </button>
               {section && (
                 <label>
-                  Section Z{' '}
-                  <input
-                    aria-label="Section depth"
-                    type="number"
-                    value={sectionDepth}
-                    onChange={(e) => setSectionDepth(Number(e.target.value))}
-                  />
+                  Section Z <NumericInput aria-label="Section depth" value={sectionDepth} onCommit={setSectionDepth} />
                 </label>
               )}
               {!propertiesOpen && <button onClick={() => setPropertiesOpen(true)}>‹ Properties</button>}
@@ -1958,10 +2362,13 @@ export default function CadWorkspace({
                   focusTarget={focusTarget}
                   model={displayPreview ? draftModel : model}
                   selectedId={selectedId}
-                  onSelect={select}
+                  selectedIds={selectionMembers}
+                  movingKey={movingKey}
+                  onSelect={pickInstance}
                   isolated={isolated}
                   view={view}
                   perspective={perspective}
+                  viewMode={viewMode}
                   exploded={exploded}
                   section={section ? sectionDepth : null}
                   fitKey={fitKey}
@@ -1969,7 +2376,7 @@ export default function CadWorkspace({
                   moveEnabled={moveMode && placeable}
                   transformMode={gizmo}
                   rotateSnap={rotateSnap}
-                  rotateSpace={rotateSpace}
+                  rotateSpace={isBody ? 'world' : rotateSpace}
                   pivotPick={rotateAbout === 'picked'}
                   holeMode={!operationDraft && !exploded && !section && !busy ? holeMode : null}
                   onPlaceHole={(point, normal, planar, options) =>
@@ -1985,12 +2392,16 @@ export default function CadWorkspace({
                   onMove={(id, delta) =>
                     perform(() => {
                       if (latestModel.current !== model) throw new Error('The model changed. Try the move again.');
+                      // The group or multi-selection key: its rigid movers, as one body.
+                      if (isBody && id === movingKey) return commit(translateInstances(model, bodyMovers(), delta));
                       commit(translateInstance(model, id, delta));
                     })
                   }
                   onRotate={(id, turn, center) =>
                     perform(() => {
                       if (latestModel.current !== model) throw new Error('The model changed. Try the turn again.');
+                      if (isBody && id === movingKey)
+                        return commit(turnInstances(model, bodyMovers(), turn, center, runtime.snapshot.parameters));
                       commit(turnInstance(model, id, turn, center, runtime.snapshot.parameters));
                     })
                   }
@@ -2033,6 +2444,22 @@ export default function CadWorkspace({
                     onLookAt={lookAtSketch}
                   />
                 )}
+                {/*
+                  The open-group banner (§3.3) sits over the view, top centre:
+                  in the view toolbar it wrapped the toolbar onto a second row
+                  at 1600 px (docs/sketch-studio-part-groups.md §10).
+                */}
+                {openGroup && (
+                  <button
+                    type="button"
+                    className="cad-group-chip"
+                    aria-label={`Inside ${nodeName(model, openGroup)} · Close (Esc)`}
+                    title="Close this group and select it (Esc)"
+                    onClick={closeGroup}
+                  >
+                    Inside <strong>{nodeName(model, openGroup)}</strong> · Close (Esc)
+                  </button>
+                )}
                 <div className="cad-view-cube" aria-label="View cube">
                   {['top', 'front', 'right', 'isometric'].map((v) => (
                     <button key={v} onClick={() => setView(v)}>
@@ -2040,6 +2467,37 @@ export default function CadWorkspace({
                     </button>
                   ))}
                 </div>
+                {/*
+                  Until the first snapshot there is no model to keep on screen, so
+                  the viewport says what it is waiting on: the WASM kernel, then
+                  the parts. After that a rebuild never covers the model — the
+                  bar above it and the status line are the whole signal.
+                */}
+                {!runtime.snapshot ? (
+                  <PanePlaceholder
+                    overlay
+                    tone="paper"
+                    data-kernel-boot=""
+                    state={
+                      ['error', 'cancelled'].includes(runtime.status)
+                        ? 'error'
+                        : runtime.kernelAwake
+                          ? 'building'
+                          : 'booting'
+                    }
+                    label={
+                      runtime.kernelAwake && model.parts.length
+                        ? kernelBuilding(model.parts.length)
+                        : LOADING_COPY.kernelBoot
+                    }
+                    error={{
+                      message: runtime.error?.message || LOADING_COPY.kernelFailed,
+                      onRetry: runtime.retry,
+                    }}
+                  />
+                ) : (
+                  <LoadingBar active={runtime.status === 'building'} placement="region" delayMs={150} />
+                )}
                 {operationDraft && (
                   <div className="cad-preview-badge">
                     {displayPreview
@@ -2541,6 +2999,12 @@ export default function CadWorkspace({
                       changePlacement(removeChosenHole(operationDraft, key, placementContext()));
                     })
                   }
+                  canFlipSide={
+                    operationDraft.placement?.tool === 'hardware' &&
+                    !draftStale &&
+                    canFlipSide(operationDraft, placementContext(), placementShown?.holeCentres || null)
+                  }
+                  onFlipSide={flipOperationSide}
                   onChangeAxis={() => setOperationDraft(startAxisPick(operationDraft))}
                   onSweepOptions={(patch) =>
                     performField(() => setOperationDraft(changeSweepOptions(operationDraft, patch, placementContext())))
@@ -2761,6 +3225,7 @@ export default function CadWorkspace({
                       </small>
                       {r.member ? (
                         <>
+                          <span>{sectionLabel(r.member.section)}</span>
                           <span>CL {r.member.centerline.toFixed(2)} mm</span>
                           <span>
                             Long {r.member.longPoint.toFixed(2)} / short {r.member.shortPoint.toFixed(2)} mm
@@ -2801,6 +3266,129 @@ export default function CadWorkspace({
                   </p>
                   <JsonEditor key={JSON.stringify(model)} label="Model JSON" value={model} onApply={commit} />
                 </>
+              ) : isBody ? (
+                // A group or several parts (§4.6): no single part, so the
+                // single-part tools stay off; this panel acts on the body.
+                <section className="cad-group-panel" aria-label="Selection">
+                  {selectedGroup ? (
+                    <>
+                      <h3>Group</h3>
+                      <ValueField
+                        key={`${selectedGroup.id}-name`}
+                        label="Group name"
+                        asText
+                        value={selectedGroup.name}
+                        onChange={(name) => renameGroup(selectedGroup.id, name)}
+                      />
+                    </>
+                  ) : (
+                    <h3>
+                      {liveSelection.length}{' '}
+                      {liveSelection.some((id) => isGroupId(model, id)) ? 'items selected' : 'parts selected'}
+                    </h3>
+                  )}
+                  {(() => {
+                    const boxes = selectionMembers
+                      .map((id) => runtime.snapshot?.instances.find((i) => i.id === id)?.bounds)
+                      .filter(Boolean);
+                    if (!boxes.length) return null;
+                    const min = [0, 1, 2].map((k) => Math.min(...boxes.map((b) => b[0][k])));
+                    const max = [0, 1, 2].map((k) => Math.max(...boxes.map((b) => b[1][k])));
+                    const span = (k) => `${['X', 'Y', 'Z'][k]} ${+min[k].toFixed(3)}–${+max[k].toFixed(3)}`;
+                    return (
+                      <p className="cad-part-size" aria-label="Selection extent">
+                        Spans {[0, 1, 2].map(span).join(' · ')} mm{runtime.ready ? '' : ' · rebuilding'}
+                      </p>
+                    );
+                  })()}
+                  {moveHint && <p className="cad-help">{moveHint}</p>}
+                  {rigidMovers(model, selectionMembers).some((id) =>
+                    model.connections.some(
+                      (c) =>
+                        c.from === id &&
+                        (c.type === 'align' || (c.type === 'face-offset' && !(c.fromReference && c.toReference))),
+                    ),
+                  ) && (
+                    <p className="cad-help">
+                      Aligned parts re-align along their connection&apos;s world axis after turning.
+                    </p>
+                  )}
+                  <h4>Parts</h4>
+                  <ul className="cad-group-members" aria-label="Selected parts">
+                    {selectionMembers.map((id) => (
+                      <li key={id}>
+                        <button type="button" title="Open its group and select this part" onClick={() => select(id)}>
+                          {nodeName(draftModel, id)}
+                          {draftModel.instances.find((i) => i.id === id)?.visible === false ? ' · hidden' : ''}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <h4>Move by (mm)</h4>
+                  <div
+                    className="cad-move-by"
+                    role="group"
+                    aria-label="Move by (mm)"
+                    onKeyDown={(e) => {
+                      // Enter in a box commits that box (NumericInput), then moves.
+                      if (e.key === 'Enter' && e.target instanceof HTMLInputElement) moveBodyBy();
+                    }}
+                  >
+                    {['X', 'Y', 'Z'].map((axis, k) => (
+                      <label key={axis} className={`cad-axis-${axis.toLowerCase()}`}>
+                        {axis}
+                        <NumericInput
+                          aria-label={`Move by ${axis} (mm)`}
+                          step="1"
+                          value={moveBy[k]}
+                          onCommit={(v) => setMoveByAxis(k, v)}
+                        />
+                      </label>
+                    ))}
+                    <button type="button" disabled={!placeable} title={moveHint || undefined} onClick={moveBodyBy}>
+                      Move
+                    </button>
+                  </div>
+                  <div className="cad-inline cad-group-actions">
+                    {liveSelection.length >= 2 && (
+                      <button
+                        type="button"
+                        title="Group the selected parts so they move together (Ctrl+G)"
+                        onClick={() => perform(groupSelection)}
+                      >
+                        Group
+                      </button>
+                    )}
+                    {liveSelection.some((id) => isGroupId(model, id)) && (
+                      <button
+                        type="button"
+                        title="Split the selected group one level (Ctrl+Shift+G)"
+                        onClick={() => perform(ungroupSelection)}
+                      >
+                        Ungroup
+                      </button>
+                    )}
+                    <button type="button" onClick={() => perform(toggleBodyVisibility)}>
+                      {bodyVisible ? 'Hide' : 'Show'}
+                    </button>
+                    <button type="button" aria-pressed={isolated} onClick={() => setIsolated(!isolated)}>
+                      Isolate
+                    </button>
+                    <button
+                      type="button"
+                      disabled={Boolean(bodyAnchor)}
+                      title={bodyAnchor ? moveHint : 'Copy the parts, their groups and connections, 100 mm along X'}
+                      onClick={() => perform(duplicateBody)}
+                    >
+                      Duplicate
+                    </button>
+                    <button type="button" className="cad-danger" onClick={() => perform(removeBody)}>
+                      {selectedGroup
+                        ? `Remove group · ${selectionMembers.length} parts`
+                        : `Remove ${selectionMembers.length} parts`}
+                    </button>
+                  </div>
+                </section>
               ) : part ? (
                 <>
                   <h3>{part.name}</h3>
@@ -3046,6 +3634,7 @@ export default function CadWorkspace({
                   <div className="cad-inline">
                     <button onClick={() => perform(() => addPart('board'))}>Board / plate</button>
                     <button onClick={() => perform(() => addPart('member'))}>Tube / member</button>
+                    <button onClick={() => perform(() => addPart('angle'))}>Angle bar</button>
                   </div>
                   <button onClick={openDesignParameters}>Design parameters</button>
                   <h4>Examples</h4>

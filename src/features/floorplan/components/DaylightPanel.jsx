@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { DaylightIcon } from '@/ui/ToolbarIcons';
 import { daylightFactorToLux } from '@/analysis/daylightModel';
+import { LOADING_COPY, LoadingPill, daylightSampling } from '@/ui/loading';
 import styles from './DaylightPanel.module.css';
 
 const MODES = [
@@ -111,13 +112,20 @@ export default function DaylightPanel({
 
           {daylight.mode === 'grid' && (
             <div className={styles.gridStatus} data-status={gridStatus}>
+              {/* The user pressed for this, so the pill answers at once with the
+                  sampler's own counts. A superseded map stays on the plan, dimmed. */}
               {gridStatus === 'running' && (
-                <span>
-                  {gridProgress
-                    ? `Sampling ${gridProgress.roomName} — ${gridProgress.done} of ${gridProgress.total}`
-                    : 'Preparing…'}
-                  {gridStale ? ' · showing the previous map' : ''}
-                </span>
+                <LoadingPill
+                  placement="inline"
+                  delayMs={0}
+                  label={
+                    gridProgress
+                      ? daylightSampling(gridProgress.roomName, gridProgress.done, gridProgress.total)
+                      : LOADING_COPY.analysisPreparing
+                  }
+                  detail={gridStale ? LOADING_COPY.recomputingMap : null}
+                  showDetail={gridStale}
+                />
               )}
               {gridStatus === 'ready' && (
                 <span>Ray-sampled map · {study?.rooms?.[0]?.grid?.rayCount ?? 0} rays per sensor</span>

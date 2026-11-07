@@ -427,6 +427,24 @@ function buildFramingMemberDescriptors(context, assembly, options = {}) {
   );
 }
 
+// One entry per wall object, valid while the floor it was built against is the
+// same object: the members are a pure function of the wall and its floor (the
+// context, the assembly and the layout all derive from those two), and both are
+// replaced, never mutated, by the reducers — the rule `resolveWallDetailFrame`'s
+// cache already relies on. Every framed wall builds its frame on every rebuild
+// (§13), so without this a drag on one floor re-derived the studs of every
+// framed wall on every other floor, fifteen times a second (measured in §13.6:
+// about a fifth of what the members add to a drag frame).
+const wallFrameCache = new WeakMap();
+
+function wallFrameDescriptors(context, assembly) {
+  const cached = wallFrameCache.get(context.wall);
+  if (cached && cached.floor === context.floor) return cached.members;
+  const members = buildFramingMemberDescriptors(context, assembly, { includeWhenDisabled: true });
+  wallFrameCache.set(context.wall, { floor: context.floor, members });
+  return members;
+}
+
 function buildDetailedWallObjects(context, assembly, layers) {
   const detailing = resolveWallDetailing(context.wall);
   const normal = perpendicular(wallDirection(context.sourceWall));
@@ -602,8 +620,14 @@ function buildWallObjects(wallContexts, hiddenBoardSides = EMPTY_HIDDEN_BOARDS) 
     const layers = deriveWallAssemblyLayers(assembly, wallLength(context.bodyWall)).filter(
       (layer) => layer.material !== WALL_BOARD_MATERIALS.NONE && layer.buildUp > 0,
     );
+    // The fallback core wears the framing's look under its own palette keys:
+    // it stands in for studs but is not studs, and the see-through modes tier
+    // by material — X-ray keeps the real members (`buildFramingMemberDescriptors`)
+    // solid and ghosts this slab with the boards (docs/preview-xray-mode.md §12).
+    // Since §13 the slab is only the fallback for a wall with no derivable
+    // frame; every other framed wall draws its members (below).
     const coreMaterialKey =
-      assembly.framing.material === WALL_FRAME_MATERIALS.TIMBER ? 'wallFramingTimber' : 'wallFramingSteel';
+      assembly.framing.material === WALL_FRAME_MATERIALS.TIMBER ? 'wallCoreTimber' : 'wallCoreSteel';
 
     // Board faces stripped for inspection. Whichever side is left keeps its
     // cladding, so you can strip one face and still read the wall's thickness.
@@ -626,18 +650,24 @@ function buildWallObjects(wallContexts, hiddenBoardSides = EMPTY_HIDDEN_BOARDS) 
       : visibleLayers;
     const rainscreen = rainscreenLayers.flatMap((layer) => buildRainscreenDescriptors(context, assembly, layer));
 
-    // With a face stripped, show the studs, tracks and noggins the wall is
-    // actually built from rather than the slab that stands in for them. The
-    // layout derives even when detailing is off — that flag governs drawing the
-    // wall, not whether it has a frame. A wall with no derivable members falls
-    // through to the core slab so it never vanishes.
-    if (visibleLayers.length < layers.length) {
-      const members = buildFramingMemberDescriptors(context, assembly, { includeWhenDisabled: true });
-      if (members.length) {
-        return [...members, ...buildSkinDescriptors(segments, skinLayers, normal, assembly, boardRun), ...rainscreen];
-      }
+    // Every framed wall draws the studs, tracks, noggins and headers it is
+    // actually built from, boarded or stripped, detailed or not — the contract a
+    // ceiling's furring and hangers already have (`buildCeilingPreviewObjects`)
+    // and the one the 2D plan keeps by drawing every stud. The layout derives
+    // even when detailing is off: that flag governs documenting the wall, not
+    // whether it has a frame. Opaque boards hide the members in Solid; X-ray and
+    // Wireframe tier by material and show them (docs/preview-xray-mode.md §13).
+    // Member ids are the generator's, so a rebuild carries them over and
+    // batching folds them into one instanced call per framing material.
+    const members = wallFrameDescriptors(context, assembly);
+    if (members.length) {
+      return [...members, ...buildSkinDescriptors(segments, skinLayers, normal, assembly, boardRun), ...rainscreen];
     }
 
+    // Fallback: a framed wall whose layout yields no members — a custom frame
+    // with every member deleted, or every generated member removed — keeps a
+    // core slab per segment between its boards, so it never vanishes and still
+    // reads as thick as it is built.
     return [
       ...segments.flatMap((segment) => {
         const metadata = {

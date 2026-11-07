@@ -1,5 +1,6 @@
 import HardwarePicker from './HardwarePicker';
 import { getFastenerKindLabel, getHardwarePattern, isFastenerEntity } from '../../utils/fastenerUtils';
+import NumericInput from '../../components/NumericInput';
 import styles from '../styles/craftsman.module.css';
 
 export const FASTENER_TOOL_ID = 'fastener';
@@ -55,15 +56,16 @@ function SelectedFastenerFields({ entity, selectedIds, onEntityHardwareChange, o
           Depth (mm)
           {isThrough && <span className={styles.fieldHint}> — through holes have no depth</span>}
         </label>
-        <input
-          type="number"
+        {/* Emptied commits '', which the entity update reads as "no depth". */}
+        <NumericInput
           className={styles.thicknessInput}
           value={isThrough ? '' : (entity.depth ?? '')}
           placeholder={isThrough ? 'Through' : 'Depth'}
           min="0"
           step="0.5"
           disabled={isThrough || !onEntityFieldCommit}
-          onChange={(event) => onEntityFieldCommit('depth', event.target.value)}
+          allowEmpty
+          onCommit={(depth) => onEntityFieldCommit('depth', depth ?? '')}
         />
       </div>
     </>
