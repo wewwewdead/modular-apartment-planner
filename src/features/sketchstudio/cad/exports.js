@@ -1,10 +1,10 @@
 import JSZip from 'jszip';
-import { jsPDF } from 'jspdf';
-import 'svg2pdf.js';
 import { svgPathProperties } from 'svg-path-properties';
 import { buildCutList, cutListCsv, planLinearStock, planSheets } from './fabrication.js';
-import { PAGE_SIZES, sheetSvg, profileSvg, xml } from './drawings.js';
+import { sheetSvg, profileSvg, xml } from './drawings.js';
 import { sheetDxf } from './sheetDxf.js';
+
+export { download } from './download.js';
 
 export function drawingDxf(paths) {
   // Explicit polyline approximation; adaptive chord error is 0.02 mm.
@@ -68,19 +68,23 @@ export function drawingDxf(paths) {
   return lines.join('\n');
 }
 
-export async function vectorPdf(sheets, model, snapshot) {
-  const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: PAGE_SIZES[sheets[0]?.size] || PAGE_SIZES.A3 });
-  for (let index = 0; index < sheets.length; index++) {
-    const sheet = sheets[index],
-      [width, height] = PAGE_SIZES[sheet.size] || PAGE_SIZES.A3;
-    if (index) pdf.addPage([width, height], 'landscape');
-    const svg = new DOMParser().parseFromString(
-      sheetSvg(sheet, model, snapshot, index + 1, sheets.length),
-      'image/svg+xml',
-    ).documentElement;
-    await pdf.svg(svg, { x: 0, y: 0, width, height });
+// The drawing set as one true-size PDF (Phase T): sheetPdf.js, loaded only
+// now so jsPDF and svg2pdf stay out of this chunk; options as sheetsPdf.
+export async function vectorPdf(sheets, model, snapshot, options) {
+  const { sheetsPdf } = await import('./sheetPdf.js');
+  return sheetsPdf(sheets, model, snapshot, options);
+}
+
+// A sheet's export SVG; a refusal names the sheet ("Sheet “Frame”: …") unless
+// the message already does (an overflow starts "Frame: front does not fit…").
+export function exportSheetSvg(sheet, model, snapshot, page, pages) {
+  try {
+    return sheetSvg(sheet, model, snapshot, page, pages);
+  } catch (error) {
+    const message = error.message || String(error);
+    if (message.startsWith(`${sheet.title}:`)) throw error;
+    throw new Error(`Sheet “${sheet.title}”: ${message}`, { cause: error });
   }
-  return pdf.output('blob');
 }
 
 // The README's ## Groups section (docs/sketch-studio-part-groups.md §3.7):
@@ -122,17 +126,21 @@ export async function workshopZip(model, snapshot, exports, title) {
     zip.file(`parts/${safe(part.id)}.step`, await part.step.arrayBuffer());
     zip.file(`parts/${safe(part.id)}.stl`, await part.stl.arrayBuffer());
   }
+  // Each sheet is rendered once, for its DXF, its SVG and its PDF page; the
+  // first sheet that cannot be exported stops the ZIP, by name.
+  const pages = exports.drawings.map((sheet, index) => ({
+    svg: exportSheetSvg(sheet, model, snapshot, index + 1, exports.drawings.length),
+    size: sheet.size,
+    title: sheet.title,
+  }));
   for (const [index, sheet] of exports.drawings.entries()) {
-    zip.file(
-      'drawings/' + safe(sheet.id) + '.dxf',
-      sheetDxf(sheetSvg(sheet, model, snapshot, index + 1, exports.drawings.length)),
-    );
-    zip.file(`drawings/${safe(sheet.id)}.svg`, sheetSvg(sheet, model, snapshot, index + 1, exports.drawings.length));
+    zip.file('drawings/' + safe(sheet.id) + '.dxf', sheetDxf(pages[index].svg));
+    zip.file(`drawings/${safe(sheet.id)}.svg`, pages[index].svg);
     for (const view of sheet.views)
       zip.file(`drawings/${safe(sheet.id)}-${safe(view.name)}.dxf`, drawingDxf(view.visible));
   }
-  if (exports.drawings.length)
-    zip.file('drawings/workshop.pdf', await (await vectorPdf(exports.drawings, model, snapshot)).arrayBuffer());
+  if (pages.length)
+    zip.file('drawings/workshop.pdf', await (await vectorPdf(null, model, snapshot, { title, pages })).arrayBuffer());
   for (const profile of exports.profiles) {
     zip.file(`cutting/${safe(profile.partId)}.svg`, profileSvg(profile));
     zip.file(`cutting/${safe(profile.partId)}.dxf`, drawingDxf(profile.visible));
@@ -154,15 +162,4 @@ export async function workshopZip(model, snapshot, exports, title) {
     `# ${title}\n\nAll solid and cutting coordinates are millimetres. STL is unitless; import as millimetres. SVG and PDF are vector drawings. DXF uses millimetres and tessellated polylines (0.02 mm sampled chord-error target).\n\nNominal model dimensions exclude kerf and stock allowances. Cutting layout reserves ${model.fabrication.kerf} mm kerf and ${model.fabrication.allowance} mm allowance. Tube end angles are measured from square, about local Y; refer to part STEP for orientation. Long and short points describe the extreme end measurements.\n\nOnly constant-thickness planar extrusions with through cuts receive flat cutting profiles. Other parts use STEP and detail drawings. Assembly quantities include hidden instances.\n\n## Instances\n${model.instances.map((i) => `- ${i.id}: ${i.partId}; position ${JSON.stringify(i.position)}; XYZ rotation ${JSON.stringify(i.rotation)}`).join('\n')}\n\n## Groups\n${groupsReadme(model)}\n\n## Connections and weld notes\n${model.connections.map((c) => `- ${c.id}: ${c.from} → ${c.to}; ${c.type}; ${c.note || ''}; location ${JSON.stringify(c.location || [])}`).join('\n')}\n`,
   );
   return zip.generateAsync({ type: 'blob' });
-}
-
-export function download(blob, filename) {
-  const url = URL.createObjectURL(blob),
-    a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

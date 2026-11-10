@@ -1,6 +1,7 @@
-import { useCallback } from 'react';
+import { useCallback, useId } from 'react';
 import styles from './InputField.module.css';
 import { useNumericDraft } from '@/hooks/useNumericDraft';
+import { useTextDraft } from '@/hooks/useTextDraft';
 
 /**
  * A number field keeps the raw text while it is being typed.
@@ -13,14 +14,22 @@ import { useNumericDraft } from '@/hooks/useNumericDraft';
  * parse is handed upstream, so no command ever has to defend against NaN.
  *
  * The draft is now also what is committed, on Enter and on blur rather than on
- * every keystroke — see useNumericDraft. Text fields are unaffected: they have
- * no clamping upstream to fight, so they still report every character.
+ * every keystroke — see useNumericDraft. Text fields have no clamping upstream
+ * to fight, so by default they still report every character; `commitOnBlur`
+ * holds a text draft instead and commits it once on Enter or blur (see
+ * useTextDraft), for fields whose every dispatch is an undo step.
  */
-export default function InputField({ label, value, onChange, type = 'text', suffix, readOnly, step }) {
+export default function InputField({ label, value, onChange, type = 'text', suffix, readOnly, step, commitOnBlur }) {
   const isNumber = type === 'number';
+  // Ties the label to its input, so it names the field for assistive tech
+  // and a click on it focuses the box.
+  const inputId = useId();
   const numeric = useNumericDraft(value, onChange);
+  const text = useTextDraft(value, onChange);
+  const draftedText = !isNumber && commitOnBlur;
 
   const handleTextChange = useCallback((e) => onChange(e.target.value), [onChange]);
+  const handlers = isNumber ? numeric : draftedText ? text : null;
 
   const inputClass = [styles.input, type === 'number' ? styles.inputNumber : '', readOnly ? styles.inputReadonly : '']
     .filter(Boolean)
@@ -28,14 +37,17 @@ export default function InputField({ label, value, onChange, type = 'text', suff
 
   return (
     <div className={styles.field}>
-      <label className={styles.label}>{label}</label>
+      <label className={styles.label} htmlFor={inputId}>
+        {label}
+      </label>
       <div className={styles.inputWrap}>
         <input
+          id={inputId}
           type={type}
-          value={isNumber ? numeric.displayValue : value}
-          onChange={isNumber ? numeric.handleChange : handleTextChange}
-          onKeyDown={isNumber ? numeric.handleKeyDown : undefined}
-          onBlur={isNumber ? numeric.handleBlur : undefined}
+          value={handlers ? handlers.displayValue : value}
+          onChange={handlers ? handlers.handleChange : handleTextChange}
+          onKeyDown={handlers?.handleKeyDown}
+          onBlur={handlers?.handleBlur}
           readOnly={readOnly}
           step={step}
           className={inputClass}

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { applySceneLightBudgets, buildFloorObjectGroup } from './buildPreviewObjects';
 import { disposeScene } from './disposeScene';
 import { MODEL_LIGHT_POOL_POLICY, disposeFixtureLightPool, syncFixtureLightPool } from './fixtureLightPool';
+import { pruneWallFinishMaterials } from './materials';
 import { freezeStaticMatrices } from './staticMatrices';
 
 /**
@@ -176,6 +177,15 @@ export function createPreviewSceneCache({ batch = true, lightPool = MODEL_LIGHT_
       if (survivor && survivor.floorGroup === previous.floorGroup) continue;
       disposeFloor(previous, survivor);
     }
+
+    // Wall-finish materials are made on demand, one per colour a face has worn
+    // (`paletteMaterialFor`), and a colour-picker drag passes through dozens.
+    // Once the old groups are gone, whatever no descriptor in the scene still
+    // names can go too — but only past a cap, so ordinary editing never
+    // rebuilds a material it is about to want back.
+    const liveKeys = new Set();
+    for (const entry of meshMap.values()) liveKeys.add(entry.materialKey);
+    pruneWallFinishMaterials(materialPalette, liveKeys);
 
     // Re-attach children in descriptor order. clear() detaches without
     // disposing (reused groups must survive), then add back.

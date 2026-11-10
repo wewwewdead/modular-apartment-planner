@@ -207,11 +207,40 @@ describe('ceiling beam pick commit', () => {
   it('commits on a double click too', () => {
     const harness = createHarness();
 
-    harness.pick('beam_w', 'beam_e');
+    harness.pick('beam_w');
+    // A real double-click reaches the tool as press, press, then the
+    // double-click: the second press takes the beam back out again.
+    harness.click(ON_BEAM.beam_e);
+    harness.click(ON_BEAM.beam_e);
     harness.handler.onDoubleClick(ON_BEAM.beam_e, {}, harness.getToolState());
 
     expect(harness.dispatched).toHaveLength(1);
     expect(harness.dispatched[0].ceiling.attachment.beamIds).toEqual(['beam_w', 'beam_e']);
+  });
+
+  it('a double click on a lone beam hangs the ceiling from that beam', () => {
+    const harness = createHarness();
+
+    harness.click(ON_BEAM.beam_s);
+    harness.click(ON_BEAM.beam_s);
+    harness.handler.onDoubleClick(ON_BEAM.beam_s, {}, harness.getToolState());
+
+    expect(harness.dispatched).toHaveLength(1);
+    expect(harness.dispatched[0].ceiling.attachment.beamIds).toEqual(['beam_s']);
+  });
+
+  it('a double click off any beam, or on one at the floor datum, finishes with what is picked', () => {
+    const harness = createHarness({
+      beams: [ringBeam('beam_tie', 'col_sw', 'col_se', 0), ringBeam('beam_n', 'col_nw', 'col_ne', 3200)],
+    });
+
+    harness.pick('beam_n');
+    harness.click(ON_BEAM.beam_s);
+    harness.click(ON_BEAM.beam_s);
+    harness.handler.onDoubleClick(ON_BEAM.beam_s, {}, harness.getToolState());
+
+    expect(harness.dispatched).toHaveLength(1);
+    expect(harness.dispatched[0].ceiling.attachment.beamIds).toEqual(['beam_n']);
   });
 
   it('does nothing with no beam picked', () => {
@@ -464,6 +493,20 @@ describe('ceiling beam pick anchored on a slab', () => {
     expect(extent(ceiling.boundaryPolygon)).toEqual({ minX: 125, maxX: 5875, minY: 125, maxY: 3875 });
     // Nothing was cut to a plate, so the message does not claim one.
     expect(harness.statusMessages().at(-1)).toBe('Ceiling added to Ground Floor — hangs from 4 beams at 3200 mm.');
+  });
+
+  it('keeps a double-clicked beam in the pick when the commit is refused', () => {
+    const harness = createAnchoredHarness();
+
+    harness.click(ON_BEAM.beam_s);
+    harness.click(ON_BEAM.beam_s);
+    harness.handler.onDoubleClick(ON_BEAM.beam_s, {}, harness.getToolState());
+
+    expect(harness.dispatched).toHaveLength(0);
+    expect(harness.getToolState().ceilingPickBeamIds).toEqual(['beam_s']);
+    expect(harness.statusMessages().at(-1)).toBe(
+      'One beam frames no area — pick the beams on both sides of the ceiling, then press Enter.',
+    );
   });
 
   it('stamps the active phase and commits on a double click too', () => {

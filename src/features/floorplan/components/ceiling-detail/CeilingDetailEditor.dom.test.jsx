@@ -1090,6 +1090,25 @@ describe('panel trace pointer mapping', () => {
     expect(preview).not.toBeNull();
     expect(preview.getAttribute('points')).toBe('1000,1000 3000,1000');
   });
+
+  // Escape in a number field throws the typed draft away, and nothing else.
+  it('leaves the trace alone when Escape is pressed in a field, and cancels it otherwise', () => {
+    const { container } = mountManualCeiling({ beamless: true });
+    fireEvent.click(container.querySelector('button[title^="Trace cut board"]'));
+    const svg = container.querySelector('svg[data-tool="trace_panel"]');
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 400, right: 600, bottom: 400 });
+    fireEvent.pointerDown(svg, { button: 0, pointerId: 1, clientX: 100, clientY: 300 });
+    const preview = () => container.querySelector('polyline[stroke="#ffb85c"]');
+    expect(preview()).not.toBeNull();
+
+    const field = container.querySelector('input[type="number"]');
+    fireEvent.focus(field);
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect(preview()).not.toBeNull();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(preview()).toBeNull();
+  });
 });
 
 /**

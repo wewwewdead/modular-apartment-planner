@@ -1,15 +1,30 @@
-import { lazy, memo, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useEditorState, useProject } from '@/features/floorplan/context/FloorplanContext';
 import {
   WALL_ASSEMBLY_PRESETS,
   WALL_BOARD_MATERIALS,
+  WALL_BOARD_OPTIONS,
   WALL_FRAME_MATERIALS,
   boardDefaultThickness,
   createWallAssembly,
+  deriveWallAssemblyLayers,
   resolveWallAssembly,
   wallAssemblyThickness,
   wallFaceViewMirrorsU,
 } from '@/domain/wallAssemblies';
+import {
+  WALL_COLOUR_CATALOG,
+  WALL_FINISH_KIND_LABELS,
+  WALL_FINISH_SHEENS,
+  WALL_FINISH_SHEEN_LABELS,
+  customWallColour,
+  describeWallFinish,
+  defaultWallFinish,
+  wallCatalogueColour,
+  wallFinishDrawingTint,
+  wallFinishHex,
+  wallFinishKindsFor,
+} from '@/domain/wallFinishes';
 import {
   FASTENER_LAYOUT_MODES,
   FASTENER_GUIDE_DIRECTIONS,
@@ -33,9 +48,20 @@ import {
   deriveWallDetail,
   deriveFastenerGuideLayout,
   formatWallDimensionValue,
+  resolveWallDetailFrame,
   retractPanelOverBoardSpan,
   wallDimensionMeasurement,
 } from '@/domain/wallDetailing';
+import { wallSidingCourseLines } from '@/domain/wallSiding';
+import {
+  ACCENT_PLACEMENTS,
+  createAccentAtOpening,
+  placeAccentAt,
+  resolveWallAccents,
+  wallFaceAcceptsAccents,
+} from '@/domain/wallAccents';
+import { defaultAccentFinish } from '@/domain/wallAccentModel';
+import { generateId } from '@/domain/ids';
 import {
   WALL_JURISDICTION_PROFILES,
   WALL_PRODUCT_PROFILES,
@@ -108,9 +134,16 @@ import {
 } from './WallDetailUiKit';
 import styles from './WallDetailEditor.module.css';
 
-import DetailEditorShell from './DetailEditorShell';
 import { wallElevationSilhouette } from '@/features/floorplan/components/preview/loadingSilhouettes';
-import { LOADING_COPY, PanePlaceholder, loadingClock, useAfterPaint, wallEditorDetail } from '@/ui/loading';
+import { LOADING_COPY, PanePlaceholder } from '@/ui/loading';
+import { useShellFirst } from './useShellFirst';
+import {
+  FOCUS_MODE_STORAGE_KEY,
+  WallEditorOpeningShell,
+  lastBoardCounts,
+  readFocusModePreference,
+  resolveWallShellTarget,
+} from './wallDetailEditorShell';
 
 const ThreePreviewPanel = lazy(() => import('@/features/floorplan/components/preview/ThreePreviewPanel'));
 
@@ -152,34 +185,12 @@ const WallLivePreview = memo(function WallLivePreview({
   );
 });
 
-/** The opening shell's panel headers: the real sections' titles, in order. */
-const WALL_SHELL_LEFT_SECTIONS = Object.freeze([
-  { id: 'face', step: 1, title: 'Wall face' },
-  { id: 'assembly', step: 2, title: 'Complete wall assembly' },
-  { id: 'panels', step: 3, title: 'Panel layout' },
-  { id: 'framing', step: 4, title: 'Framing' },
-  { id: 'fasteners', step: 5, title: 'Fasteners' },
-  { id: 'dimensions', step: 6, title: 'Construction dimensions' },
-]);
-const WALL_SHELL_RIGHT_SECTIONS = Object.freeze([
-  { id: 'selection', title: 'Selection' },
-  { id: 'takeoff', title: 'Exact takeoff' },
-  { id: 'schedule', title: 'Dimension schedule' },
-  { id: 'asBuilt', title: 'Site / as-built comparison' },
-  { id: 'checks', title: 'Coordination checks' },
-]);
-
-/*
- * What the last opening of each wall face laid out, so the next one can say
- * how much it is laying out before deriving anything (§7: real numbers only).
- */
-const lastBoardCounts = new Map();
-
 const CANVAS_TOOLS = Object.freeze({
   SELECT: 'select',
   PAN: 'pan',
   DRAW_PANEL: 'draw_panel',
   TRACE_PANEL: 'trace_panel',
+  DRAW_ACCENT: 'draw_accent',
   DRAW_STUD: 'draw_stud',
   DRAW_NOGGIN: 'draw_noggin',
   ADD_FASTENER: 'add_fastener',
@@ -206,6 +217,7 @@ const TOOL_HINTS = Object.freeze({
   [CANVAS_TOOLS.PAN]: 'Drag anywhere to pan; use the mouse wheel to zoom',
   [CANVAS_TOOLS.DRAW_PANEL]: 'Drag a rectangle to draw a board panel',
   [CANVAS_TOOLS.TRACE_PANEL]: 'Click each cut corner; click the first point or double-click to finish',
+  [CANVAS_TOOLS.DRAW_ACCENT]: 'Drag a rectangle to pick out an accent panel in another finish',
   [CANVAS_TOOLS.DRAW_STUD]: 'Click for a full-height stud, or drag its vertical span',
   [CANVAS_TOOLS.DRAW_NOGGIN]: 'Click for a full-width noggin, or drag its horizontal span',
   [CANVAS_TOOLS.ADD_FASTENER]: 'Click to place a screw; measurements act as magnetic pencil guides',
@@ -245,6 +257,15 @@ const TOOL_DEFINITIONS = Object.freeze([
     shortcut: 'T',
     title: 'Trace cut panel — click each corner, then close the outline (T)',
     group: 'board',
+  },
+  {
+    tool: CANVAS_TOOLS.DRAW_ACCENT,
+    icon: 'accent',
+    label: 'Accent',
+    shortcut: 'A',
+    title: 'Draw accent panel — drag a rectangle to finish it in another colour (A)',
+    group: 'board',
+    accentsOnly: true,
   },
   {
     tool: CANVAS_TOOLS.DRAW_STUD,
@@ -323,6 +344,7 @@ const LAYER_LABELS = Object.freeze({
 
 const SELECTION_LABELS = Object.freeze({
   panel: 'board panel',
+  accent: 'accent panel',
   framing: 'frame member',
   fastener: 'screw',
   dimension: 'measurement',
@@ -349,19 +371,8 @@ function persistOrientationDismissed() {
   }
 }
 
-const FOCUS_MODE_STORAGE_KEY = 'floorplan.wallDetailEditor.focusMode';
-
 /** How long the keyboard-shortcut HUD chip stays up; matches the CSS animation length. */
 const TOOL_HUD_LIFETIME_MS = 1600;
-
-function readFocusModePreference() {
-  if (typeof window === 'undefined') return false;
-  try {
-    return window.localStorage.getItem(FOCUS_MODE_STORAGE_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
 
 function persistFocusModePreference(value) {
   if (typeof window === 'undefined') return false;
@@ -381,7 +392,49 @@ function faceColor(material) {
   // A drawing tint, not the corten itself: the editor draws set-out lines and
   // dimensions over this, so the fill has to stay light enough to read through.
   if (material === WALL_BOARD_MATERIALS.RAINSCREEN) return '#dcc0ac';
+  // Siding always carries a finish, whose tint is drawn instead; this is only
+  // for a caller that has none to read.
+  if (material === WALL_BOARD_MATERIALS.SIDING) return '#dcc5ad';
   return material === WALL_BOARD_MATERIALS.FIBER_CEMENT ? '#dedbd1' : '#d3d7da';
+}
+
+/**
+ * The joint centre-lines of a siding face as one path in the wall's own u/v:
+ * full-span horizontals for horizontal courses, full-height verticals for
+ * vertical boards. The canvas clips it to the boards, so openings cut it.
+ */
+function sidingCoursePathData(course, wall, frame, span) {
+  const lines = wallSidingCourseLines(course, { wall, frame, span });
+  const u0 = span?.u0 ?? 0;
+  const u1 = span?.u1 ?? frame.length;
+  const d = lines.positions
+    .map((position) => (lines.axis === 'v' ? `M ${u0} ${position} H ${u1}` : `M ${position} 0 V ${frame.height}`))
+    .join(' ');
+  return d || null;
+}
+
+const EMPTY_ACCENTS = Object.freeze([]);
+
+/** An accent's rectangle moved by `delta`, kept on the drawn face. */
+function moveAccentRectWithinBounds(rect, delta, bounds) {
+  const width = rect.u1 - rect.u0;
+  const height = rect.v1 - rect.v0;
+  const u0 = Math.max(bounds.u0, Math.min(bounds.u1 - width, rect.u0 + delta.u));
+  const v0 = Math.max(0, Math.min(bounds.height - height, rect.v0 + delta.v));
+  return { u0, u1: u0 + width, v0, v1: v0 + height };
+}
+
+const ACCENT_PLACEMENT_LABELS = Object.freeze({
+  [ACCENT_PLACEMENTS.LEFT]: 'Left of it',
+  [ACCENT_PLACEMENTS.RIGHT]: 'Right of it',
+  [ACCENT_PLACEMENTS.ABOVE]: 'Above it',
+  [ACCENT_PLACEMENTS.BELOW]: 'Below it',
+});
+
+/** "Window · 1200 × 1200" — an opening as the accent pickers name it. */
+function openingOptionLabel(opening, index) {
+  const kind = opening.kind === 'door' ? 'Door' : 'Window';
+  return `${kind} ${index + 1} · ${Math.round(opening.u1 - opening.u0)} × ${Math.round(opening.v1 - opening.v0)}`;
 }
 
 function fastenerVisualPalette(appearance, material) {
@@ -687,39 +740,17 @@ export default function WallDetailEditor({ mountShellFirst = false }) {
   const { project } = useProject();
   const { wallDetailEditor, dispatch: editorDispatch } = useEditorState();
   const openKey = wallDetailEditor ? `${wallDetailEditor.floorId}:${wallDetailEditor.wallId}` : null;
-  const [openedAt] = useState(loadingClock);
-  const [readyFor, setReadyFor] = useState(mountShellFirst ? null : openKey);
-  const ready = !mountShellFirst || readyFor === openKey;
-  useAfterPaint(() => {
-    if (!ready) startTransition(() => setReadyFor(openKey));
-  }, [openKey, ready]);
+  const { openedAt, ready } = useShellFirst(openKey, mountShellFirst);
 
-  const floor = ready ? null : project.floors.find((entry) => entry.id === wallDetailEditor?.floorId) || null;
-  const wall = floor?.walls.find((entry) => entry.id === wallDetailEditor?.wallId) || null;
-  const silhouette = useMemo(() => wallElevationSilhouette(wall, floor), [wall, floor]);
-
-  if (wallDetailEditor && !ready && wall) {
-    const side = wallDetailEditor.side || wall.assembly?.detailing?.activeSide || WALL_DETAIL_SIDES.INTERIOR;
-    const boards = lastBoardCounts.get(`${wall.id}:${side}`);
+  const target = ready ? null : resolveWallShellTarget(project, wallDetailEditor);
+  if (wallDetailEditor && !ready && target.wall) {
     return (
-      <DetailEditorShell
-        dialogLabel="Wall assembly detail editor"
-        eyebrow="Construction-detail workspace"
-        title="Wall-local assembly editor"
-        subtitle={wall.id}
-        closeTitle="Close the wall detail editor and return to the floorplan"
-        onClose={() => editorDispatch({ type: 'CLOSE_WALL_DETAIL_EDITOR' })}
-        leftLabel="Wall detailing steps"
-        leftSections={WALL_SHELL_LEFT_SECTIONS}
-        rightLabel="Selection, numbers, and checks"
-        rightSections={WALL_SHELL_RIGHT_SECTIONS}
-        focus={readFocusModePreference()}
-        silhouette={silhouette}
-        label={LOADING_COPY.wallEditor}
-        detail={boards === undefined ? undefined : wallEditorDetail(boards)}
-        previewLabel={LOADING_COPY.livePreview}
-        previewKind="wall"
-        since={openedAt}
+      <WallEditorOpeningShell
+        wallDetailEditor={wallDetailEditor}
+        floor={target.floor}
+        wall={target.wall}
+        editorDispatch={editorDispatch}
+        openedAt={openedAt}
       />
     );
   }
@@ -727,11 +758,17 @@ export default function WallDetailEditor({ mountShellFirst = false }) {
   return <WallDetailEditorBody openedAt={openedAt} />;
 }
 
-function WallDetailEditorBody({ openedAt }) {
+// The editor proper; the workspace loads it on demand behind the shell
+// (WallDetailEditorLazy).
+export function WallDetailEditorBody({ openedAt }) {
   const { project, dispatch, canUndo = false, canRedo = false } = useProject();
   const { wallDetailEditor, dispatch: editorDispatch } = useEditorState();
   const svgRef = useRef(null);
   const canvasFrameRef = useRef(null);
+  // A plain-letters id for the siding courses' clip path: useId's own form
+  // carries punctuation that some url(#…) parsers stop at.
+  const sidingClipId = `wall-siding-clip-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  const accentClipId = `wall-accent-clip-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const floor = project.floors.find((entry) => entry.id === wallDetailEditor?.floorId) || null;
   const wall = floor?.walls.find((entry) => entry.id === wallDetailEditor?.wallId) || null;
   const [activeSide, setActiveSide] = useState(() => {
@@ -749,6 +786,8 @@ function WallDetailEditorBody({ openedAt }) {
   const [canvasTool, setCanvasTool] = useState(CANVAS_TOOLS.SELECT);
   const [gesture, setGesture] = useState(null);
   const [panelTrace, setPanelTrace] = useState(null);
+  // "Add accent at opening": which opening, which side of it, and how big.
+  const [accentDraft, setAccentDraft] = useState({ openingId: '', placement: ACCENT_PLACEMENTS.RIGHT, size: 600 });
   const [viewport, setViewport] = useState({ zoom: 1, panU: 0, panV: 0 });
   const [panGesture, setPanGesture] = useState(null);
   const [spacePanActive, setSpacePanActive] = useState(false);
@@ -786,6 +825,7 @@ function WallDetailEditorBody({ openedAt }) {
     panels: false,
     framing: false,
     fasteners: false,
+    accents: false,
     dimensions: false,
     selection: true,
     takeoff: true,
@@ -821,6 +861,9 @@ function WallDetailEditorBody({ openedAt }) {
     if (!panelTrace) return undefined;
     const cancelTrace = (event) => {
       if (event.key !== 'Escape') return;
+      // Escape in a field throws away what was typed there, and nothing else.
+      const target = event.target;
+      if (target?.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target?.tagName)) return;
       event.preventDefault();
       setPanelTrace(null);
     };
@@ -883,11 +926,33 @@ function WallDetailEditorBody({ openedAt }) {
   // The face on the wall's far side (relative to the U axis viewpoint) renders
   // and reads mirrored — the same reflection the built wall shows in 3D.
   const mirrorU = assembly ? wallFaceViewMirrorsU(assembly, activeSide) : false;
+  // The board fill: the face's finish knocked back far enough that the set-out
+  // lines and dimensions drawn over it still read, or the board's stock tint.
+  // Read off the derived layers — the one place a face's finish is answered
+  // (docs/wall-cladding-finishes.md §5.5).
+  const activeFinishHex = assembly
+    ? wallFinishHex(deriveWallAssemblyLayers(assembly).find((layer) => layer.side === activeSide))
+    : null;
+  const panelFill = activeFinishHex
+    ? wallFinishDrawingTint(activeFinishHex)
+    : faceColor(assembly?.[activeSide]?.material);
   // What the canvas has to show: the wall, plus whatever this face's board runs
   // on past it. `length` stays the WALL's length — everything that measures,
   // clamps or bills reads that — while `u0`/`u1`/`spanU` say how much drawing
   // there is around it.
   const boardSpan = detail?.boardSpans?.[activeSide] || null;
+  // A siding face's course lines, from the one set-out the 3D preview also
+  // draws (`wallSiding.js`), so the joints on this drawing are the joints on
+  // the model (docs/wall-cladding-finishes.md §6.1).
+  const activeLayer = assembly ? deriveWallAssemblyLayers(assembly).find((layer) => layer.side === activeSide) : null;
+  const sidingCoursePath =
+    detail && wall && activeLayer?.material === WALL_BOARD_MATERIALS.SIDING
+      ? sidingCoursePathData(activeLayer.course, wall, resolveWallDetailFrame(wall, floor), boardSpan)
+      : null;
+  // The accent panels on the face being edited (docs/wall-cladding-finishes.md
+  // §7.1), placed by the one derivation the 3D preview and the bill also read.
+  const accentsAllowed = wall ? wallFaceAcceptsAccents(wall, activeSide) : false;
+  const faceAccents = wall && floor && accentsAllowed ? resolveWallAccents(wall, floor, activeSide) : EMPTY_ACCENTS;
   const bounds = detail
     ? {
         length: detail.length,
@@ -1074,6 +1139,85 @@ function WallDetailEditorBody({ openedAt }) {
       },
     });
   const updateLayout = (patch) => updateFace({ layout: { ...face.layout, ...patch } });
+
+  /*
+    Accent edits write the face's accent list straight onto its board layer, as
+    the properties panel's finish controls do — never through commitAssembly,
+    which also rewrites the built thickness and the structural role, neither of
+    which a block of colour changes. One dispatch per edit, so a drag (committed
+    on release, like every drag here) is one undo step.
+  */
+  const storedAccents = () => assembly[activeSide]?.accents || [];
+  const commitAccents = (accents) => {
+    const nextAssembly = createWallAssembly(
+      assembly.preset,
+      { ...assembly, [activeSide]: { ...assembly[activeSide], accents } },
+      wall.thickness,
+    );
+    dispatch({ type: 'WALL_UPDATE', floorId: floor.id, wall: { id: wall.id, assembly: nextAssembly } });
+  };
+  const placeAccent = (accent, rect) =>
+    placeAccentAt(accent, rect, { frame: resolveWallDetailFrame(wall, floor), openings: detail.openings });
+  const addAccentAt = (rect, extra = {}) => {
+    const accent = placeAccent(
+      {
+        id: generateId('accent'),
+        label: '',
+        finish: defaultAccentFinish(assembly.system, assembly[activeSide].material),
+        anchor: null,
+        ...extra,
+      },
+      rect,
+    );
+    commitAccents([...storedAccents(), accent]);
+    setSelection({ type: 'accent', id: accent.id });
+  };
+  const addAccentAtOpening = () => {
+    const opening = detail.openings.find((entry) => entry.id === accentDraft.openingId) || detail.openings[0];
+    if (!opening || !accentsAllowed) return;
+    const accent = createAccentAtOpening({
+      opening,
+      placement: accentDraft.placement,
+      size: accentDraft.size,
+      id: generateId('accent'),
+      system: assembly.system,
+      material: assembly[activeSide].material,
+      frame: resolveWallDetailFrame(wall, floor),
+    });
+    if (!accent) return;
+    commitAccents([...storedAccents(), accent]);
+    setSelection({ type: 'accent', id: accent.id });
+  };
+  /**
+   * An exact-field edit of the selected accent. `rect` moves or resizes it in
+   * the drawing (anchored ones re-derive their offset from the opening);
+   * `anchorOpeningId` attaches it to an opening where it stands, or detaches it.
+   */
+  const updateSelectedAccent = (patch) => {
+    if (selection?.type !== 'accent') return;
+    const resolved = faceAccents.find((entry) => entry.id === selection.id);
+    if (!resolved) return;
+    commitAccents(
+      storedAccents().map((accent) => {
+        if (accent.id !== selection.id) return accent;
+        const { rect, anchorOpeningId, ...rest } = patch;
+        const next = { ...accent, ...rest };
+        if (rect) return placeAccent(next, { ...resolved.requested, ...rect });
+        if (anchorOpeningId !== undefined) {
+          const opening = detail.openings.find((entry) => entry.id === anchorOpeningId);
+          return opening
+            ? placeAccent({ ...next, anchor: { openingId: opening.id, du: 0, dv: 0 } }, resolved.requested)
+            : { ...next, anchor: null };
+        }
+        return next;
+      }),
+    );
+  };
+  const deleteSelectedAccent = () => {
+    if (selection?.type !== 'accent') return;
+    commitAccents(storedAccents().filter((accent) => accent.id !== selection.id));
+    setSelection(null);
+  };
   const updateFastenerPattern = (patch) => updateFace({ fasteners: { ...face.fasteners, ...patch } });
   const updateDimensionSettings = (patch) => updateFace({ dimensions: { ...face.dimensions, ...patch } });
   const setShadowReveal = (gap) =>
@@ -1093,7 +1237,11 @@ function WallDetailEditorBody({ openedAt }) {
   const chooseSide = (side) => {
     setActiveSide(side);
     setSelection(null);
+    // A half-drawn trace or a measurement waiting for its second click belongs
+    // to the face it was started on.
     setGesture(null);
+    setDimensionAcquisition(null);
+    setPanelTrace(null);
     updateDetailing({ activeSide: side });
   };
 
@@ -1109,9 +1257,13 @@ function WallDetailEditorBody({ openedAt }) {
       setSelection(null);
       return;
     }
-    if (!['panel', 'framing', 'fastener'].includes(part.kind)) return;
+    if (!['panel', 'framing', 'fastener', 'accent'].includes(part.kind)) return;
     if (part.side && part.side !== 'core' && part.side !== activeSide) {
       setActiveSide(part.side);
+      // Turning around drops whatever was being drawn, as the face buttons do.
+      setGesture(null);
+      setDimensionAcquisition(null);
+      setPanelTrace(null);
       updateDetailing({ activeSide: part.side });
     }
     setSelection({ type: part.kind, id: part.id });
@@ -1492,7 +1644,8 @@ function WallDetailEditorBody({ openedAt }) {
   };
 
   const deleteSelection = () => {
-    if (selection?.type === 'panel') deleteSelectedPanel();
+    if (selection?.type === 'accent') deleteSelectedAccent();
+    else if (selection?.type === 'panel') deleteSelectedPanel();
     else if (selection?.type === 'framing') deleteSelectedMember();
     else if (selection?.type === 'fastener') deleteSelectedFastener();
     else if (selection?.type === 'dimension') deleteSelectedDimension();
@@ -1615,6 +1768,9 @@ function WallDetailEditorBody({ openedAt }) {
       u: value.current.u - value.start.u,
       v: value.current.v - value.start.v,
     };
+    // An accent moves as a plain rectangle kept on the face; it does not snap
+    // to the boards under it, which it is not part of.
+    if (value.type === 'accent') return moveAccentRectWithinBounds(value.entity, delta, bounds);
     let moved;
     let anchor;
     if (value.type === 'panel') {
@@ -1657,6 +1813,7 @@ function WallDetailEditorBody({ openedAt }) {
 
   const drawnGestureEntity = (value = gesture) => {
     if (!value || value.kind !== 'draw') return null;
+    if (value.tool === CANVAS_TOOLS.DRAW_ACCENT) return createDrawnPanel(value.start, value.current, bounds, 10);
     if (value.tool === CANVAS_TOOLS.DRAW_PANEL) {
       const panel = createDrawnPanel(value.start, value.current, bounds);
       if (!snapEnabled) return panel;
@@ -1739,6 +1896,7 @@ function WallDetailEditorBody({ openedAt }) {
   const beginCanvasGesture = (event) => {
     if (event.button !== 0) return;
     if (canvasTool === CANVAS_TOOLS.PAN || spacePanActive) return;
+    if (canvasTool === CANVAS_TOOLS.DRAW_ACCENT && !accentsAllowed) return;
     if (canvasTool === CANVAS_TOOLS.TRACE_PANEL) {
       event.preventDefault();
       const point = eventToLocal(event, true, true);
@@ -1904,6 +2062,12 @@ function WallDetailEditorBody({ openedAt }) {
    * piece can only live in a custom layout.
    */
   const commitElementCopy = (finalGesture, moved) => {
+    if (finalGesture.type === 'accent') {
+      // A copy is a free accent: it does not follow the original's opening.
+      const original = storedAccents().find((accent) => accent.id === finalGesture.id);
+      if (original) addAccentAt(moved, { finish: original.finish });
+      return;
+    }
     if (finalGesture.type === 'panel') {
       // Blank label: the copy is numbered in sequence rather than inheriting
       // the original's name and leaving the wall with two boards called P3.
@@ -1935,6 +2099,11 @@ function WallDetailEditorBody({ openedAt }) {
   const finishCanvasGesture = (event) => {
     if (panGesture) return;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
+    // Judged in pixels, not millimetres: at fit zoom a millimetre is well under
+    // a pixel, so a bare click used to clear a millimetre test and commit a
+    // "move" — which on a generated board, stud or screw layout also froze the
+    // whole pattern into custom pieces.
+    const clickTravel = Math.max(1, wallUnitsPerPixel(canvasMetrics, viewport, bounds) * 2);
     if (gesture.kind === 'dimension_endpoint') {
       const acquisition = orthoDimensionEndpoint(
         event,
@@ -1965,7 +2134,7 @@ function WallDetailEditorBody({ openedAt }) {
       const moved = moveWallDimensionWithinBounds(gesture.dimension, delta, bounds, face.dimensions.precision);
       svgRef.current?.releasePointerCapture?.(event.pointerId);
       setGesture(null);
-      if (Math.hypot(delta.u, delta.v) < face.dimensions.precision) return;
+      if (Math.hypot(delta.u, delta.v) < clickTravel) return;
       if (gesture.copy) {
         // The copy measures its own two points from here on: dragging it away
         // from the geometry it was snapped to would otherwise leave it claiming
@@ -2020,6 +2189,8 @@ function WallDetailEditorBody({ openedAt }) {
       if (!entity) return;
       if (finalGesture.tool === CANVAS_TOOLS.DRAW_DIMENSION) {
         commitDrawnDimension(finalGesture);
+      } else if (finalGesture.tool === CANVAS_TOOLS.DRAW_ACCENT) {
+        addAccentAt(entity);
       } else if (finalGesture.tool === CANVAS_TOOLS.DRAW_PANEL) {
         const panel = createCustomPanel(entity);
         updateLayout({
@@ -2048,12 +2219,16 @@ function WallDetailEditorBody({ openedAt }) {
     );
     // A copy dropped exactly on its original would be invisible and impossible
     // to select apart, so the same "did it actually move?" guard covers both.
-    if (!moved || movedDistance < 1) return;
+    if (!moved || movedDistance < clickTravel) return;
     if (finalGesture.copy) {
       commitElementCopy(finalGesture, moved);
       return;
     }
-    if (finalGesture.type === 'panel') {
+    if (finalGesture.type === 'accent') {
+      commitAccents(
+        storedAccents().map((accent) => (accent.id === finalGesture.id ? placeAccent(accent, moved) : accent)),
+      );
+    } else if (finalGesture.type === 'panel') {
       updateLayout({
         mode: PANEL_LAYOUT_MODES.CUSTOM,
         customPanels: editablePanels().map((panel) =>
@@ -2121,6 +2296,7 @@ function WallDetailEditorBody({ openedAt }) {
   };
 
   const selectedPanel = selection?.type === 'panel' ? panels.find((panel) => panel.localId === selection.id) : null;
+  const selectedAccent = selection?.type === 'accent' ? faceAccents.find((accent) => accent.id === selection.id) : null;
   const selectedMember =
     selection?.type === 'framing' ? frameMembers.find((member) => member.id === selection.id) : null;
   const selectedFastener = selection?.type === 'fastener' ? fasteners.find((entry) => entry.id === selection.id) : null;
@@ -2149,11 +2325,13 @@ function WallDetailEditorBody({ openedAt }) {
       : rawGesturePreview;
   const gesturePreviewType =
     gesture?.kind === 'draw'
-      ? gesture.tool === CANVAS_TOOLS.DRAW_PANEL
-        ? 'panel'
-        : gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION
-          ? 'dimension'
-          : 'framing'
+      ? gesture.tool === CANVAS_TOOLS.DRAW_ACCENT
+        ? 'accent'
+        : gesture.tool === CANVAS_TOOLS.DRAW_PANEL
+          ? 'panel'
+          : gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION
+            ? 'dimension'
+            : 'framing'
       : gesture?.type;
   const dimensionGesturePreview =
     gesture?.kind === 'dimension_endpoint'
@@ -2291,7 +2469,7 @@ function WallDetailEditorBody({ openedAt }) {
   /** Live size / position readout that follows the pointer during gestures. */
   const gestureReadout = (() => {
     if (gesture?.kind === 'draw' && gesturePreview) {
-      if (gesture.tool === CANVAS_TOOLS.DRAW_PANEL) {
+      if (gesture.tool === CANVAS_TOOLS.DRAW_PANEL || gesture.tool === CANVAS_TOOLS.DRAW_ACCENT) {
         return {
           point: gesture.current,
           lines: [
@@ -2315,7 +2493,7 @@ function WallDetailEditorBody({ openedAt }) {
       // The original stays drawn under a Ctrl-drag, so the readout has to say
       // which of the two shapes on screen the pointer is carrying.
       const heading = gesture.copy ? [`Copy of ${SELECTION_LABELS[gesture.type] || gesture.type}`] : [];
-      if (gesture.type === 'panel') {
+      if (gesture.type === 'panel' || gesture.type === 'accent') {
         return {
           point: gesture.current,
           lines: [...heading, `U ${formatMm(gesturePreview.u0)} · V ${formatMm(gesturePreview.v0)}`],
@@ -2435,6 +2613,7 @@ function WallDetailEditorBody({ openedAt }) {
     if (!definition) return;
     claimShortcut(event);
     if (definition.framedOnly && !framedAssembly) return;
+    if (definition.accentsOnly && !accentsAllowed) return;
     chooseCanvasTool(definition.tool);
     flashToolHud(definition);
   };
@@ -2448,7 +2627,7 @@ function WallDetailEditorBody({ openedAt }) {
         shortcut={definition.shortcut}
         title={definition.title}
         active={canvasTool === definition.tool}
-        disabled={Boolean(definition.framedOnly && !framedAssembly)}
+        disabled={Boolean((definition.framedOnly && !framedAssembly) || (definition.accentsOnly && !accentsAllowed))}
         onClick={() => chooseCanvasTool(definition.tool)}
         {...overrides}
       />
@@ -2586,10 +2765,11 @@ function WallDetailEditorBody({ openedAt }) {
                   value={assembly[activeSide].material}
                   onChange={chooseBoardMaterial}
                 >
-                  <option value={WALL_BOARD_MATERIALS.NONE}>None</option>
-                  <option value={WALL_BOARD_MATERIALS.FIBER_CEMENT}>HardieFlex / fiber cement</option>
-                  <option value={WALL_BOARD_MATERIALS.PLYWOOD}>Plywood</option>
-                  <option value={WALL_BOARD_MATERIALS.RAINSCREEN}>Rainscreen panel</option>
+                  {WALL_BOARD_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </SelectField>
                 {assembly[activeSide].material !== WALL_BOARD_MATERIALS.NONE ? (
                   <>
@@ -2852,6 +3032,93 @@ function WallDetailEditorBody({ openedAt }) {
                 Reset generated grid
               </ToolbarButton>
             </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            id="accents"
+            title="Accent panels"
+            summary={
+              accentsAllowed
+                ? `${faceAccents.length} accent${faceAccents.length === 1 ? '' : 's'} on this face`
+                : 'Not on this face'
+            }
+            open={openSections.accents}
+            onToggle={() => toggleSection('accents')}
+            innerRef={sectionRef('accents')}
+          >
+            {accentsAllowed ? (
+              <>
+                <div className={styles.toolRow} aria-label="Accent drawing tools">
+                  {renderToolButton(CANVAS_TOOLS.DRAW_ACCENT)}
+                </div>
+                <p className={styles.inlineHelp}>
+                  An accent is a block of this face in another finish — the same board, another colour. Drag one out
+                  with the Accent tool, or set one against a door or window so it follows the opening.
+                </p>
+                {detail.openings.length ? (
+                  <div data-accent-at-opening="true">
+                    <SelectField
+                      label="Opening"
+                      value={accentDraft.openingId || detail.openings[0].id}
+                      onChange={(openingId) => setAccentDraft((draft) => ({ ...draft, openingId }))}
+                    >
+                      {detail.openings.map((opening, index) => (
+                        <option key={opening.id} value={opening.id}>
+                          {openingOptionLabel(opening, index)}
+                        </option>
+                      ))}
+                    </SelectField>
+                    <SelectField
+                      label="Placement"
+                      value={accentDraft.placement}
+                      onChange={(placement) => setAccentDraft((draft) => ({ ...draft, placement }))}
+                    >
+                      {Object.values(ACCENT_PLACEMENTS).map((placement) => (
+                        <option key={placement} value={placement}>
+                          {ACCENT_PLACEMENT_LABELS[placement]}
+                        </option>
+                      ))}
+                    </SelectField>
+                    <NumberField
+                      label="Size"
+                      value={accentDraft.size}
+                      min={10}
+                      onChange={(size) => setAccentDraft((draft) => ({ ...draft, size }))}
+                    />
+                    <ToolbarButton onClick={addAccentAtOpening}>Add accent at opening</ToolbarButton>
+                  </div>
+                ) : (
+                  <p className={styles.inlineHelp}>This wall has no doors or windows to set an accent against.</p>
+                )}
+                {faceAccents.length ? (
+                  <div className={styles.accentList} role="list" aria-label="Accents on this face">
+                    {faceAccents.map((accent, index) => (
+                      <button
+                        key={accent.id}
+                        type="button"
+                        role="listitem"
+                        className={styles.accentListItem}
+                        data-selected={selection?.type === 'accent' && selection.id === accent.id ? 'true' : 'false'}
+                        onClick={() => setSelection({ type: 'accent', id: accent.id })}
+                      >
+                        <span
+                          className={styles.accentSwatch}
+                          style={{ background: accent.finish.colour.hex }}
+                          aria-hidden="true"
+                        />
+                        {accent.label || `Accent ${index + 1}`} · {describeWallFinish(accent.finish)}
+                        {accent.anchorMissing ? ' · opening gone' : ''}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <EmptyState icon="accent" title="No accents on this face">
+                Accent panels go on boarded faces of straight framed walls. Choose a board for this face under Complete
+                wall assembly to add them.
+              </EmptyState>
+            )}
           </CollapsibleSection>
 
           <CollapsibleSection
@@ -3482,7 +3749,7 @@ function WallDetailEditorBody({ openedAt }) {
                                     selection?.type === 'panel' && selection.id === panel.localId ? 'true' : 'false'
                                   }
                                   d={panelRegionPath(region)}
-                                  fill={faceColor(assembly[activeSide].material)}
+                                  fill={panelFill}
                                   fillRule="evenodd"
                                   vectorEffect="non-scaling-stroke"
                                   onPointerDown={(event) => beginElementMove(event, 'panel', panel.localId, panel)}
@@ -3501,7 +3768,7 @@ function WallDetailEditorBody({ openedAt }) {
                                   y={fragment.v0}
                                   width={fragment.u1 - fragment.u0}
                                   height={fragment.v1 - fragment.v0}
-                                  fill={faceColor(assembly[activeSide].material)}
+                                  fill={panelFill}
                                   vectorEffect="non-scaling-stroke"
                                   onPointerDown={(event) => beginElementMove(event, 'panel', panel.localId, panel)}
                                 >
@@ -3509,6 +3776,84 @@ function WallDetailEditorBody({ openedAt }) {
                                 </rect>
                               )),
                         )}
+                      {layerVisibility.panels && sidingCoursePath ? (
+                        <g pointerEvents="none" data-siding-courses={activeSide}>
+                          <clipPath id={sidingClipId}>
+                            {panels.flatMap((panel) =>
+                              panel.regions.map((region, index) => (
+                                <path
+                                  key={`${panel.id}:clip:${index}`}
+                                  d={panelRegionPath(region)}
+                                  clipRule="evenodd"
+                                />
+                              )),
+                            )}
+                          </clipPath>
+                          <path
+                            className={styles.sidingCourses}
+                            d={sidingCoursePath}
+                            clipPath={`url(#${sidingClipId})`}
+                            vectorEffect="non-scaling-stroke"
+                          />
+                        </g>
+                      ) : null}
+                      {/* Accent panels: over the boards, under the framing,
+                          screws and dimensions, clipped to the boards so the
+                          openings and the reveals cut them as they cut the
+                          board. Selection changes the fill, never the line. */}
+                      {layerVisibility.panels && faceAccents.length ? (
+                        <g data-accents={activeSide}>
+                          <clipPath id={accentClipId}>
+                            {panels.flatMap((panel) =>
+                              panel.regions.map((region, index) => (
+                                <path
+                                  key={`${panel.id}:accent-clip:${index}`}
+                                  d={panelRegionPath(region)}
+                                  clipRule="evenodd"
+                                />
+                              )),
+                            )}
+                          </clipPath>
+                          <g clipPath={`url(#${accentClipId})`}>
+                            {faceAccents
+                              .filter((accent) => accent.u1 > accent.u0 && accent.v1 > accent.v0)
+                              .map((accent) => (
+                                <rect
+                                  key={accent.id}
+                                  className={styles.accentShape}
+                                  data-accent-id={accent.id}
+                                  data-selected={
+                                    selection?.type === 'accent' && selection.id === accent.id ? 'true' : 'false'
+                                  }
+                                  x={accent.u0}
+                                  y={accent.v0}
+                                  width={accent.u1 - accent.u0}
+                                  height={accent.v1 - accent.v0}
+                                  fill={wallFinishDrawingTint(accent.finish.colour.hex)}
+                                  vectorEffect="non-scaling-stroke"
+                                  onPointerDown={(event) =>
+                                    beginElementMove(event, 'accent', accent.id, accent.requested)
+                                  }
+                                >
+                                  <title>{`${accent.label || 'Accent'} · ${formatMm(accent.width)} × ${formatMm(
+                                    accent.height,
+                                  )} · ${describeWallFinish(accent.finish)}`}</title>
+                                </rect>
+                              ))}
+                          </g>
+                        </g>
+                      ) : null}
+                      {gesturePreview && gesturePreviewType === 'accent' ? (
+                        <rect
+                          className={styles.drawPreview}
+                          data-accent-preview="true"
+                          x={gesturePreview.u0}
+                          y={gesturePreview.v0}
+                          width={gesturePreview.u1 - gesturePreview.u0}
+                          height={gesturePreview.v1 - gesturePreview.v0}
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      ) : null}
                       {layerVisibility.framing &&
                         drawnFrameMembers.map((member) => {
                           const contact = framingContactById.get(member.id);
@@ -3849,7 +4194,7 @@ function WallDetailEditorBody({ openedAt }) {
             onToggle={() => toggleSection('selection')}
             innerRef={sectionRef('selection')}
           >
-            {selectedPanel || selectedMember || selectedFastener || selectedDimension ? null : (
+            {selectedPanel || selectedAccent || selectedMember || selectedFastener || selectedDimension ? null : (
               <EmptyState icon="select" title="Nothing selected">
                 Pick the Select tool, then click a board, stud, screw, or measurement on the drawing to edit its exact
                 numbers here.
@@ -3894,6 +4239,124 @@ function WallDetailEditorBody({ openedAt }) {
                 />
                 <ToolbarButton danger onClick={deleteSelectedPanel}>
                   Delete panel
+                </ToolbarButton>
+              </div>
+            )}
+
+            {selectedAccent && (
+              <div className={styles.selectionCard} data-selected-accent={selectedAccent.id}>
+                <h3>Selected accent — {selectedAccent.label || 'Accent'}</h3>
+                <div className={styles.measurementReadout}>
+                  <strong>
+                    {formatMm(selectedAccent.width)} × {formatMm(selectedAccent.height)}
+                  </strong>
+                  <span>{describeWallFinish(selectedAccent.finish)}</span>
+                  <span>
+                    {selectedAccent.visible
+                      ? `${(selectedAccent.netArea / 1_000_000).toFixed(2)} m² shows, openings taken out`
+                      : 'Shows nothing: off the face or inside an opening'}
+                  </span>
+                </div>
+                <TextField
+                  label="Label"
+                  value={selectedAccent.label}
+                  placeholder="Accent"
+                  onChange={(label) => updateSelectedAccent({ label })}
+                />
+                <NumberField
+                  label="From wall start"
+                  value={Math.round(selectedAccent.requested.u0)}
+                  onChange={(u) => updateSelectedAccent({ rect: { u0: u, u1: u + selectedAccent.width } })}
+                />
+                <SignedNumberField
+                  label="Above floor"
+                  value={Math.round(selectedAccent.requested.v0 - detail.datumV)}
+                  onChange={(v) =>
+                    updateSelectedAccent({
+                      rect: { v0: detail.datumV + v, v1: detail.datumV + v + selectedAccent.height },
+                    })
+                  }
+                />
+                <NumberField
+                  label="Width"
+                  value={selectedAccent.width}
+                  min={10}
+                  onChange={(width) =>
+                    updateSelectedAccent({ rect: { u1: selectedAccent.requested.u0 + Math.max(10, width) } })
+                  }
+                />
+                <NumberField
+                  label="Height"
+                  value={selectedAccent.height}
+                  min={10}
+                  onChange={(height) =>
+                    updateSelectedAccent({ rect: { v1: selectedAccent.requested.v0 + Math.max(10, height) } })
+                  }
+                />
+                <SelectField
+                  label="Finish"
+                  value={selectedAccent.finish.kind}
+                  onChange={(kind) => updateSelectedAccent({ finish: defaultWallFinish(kind) })}
+                >
+                  {wallFinishKindsFor(assembly.system, assembly[activeSide].material).map((kind) => (
+                    <option key={kind} value={kind}>
+                      {WALL_FINISH_KIND_LABELS[kind]}
+                    </option>
+                  ))}
+                </SelectField>
+                <SelectField
+                  label="Colour"
+                  value={`${selectedAccent.finish.colour.catalogue}:${selectedAccent.finish.colour.name}`}
+                  onChange={(value) => {
+                    const [catalogue, ...rest] = value.split(':');
+                    const name = rest.join(':');
+                    const colour =
+                      catalogue === 'custom' ? customWallColour(name) : wallCatalogueColour(catalogue, name);
+                    if (colour) updateSelectedAccent({ finish: { ...selectedAccent.finish, colour } });
+                  }}
+                >
+                  {selectedAccent.finish.colour.catalogue === 'custom' ? (
+                    <option value={`custom:${selectedAccent.finish.colour.name}`}>
+                      Custom {selectedAccent.finish.colour.hex}
+                    </option>
+                  ) : null}
+                  {(selectedAccent.finish.kind === 'timber' ? ['timber', 'facade'] : ['facade', 'ral']).map(
+                    (catalogue) =>
+                      WALL_COLOUR_CATALOG[catalogue].map((swatch) => (
+                        <option key={`${catalogue}:${swatch.name}`} value={`${catalogue}:${swatch.name}`}>
+                          {swatch.name}
+                        </option>
+                      )),
+                  )}
+                </SelectField>
+                <SelectField
+                  label="Sheen"
+                  value={selectedAccent.finish.sheen}
+                  onChange={(sheen) => updateSelectedAccent({ finish: { ...selectedAccent.finish, sheen } })}
+                >
+                  {Object.values(WALL_FINISH_SHEENS).map((sheen) => (
+                    <option key={sheen} value={sheen}>
+                      {WALL_FINISH_SHEEN_LABELS[sheen]}
+                    </option>
+                  ))}
+                </SelectField>
+                <SelectField
+                  label="Attach to"
+                  value={selectedAccent.anchor && !selectedAccent.anchorMissing ? selectedAccent.anchor.openingId : ''}
+                  onChange={(openingId) => updateSelectedAccent({ anchorOpeningId: openingId || null })}
+                >
+                  <option value="">None — stays where it is</option>
+                  {detail.openings.map((opening, index) => (
+                    <option key={opening.id} value={opening.id}>
+                      {openingOptionLabel(opening, index)}
+                    </option>
+                  ))}
+                </SelectField>
+                {selectedAccent.anchorMissing ? (
+                  <p className={styles.inlineHelp}>Its opening is gone; it stays where it was last placed.</p>
+                ) : null}
+                <ToolbarButton danger onClick={deleteSelectedAccent}>
+                  Delete accent
                 </ToolbarButton>
               </div>
             )}

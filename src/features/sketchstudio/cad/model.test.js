@@ -2,14 +2,18 @@ import { expect, it } from 'vitest';
 import {
   CAD_VERSION,
   createPart,
+  duplicateSheet,
   emptyModel,
+  findSheetFor,
   normalizeModel,
   removeInstance,
   removeEmptyParts,
   removePart,
+  removeSheets,
   resolveSection,
   validateReferences,
 } from './model.js';
+import { sheetSubject } from './groups.js';
 
 const mark = (id, from = 'a', to = 'b') => ({
   id,
@@ -315,4 +319,90 @@ it('removeInstance dissolves a two-member group it leaves with one part, and is 
   // Without groups the result is exactly the old one (no groups key added).
   const plain = { instances: [{ id: 'a' }], connections: [], marks: [], sheets: [] };
   expect(removeInstance(plain, 'a')).toEqual({ instances: [], connections: [], marks: [], sheets: [] });
+});
+
+// Drawing sheets (Phase S, docs/sketch-studio-sheet-manager.md §3).
+const sheet = (id, extra = {}) => ({ id, title: id, views: ['front'], annotations: [], ...extra });
+const sheetModel = (...sheets) =>
+  normalizeModel({
+    ...emptyModel(),
+    parts: [{ id: 'p', name: 'Profile part 1', features: [{ id: 'f', type: 'box', width: 1, depth: 1, height: 1 }] }],
+    groups: [{ id: 'g', name: 'Frame', parentId: null }],
+    instances: [
+      { id: 'a', partId: 'p', groupId: 'g' },
+      { id: 'b', partId: 'p', groupId: 'g' },
+      { id: 'c', partId: 'p' },
+    ],
+    sheets,
+  });
+
+it('removeSheets removes the sheets and refuses to remove the last one', () => {
+  const model = sheetModel(sheet('s1'), sheet('s2'), sheet('s3'));
+  expect(removeSheets(model, ['s1', 's3']).sheets.map((s) => s.id)).toEqual(['s2']);
+  // Unknown ids are ignored; the model itself is untouched.
+  expect(removeSheets(model, ['zzz']).sheets).toHaveLength(3);
+  expect(model.sheets).toHaveLength(3);
+  expect(() => removeSheets(model, ['s1', 's2', 's3'])).toThrow('Keep at least one drawing sheet.');
+});
+
+it('duplicateSheet copies right after the original with new sheet and annotation ids', () => {
+  const model = sheetModel(sheet('s1', { annotations: [{ id: 'n1', type: 'part-number', partId: 'p' }] }), sheet('s2'));
+  const next = duplicateSheet(model, 's1');
+  expect(next.sheets.map((s) => s.id)[0]).toBe('s1');
+  expect(next.sheets.at(-1).id).toBe('s2');
+  const copy = next.sheets[1];
+  expect(copy.id).not.toBe('s1');
+  expect(copy.title).toBe('s1 (copy)');
+  expect(copy.annotations).toHaveLength(1);
+  expect(copy.annotations[0]).toMatchObject({ type: 'part-number', partId: 'p' });
+  expect(copy.annotations[0].id).not.toBe('n1');
+  // A deep copy: the original is not shared.
+  expect(copy.views).not.toBe(model.sheets[0].views);
+  expect(normalizeModel(next).sheets).toHaveLength(3);
+  // Cut to the 65-character title block.
+  const long = duplicateSheet(sheetModel(sheet('s1', { title: 'x'.repeat(64) })), 's1');
+  expect(long.sheets[1].title).toHaveLength(65);
+  expect(() => duplicateSheet(model, 'zzz')).toThrow('Unknown drawing sheet: zzz');
+});
+
+it('sheetSubject labels a part, a group, chosen parts and the whole assembly, with section and exploded suffixes', () => {
+  const model = sheetModel(sheet('s1'));
+  const label = (extra) => sheetSubject(sheet('x', extra), model).label;
+  expect(sheetSubject(sheet('x', { partId: 'p' }), model)).toEqual({
+    kind: 'part',
+    partId: 'p',
+    label: 'Part · Profile part 1',
+  });
+  expect(label({ instanceIds: ['b', 'a'] })).toBe('Group · Frame');
+  expect(sheetSubject(sheet('x', { instanceIds: ['a', 'b', 'c'] }), model)).toEqual({
+    kind: 'parts',
+    instanceIds: ['a', 'b', 'c'],
+    label: '3 parts',
+  });
+  expect(label({ instanceIds: ['c'] })).toBe('1 part');
+  expect(label({})).toBe('Whole assembly');
+  expect(label({ instanceIds: [] })).toBe('Whole assembly');
+  expect(label({ section: { origin: [0, 0, 0], normal: [1, 0, 0] } })).toBe('Whole assembly · section');
+  expect(label({ views: ['exploded'] })).toBe('Whole assembly · exploded');
+  expect(label({ partId: 'p', views: [{ name: 'E', view: 'exploded' }] })).toBe('Part · Profile part 1 · exploded');
+});
+
+it('findSheetFor matches plain sheets by part, instance set or whole assembly, never section or exploded ones', () => {
+  const model = sheetModel(
+    sheet('section', { section: { origin: [0, 0, 0], normal: [1, 0, 0] } }),
+    sheet('exploded', { views: ['exploded'] }),
+    sheet('part', { partId: 'p' }),
+    sheet('pair', { instanceIds: ['a', 'b'] }),
+    sheet('assembly'),
+  );
+  expect(findSheetFor(model, { partId: 'p' }).id).toBe('part');
+  expect(findSheetFor(model, { partId: 'zzz' })).toBeNull();
+  expect(findSheetFor(model, { instanceIds: ['b', 'a'] }).id).toBe('pair');
+  expect(findSheetFor(model, { instanceIds: ['a'] })).toBeNull();
+  expect(findSheetFor(model, {}).id).toBe('assembly');
+  // A section or exploded sheet of the subject is not its plain sheet.
+  expect(
+    findSheetFor(sheetModel(sheet('section', { section: { origin: [0, 0, 0], normal: [1, 0, 0] } })), {}),
+  ).toBeNull();
+  expect(findSheetFor(sheetModel(sheet('e', { partId: 'p', views: ['exploded'] })), { partId: 'p' })).toBeNull();
 });

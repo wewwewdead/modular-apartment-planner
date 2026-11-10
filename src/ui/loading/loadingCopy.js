@@ -82,6 +82,8 @@ export const LOADING_COPY = Object.freeze({
   templateCard: 'Opening…',
   workshopZip: 'Packing workshop ZIP…',
   sheetPdfWorkshop: 'Rendering sheet PDF…',
+  // The sheet PDF (docs/sketch-studio-sheet-pdf.md §5) before its first page.
+  sheetPdfPreflight: 'Checking sheets…',
 
   // Section and elevation views
   cuttingSection: 'Cutting section…',
@@ -126,6 +128,11 @@ export function cuttingSection(label) {
     .replace(/^section\s+/i, '')
     .trim();
   return name ? `Cutting section ${name}…` : LOADING_COPY.cuttingSection;
+}
+
+/** "Rendering sheet 3 of 12 — Frame" (the sheet PDF's progress). */
+export function renderingSheetPdf(page, total, title) {
+  return `Rendering sheet ${formatCount(page)} of ${formatCount(total)}${title ? ` — ${title}` : ''}`;
 }
 
 /** "Drawing the front elevation…" */

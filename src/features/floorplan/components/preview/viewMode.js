@@ -200,8 +200,15 @@ export function isSeeThrough(mode) {
   return resolved !== VIEW_MODES.SOLID;
 }
 
-/** The tier of a palette material (or of a palette material's twin), or null. */
+/**
+ * The tier of a palette material (or of a palette material's twin), or null.
+ *
+ * A material that states its own tier is read first: the wall-finish materials
+ * the palette builds on demand (`paletteMaterialFor`) are keyed by a colour
+ * string no table could list, so each one carries `userData.tier` instead.
+ */
 export function tierOf(material) {
+  if (material?.userData?.tier) return material.userData.tier;
   const key = material?.userData?.paletteKey;
   return key ? MATERIAL_TIERS[key] || null : null;
 }

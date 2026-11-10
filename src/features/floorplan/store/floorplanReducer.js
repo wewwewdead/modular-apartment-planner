@@ -39,6 +39,7 @@ import {
 import { propagateWallEdit } from '@/domain/modelGraph';
 import { reconcileFloorRooms } from '@/domain/roomReconcile';
 import { BUILDING_COMMANDS, executeBuildingCommand } from '@/domain/buildingCommands';
+import { keepArmedSettings } from '@/editor/toolSession';
 import { applySunStudyPatch, createSunStudyState } from '@/analysis/sunStudyState';
 import { applyDaylightPatch, createDaylightState } from '@/analysis/daylightState';
 import { applySolarAccessPatch, createSolarAccessState } from '@/analysis/solarAccessState';
@@ -63,6 +64,9 @@ import { deriveServicesRealization } from '@/domain/servicesRealization';
 import { deriveCostRealization } from '@/domain/costRealization';
 import { deriveDocumentationRealization } from '@/domain/documentationRealization';
 import { deriveProfessionalExchange } from '@/domain/professionalExchange';
+import { applyWallFaceFinishToFloors } from '@/domain/wallAssemblies';
+import { copyWallFaceAccentsToStack } from '@/domain/wallAccents';
+import { generateId } from '@/domain/ids';
 
 const LIFECYCLE_STAGE_IDS = new Set([
   'brief',
@@ -202,6 +206,26 @@ function buildDerivedModels(project, validationIssues) {
  * `{ type: 'END_DRAG_GESTURE', settleDeferred: true }` when it goes idle or
  * closes; any settled edit of another kind settles it too.
  */
+/**
+ * Truss systems and manual ceilings store an absolute elevation instead of
+ * following their floor's, so a floor that moves has to carry them along.
+ * `deltaForFloor(floorId)` gives a floor's shift in mm, or null when it stays.
+ * Beam-attached ceilings resolve their height from the beams they hang from,
+ * which the floor shift itself already moved — only manual ceilings follow here.
+ */
+function shiftFloorAttachedElevations(project, deltaForFloor) {
+  return {
+    trussSystems: (project.trussSystems || []).map((trussSystem) => {
+      const delta = deltaForFloor(trussSystem.floorId);
+      return delta === null ? trussSystem : { ...trussSystem, baseElevation: (trussSystem.baseElevation ?? 0) + delta };
+    }),
+    ceilings: (project.ceilings || []).map((ceiling) => {
+      const delta = ceiling.attachment?.mode === 'manual' ? deltaForFloor(ceiling.floorId) : null;
+      return delta === null ? ceiling : { ...ceiling, baseElevation: (ceiling.baseElevation ?? 0) + delta };
+    }),
+  };
+}
+
 function createDragGesture(derivedStale = false, deferredCoordination = false) {
   return { active: false, historyRecorded: false, derivedStale, deferredCoordination };
 }
@@ -514,10 +538,14 @@ function reduceProjectState(state, action) {
         ...result.project,
         updatedAt: new Date().toISOString(),
       });
+      // The coordination models are the root reducer's job: settled, it
+      // recomputes them against the synced project this state now holds (a
+      // pass here would be thrown away); mid-drag it leaves them stale until
+      // END_DRAG_GESTURE. Only the command record is this branch's to write.
       return {
         ...nextState,
         derived: {
-          ...computeDerivedModels(result.project, result.validation.issues),
+          ...state.derived,
           lastCommand: {
             ok: true,
             commandType: result.commandType,
@@ -842,27 +870,13 @@ function reduceProjectState(state, action) {
             };
           });
 
-          const nextTrussSystems = (state.project.trussSystems || []).map((trussSystem) =>
-            trussSystem.floorId === action.floor.id
-              ? { ...trussSystem, baseElevation: (trussSystem.baseElevation ?? 0) + elevationDelta }
-              : trussSystem,
-          );
-
-          // Beam-attached ceilings resolve their height from the beams they hang
-          // from, which the shift above already moved — only manual ceilings
-          // store an absolute elevation that has to follow the floor.
-          const nextCeilings = (state.project.ceilings || []).map((ceiling) =>
-            ceiling.floorId === action.floor.id && ceiling.attachment?.mode === 'manual'
-              ? { ...ceiling, baseElevation: (ceiling.baseElevation ?? 0) + elevationDelta }
-              : ceiling,
-          );
-
           return {
             ...state.project,
             updatedAt: new Date().toISOString(),
             floors: sortFloors(nextFloors),
-            trussSystems: nextTrussSystems,
-            ceilings: nextCeilings,
+            ...shiftFloorAttachedElevations(state.project, (floorId) =>
+              floorId === action.floor.id ? elevationDelta : null,
+            ),
           };
         })(),
       );
@@ -872,9 +886,11 @@ function reduceProjectState(state, action) {
       const elevationShift = duplicatedFloor.floorToFloorHeight ?? 0;
       const insertionLevelIndex = getFloorLevelIndex(duplicatedFloor);
 
+      const shiftedFloorIds = new Set();
       const shiftedFloors = state.project.floors.map((floor) => {
         if (getFloorLevelIndex(floor) < insertionLevelIndex) return floor;
 
+        shiftedFloorIds.add(floor.id);
         const previousLevelIndex = getFloorLevelIndex(floor);
         return shiftFloorElevationData(
           {
@@ -889,7 +905,14 @@ function reduceProjectState(state, action) {
         );
       });
 
-      return replaceFloors(state, [...shiftedFloors, duplicatedFloor]);
+      return applyProjectUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        floors: sortFloors([...shiftedFloors, duplicatedFloor]),
+        ...shiftFloorAttachedElevations(state.project, (floorId) =>
+          shiftedFloorIds.has(floorId) ? elevationShift : null,
+        ),
+      });
     }
 
     case 'FLOOR_DELETE': {
@@ -1309,6 +1332,32 @@ function reduceProjectState(state, action) {
       return withoutOverhangEdgeSelection(nextState, action.slabId);
     }
 
+    /**
+     * Copy one wall face's finish to its facade stack, or to the matching walls
+     * on its floor or in the building (docs/wall-cladding-finishes.md §5.7).
+     * Every wall it touches lands in one project update — one history entry,
+     * one undo — the way a projecting bay's plate and walls do above. Nothing
+     * to change (every target already looks like that) is a true no-op: no
+     * history entry, no version bump.
+     */
+    case 'WALL_FACE_FINISH_APPLY': {
+      const floors = applyWallFaceFinishToFloors(state.project.floors, action);
+      if (floors === state.project.floors) return state;
+      return applyProjectUpdate(state, { ...state.project, updatedAt: new Date().toISOString(), floors });
+    }
+
+    /**
+     * Copy one face's accent panels to the same face of every other wall in
+     * its facade stack (spec §7.1): new ids, no anchors, one history entry for
+     * the lot. Nothing to change is a true no-op.
+     */
+    case 'WALL_FACE_ACCENTS_APPLY': {
+      if (action.scope && action.scope !== 'stack') return state;
+      const floors = copyWallFaceAccentsToStack(state.project.floors, action, () => generateId('accent'));
+      if (floors === state.project.floors) return state;
+      return applyProjectUpdate(state, { ...state.project, updatedAt: new Date().toISOString(), floors });
+    }
+
     case 'SLAB_DELETE': {
       const nextState = updateFloor(state, action.floorId, (floor) => ({
         ...floor,
@@ -1429,13 +1478,18 @@ function reduceProjectState(state, action) {
         phases: action.phases,
       });
 
-    case 'MARK_SAVED':
+    case 'MARK_SAVED': {
+      // A save that awaited a file write names the version it wrote: edits
+      // made while it was in flight are not on disk and must stay dirty.
+      // Without one, what is in the store now is what was saved.
+      const savedVersion = Number.isFinite(action.version) ? action.version : state.changeVersion;
       return {
         ...state,
-        isDirty: false,
+        isDirty: state.changeVersion !== savedVersion,
         lastSavedAt: new Date().toISOString(),
-        savedVersion: state.changeVersion,
+        savedVersion,
       };
+    }
 
     case 'UNDO': {
       if (state.history.length === 0) return state;
@@ -1530,7 +1584,7 @@ function reduceEditorState(editorState, action) {
         viewMode: normalizeViewMode(action.viewMode),
         activeSectionCutId: action.sectionCutId ?? editorState.activeSectionCutId,
         viewport: { ...editorState.modelViewport },
-        toolState: {},
+        toolState: keepArmedSettings(editorState.toolState),
         statusMessage: null,
       };
 
@@ -1540,7 +1594,7 @@ function reduceEditorState(editorState, action) {
         workspaceMode: action.workspaceMode,
         viewport:
           action.workspaceMode === 'sheet' ? { ...editorState.sheetViewport } : { ...editorState.modelViewport },
-        toolState: {},
+        toolState: keepArmedSettings(editorState.toolState),
         statusMessage: null,
       };
 
@@ -1754,7 +1808,7 @@ function reduceEditorState(editorState, action) {
       return {
         ...clearSelectionState(editorState),
         activeFloorId: action.floorId,
-        toolState: {},
+        toolState: keepArmedSettings(editorState.toolState),
         statusMessage: null,
       };
 
@@ -1907,6 +1961,31 @@ export default function floorplanReducer(state, action) {
         lastCommand: state.derived?.lastCommand || null,
       },
     };
+  }
+
+  // Escape mid-drag. A drag that commits per frame (a column, a fixture, a
+  // door…) has already rewritten the project by the time Escape arrives; its
+  // first frame stored the pre-drag project as this gesture's one history
+  // entry, so cancelling puts exactly that project back and takes the entry
+  // off again — no undo step is left that would only undo nothing. A gesture
+  // that changed nothing has nothing to restore.
+  if (action.type === 'CANCEL_DRAG_GESTURE') {
+    if (!state.gesture?.active || !state.gesture.historyRecorded || !state.history.length) return state;
+    const previousProject = state.history[state.history.length - 1];
+    const nextVersion = state.changeVersion + 1;
+    return syncFloorplanState({
+      ...state,
+      project: previousProject,
+      history: state.history.slice(0, -1),
+      changeVersion: nextVersion,
+      isDirty: nextVersion !== state.savedVersion,
+      gesture: createDragGesture(),
+      derived: {
+        ...state.derived,
+        ...computeDerivedModels(previousProject),
+        lastCommand: state.derived?.lastCommand || null,
+      },
+    });
   }
 
   const projectAction = routeStructuralActionToCommand(state, action);

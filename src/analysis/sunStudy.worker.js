@@ -16,6 +16,7 @@
  */
 
 import { computeDayStudy } from './sunStudyRunner';
+import { handleLatestRequestOnly } from './latestRequestOnly';
 
 /**
  * The sun-hours grid carries typed arrays, one slot per cell. Handing their
@@ -32,9 +33,8 @@ function transferablesOf(result) {
   return buffers;
 }
 
-self.onmessage = (event) => {
-  const { id, project, sunStudy } = event.data || {};
-
+// Only the newest queued request is solved (see `handleLatestRequestOnly`).
+self.onmessage = handleLatestRequestOnly(({ id, project, sunStudy }) => {
   try {
     const result = computeDayStudy({ project, sunStudy });
     self.postMessage({ id, type: 'result', result }, transferablesOf(result));
@@ -43,4 +43,4 @@ self.onmessage = (event) => {
     // forever on a promise nobody will settle.
     self.postMessage({ id, type: 'error', message: error?.message || 'Sun study failed.' });
   }
-};
+});

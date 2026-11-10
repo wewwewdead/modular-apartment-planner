@@ -47,6 +47,9 @@ export function createWalkNavigation({
   const worldUp = new THREE.Vector3(0, 1, 0);
 
   let enabled = false;
+  // Set while the viewport is parked behind a detail editor: a pane nobody can
+  // see takes no keys and no click-to-lock.
+  let inputSuspended = false;
   // Physics is the default walk: the point of the mode is standing in the
   // building. Noclip stays one C-press away.
   let physicsEnabled = true;
@@ -72,20 +75,24 @@ export function createWalkNavigation({
   };
 
   const handleClick = () => {
-    if (!enabled || controls.isLocked) return;
+    if (!enabled || inputSuspended || controls.isLocked) return;
     controls.lock();
   };
 
   const handleKeyDown = (event) => {
-    if (!enabled) return;
+    if (!enabled || inputSuspended) return;
     if (isTypingTarget(event.target)) return;
+    // A chord is never a walk key: Ctrl+S, Ctrl+C, Ctrl+F and Ctrl+R keep
+    // reaching the app and the browser.
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (!isMovementKey(event)) return;
+    // Unlocked, walk mode only answers Escape (leave walk); every other key —
+    // the plan's W and D tool shortcuts among them — goes on to its listener.
+    if (!controls.isLocked && event.code !== 'Escape') return;
 
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
-
-    if (!controls.isLocked && event.code !== 'Escape') return;
 
     switch (event.code) {
       case 'KeyW':
@@ -127,7 +134,7 @@ export function createWalkNavigation({
   };
 
   const handleKeyUp = (event) => {
-    if (!enabled || isTypingTarget(event.target)) return;
+    if (!enabled || inputSuspended || isTypingTarget(event.target)) return;
     if (!isMovementKey(event)) return;
 
     event.preventDefault();
@@ -174,9 +181,14 @@ export function createWalkNavigation({
 
   controls.addEventListener('lock', emitStateChange);
   controls.addEventListener('unlock', emitStateChange);
+  // Holding W and Alt-Tabbing away takes pointer lock and focus with it, and
+  // the key-up lands in another window. A key is only known to be held while
+  // the walk still has the keyboard, so losing either lets go of every key.
+  controls.addEventListener('unlock', clearMovement);
   domElement.addEventListener('click', handleClick);
   window.addEventListener('keydown', handleKeyDown, true);
   window.addEventListener('keyup', handleKeyUp, true);
+  window.addEventListener('blur', clearMovement);
 
   return {
     update(deltaSeconds) {
@@ -237,6 +249,11 @@ export function createWalkNavigation({
       emitStateChange();
     },
     setPhysicsMode,
+    /** Parks keyboard and click input while the viewport is suspended. */
+    setInputSuspended(nextSuspended) {
+      inputSuspended = Boolean(nextSuspended);
+      if (inputSuspended) clearMovement();
+    },
     getPhysicsMode() {
       return physicsEnabled;
     },
@@ -276,9 +293,11 @@ export function createWalkNavigation({
       controls.disconnect?.();
       controls.removeEventListener('lock', emitStateChange);
       controls.removeEventListener('unlock', emitStateChange);
+      controls.removeEventListener('unlock', clearMovement);
       domElement.removeEventListener('click', handleClick);
       window.removeEventListener('keydown', handleKeyDown, true);
       window.removeEventListener('keyup', handleKeyUp, true);
+      window.removeEventListener('blur', clearMovement);
     },
   };
 }

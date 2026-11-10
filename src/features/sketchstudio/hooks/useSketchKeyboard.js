@@ -4,14 +4,16 @@ import {
   closeShortcutOverlay,
   commitEntity,
   deleteSelected,
-  endTransform,
   patchDraft,
   setActiveTool,
   setDocumentEntities,
   setPrecisionInput,
+  setSelection,
+  setSuppressNextClick,
   setUiFlag,
   toggleShortcutOverlay,
 } from '../store/sketchStudioActions';
+import { getInteractionEnd, interactionEndAction, isInteractionInFlight } from '../store/interactionEnd';
 import { createPolylineEntity } from '../utils/entityUtils';
 import { getNextActiveLayer } from '../utils/layerUtils';
 import { withIsometricPlaneMeta } from '../utils/isometricUtils';
@@ -28,6 +30,7 @@ import { commitSelectionCopyResult } from './selectionCopyCommit';
 import { removeLastPolylineVertex } from '../utils/polylineUtils';
 import { translateEntities } from '../utils/transformUtils';
 import {
+  HOVER_DRAFT_TOOLS,
   TOOL_SHORTCUT_MAP,
   buildAngleDimensionEntityFromDraft,
   buildSketchArrayResult,
@@ -107,7 +110,10 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
         const shortcutToolId = TOOL_SHORTCUT_MAP.get(key);
         if (shortcutToolId) {
           event.preventDefault();
-          dispatch(setActiveTool(shortcutToolId));
+          // Switching tool drops a drag without closing its undo entry, so the
+          // moved geometry would stay and the next undo would take it back
+          // together with the action before it. The shortcut waits for the release.
+          if (!isInteractionInFlight(state.interaction.mode)) dispatch(setActiveTool(shortcutToolId));
           return;
         }
       }
@@ -150,11 +156,30 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
       }
 
       if (event.key === 'Escape') {
-        if (state.interaction.mode === 'transform') {
-          dispatch(endTransform());
+        const mode = state.interaction.mode;
+        if (isInteractionInFlight(mode)) {
+          dispatch(interactionEndAction(mode, 'escape'));
+          // A cancel restores the document the way undo does, and that also
+          // clears the selection. Escape only abandons the drag, so the
+          // selection the drag started with comes back with the geometry.
+          if (getInteractionEnd(mode, 'escape') === 'cancel') {
+            const drag =
+              mode === 'transform'
+                ? state.interaction.transform
+                : mode === 'handle-drag'
+                  ? state.interaction.handleDrag
+                  : state.interaction.anchorDrag;
+            dispatch(setSelection(drag?.startSelectedIds ?? state.selection.selectedIds));
+          }
+          // The button is still down, so the release that follows would land as
+          // a click on whatever is under the cursor. A middle-button pan's
+          // release makes no click, and an armed flag would eat the next one.
+          if (mode !== 'panning' || state.interaction.panButton === 0) {
+            dispatch(setSuppressNextClick(true));
+          }
           return;
         }
-        if (state.draft.type === 'fillet' || state.draft.type === 'chamfer') {
+        if (HOVER_DRAFT_TOOLS.has(state.draft.type)) {
           dispatch(cancelDraft());
           dispatch(setActiveTool('select'));
           return;
@@ -343,6 +368,10 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
     state.document,
     state.draft,
     state.interaction.mode,
+    state.interaction.panButton,
+    state.interaction.handleDrag,
+    state.interaction.anchorDrag,
+    state.interaction.transform,
     state.selection.selectedIds,
     state.ui.activeLayerId,
     state.ui.activeTool,

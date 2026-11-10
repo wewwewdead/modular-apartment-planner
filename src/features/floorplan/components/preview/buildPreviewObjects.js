@@ -5,6 +5,7 @@ import {
   taggedCylinderGeometry,
   unitOutlineGeometry,
 } from './previewBatching';
+import { paletteMaterialFor } from './materials';
 import { MAX_ACTIVE_FIXTURE_LIGHTS } from './previewPerf';
 import { selectionMaterialFor } from './selectionMaterials';
 import { freezeStaticMatrices } from './staticMatrices';
@@ -198,7 +199,7 @@ function createPrismObject(descriptor, materialPalette) {
   geometry.rotateX(-Math.PI / 2);
   geometry.translate(0, descriptor.baseElevation, 0);
 
-  const mesh = createMesh(geometry, materialPalette[descriptor.materialKey]);
+  const mesh = createMesh(geometry, paletteMaterialFor(materialPalette, descriptor.materialKey));
   addOutline(mesh, materialPalette);
   return mesh;
 }
@@ -264,7 +265,7 @@ function createBoxObject(descriptor, materialPalette) {
     Math.max(descriptor.size.y, 1),
     Math.max(descriptor.size.z, 1),
   );
-  const mesh = createMesh(geometry, materialPalette[descriptor.materialKey]);
+  const mesh = createMesh(geometry, paletteMaterialFor(materialPalette, descriptor.materialKey));
   const center = planPointToWorld(descriptor.center, descriptor.baseElevation + descriptor.size.y / 2);
   mesh.position.copy(center);
   mesh.rotation.y = planAngleToWorldRotation(descriptor.rotation);
@@ -312,7 +313,7 @@ function createFastenerObject(descriptor, materialPalette) {
   const geometry = vertical
     ? sharedFastenerGeometry(narrow, wide, depth)
     : taggedCylinderGeometry(wide, narrow, depth, 12);
-  const mesh = createMesh(geometry, materialPalette[descriptor.materialKey]);
+  const mesh = createMesh(geometry, paletteMaterialFor(materialPalette, descriptor.materialKey));
   mesh.position.copy(planPointToWorld(descriptor.center, descriptor.baseElevation + descriptor.size.y / 2));
   if (vertical) {
     mesh.rotation.y = planAngleToWorldRotation(descriptor.rotation);
@@ -346,7 +347,7 @@ function createWallPanelObject(descriptor, materialPalette) {
   });
   geometry.translate(0, 0, -descriptor.depth / 2);
 
-  const mesh = createMesh(geometry, materialPalette[descriptor.materialKey]);
+  const mesh = createMesh(geometry, paletteMaterialFor(materialPalette, descriptor.materialKey));
   mesh.position.copy(planPointToWorld(descriptor.origin, descriptor.baseElevation));
   mesh.rotation.y = planAngleToWorldRotation(descriptor.rotation);
   addOutline(mesh, materialPalette);

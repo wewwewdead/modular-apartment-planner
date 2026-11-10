@@ -2,6 +2,7 @@ import { createSlab } from '@/domain/models';
 import { SNAP_DISTANCE_PX } from '@/domain/defaults';
 import { getFloorElevation } from '@/domain/floorModels';
 import { distance } from '@/geometry/point';
+import { dropTrailingRepeatedPoints } from './handlerSnapUtils';
 import { resolveReferenceSnapGeometry, snapPointToReference } from './referenceSnap';
 
 function resetSlabToolState(editorDispatch) {
@@ -100,7 +101,8 @@ export function createSlabPlaceHandler({
     },
 
     onDoubleClick(modelPos, e, toolState) {
-      const points = toolState.slabPoints || [];
+      // The double-click's second press put its corner down a second time.
+      const points = dropTrailingRepeatedPoints(toolState.slabPoints, SNAP_DISTANCE_PX / viewport.zoom);
       if (points.length < 3) return;
       commitSlab(points);
     },

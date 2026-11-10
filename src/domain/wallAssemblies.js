@@ -1,5 +1,8 @@
 import { wallDirection, wallLength } from '@/geometry/wallGeometry';
 import { add, perpendicular, scale } from '@/geometry/point';
+import { normalizeWallFinish, resolveLayerFinish, sameWallFinish } from './wallFinishes';
+import { normalizeSidingCourse } from './wallSiding';
+import { normalizeWallAccents } from './wallAccentModel';
 
 export const WALL_ASSEMBLY_PRESETS = Object.freeze({
   CHB: 'chb',
@@ -13,7 +16,32 @@ export const WALL_BOARD_MATERIALS = Object.freeze({
   FIBER_CEMENT: 'fiber_cement',
   PLYWOOD: 'plywood',
   RAINSCREEN: 'rainscreen',
+  // Plank siding: a field of boards set out in courses (`wallSiding.js`).
+  SIDING: 'siding',
 });
+
+/**
+ * The board choices every picker offers, in the order they are offered — the
+ * properties panel's two, the wall detail editor's one — and the names the
+ * readouts call them by. `label` is what a picker shows; `shortLabel` is what a
+ * button or a schedule line says.
+ */
+export const WALL_BOARD_OPTIONS = Object.freeze([
+  Object.freeze({ value: WALL_BOARD_MATERIALS.NONE, label: 'None', shortLabel: 'No board' }),
+  Object.freeze({
+    value: WALL_BOARD_MATERIALS.FIBER_CEMENT,
+    label: 'HardieFlex / fiber cement',
+    shortLabel: 'Fiber cement',
+  }),
+  Object.freeze({ value: WALL_BOARD_MATERIALS.PLYWOOD, label: 'Plywood', shortLabel: 'Plywood' }),
+  Object.freeze({ value: WALL_BOARD_MATERIALS.RAINSCREEN, label: 'Rainscreen panel', shortLabel: 'Rainscreen panel' }),
+  Object.freeze({ value: WALL_BOARD_MATERIALS.SIDING, label: 'Plank siding', shortLabel: 'Plank siding' }),
+]);
+
+/** A board material's short name — `Fiber cement`, `Plank siding` — or `No board`. */
+export function wallBoardMaterialLabel(material) {
+  return WALL_BOARD_OPTIONS.find((option) => option.value === material)?.shortLabel || 'No board';
+}
 
 export const WALL_FRAME_MATERIALS = Object.freeze({
   LIGHT_GAUGE_STEEL: 'light_gauge_steel',
@@ -39,6 +67,9 @@ const BOARD_DEFAULT_THICKNESS = Object.freeze({
   // not board, so it stays out of the layer thickness the way it stays out of
   // a real board schedule.
   [WALL_BOARD_MATERIALS.RAINSCREEN]: 8,
+  // A 19 mm board is the common dressed thickness of a timber weatherboard and
+  // sits in the range a fibre-cement plank is sold in, so it serves either.
+  [WALL_BOARD_MATERIALS.SIDING]: 19,
 });
 
 /**
@@ -104,9 +135,18 @@ function boardOverhangValue(value) {
   return clampValue(number, -BOARD_OVERHANG_LIMIT, BOARD_OVERHANG_LIMIT);
 }
 
-function normalizeBoardLayer(layer, fallbackMaterial) {
+function normalizeBoardLayer(layer, fallbackMaterial, system) {
   const material = Object.values(WALL_BOARD_MATERIALS).includes(layer?.material) ? layer.material : fallbackMaterial;
   const bare = material === WALL_BOARD_MATERIALS.NONE;
+  // What the face looks like (docs/wall-cladding-finishes.md §4). A stock face
+  // has no `finish` key at all rather than a null one, so a wall nobody has
+  // painted normalises to exactly the object it did before finishes existed —
+  // and a finish the face cannot carry (a render on plywood, anything on a
+  // framed face with no board) is dropped here, which is what lets the board
+  // change without anything else having to remember to clear it. Plank siding
+  // is the one board with no stock look, so it always comes back with one.
+  const finish = resolveLayerFinish(layer?.finish, system, material);
+  const accents = normalizeWallAccents(layer?.accents, system, material);
   return {
     material,
     thickness: finitePositive(layer?.thickness, BOARD_DEFAULT_THICKNESS[material] || 0),
@@ -114,6 +154,13 @@ function normalizeBoardLayer(layer, fallbackMaterial) {
     // No board, no overhang — the same reason a bare face carries no layers.
     overhangStart: bare ? 0 : boardOverhangValue(layer?.overhangStart),
     overhangEnd: bare ? 0 : boardOverhangValue(layer?.overhangEnd),
+    // How a siding face's boards are coursed (spec §6.1). Siding only: every
+    // other layer has no `course` key, exactly as it had none before siding.
+    ...(material === WALL_BOARD_MATERIALS.SIDING ? { course: normalizeSidingCourse(layer?.course) } : {}),
+    ...(finish ? { finish } : {}),
+    // Accent panels (spec §7.1): omitted when there are none, so a face nobody
+    // has picked out normalises to exactly what it did before accents existed.
+    ...(accents ? { accents } : {}),
   };
 }
 
@@ -210,8 +257,8 @@ export function createWallAssembly(preset = WALL_ASSEMBLY_PRESETS.CHB, overrides
       system: 'masonry',
       coreMaterial: 'chb',
       coreThickness: finitePositive(overrides.coreThickness, defaults.coreThickness),
-      interior: normalizeBoardLayer(overrides.interior, WALL_BOARD_MATERIALS.NONE),
-      exterior: normalizeBoardLayer(overrides.exterior, WALL_BOARD_MATERIALS.NONE),
+      interior: normalizeBoardLayer(overrides.interior, WALL_BOARD_MATERIALS.NONE, 'masonry'),
+      exterior: normalizeBoardLayer(overrides.exterior, WALL_BOARD_MATERIALS.NONE, 'masonry'),
       interiorSide:
         overrides.interiorSide === WALL_INTERIOR_SIDES.RIGHT ? WALL_INTERIOR_SIDES.RIGHT : WALL_INTERIOR_SIDES.LEFT,
       framing: null,
@@ -228,8 +275,8 @@ export function createWallAssembly(preset = WALL_ASSEMBLY_PRESETS.CHB, overrides
     system: 'framed',
     coreMaterial: null,
     coreThickness: 0,
-    interior: normalizeBoardLayer(overrides.interior || defaults.interior, defaults.interior.material),
-    exterior: normalizeBoardLayer(overrides.exterior || defaults.exterior, defaults.exterior.material),
+    interior: normalizeBoardLayer(overrides.interior || defaults.interior, defaults.interior.material, 'framed'),
+    exterior: normalizeBoardLayer(overrides.exterior || defaults.exterior, defaults.exterior.material, 'framed'),
     interiorSide:
       overrides.interiorSide === WALL_INTERIOR_SIDES.RIGHT ? WALL_INTERIOR_SIDES.RIGHT : WALL_INTERIOR_SIDES.LEFT,
     framing: {
@@ -299,6 +346,13 @@ export function deriveWallAssemblyLayers(assembly, length = 0) {
       overhangEnd: span.end,
       u0: span.u0,
       u1: span.u1,
+      // The ONE place a consumer learns what a face looks like. Omitted, not
+      // null, on a stock face, so every view of a stock wall reads the same
+      // object it always did.
+      ...(layer.finish ? { finish: layer.finish } : {}),
+      // A siding face's courses travel with it, so the 3D key and the drawing
+      // read the same set-out the layer stores. Absent on every other face.
+      ...(layer.course ? { course: layer.course } : {}),
     };
   });
 }
@@ -701,6 +755,89 @@ export function deriveWallFramingLayout(wall, openings = [], options = {}) {
     totalLinearLengthMm: members.reduce((total, member) => total + memberRunLength(member), 0),
     components,
   };
+}
+
+/**
+ * The wall with one face's finish replaced — `null` puts the face back to
+ * stock — or the same wall object when nothing would change.
+ *
+ * Only that face's layer is written: the rest of the stored assembly is spread
+ * through as it is, so a finish copied onto a wall changes its look and
+ * nothing else about it. A finish the face cannot carry leaves the wall alone
+ * rather than clearing whatever it had; the caller asked to paint it, not to
+ * strip it.
+ */
+export function withWallFaceFinish(wall, side, finish) {
+  if (!wall || (side !== 'interior' && side !== 'exterior')) return wall;
+  const assembly = createWallAssembly(
+    wall.assembly?.preset || WALL_ASSEMBLY_PRESETS.CHB,
+    wall.assembly || {},
+    wall.thickness,
+  );
+  const layer = assembly[side];
+  if (finish && !normalizeWallFinish(finish, assembly.system, layer.material)) return wall;
+  // "Stock" on a siding face is its default timber look, not no look at all.
+  const next = resolveLayerFinish(finish, assembly.system, layer.material);
+  if (sameWallFinish(layer.finish || null, next)) return wall;
+  const { finish: _previous, ...stock } = layer;
+  return {
+    ...wall,
+    assembly: { ...(wall.assembly || assembly), [side]: next ? { ...stock, finish: next } : stock },
+  };
+}
+
+/** Same system, same board on that face: the walls a face finish is "matching" on. */
+export function wallFacesMatch(a, b, side) {
+  const left = resolveWallAssembly(a);
+  const right = resolveWallAssembly(b);
+  return left.system === right.system && left[side]?.material === right[side]?.material;
+}
+
+export const WALL_FINISH_APPLY_SCOPES = Object.freeze({
+  STACK: 'stack',
+  FLOOR: 'floor',
+  BUILDING: 'building',
+});
+
+/**
+ * Copy one wall face's finish across a set of walls — the facade stack the
+ * wall belongs to, the matching walls on its floor, or the matching walls in
+ * the building — and hand back the floors.
+ *
+ * Untouched floors (and untouched walls) come back as the same objects, so the
+ * 3D cache rebuilds only the storeys that changed, and the caller can tell "no
+ * change at all" by identity and skip the history entry.
+ */
+export function applyWallFaceFinishToFloors(floors, { floorId, wallId, side, scope }) {
+  const sourceFloor = (floors || []).find((floor) => floor.id === floorId);
+  const source = sourceFloor?.walls?.find((wall) => wall.id === wallId);
+  if (!source || (side !== 'interior' && side !== 'exterior')) return floors;
+  const finish =
+    createWallAssembly(source.assembly?.preset || WALL_ASSEMBLY_PRESETS.CHB, source.assembly || {}, source.thickness)[
+      side
+    ].finish || null;
+
+  const inScope = (floor, wall) => {
+    if (scope === WALL_FINISH_APPLY_SCOPES.STACK) return Boolean(source.stackId) && wall.stackId === source.stackId;
+    if (scope === WALL_FINISH_APPLY_SCOPES.FLOOR && floor.id !== floorId) return false;
+    if (scope !== WALL_FINISH_APPLY_SCOPES.FLOOR && scope !== WALL_FINISH_APPLY_SCOPES.BUILDING) return false;
+    return wallFacesMatch(source, wall, side);
+  };
+
+  let changed = false;
+  const nextFloors = floors.map((floor) => {
+    let floorChanged = false;
+    const walls = (floor.walls || []).map((wall) => {
+      if (wall.id === source.id || !inScope(floor, wall)) return wall;
+      const next = withWallFaceFinish(wall, side, finish);
+      if (next !== wall) floorChanged = true;
+      return next;
+    });
+    if (!floorChanged) return floor;
+    changed = true;
+    return { ...floor, walls };
+  });
+  return changed ? nextFloors : floors;
 }
 
 export function boardLayerAreaMultiplier(assembly, material) {

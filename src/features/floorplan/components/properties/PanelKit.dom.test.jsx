@@ -187,6 +187,40 @@ describe('NumberField', () => {
     expect(committed).toEqual([2400]);
   });
 
+  // An untouched field has nothing to commit: committing the value it already
+  // holds was an undo step that undid nothing, and marked the project dirty.
+  it('commits nothing on Enter when the field was not edited', () => {
+    const committed = [];
+    const node = mount(<HeightHarness committed={committed} />);
+    const input = node.querySelector('input');
+
+    act(() => input.focus());
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+
+    expect(committed).toEqual([]);
+    expect(input.value).toBe('3000');
+  });
+
+  it('still submits on Enter when the field was not edited', () => {
+    const committed = [];
+    const submitted = [];
+    const node = mount(
+      <NumberField
+        label="Reach"
+        value={1200}
+        onChange={(v) => committed.push(v)}
+        onSubmit={(v) => submitted.push(v)}
+      />,
+    );
+    const input = node.querySelector('input');
+
+    act(() => input.focus());
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+
+    expect(committed).toEqual([]);
+    expect(submitted).toEqual([1200]);
+  });
+
   it('reverts on Escape', () => {
     const committed = [];
     const node = mount(<HeightHarness committed={committed} />);

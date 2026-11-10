@@ -65,32 +65,67 @@ function clear(layer) {
   for (const object of [...layer.children]) {
     object.traverse((o) => {
       if (!o.userData.sharedGeometry) o.geometry?.dispose();
-      o.material?.dispose();
+      // Cached overlay materials outlive the redraw (see createOverlayMaterials).
+      if (!o.material?.userData.overlayCached) o.material?.dispose();
     });
   }
   layer.clear();
 }
-function segmentsObject(segments, color, name, opacity = 0.95, order = 44) {
+function segmentsWith(material, segments, name, order) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(segments.flat(2), 3));
-  const line = new THREE.LineSegments(
-    geometry,
-    new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthTest: false }),
-  );
+  const line = new THREE.LineSegments(geometry, material);
   line.name = name;
   line.renderOrder = order;
   line.frustumCulled = false;
   return line;
 }
-const basicMaterial = (color, opacity = 1) =>
-  new THREE.MeshBasicMaterial({
-    color,
-    transparent: true,
-    opacity,
-    depthTest: false,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
+/*
+ * The overlay's materials, one per colour and opacity, owned by the layer.
+ *
+ * Every redraw — each pointer move of a handle drag, each orbit step — used to
+ * dispose the overlay's materials and create fresh ones. three destroys a
+ * program when the last material using it is disposed, so the grips' program
+ * was destroyed and relinked on every frame of a Shape-stage drag (22 links in
+ * one arrow drag). Shared materials keep the program alive; they are disposed
+ * with the layer.
+ */
+export function createOverlayMaterials() {
+  const cache = new Map();
+  const cached = (key, build) => {
+    let material = cache.get(key);
+    if (!material) {
+      material = build();
+      material.userData.overlayCached = true;
+      cache.set(key, material);
+    }
+    return material;
+  };
+  return {
+    line: (color, opacity) =>
+      cached(
+        `line|${color}|${opacity}`,
+        () => new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthTest: false }),
+      ),
+    basic: (color, opacity) =>
+      cached(
+        `basic|${color}|${opacity}`,
+        () =>
+          new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity,
+            depthTest: false,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+          }),
+      ),
+    dispose() {
+      for (const material of cache.values()) material.dispose();
+      cache.clear();
+    },
+  };
+}
 
 /**
  * @param {object} deps
@@ -102,6 +137,10 @@ const basicMaterial = (color, opacity = 1) =>
  * @param {Function} deps.placeBox (node) → position a readout by the cursor.
  */
 export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pickedFace, placeBox }) {
+  const overlayMaterials = createOverlayMaterials();
+  const segmentsObject = (segments, color, name, opacity = 0.95, order = 44) =>
+    segmentsWith(overlayMaterials.line(color, opacity), segments, name, order);
+  const basicMaterial = (color, opacity = 1) => overlayMaterials.basic(color, opacity);
   const layer = new THREE.Group();
   layer.name = 'placement';
   layer.renderOrder = 37;
@@ -1206,6 +1245,7 @@ export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pic
       axisLabel.remove();
       detachTool();
       clear(layer);
+      overlayMaterials.dispose();
       ctx.scene.remove(layer);
     },
   };
@@ -1215,3 +1255,5 @@ export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pic
   });
   return api;
 }
+
+export { clear as clearPlacementOverlay };

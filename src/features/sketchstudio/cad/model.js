@@ -32,6 +32,9 @@ export function emptyModel() {
         title: 'Assembly',
         size: 'A3',
         units: 'mm',
+        // Fit to page (Phase R): the largest standard scale where every view
+        // fits; `scale` is the fixed value kept for switching back.
+        scaleMode: 'fit',
         scale: 0.05,
         revision: 'A',
         tolerance: '±0.5 mm',
@@ -99,7 +102,13 @@ export function normalizeModel(value) {
       throw new Error(`Invalid mark: ${mark.id}`);
   if (!result.sheets.length) throw new Error('Keep at least one drawing sheet.');
   for (const sheet of result.sheets)
-    if (!Array.isArray(sheet.views) || !sheet.views.length || (sheet.annotations && !Array.isArray(sheet.annotations)))
+    if (
+      !Array.isArray(sheet.views) ||
+      !sheet.views.length ||
+      (sheet.annotations && !Array.isArray(sheet.annotations)) ||
+      // Absent = fixed (files before Phase R).
+      (sheet.scaleMode != null && !['fit', 'fixed'].includes(sheet.scaleMode))
+    )
       throw new Error(`Invalid drawing sheet: ${sheet.id}`);
   return result;
 }
@@ -262,6 +271,53 @@ export function removePart(model, partId) {
           : sheet,
       ),
   };
+}
+
+// Drawing sheets (Phase S, docs/sketch-studio-sheet-manager.md §3). A model
+// always keeps one sheet (normalizeModel refuses none); callers disable the
+// action rather than rely on the throw.
+export function removeSheets(model, ids) {
+  const gone = new Set(ids);
+  const sheets = model.sheets.filter((sheet) => !gone.has(sheet.id));
+  if (!sheets.length) throw new Error('Keep at least one drawing sheet.');
+  return { ...model, sheets };
+}
+
+// A copy right after the original: new sheet and annotation ids, "(copy)"
+// within the 65-character title block.
+export function duplicateSheet(model, id) {
+  const index = model.sheets.findIndex((sheet) => sheet.id === id);
+  if (index < 0) throw new Error(`Unknown drawing sheet: ${id}`);
+  const source = model.sheets[index];
+  const copy = {
+    ...clone(source),
+    id: uid('sheet'),
+    title: `${source.title || 'Sheet'} (copy)`.slice(0, 65),
+    ...(source.annotations
+      ? { annotations: clone(source.annotations).map((a) => ({ ...a, id: uid('annotation') })) }
+      : {}),
+  };
+  return { ...model, sheets: [...model.sheets.slice(0, index + 1), copy, ...model.sheets.slice(index + 1)] };
+}
+
+const viewKind = (entry) => (typeof entry === 'string' ? entry : entry?.view || entry?.name);
+// An exploded-assembly sheet: every view is the exploded one.
+export const isExplodedSheet = (sheet) =>
+  Array.isArray(sheet.views) && sheet.views.length > 0 && sheet.views.every((v) => viewKind(v) === 'exploded');
+
+// The first plain sheet (no section, not exploded) drawing this subject:
+// { partId }, { instanceIds } (as a set) or {} (the whole assembly).
+export function findSheetFor(model, subject = {}) {
+  const wanted = subject.partId ? null : new Set(subject.instanceIds || []);
+  return (
+    model.sheets.find((sheet) => {
+      if (sheet.section || isExplodedSheet(sheet)) return false;
+      if (subject.partId) return sheet.partId === subject.partId;
+      if (sheet.partId) return false;
+      const ids = new Set(sheet.instanceIds || []);
+      return ids.size === wanted.size && [...ids].every((id) => wanted.has(id));
+    }) || null
+  );
 }
 
 // Saves made before Phase M.1 can hold a part whose only feature was removed

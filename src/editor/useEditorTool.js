@@ -258,6 +258,8 @@ export function useEditorTool({
       onMouseUp: (modelPos, e) => handler?.onMouseUp?.(modelPos, e, toolState),
       onDoubleClick: (modelPos, e) => handler?.onDoubleClick?.(modelPos, e, toolState),
       onKeyDown: (e) => handler?.onKeyDown?.(e, toolState, selectedId, selectedType),
+      // A key the active tool uses for itself, ahead of the global tool shortcuts.
+      claimsKey: (e) => Boolean(handler?.claimsKey?.(e, toolState)),
       getCursor: () => handler?.getCursor?.(toolState) || 'default',
     }),
     [handler, toolState, selectedId, selectedType],

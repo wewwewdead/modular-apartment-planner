@@ -128,9 +128,10 @@ records its name for the model and workshop output; dimensions stay separate.
    setup preview. Configure the operation, inspect it, then choose Apply.
 4. Use the Assemble tab for placements, attachments, weld notes, hide/isolate,
    exploded display, sections and solid interference inspection.
-5. Generate linked drawing views. Set scale, page size, units, revision and
-   annotations in Sheet properties. A scale of 0.05 is 1:20. Oversized views
-   report an error instead of silently changing a stated scale.
+5. Generate linked drawing views. New sheets fit the page; set a fixed scale,
+   page size, units, revision and annotations in Sheet properties. A scale of
+   0.05 is 1:20. An oversized fixed scale is flagged in the preview and
+   refused by exports instead of silently changing a stated scale.
 6. Set stock lengths, sheet sizes, kerf and allowances in Manufacture. Export a
    STEP assembly, a selected STL part, a CSV cutting list or the workshop ZIP.
 
@@ -157,15 +158,71 @@ mounting locations and installation-hole diameters are assumptions. Square
 bends and plain bores simplify the geometry; tabs, PEM nuts and threads are
 omitted. The example sheets carry these limitations as drawing notes.
 
-For your own model, select a part and choose **New engineering sheet**.
+For your own model, select what to draw and choose **New engineering sheet**,
+or **Drawing sheet** in the part's Properties or the group / multi-selection
+panel (which also opens the Drawings tab). The 3D selection is the subject: one
+part draws that part, a group draws its member instances under the group's
+name, several parts draw those instances ("3 parts"), and nothing selected
+draws the whole assembly under the document name. The new sheet fits the page
+and its views are generated straight away. A subject that already has a plain
+sheet (not a section or exploded sheet) opens that sheet instead of adding a
+duplicate.
+
+**Drawing one part.** On the Drawings tab every part and group row in the parts
+tree has a draw icon (**Draw <name>**): it opens that part's or group's sheet,
+or creates one fitted to the page, without changing the 3D selection. The
+**Sheets** panel's **New drawing of** row does the same by name — Whole
+assembly, the 3D selection, any part or any group — and reads **Open sheet**
+when the subject already has one, with **Create another** to add a second.
+
+**Managing sheets.** **Sheets** (first on the Drawings tab, also **Manage
+sheets** beside the drawing pane's sheet selector, and shown when the Drawings
+tab opens with nothing else in Properties) lists every sheet with its subject
+("Part · Profile part 1", "Group · Frame", "3 parts", "Whole assembly", plus
+" · section" / " · exploded") and its page and scale ("A3 · 1:50" once
+generated, else "A3 · Fit"). Click a title to open it; double-click or F2
+renames it (Enter keeps, Escape cancels, an empty name is refused). Each row
+has Duplicate (inserted after it as "… (copy)") and Delete; tick rows for
+**Delete selected**. A model keeps at least one sheet, so Delete is disabled on
+the last one and Delete selected when every row is ticked. Deleting is one
+Undo step, with a "Deleted N sheets — Undo" line until the next change; if the
+open sheet goes, the next row (else the previous one) opens. The sheet selector
+reads "title — subject" so sheets with the same title can be told apart.
+**Add missing part sheets** adds a fitted sheet only for parts without a plain
+sheet, so pressing it again adds nothing ("Every part already has a sheet").
 **Sheet properties** now provides ordinary form controls for the drawing
-subject, A3/A4/Letter paper, scale, units, view labels and scales, revision,
-drawing number, material/finish, tolerance, drawn-by/date and drawing notes.
+subject, A4/A3/A2/A1/A0/Letter paper (all landscape), scale, units, view labels
+and scales, revision, drawing number, material/finish, tolerance,
+drawn-by/date and drawing notes. **Drawing subject** offers Whole assembly,
+One part, or **Chosen parts**: a checklist of instances indented under their
+group names, with **Use 3D selection (N)** to take the parts selected in the
+3D view. At least one part stays chosen. Changing the subject clears that
+sheet's annotations (Undo restores them) and asks for **Update drawing
+preview**.
 Engineering sheets have a bordered title block and up to four explicitly
 labeled views. The layout places top/isometric above front/right; it does not
 assert a first-angle or third-angle projection standard. Overall dimensions
-have extension lines and arrowheads. Paper scale is preserved; an oversized
-view reports an error instead of silently shrinking.
+have extension lines and arrowheads.
+
+**Paper scale.** **Fit to page** (the default for new sheets and the automatic
+part detail sheets) draws at the largest ISO 5455 standard scale — 50:1 … 2:1,
+1:1, 1:2, 1:5, 1:10, 1:20, 1:50 … 1:10 000 — at which every view without its
+own scale fits its cell, and prints that real ratio ("1:50") in the title
+block. The **scale slider** (in the drawing pane beside the sheet selector and
+in Sheet properties) snaps to those stops; dragging previews live and saves
+one Undo step when released, as a fixed scale. Once views are generated, the
+track turns red where they stop fitting and a **fits** tick marks the largest
+stop that fits. **Custom** accepts `50`, `1:50` or `2:1`. **Screen zoom** only
+zooms the preview; it never changes the printed scale. Scale changes need no
+new Generate views. A per-view scale is always fixed.
+
+Paper scale is preserved. A fixed scale that does not fit still shows the
+sheet: the overflowing view's cell is outlined red and a banner offers **Fit to
+page (1:50)**, **Use 1:50** or **Use A1 at 1:20** (each one Undo step; the page
+button only when a page fits). Exports (SVG, DXF, PDF, workshop ZIP)
+never change a stated scale: an overflowing fixed scale is refused with what to
+do, for example "front does not fit on A3 at 1:20. Use Fit to page, choose 1:50
+or smaller, or use A1." Files saved before fit-to-page keep their fixed scales.
 
 Under **Hole dimensions & callouts**, select Hole features and a face-on view,
 then add a horizontal/vertical chain or a grouped diameter/depth callout.
@@ -182,13 +239,51 @@ Cut position and Retain side controls, and choose a view facing the cut plane.
 The default cut is perpendicular to X. It does not add an A-A cutting-plane
 marker to the parent sheet. Advanced sheet definitions remain available.
 
-After editing, choose **Generate views** or **Update drawing preview**.
-Use **SVG sheet** or **DXF sheet** for the selected sheet, or **Vector PDF** for
-the drawing set (including automatically generated part details). All three
-use the same rendered drawing. DXF carries linework and text, not native
-associative CAD DIMENSION entities. Print the PDF at actual size to preserve
-the stated scale. Save/open, recovery and Undo/Redo retain the sheet settings
-and linked references.
+Previews are generated one sheet at a time: opening a sheet with no views yet,
+or whose subject or view list changed, generates it by itself; after a model
+change choose **Generate views**, **Refresh drawings** or **Update drawing
+preview** (all regenerate the open sheet only). A sheet the kernel cannot draw,
+such as a section that no longer crosses the model, shows its own error while
+the other sheets keep their previews.
+Use **SVG sheet** or **DXF sheet** for the selected sheet. All exports use the
+same rendered drawing. DXF carries linework and text, not native associative
+CAD DIMENSION entities. Save/open, recovery and Undo/Redo retain the sheet
+settings and linked references.
+
+**Exporting PDFs.** The drawing pane's **PDF** button (beside **Manage
+sheets**) saves the open sheet. The Sheets panel's **Export PDF** section, at
+the top of the panel (the ribbon's **Export PDF…** opens it), chooses **This
+sheet**, **Selected (N)** (the ticked rows; the bulk bar's **Export selected as
+PDF** does the same) or **All sheets (N)**, which can add **Include automatic
+part detail sheets** (a fitted detail sheet for each part with no sheet of its
+own). Each choice is one PDF of true-size landscape pages, each at its sheet's
+paper size (A4 … A0, Letter): print at **actual size** (not "fit to page") and
+A3 at 1:20 measures 1:20. Pages are numbered within the file ("2 of 3"). The
+Save dialog opens straight away with a suggested name ("Model - Frame.pdf", or
+"Model - drawings.pdf" for several sheets); where the browser has no Save
+dialog the PDF downloads under that name (the desktop app shows its own save
+dialog for it). Only the chosen sheets' views are generated, and views already
+current are reused; no STEP or STL is built.
+
+Before anything is written every sheet is checked as it will print. If any
+cannot be exported (a fixed scale that does not fit, a section that no longer
+crosses the model, notes too long for the title block, a broken reference),
+the panel lists them, "2 of 7 sheets can't be exported", each with what is
+wrong, **Fit to page** where fitting fixes it (one Undo step; the check then
+runs again and the file is written if all is now well) and **Open sheet**.
+**Export the other N sheets** writes the rest, renumbered; **Cancel** writes
+nothing. Progress reads "Rendering sheet 3 of 12 — Frame" with **Cancel**,
+which also writes nothing. The result line reads "Saved Frame.pdf (3 pages)".
+
+The PDF's text uses the standard Helvetica font, which can show only the
+Windows-1252 (WinAnsi) characters: English and Western European letters and
+symbols such as Ø × ± ° — – · …, all of which print correctly. Other
+characters in titles, notes or other text (for example 日本, ≤ or ✓) cannot be
+shown: the check lists them as a warning ("‘Frame’: these characters can't be
+shown in the PDF: 日本 (they print as ?)") without stopping the export, and the
+result line repeats it. They print as "?", except a few with close stand-ins
+(≤ as <=, ≥ as >=, the minus sign as -, ⌀ as Ø). The PDF's title and keywords
+(document properties) keep every character.
 
 This is model-driven drawing authoring, not automatic photo-to-CAD tracing.
 Confirm the original drawing's dimensions, material grade, bends, hardware

@@ -11,6 +11,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // src/main.jsx registers the worker itself, and only over http(s): the
+      // injected script also ran under file:// in the desktop shell, where a
+      // service worker cannot register and every launch logged the rejection.
+      injectRegister: false,
       includeAssets: ['fonts/*.woff2', 'favicon.svg', 'icons/*.png'],
       workbox: {
         globPatterns: ['**/*.{js,css,html,woff2,png,svg,wasm,txt}'],

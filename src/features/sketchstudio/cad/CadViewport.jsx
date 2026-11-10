@@ -813,6 +813,7 @@ export default function CadViewport({
         .makeTranslation(c.x, c.y, c.z)
         .multiply(new THREE.Matrix4().makeRotationFromQuaternion(turn))
         .multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+      drag.motion = motion;
       moveGroups(drag.groups, motion);
       updateMarks();
     };
@@ -844,9 +845,17 @@ export default function CadViewport({
       renderer.domElement.removeEventListener('pointermove', dialMove);
       clearRotateFeedback(rotateLayer);
     };
+    // Geometry a rebuild replaced mid-drag that the rotate ghost still drew
+    // (see the snapshot effect): released once the drag is over.
+    const releaseDeferredGeometry = () => {
+      for (const geometry of ctx.deferredGeometry) geometry.dispose();
+      ctx.deferredGeometry = [];
+    };
+    ctx.deferredGeometry = [];
     const cancelDrag = () => {
       drawSnapHighlights(snapLayer, null);
       endRotateFeedback();
+      releaseDeferredGeometry();
       hideHud();
       if (!drag) return;
       pivot.position.copy(drag.start);
@@ -959,7 +968,8 @@ export default function CadViewport({
         );
         ctx.lastSnaps = snaps;
         pivot.position.copy(drag.start).add(delta);
-        moveGroups(drag.groups, new THREE.Matrix4().makeTranslation(delta.x, delta.y, delta.z));
+        drag.motion = new THREE.Matrix4().makeTranslation(delta.x, delta.y, delta.z);
+        moveGroups(drag.groups, drag.motion);
         updateMarks();
       }
       updateHud();
@@ -974,6 +984,7 @@ export default function CadViewport({
       if (ctx.toolGizmo) return ctx.placementLayer.toolUp();
       drawSnapHighlights(snapLayer, null);
       endRotateFeedback();
+      releaseDeferredGeometry();
       hideHud();
       if (!drag) return;
       const completed = drag;
@@ -1736,19 +1747,34 @@ export default function CadViewport({
     const ctx = sceneRef.current;
     if (!ctx) return;
     // Geometry only: the materials belong to ctx.materials and outlive the meshes.
-    ctx.group.traverse((obj) => obj.geometry?.dispose());
+    // A rebuild can land mid-drag (placement edits chain while the kernel
+    // works): the dragged parts' edge geometry is what a rotate drag's ghost
+    // draws, so it is released when the drag ends rather than here.
+    const draggedGroups = new Set((ctx.drag?.groups || []).map((d) => d.group));
+    ctx.group.traverse((obj) => {
+      if (!obj.geometry) return;
+      if (obj.isLineSegments && draggedGroups.has(obj.parent)) ctx.deferredGeometry.push(obj.geometry);
+      else obj.geometry.dispose();
+    });
     ctx.group.clear();
     for (const item of snapshot?.instances || []) {
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.Float32BufferAttribute(item.mesh.vertices, 3));
       geometry.setAttribute('normal', new THREE.Float32BufferAttribute(item.mesh.normals, 3));
-      geometry.setIndex(item.mesh.triangles);
+      // The kernel sends a Uint32Array, which `setIndex` would take as an
+      // attribute itself; a plain array (test fixtures) still goes straight in.
+      const triangles = item.mesh.triangles;
+      geometry.setIndex(ArrayBuffer.isView(triangles) ? new THREE.Uint32BufferAttribute(triangles, 1) : triangles);
       // Placeholders: the pose effect below gives each part its real look.
       const mesh = new THREE.Mesh(geometry, ctx.materials.body(BODY_COLORS.metal, 1, { depthWrite: true }));
       mesh.userData.instanceId = item.id;
       const lineGeometry = new THREE.BufferGeometry();
       lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(item.edges.lines, 3));
       const edges = new THREE.LineSegments(lineGeometry, ctx.materials.edge(EDGE_COLOR, EDGE_ALPHA.solid));
+      // Every pick in the viewport wants the body (each keeps only mesh hits),
+      // and testing a ray against thousands of edge segments per pointer move
+      // was most of a pick's cost. Measure reads edge positions directly.
+      edges.raycast = () => {};
       const group = new THREE.Group();
       group.userData = {
         instanceId: item.id,
@@ -1808,6 +1834,21 @@ export default function CadViewport({
       );
       edges.renderOrder = EDGE_RENDER_ORDER;
     });
+    // A rebuild that landed mid-drag replaced the dragged parts' groups. The
+    // drag carries on with the new ones: each starts from the pose just shown
+    // for it (the same place on screen) and takes the drag's motion so far.
+    if (ctx.drag) {
+      for (const dragged of ctx.drag.groups) {
+        if (dragged.group.parent === ctx.group) continue;
+        const replacement = ctx.group.children.find((g) => g.userData.instanceId === dragged.group.userData.instanceId);
+        if (!replacement) continue;
+        ctx.movingGroups = ctx.movingGroups.map((g) => (g === dragged.group ? replacement : g));
+        replacement.updateMatrix();
+        dragged.group = replacement;
+        dragged.start = replacement.matrix.clone();
+        if (ctx.drag.motion) moveGroups([dragged], ctx.drag.motion);
+      }
+    }
     // Marks ride on the poses just shown.
     ctx.updateMarks();
     ctx.render();
@@ -1866,6 +1907,10 @@ export default function CadViewport({
     if (!ctx) return;
     // A boolean tool drag keeps the gizmo until it ends (the next view re-runs this).
     if (ctx.toolGizmo && ctx.placementLayer.isDragging()) return;
+    // So does a part drag: a rebuild landing mid-drag (the previous drop's)
+    // must not snap the part back. The pose effect has already moved the drag
+    // onto the rebuilt groups.
+    if (ctx.drag) return;
     ctx.cancelDrag();
     ctx.transform.detach();
     ctx.placementLayer.detachTool();

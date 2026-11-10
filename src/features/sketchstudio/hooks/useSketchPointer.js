@@ -36,6 +36,7 @@ import {
   updatePan,
   updateSelectionBox,
 } from '../store/sketchStudioActions';
+import { interactionEndAction } from '../store/interactionEnd';
 import {
   PROFILE_CLOSE_TOLERANCE_PX,
   TRANSFORM_DRAG_THRESHOLD_PX,
@@ -61,7 +62,12 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
         event.preventDefault();
         event.currentTarget.setPointerCapture(event.pointerId);
         dispatch(
-          startPan({ pointerId: event.pointerId, screenPoint: readCanvasPoint(event), startViewport: state.viewport }),
+          startPan({
+            pointerId: event.pointerId,
+            button: event.button,
+            screenPoint: readCanvasPoint(event),
+            startViewport: state.viewport,
+          }),
         );
         return;
       }
@@ -448,7 +454,10 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
       if (state.interaction.mode === 'panning' && event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
         dispatch(endPan());
-        dispatch(setSuppressNextClick(true));
+        // Only a left-button release is followed by a click. A middle-button
+        // release makes none, so arming the flag there would swallow the next
+        // real click instead.
+        if (event.button === 0) dispatch(setSuppressNextClick(true));
         return;
       }
 
@@ -516,24 +525,9 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
   );
 
   const handlePointerCancel = useCallback(() => {
-    if (state.interaction.mode === 'panning') {
-      dispatch(endPan());
-      return;
-    }
-    if (state.interaction.mode === 'selection-box') {
-      dispatch(endSelectionBox());
-      return;
-    }
-    if (state.interaction.mode === 'handle-drag') {
-      dispatch(endHandleDrag());
-      return;
-    }
-    if (state.interaction.mode === 'anchor-drag') {
-      dispatch(endAnchorDrag());
-      return;
-    }
-    if (state.interaction.mode === 'transform') {
-      dispatch(endTransform());
+    const endAction = interactionEndAction(state.interaction.mode, 'abort');
+    if (endAction) {
+      dispatch(endAction);
       return;
     }
     dispatch(setPointerDown(false));

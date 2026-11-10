@@ -491,6 +491,79 @@
   height: auto;
   display: block;
 }
+/* Paper scale (SheetScaleControl.jsx, Phase R): Fit to page, the 1-2-5 slider
+   whose track turns red where the views stop fitting, and the overflow banner. */
+.cad-scale-control {
+  margin: 8px 0;
+}
+.cad-scale-control .cad-inline {
+  align-items: center;
+}
+.cad-scale-value {
+  font:
+    600 12px ui-monospace,
+    monospace;
+  color: #263444;
+}
+.cad-scale-slider {
+  position: relative;
+  padding-bottom: 14px;
+}
+.cad-scale-slider input[type='range'] {
+  width: 100%;
+  height: 6px;
+  appearance: none;
+  border-radius: 3px;
+  background: var(--cad-scale-track, #c3ced8);
+}
+.cad-scale-slider input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #246e9a;
+  border: 2px solid white;
+}
+.cad-scale-slider input[type='range']::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #246e9a;
+  border: 2px solid white;
+}
+.cad-scale-fits {
+  position: absolute;
+  bottom: 0;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: #2e7d4f;
+  border-top: 2px solid #2e7d4f;
+  line-height: 1.2;
+}
+.cad-sheet-overflow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  margin: 8px 0;
+  font-size: 12px;
+  color: #6b2a22;
+  background: #fdecea;
+  border: 1px solid #e7a59d;
+  border-radius: 4px;
+}
+.cad-chosen-parts .cad-sheet-check,
+.cad-chosen-group {
+  margin-left: calc(var(--cad-tree-depth, 0) * 12px);
+}
+.cad-chosen-group {
+  margin-top: 8px;
+  margin-bottom: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #5b6c7c;
+}
 .cad-views.is-drawing-focus .cad-model-view {
   display: none;
 }
@@ -1290,4 +1363,164 @@
 }
 .cad-group-actions {
   flex-wrap: wrap;
+}
+/* Drawing sheets (Phase S, docs/sketch-studio-sheet-manager.md §§5–6): the
+   Sheets panel's list rows, bulk bar and result line, the pane's sheet
+   switcher, a sheet's own kernel error and the tree's draw icon. */
+.cad-sheet-switch {
+  align-items: center;
+  margin-top: 0;
+}
+.cad-sheet-switch select {
+  flex: 1;
+}
+.cad-workspace .cad-link {
+  padding: 2px 4px;
+  color: #246e9a;
+  text-decoration: underline;
+}
+.cad-sheet-notice {
+  margin: 8px 0;
+  font-size: 12px;
+  color: #2e5a3c;
+}
+.cad-sheet-list-head .cad-sheet-check {
+  margin: 10px 0 4px;
+  font-size: 11px;
+  color: #5b6c7c;
+}
+.cad-sheet-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  background: #eef3f7;
+  border-radius: 4px;
+}
+.cad-sheet-bulk .cad-danger {
+  margin-top: 0;
+}
+.cad-sheet-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cad-sheet-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 2px;
+  border-bottom: 1px solid #d6dfe6;
+  border-left: 3px solid transparent;
+}
+.cad-sheet-row.is-selected {
+  border-left-color: #246e9a;
+  background: #dcecf5;
+}
+.cad-workspace .cad-sheet-open {
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 4px 6px;
+  text-align: left;
+}
+.cad-sheet-open span,
+.cad-sheet-open small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cad-sheet-open small {
+  color: #7a8897;
+  font-size: 10px;
+}
+.cad-sheet-rename {
+  flex: 1;
+}
+.cad-sheet-scale {
+  flex: none;
+  font-size: 10px;
+  color: #5b6c7c;
+  white-space: nowrap;
+}
+.cad-workspace .cad-sheet-action {
+  flex: none;
+  width: 24px;
+  padding: 2px;
+}
+.cad-sheet-error {
+  color: #8a2f22;
+}
+.cad-workspace .cad-tree-draw {
+  flex: none;
+  width: 28px;
+  padding: 0;
+  color: #5b6b7b;
+}
+/* Sheet PDF (Phase T, docs/sketch-studio-sheet-pdf.md §§5–6): the Sheets
+   panel's Export PDF section, a run's progress line and the preflight report. */
+.cad-pdf-export {
+  padding: 2px 0 10px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #d6dfe6;
+}
+.cad-pdf-export:focus-visible {
+  outline: 2px solid #246e9a;
+  outline-offset: 2px;
+}
+.cad-pdf-export h4 {
+  margin-top: 4px;
+}
+.cad-pdf-scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.cad-pdf-scope label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cad-pdf-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+  font-size: 12px;
+  color: #36475a;
+}
+.cad-pdf-progress progress {
+  flex: 1;
+  min-width: 60px;
+}
+.cad-pdf-report {
+  padding: 8px 10px;
+  margin: 8px 0;
+  font-size: 12px;
+  color: #6b2a22;
+  background: #fdecea;
+  border: 1px solid #e7a59d;
+  border-radius: 4px;
+}
+.cad-pdf-report ul {
+  margin: 6px 0;
+  padding-left: 16px;
+}
+.cad-pdf-report li {
+  margin-bottom: 4px;
+}
+.cad-pdf-report li button {
+  margin: 2px 4px 0 0;
+}
+.cad-pdf-warning {
+  margin: 4px 0;
+  color: #7a5200;
 }

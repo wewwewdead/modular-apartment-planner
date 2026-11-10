@@ -7,16 +7,25 @@ import { createWall } from '@/domain/models';
 import {
   WALL_ASSEMBLY_PRESETS,
   WALL_BOARD_MATERIALS,
+  WALL_BOARD_OPTIONS,
   WALL_FRAME_MATERIALS,
   WALL_INTERIOR_SIDES,
   boardDefaultThickness,
+  boardLayerUSpan,
   createWallAssembly,
   deriveWallAssemblyLayers,
   deriveWallFramingLayout,
   resolveWallAssembly,
   wallAssemblyCoreDepth,
   wallAssemblyThickness,
+  wallBoardMaterialLabel,
 } from '@/domain/wallAssemblies';
+import {
+  SIDING_COURSE_ORIENTATIONS,
+  normalizeSidingCourse,
+  sidingBoardCountAcross,
+  wallSidingCourseLines,
+} from '@/domain/wallSiding';
 import {
   WALL_DETAIL_SIDES,
   createWallDetailing,
@@ -44,6 +53,7 @@ import InputField from '../InputField';
 import PhaseSelector from '../PhaseSelector';
 import styles from '../PropertiesPanel.module.css';
 import { Hint, Note, NumberField, Readout, Section, SelectField, Stack, Status, panelKitStyles } from './PanelKit';
+import { WallFinishesSection } from './WallFinishesSection';
 
 const EMPTY_SIDES = [];
 
@@ -126,11 +136,15 @@ function describeStructureFit(fit, u) {
 }
 
 function boardMaterialLabel(material) {
-  if (material === WALL_BOARD_MATERIALS.PLYWOOD) return 'Plywood';
-  if (material === WALL_BOARD_MATERIALS.FIBER_CEMENT) return 'Fiber cement';
-  if (material === WALL_BOARD_MATERIALS.RAINSCREEN) return 'Rainscreen panel';
-  return 'No board';
+  return wallBoardMaterialLabel(material);
 }
+
+// The one board list (`WALL_BOARD_OPTIONS`), as the options both pickers show.
+const boardOptions = WALL_BOARD_OPTIONS.map((option) => (
+  <option key={option.value} value={option.value}>
+    {option.label}
+  </option>
+));
 
 export function WallDrawingInput({
   start,
@@ -263,7 +277,10 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
   const len = wallLength(wall);
   const isArc = Boolean(wall.controlPoint);
   // Which side an offset would go to before there is an offset to read it off.
-  const [intendedSide, setIntendedSide] = useState(OUTBOARD_SIDE_NONE);
+  // Kept with the wall it was picked on: the panel stays mounted while the
+  // selection moves between walls, and one wall's pick is not the next one's.
+  const [intended, setIntended] = useState({ wallId: null, side: OUTBOARD_SIDE_NONE });
+  const intendedSide = intended.wallId === wall.id ? intended.side : OUTBOARD_SIDE_NONE;
   const heightMode = normalizeWallHeightMode(wall.heightMode);
   const framingMode = normalizeWallFramingMode(wall.framingMode);
   const structuralRole = structuralRoleOf(wall);
@@ -315,7 +332,7 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
     updateWall({ outboardOffset: outboardSign(outboardSide) * millimetres });
   };
   const setOutboardSide = (side) => {
-    setIntendedSide(side);
+    setIntended({ wallId: wall.id, side });
     // Putting a wall back on its axis is the same act as choosing no side.
     if (side === OUTBOARD_SIDE_NONE) {
       if (outboardOffset !== 0) updateWall({ outboardOffset: 0 });
@@ -410,6 +427,55 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
     </>
   );
 
+  /**
+   * How a siding face is coursed (spec §6.1): which way the boards run, how
+   * much of each shows, and the gap between them. The readouts are the set-out
+   * the drawing and the 3D preview both draw — the same helper, so the number
+   * of courses quoted here is the number of boards on the elevation.
+   */
+  const sidingCourseFields = (side, label) => {
+    const layer = assembly[side];
+    if (layer.material !== WALL_BOARD_MATERIALS.SIDING) return null;
+    const course = normalizeSidingCourse(layer.course);
+    const frame = resolveWallDetailFrame(wall, floor);
+    const span = boardLayerUSpan(layer, frame.length);
+    const lines = wallSidingCourseLines(course, { wall, frame, span });
+    const horizontal = course.orientation === SIDING_COURSE_ORIENTATIONS.HORIZONTAL;
+    const boards = horizontal
+      ? sidingBoardCountAcross(lines.positions, 0, frame.height)
+      : sidingBoardCountAcross(lines.positions, span.u0, span.u1);
+    const setCourse = (patch) => updateBoardLayer(side, { course: { ...course, ...patch } });
+    return (
+      <>
+        <SelectField
+          label={`${label} boards run`}
+          value={course.orientation}
+          onChange={(orientation) => setCourse({ orientation })}
+        >
+          <option value={SIDING_COURSE_ORIENTATIONS.HORIZONTAL}>Horizontal</option>
+          <option value={SIDING_COURSE_ORIENTATIONS.VERTICAL}>Vertical</option>
+        </SelectField>
+        <NumberField
+          label={`${label} exposure`}
+          value={u.toDisplay(course.exposure)}
+          step={u.step(5)}
+          unit={u.suffix}
+          onChange={(v) => setCourse({ exposure: Math.round(u.fromDisplay(v)) })}
+        />
+        <NumberField
+          label={`${label} joint`}
+          value={u.toDisplay(course.joint)}
+          step={u.step(1)}
+          unit={u.suffix}
+          min={0}
+          onChange={(v) => setCourse({ joint: Math.round(u.fromDisplay(v)) })}
+        />
+        <Readout label={`${label} pitch`} value={u.toDisplay(lines.pitch)} unit={u.suffix} />
+        <Readout label={horizontal ? `${label} courses up` : `${label} boards along`} value={boards} />
+      </>
+    );
+  };
+
   const changeBoardMaterial = (side, material) => {
     updateBoardLayer(side, {
       material,
@@ -462,6 +528,15 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
           An arc wall cannot be built off its axis: offsetting a curve changes its radii and its end tangents, so
           outboard facades are straight walls only.
         </div>
+        {/* An arc is drawn in 3D as one prism in its outside face's look, so
+            the outside face is the only one worth offering. */}
+        <WallFinishesSection
+          wall={wall}
+          assembly={assembly}
+          floorId={floorId}
+          dispatch={dispatch}
+          sides={['exterior']}
+        />
       </div>
     );
   }
@@ -614,43 +689,43 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
             unit={u.suffix}
             onChange={(v) => updateAssembly({ coreThickness: Math.max(50, u.fromDisplay(v)) })}
           />
-        ) : (
+        ) : null}
+        {/* Which face is inside. A board wall needs it for its boards; a
+            masonry wall needs it once its two faces are finished differently,
+            because the outside colour is the one its ends and reveals take. */}
+        <SelectField
+          label="Inside side"
+          value={assembly.interiorSide}
+          onChange={(interiorSide) => updateAssembly({ interiorSide })}
+        >
+          <option value={WALL_INTERIOR_SIDES.LEFT}>Left of start → end</option>
+          <option value={WALL_INTERIOR_SIDES.RIGHT}>Right of start → end</option>
+        </SelectField>
+        <Stack>
+          <button
+            type="button"
+            className={styles.actionBtn}
+            onClick={() =>
+              updateAssembly({
+                interiorSide:
+                  assembly.interiorSide === WALL_INTERIOR_SIDES.LEFT
+                    ? WALL_INTERIOR_SIDES.RIGHT
+                    : WALL_INTERIOR_SIDES.LEFT,
+              })
+            }
+          >
+            Flip Inside / Outside
+          </button>
+        </Stack>
+        <Hint>Inside is measured while looking from the wall start point toward its end point.</Hint>
+        {isMasonry ? null : (
           <>
-            <SelectField
-              label="Inside side"
-              value={assembly.interiorSide}
-              onChange={(interiorSide) => updateAssembly({ interiorSide })}
-            >
-              <option value={WALL_INTERIOR_SIDES.LEFT}>Left of start → end</option>
-              <option value={WALL_INTERIOR_SIDES.RIGHT}>Right of start → end</option>
-            </SelectField>
-            <Stack>
-              <button
-                type="button"
-                className={styles.actionBtn}
-                onClick={() =>
-                  updateAssembly({
-                    interiorSide:
-                      assembly.interiorSide === WALL_INTERIOR_SIDES.LEFT
-                        ? WALL_INTERIOR_SIDES.RIGHT
-                        : WALL_INTERIOR_SIDES.LEFT,
-                  })
-                }
-              >
-                Flip Inside / Outside
-              </button>
-            </Stack>
-            <Hint>Inside is measured while looking from the wall start point toward its end point.</Hint>
-
             <SelectField
               label="Inside board"
               value={assembly.interior.material}
               onChange={(material) => changeBoardMaterial('interior', material)}
             >
-              <option value={WALL_BOARD_MATERIALS.NONE}>None</option>
-              <option value={WALL_BOARD_MATERIALS.FIBER_CEMENT}>HardieFlex / fiber cement</option>
-              <option value={WALL_BOARD_MATERIALS.PLYWOOD}>Plywood</option>
-              <option value={WALL_BOARD_MATERIALS.RAINSCREEN}>Rainscreen panel</option>
+              {boardOptions}
             </SelectField>
             {assembly.interior.material !== WALL_BOARD_MATERIALS.NONE ? (
               <>
@@ -661,6 +736,7 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
                   unit={u.suffix}
                   onChange={(v) => updateBoardLayer('interior', { thickness: Math.max(1, u.fromDisplay(v)) })}
                 />
+                {sidingCourseFields('interior', 'Inside')}
                 <NumberField
                   label="Inside layers"
                   value={assembly.interior.layerCount}
@@ -675,10 +751,7 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
               value={assembly.exterior.material}
               onChange={(material) => changeBoardMaterial('exterior', material)}
             >
-              <option value={WALL_BOARD_MATERIALS.NONE}>None</option>
-              <option value={WALL_BOARD_MATERIALS.FIBER_CEMENT}>HardieFlex / fiber cement</option>
-              <option value={WALL_BOARD_MATERIALS.PLYWOOD}>Plywood</option>
-              <option value={WALL_BOARD_MATERIALS.RAINSCREEN}>Rainscreen panel</option>
+              {boardOptions}
             </SelectField>
             {assembly.exterior.material !== WALL_BOARD_MATERIALS.NONE ? (
               <>
@@ -689,6 +762,7 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
                   unit={u.suffix}
                   onChange={(v) => updateBoardLayer('exterior', { thickness: Math.max(1, u.fromDisplay(v)) })}
                 />
+                {sidingCourseFields('exterior', 'Outside')}
                 <NumberField
                   label="Outside layers"
                   value={assembly.exterior.layerCount}
@@ -727,6 +801,14 @@ function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, edito
           </>
         )}
       </Section>
+
+      <WallFinishesSection
+        wall={wall}
+        assembly={assembly}
+        floorId={floorId}
+        dispatch={dispatch}
+        onEditAccents={openWallDetailEditor}
+      />
 
       {isMasonry ? null : (
         <Section

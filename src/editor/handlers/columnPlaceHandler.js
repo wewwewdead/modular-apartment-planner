@@ -32,6 +32,18 @@ export function createColumnPlaceHandler({
         y = snapToGrid(y);
       }
       const column = createColumn(x, y);
+      // A second press with no move between (a double-click) would stack a
+      // column on the one the first press just placed, so the press checks the
+      // floor as it is now (see the door tool).
+      const floor = getFloor(activeFloorId);
+      const alreadyThere = (floor?.columns || []).some(
+        (entry) =>
+          (entry.type ?? 'rectangular') === column.type &&
+          entry.x === x &&
+          entry.y === y &&
+          (entry.rotation ?? 0) === column.rotation,
+      );
+      if (alreadyThere) return;
       column.phaseId = activePhaseId || null;
       dispatch({ type: 'COLUMN_ADD', floorId: activeFloorId, column });
     },

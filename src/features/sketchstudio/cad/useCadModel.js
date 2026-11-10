@@ -1,6 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { RevisionWorker } from './workerClient.js';
 
+// A preview switched off keeps its warm workers this long before letting them
+// go, so the WASM heaps are still freed when it stays off.
+export const PREVIEW_IDLE_RELEASE_MS = 30000;
+
 export default function useCadModel(model, enabled = true) {
   const clients = useRef(null);
   const currentModel = useRef(model);
@@ -22,6 +26,9 @@ export default function useCadModel(model, enabled = true) {
     kernel.onStatus = (status) => {
       if (status === 'awake') setKernelAwake(true);
     };
+    // A crash, a timeout or a cancel terminates the worker; its replacement
+    // loads OpenCascade again.
+    kernel.onTerminate = () => setKernelAwake(false);
     clients.current = { kernel, solver };
     return () => {
       kernel.cancel();
@@ -34,9 +41,20 @@ export default function useCadModel(model, enabled = true) {
     const revision = ++sequence.current;
     const { kernel, solver } = clients.current;
     if (!enabled) {
-      kernel.cancel();
-      solver.cancel();
-      return;
+      // The workspace switches the preview off for every draft it cannot build
+      // yet — the whole Place stage, each half-typed value — and terminating
+      // made the next operation cold-boot OpenCascade. So an idle worker stays
+      // warm; one actually running a build it can no longer use is stopped,
+      // and a preview that stays off still lets its heaps go after a while.
+      for (const client of [kernel, solver]) {
+        if (client.isBusy()) client.cancel();
+        else client.supersede();
+      }
+      const idleRelease = setTimeout(() => {
+        kernel.cancel();
+        solver.cancel();
+      }, PREVIEW_IDLE_RELEASE_MS);
+      return () => clearTimeout(idleRelease);
     }
     // Restarting the worker reloads OpenCascade (~1 s), so an edit only
     // supersedes the previous request.
@@ -76,7 +94,14 @@ export default function useCadModel(model, enabled = true) {
         if (source !== currentModel.current) throw new Error('Model changed during the operation. Run it again.');
         return result;
       } catch (error) {
-        if (source === currentModel.current && state.revision === sequence.current)
+        // Only a dead worker (crashed, timed out) takes the whole workspace
+        // into the error state; a request the kernel answered with an error —
+        // an export or a drawing that failed — is the caller's to report.
+        if (
+          !clients.current?.kernel.isAlive() &&
+          source === currentModel.current &&
+          state.revision === sequence.current
+        )
           setState((old) => ({ ...old, status: 'error', error }));
         throw error;
       }

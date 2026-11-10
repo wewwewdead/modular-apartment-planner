@@ -843,3 +843,80 @@ describe('panel support at lapped corners', () => {
     expect(panelIssues(validateWallDetail(sparse.wall, sparse.floor)).length).toBeGreaterThan(0);
   });
 });
+
+describe('a plank siding face (spec §6.1)', () => {
+  const SHEET_RULES = [
+    'WALL.PANEL_EDGE_UNSUPPORTED',
+    'WALL.PANEL_SIZE_NOT_STOCK',
+    'WALL.BOARD_THICKNESS_NOT_PROFILED',
+    'WALL.JOINT_SYSTEM_NOT_ALLOWED',
+    'WALL.EXPRESS_JOINT_REQUIRES_REVEAL',
+    'WALL.REVEAL_LEAVES_NO_SHARED_SUPPORT',
+    'WALL.FASTENER_EDGE_CLEARANCE_BELOW_PROFILE',
+    'WALL.FASTENER_SPACING_EXCEEDS_PROFILE',
+    'WALL.FASTENER_GUIDE_SPACING_EXCEEDS_PROFILE',
+  ];
+
+  // Only the outside face is boarded and detailed, so every issue raised is that
+  // face's. The layout is deliberately off-stock with zero reveals, so a sheet
+  // face would raise several of the sheet rules.
+  function sidingFixture(material) {
+    const floor = createFloor('Ground Floor', 0);
+    const wall = createWall({ x: 0, y: 0 }, { x: 4000, y: 0 }, 100, {
+      height: 2700,
+      assembly: {
+        preset: 'fiber_cement',
+        framing: { spacing: 600, studWidth: 50, studDepth: 75, nogginRows: 1 },
+        interior: { material: 'none' },
+        exterior: { material, thickness: material === 'siding' ? 19 : 9 },
+      },
+    });
+    wall.assembly.detailing = createWallDetailing({
+      enabled: true,
+      sides: {
+        exterior: {
+          enabled: true,
+          layout: { boardWidth: 1111, boardHeight: 2222, horizontalGap: 0, verticalGap: 0, jointSystem: 'express' },
+          fasteners: { edgeClearance: 1, perimeterSpacing: 900 },
+        },
+      },
+    });
+    floor.walls = [wall];
+    floor.windows = [{ ...createWindow(wall.id, 2000, 1200), height: 1200, sillHeight: 900, id: 'win' }];
+    return { wall, floor };
+  }
+
+  it('is one field over the board span and the frame height, cut by the window — not a grid of sheets', () => {
+    const { wall, floor } = sidingFixture('siding');
+    const panels = deriveWallPanels(wall, floor, 'exterior');
+    expect(panels).toHaveLength(1);
+    expect(panels[0]).toMatchObject({ localId: 'siding-field', u0: 0, u1: 4000, v0: 0, v1: 2700 });
+    expect(panels[0].netArea).toBeCloseTo(4000 * 2700 - 1200 * 1200, 6);
+    expect(panels[0].regions[0].holes).toHaveLength(1);
+  });
+
+  it('generates no fasteners, and keeps the ones placed by hand', () => {
+    const { wall, floor } = sidingFixture('siding');
+    expect(deriveWallFasteners(wall, floor, 'exterior')).toEqual([]);
+    wall.assembly.detailing.sides.exterior.fasteners.manual = [createManualFastener({ u: 25, v: 600 })];
+    expect(deriveWallFasteners(wall, floor, 'exterior')).toHaveLength(1);
+    const sheet = sidingFixture('fiber_cement');
+    expect(deriveWallFasteners(sheet.wall, sheet.floor, 'exterior').length).toBeGreaterThan(0);
+  });
+
+  it('raises none of the sheet checks, while a sheet face in the same layout raises them', () => {
+    const rulesOf = ({ wall, floor }) => new Set(validateWallDetail(wall, floor).map((entry) => entry.ruleId));
+    const siding = rulesOf(sidingFixture('siding'));
+    const sheet = rulesOf(sidingFixture('fiber_cement'));
+    for (const rule of SHEET_RULES) expect(siding.has(rule), rule).toBe(false);
+    expect(SHEET_RULES.filter((rule) => sheet.has(rule)).length).toBeGreaterThanOrEqual(5);
+    // The framing check still stands: 600 mm studs exceed the profile limit.
+    expect(siding.has('WALL.STUD_SPACING_EXCEEDS_PROFILE')).toBe(sheet.has('WALL.STUD_SPACING_EXCEEDS_PROFILE'));
+  });
+
+  it('orders no stock sheets for the field', () => {
+    const { wall, floor } = sidingFixture('siding');
+    const takeoff = deriveWallDetailTakeoff(wall, floor);
+    expect(takeoff.sides.exterior).toMatchObject({ panelCount: 1, stockSheetCount: 0, fastenerCount: 0 });
+  });
+});

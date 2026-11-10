@@ -24,6 +24,13 @@ const GLYPHS = {
       <circle cx="20" cy="9" r="1.7" fill="currentColor" stroke="none" />
     </>
   ),
+  // A board with one block of it picked out in another finish.
+  accent: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="1" />
+      <rect x="12" y="8" width="6" height="8" fill="currentColor" stroke="none" />
+    </>
+  ),
   stud: <rect x="9" y="3" width="6" height="18" rx="1" />,
   noggin: <rect x="3" y="9" width="18" height="6" rx="1" />,
   screw: (

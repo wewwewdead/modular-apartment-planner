@@ -903,3 +903,39 @@ describe('preview batching — under a see-through mode', () => {
     cache.dispose();
   });
 });
+
+describe('preview batching — wall finishes (docs/wall-cladding-finishes.md §5.4)', () => {
+  const ORANGE = 'wallFinish:paint:fc:E0701F:matte';
+  const BLUE = 'wallFinish:paint:fc:6F8597:matte';
+
+  function batchesFor(keys) {
+    const palette = createMaterialPalette();
+    const objects = keys.map((key, index) =>
+      boxDescriptor(`wall_${index}`, { materialKey: key, center: { x: index * 3000, y: 0 } }),
+    );
+    const { batchGroup } = buildFloorObjectGroup(floorDescriptor(objects), palette, null, { batch: true });
+    const batches = batchGroup.children.filter((child) => child.isInstancedMesh);
+    return { palette, batches };
+  }
+
+  it('draws two walls in one finish as one instanced call', () => {
+    const { palette, batches } = batchesFor([ORANGE, ORANGE]);
+    expect(batches).toHaveLength(1);
+    expect(batches[0].count).toBe(2);
+    expect(batches[0].material).toBe(palette[ORANGE]);
+  });
+
+  it('draws two colours as two calls, and a stock wall beside them as its own', () => {
+    const { palette, batches } = batchesFor([ORANGE, BLUE, 'wall', BLUE]);
+    expect(batches).toHaveLength(3);
+    const byKey = new Map(batches.map((batch) => [batch.material.userData.paletteKey, batch.count]));
+    expect(byKey).toEqual(
+      new Map([
+        [ORANGE, 1],
+        [BLUE, 2],
+        ['wall', 1],
+      ]),
+    );
+    expect(batches.find((batch) => batch.material === palette.wall)).toBeTruthy();
+  });
+});

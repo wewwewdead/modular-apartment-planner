@@ -51,6 +51,10 @@ export default function SvgCanvas() {
   const cursorPosRef = useRef({ x: 0, y: 0 });
   const pendingMoveEvent = useRef(null);
   const moveFrame = useRef(0);
+  // A tool press that has not been released yet: its pointer, and the client
+  // position the tool last saw (the press, then each processed move). A
+  // cancelled or lost pointer ends the press at that position.
+  const toolPointerRef = useRef(null);
   /*
    * The status bar's coordinate readout, written into the DOM rather than held
    * in state. It changes on every hover frame, and putting it through React
@@ -109,8 +113,13 @@ export default function SvgCanvas() {
     phaseViewMode,
     lastRejection,
     sunStudy,
+    wallDetailEditor,
+    ceilingDetailEditor,
     dispatch: editorDispatch,
   } = editor;
+  // An open wall or ceiling detail editor owns the keyboard; the plan behind it
+  // must not switch tools, delete or paste.
+  const detailEditorOpen = Boolean(wallDetailEditor || ceilingDetailEditor);
   committedViewportRef.current = viewport;
 
   // During a wall drag the committed floor never changes; overlay the live
@@ -371,13 +380,20 @@ export default function SvgCanvas() {
     [],
   );
 
+  /*
+   * Client pixels to model millimetres through the view ON SCREEN: a wheel
+   * burst's pending zoom (or one dispatched and not yet rendered) is what the
+   * pointer is over, for the ninety milliseconds before the store hears of it.
+   * Mapping through the committed view put the hover — and a press, which
+   * settles the zoom in the same event — hundreds of millimetres off.
+   */
   const getModelPos = useCallback(
     (e) => {
       const rect = readSvgRect();
       if (!rect) return { x: 0, y: 0 };
-      return screenToModel(e.clientX, e.clientY, viewport, rect);
+      return screenToModel(e.clientX, e.clientY, gestureBase() || viewport, rect);
     },
-    [readSvgRect, viewport],
+    [gestureBase, readSvgRect, viewport],
   );
 
   // --- Mouse/pointer handlers ---
@@ -419,6 +435,17 @@ export default function SvgCanvas() {
         return;
       }
       tool.onMouseDown(modelPos, e);
+      if (e.button !== 0) return;
+      // Captured like a pan, so a drag released over another pane or off the
+      // window still delivers its release here and the tool ends its drag.
+      // Taken after the tool has read this press's own target.
+      toolPointerRef.current = { pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY };
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // No capture for this pointer: pointercancel / lostpointercapture and
+        // the window-level gesture release remain the fallback.
+      }
     },
     [dispatch, flushPendingZoom, getModelPos, modelTarget, pastePreview, placePaste, tool],
   );
@@ -435,6 +462,9 @@ export default function SvgCanvas() {
       const modelPos = getModelPos(e);
       cursorPosRef.current = modelPos;
       cursorChannelRef.current?.(modelPos);
+      if (toolPointerRef.current) {
+        toolPointerRef.current = { ...toolPointerRef.current, clientX: e.clientX, clientY: e.clientY };
+      }
       if (modelTarget === 'floor' && pastePreview?.active) {
         updatePastePreview(modelPos);
         return;
@@ -469,7 +499,7 @@ export default function SvgCanvas() {
   );
 
   const handleMouseUp = useCallback(
-    (e) => {
+    (e, positionEvent = e) => {
       /*
        * A move still queued at release is dropped, not flushed. Handlers that
        * commit on mouse-up read the tool state the last processed frame wrote —
@@ -484,16 +514,35 @@ export default function SvgCanvas() {
         moveFrame.current = 0;
       }
       pendingMoveEvent.current = null;
+      toolPointerRef.current = null;
 
       if (isPanning.current) {
         commitPan(e);
         return;
       }
       if (modelTarget === 'floor' && pastePreview?.active) return;
-      const modelPos = getModelPos(e);
+      const modelPos = getModelPos(positionEvent);
       tool.onMouseUp(modelPos, e);
     },
     [commitPan, getModelPos, modelTarget, pastePreview, tool],
+  );
+
+  /*
+   * A tool press whose pointer was cancelled (the OS took it, a touch turned
+   * into a scroll) or lost its capture without a release reaching the canvas.
+   * It ends exactly like a release where the tool last saw the pointer —
+   * the drag's position is the one last drawn — and closes the store's drag
+   * gesture. Only a press still open counts: the capture a normal release
+   * gives up arrives after that release has already ended it.
+   */
+  const handlePointerAbort = useCallback(
+    (e) => {
+      const press = toolPointerRef.current;
+      if (!press || (press.pointerId != null && e.pointerId != null && press.pointerId !== e.pointerId)) return;
+      handleMouseUp(e, press);
+      dispatch({ type: 'END_DRAG_GESTURE' });
+    },
+    [dispatch, handleMouseUp],
   );
 
   useDragGestureRelease(dispatch);
@@ -648,6 +697,7 @@ export default function SvgCanvas() {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (isTypingTarget(e.target)) return;
+      if (detailEditorOpen) return;
       flushPendingZoom();
 
       if (e.key === ' ') {
@@ -678,6 +728,13 @@ export default function SvgCanvas() {
       if (e.key === 'Escape' && modelTarget === 'floor' && pastePreview?.active) {
         e.preventDefault();
         cancelPaste();
+        return;
+      }
+
+      // The active tool's own keys (the door's F flip, the fixture's R turn)
+      // win over the tool-switch shortcuts below.
+      if (tool.claimsKey?.(e)) {
+        tool.onKeyDown(e);
         return;
       }
 
@@ -796,25 +853,31 @@ export default function SvgCanvas() {
       tool.onKeyDown(e);
     };
 
+    // Releasing Space always lets go of the pan latch, wherever focus is by
+    // then — a Space pressed on the canvas and released in a field, or lost to
+    // another window, used to leave every later click panning.
+    const releaseSpace = () => {
+      spaceHeld.current = false;
+      setIsSpaceHeld(false);
+    };
     const handleKeyUp = (e) => {
-      if (isTypingTarget(e.target)) return;
-      if (e.key === ' ') {
-        spaceHeld.current = false;
-        setIsSpaceHeld(false);
-      }
+      if (e.key === ' ') releaseSpace();
     };
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', releaseSpace);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', releaseSpace);
     };
   }, [
     beginPaste,
     cancelPaste,
     copySelection,
     cutSelection,
+    detailEditorOpen,
     modelTarget,
     pastePreview?.active,
     tool,
@@ -981,6 +1044,8 @@ export default function SvgCanvas() {
           onPointerDown={handleMouseDown}
           onPointerMove={handleMouseMove}
           onPointerUp={handleMouseUp}
+          onPointerCancel={handlePointerAbort}
+          onLostPointerCapture={handlePointerAbort}
           onDoubleClick={handleDoubleClick}
         >
           <DeferredDrawingContext.Provider value={deferredDrawing}>

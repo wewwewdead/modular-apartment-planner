@@ -1,7 +1,7 @@
 import initOpenCascade from 'replicad-opencascadejs';
 import wasmUrl from 'replicad-opencascadejs/wasm?url';
 import { setOC } from 'replicad';
-import { createKernelSession } from './kernel.js';
+import { createKernelSession, snapshotTransferables } from './kernel.js';
 let init, session, revision;
 let announced = false;
 // Queue initialization and operations so an export cannot race a build.
@@ -30,7 +30,9 @@ self.onmessage = ({ data }) => {
         revision = data.revision;
       } else {
         if (!session || revision !== data.revision) throw new Error('Model is out of date. Rebuild before exporting.');
-        if (data.type === 'drawings') result = session.drawings();
+        // The payload is { sheetIds, includeParts, collectErrors } (Phases
+        // S and T), or null for every sheet.
+        if (data.type === 'drawings') result = session.drawings(data.payload || {});
         else if (data.type === 'references')
           result = session.referenceOptions(data.payload.partId, data.payload.beforeFeatureId);
         else if (data.type === 'inspect') result = session.inspect();
@@ -43,7 +45,11 @@ self.onmessage = ({ data }) => {
           };
         else throw new Error(`Unknown worker request: ${data.type}`);
       }
-      self.postMessage({ revision: data.revision, requestId: data.requestId, result });
+      // A build's tessellation is transferred, not copied (see `typedMesh`).
+      self.postMessage(
+        { revision: data.revision, requestId: data.requestId, result },
+        data.type === 'build' ? snapshotTransferables(result) : [],
+      );
     } catch (error) {
       self.postMessage({
         revision: data.revision,

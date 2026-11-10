@@ -691,3 +691,117 @@ describe('cross-floor slab support', () => {
     expect(inferSlabSupportRefs(first, first.slabs[0])).toEqual([]);
   });
 });
+
+describe('opening against column checks', () => {
+  function openingCase({ wall: [start, end], offset, column }) {
+    const project = createProject();
+    const floor = project.floors[0];
+    const wall = { ...createWall(start, end), id: 'wall_case' };
+    floor.walls = [wall];
+    floor.windows = [{ ...createWindow(wall.id, offset, 1000), id: 'window_case' }];
+    floor.columns = [
+      { ...createColumn(column.x, column.y, 300, 300), rotation: column.rotation || 0, id: 'column_case' },
+    ];
+    return validateStructuralCoordination(project).filter((entry) =>
+      ['STRUCT.OPENING_INTERSECTS_COLUMN', 'STRUCT.OPENING_NEAR_COLUMN'].includes(entry.ruleId),
+    );
+  }
+
+  it('reports an opening standing flush against a column face as near, not through', () => {
+    const found = openingCase({
+      wall: [
+        { x: 0, y: 0 },
+        { x: 6000, y: 0 },
+      ],
+      offset: 2000,
+      column: { x: 2000, y: 150 },
+    });
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ ruleId: 'STRUCT.OPENING_NEAR_COLUMN', severity: 'warning' });
+    expect(JSON.stringify(found[0])).toContain('"measuredClearance":0');
+  });
+
+  it('measures a 1 mm gap as a 1 mm clearance', () => {
+    const [found] = openingCase({
+      wall: [
+        { x: 0, y: 0 },
+        { x: 6000, y: 0 },
+      ],
+      offset: 2000,
+      column: { x: 2000, y: 151 },
+    });
+    expect(found).toMatchObject({ ruleId: 'STRUCT.OPENING_NEAR_COLUMN', severity: 'warning' });
+    expect(JSON.stringify(found)).toContain('"measuredClearance":1');
+  });
+
+  it('catches a 45° wall whose opening runs through a column', () => {
+    const along = 2000 * Math.SQRT2;
+    const found = openingCase({
+      wall: [
+        { x: 0, y: 0 },
+        { x: 4000, y: 4000 },
+      ],
+      offset: along,
+      // Off-centre, so the line crosses the column without meeting a corner.
+      column: { x: 2050, y: 1950 },
+    });
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ ruleId: 'STRUCT.OPENING_INTERSECTS_COLUMN', severity: 'error' });
+  });
+
+  it('catches an opening passing straight through a column, and ignores one far away', () => {
+    const through = openingCase({
+      wall: [
+        { x: 0, y: 0 },
+        { x: 6000, y: 0 },
+      ],
+      offset: 2000,
+      column: { x: 2000, y: 0 },
+    });
+    expect(through.map((entry) => entry.ruleId)).toEqual(['STRUCT.OPENING_INTERSECTS_COLUMN']);
+    const far = openingCase({
+      wall: [
+        { x: 0, y: 0 },
+        { x: 6000, y: 0 },
+      ],
+      offset: 2000,
+      column: { x: 5000, y: 2000 },
+    });
+    expect(far).toEqual([]);
+  });
+});
+
+describe('load path column stacks', () => {
+  it('runs a stack from the upper storey down whatever order the floors are listed in', () => {
+    const project = createProject();
+    const ground = { ...createFloor('Ground', 0, { elevation: 0 }), id: 'floor_ground' };
+    const upper = { ...createFloor('Upper', 1, { elevation: 3000 }), id: 'floor_upper' };
+    ground.columns = [{ ...createColumn(0, 0), id: 'column_ground' }];
+    upper.columns = [{ ...createColumn(0, 0), id: 'column_upper' }];
+    // Listed top first: array order is not storey order.
+    project.floors = [upper, ground];
+    project.building = {
+      ...project.building,
+      systems: {
+        ...project.building?.systems,
+        structural: {
+          ...project.building?.systems?.structural,
+          columnStacks: [
+            {
+              id: 'stack_a',
+              origin: { x: 0, y: 0 },
+              columnRefs: [
+                { floorId: 'floor_ground', columnId: 'column_ground' },
+                { floorId: 'floor_upper', columnId: 'column_upper' },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    const stackEdges = deriveConceptualLoadPath(project).edges.filter((edge) => edge.kind === 'column_to_column_below');
+    expect(stackEdges).toHaveLength(1);
+    expect(stackEdges[0].from).toContain('column_upper');
+    expect(stackEdges[0].to).toContain('column_ground');
+  });
+});

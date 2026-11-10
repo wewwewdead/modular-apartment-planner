@@ -10,8 +10,14 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { RENDER_STYLES, renderStyleConfig } from './renderStyle';
+import { DETAIL_FAMILIES } from './proceduralDetail';
+import { selectionMaterialFor, selectionMaterialsOf } from './selectionMaterials';
 import {
   PALETTE_LOOKS,
+  SIDING_COURSE_TONE,
+  SIDING_GROOVE_RELIEF,
+  WALL_FINISH_ROUGHNESS,
+  WALL_RENDER_MIN_ROUGHNESS,
   applyRenderStyleToPalette,
   applyRoofAppearanceToPalette,
   createMaterialPalette,
@@ -19,7 +25,10 @@ import {
   ghostMaterialFor,
   ghostMaterialsOf,
   ghostSourceOf,
+  paletteMaterialFor,
+  pruneWallFinishMaterials,
   syncGhostMaterials,
+  wallFinishMaterialKeys,
 } from './materials';
 
 /** Relative luminance in linear light — how much of the light a surface sends back. */
@@ -447,5 +456,178 @@ describe('the framed wall schematic core', () => {
       }
       disposeMaterialPalette(live);
     }
+  });
+});
+
+describe('wall-finish materials (docs/wall-cladding-finishes.md §5.4)', () => {
+  const ORANGE_FC = 'wallFinish:paint:fc:E0701F:matte';
+
+  it('is built once per key and found again under it', () => {
+    const live = createMaterialPalette();
+    expect(live[ORANGE_FC]).toBeUndefined();
+    const first = paletteMaterialFor(live, ORANGE_FC);
+    expect(first).toBeInstanceOf(THREE.MeshStandardMaterial);
+    expect(paletteMaterialFor(live, ORANGE_FC)).toBe(first);
+    expect(live[ORANGE_FC]).toBe(first);
+    // Every key the palette was born with comes back exactly as indexing did,
+    // and an unknown key is still undefined rather than a guess.
+    expect(paletteMaterialFor(live, 'wallFiberCement')).toBe(live.wallFiberCement);
+    expect(paletteMaterialFor(live, 'noSuchKey')).toBeUndefined();
+    expect(paletteMaterialFor(live, 'wallFinish:paint:fc:e0701f:matte')).toBeUndefined();
+    disposeMaterialPalette(live);
+  });
+
+  it('takes its colour, roughness and family from the key', () => {
+    const live = createMaterialPalette();
+    const paint = paletteMaterialFor(live, ORANGE_FC);
+    expect(paint.color.getHexString()).toBe(new THREE.Color('#E0701F').getHexString());
+    expect(paint.roughness).toBe(WALL_FINISH_ROUGHNESS.matte);
+    expect(paint.metalness).toBe(0);
+    // Paint is a film: the board's own texture shows through it.
+    expect(paint.userData.detailFamily).toEqual(live.wallFiberCement.userData.detailFamily);
+    expect(paletteMaterialFor(live, 'wallFinish:paint:ply:E0701F:gloss').roughness).toBe(WALL_FINISH_ROUGHNESS.gloss);
+    expect(paletteMaterialFor(live, 'wallFinish:paint:ply:E0701F:satin').roughness).toBe(WALL_FINISH_ROUGHNESS.satin);
+    // A render is never glossier than a render can be.
+    const render = paletteMaterialFor(live, 'wallFinish:render:masonry:E4DDCC:gloss');
+    expect(render.roughness).toBe(WALL_RENDER_MIN_ROUGHNESS);
+    expect(render.userData.detailFamily).toEqual(DETAIL_FAMILIES.render);
+    expect(paletteMaterialFor(live, 'wallFinish:timber:ply:6B4226:satin').userData.detailFamily).toEqual(
+      DETAIL_FAMILIES.timber,
+    );
+    disposeMaterialPalette(live);
+  });
+
+  it('is a skin-tier palette material: batchable, ghostable, on the shared detail program', () => {
+    const live = createMaterialPalette();
+    const paint = paletteMaterialFor(live, ORANGE_FC);
+    expect(paint.userData).toMatchObject({ paletteKey: ORANGE_FC, tier: 'skin', ownedByPalette: true });
+    expect(paint.userData.ownedByPreviewObject).toBeUndefined();
+    expect(paint.transparent).toBe(false);
+    expect(paint.customProgramCacheKey()).toBe(live.wall.customProgramCacheKey());
+    disposeMaterialPalette(live);
+  });
+
+  it('builds the same material in every palette look', () => {
+    const [classic, white] = [PALETTE_LOOKS.CLASSIC, PALETTE_LOOKS.WHITE_MODEL].map((look) => {
+      const live = createMaterialPalette({ look });
+      const material = paletteMaterialFor(live, 'wallFinish:paint:masonry:8DB3CF:satin');
+      const row = {
+        color: material.color.getHex(),
+        roughness: material.roughness,
+        metalness: material.metalness,
+        envMapIntensity: material.envMapIntensity,
+        side: material.side,
+        family: material.userData.detailFamily,
+      };
+      disposeMaterialPalette(live);
+      return row;
+    });
+    expect(classic).toEqual(white);
+  });
+
+  it('follows the render style, including one made after the style was set', () => {
+    const live = createMaterialPalette();
+    const early = paletteMaterialFor(live, ORANGE_FC);
+    applyRenderStyleToPalette(live, renderStyleConfig(RENDER_STYLES.SHADED));
+    expect(early.userData.detailScale).toBe(0);
+    const late = paletteMaterialFor(live, 'wallFinish:paint:fc:2F3338:matte');
+    expect(late.userData.detailScale).toBe(0);
+    applyRenderStyleToPalette(live, renderStyleConfig(RENDER_STYLES.REALISTIC));
+    expect(late.userData.detailScale).toBe(1);
+    disposeMaterialPalette(live);
+  });
+
+  it('is disposed with the palette', () => {
+    const live = createMaterialPalette();
+    const paint = paletteMaterialFor(live, ORANGE_FC);
+    let disposed = 0;
+    paint.addEventListener('dispose', () => {
+      disposed += 1;
+    });
+    disposeMaterialPalette(live);
+    expect(disposed).toBe(1);
+  });
+
+  it('prunes past the cap, and only the keys nothing draws any more, with their twins and tints', () => {
+    const live = createMaterialPalette();
+    const keys = Array.from(
+      { length: 6 },
+      (_, index) => `wallFinish:paint:fc:${(0x100000 + index).toString(16).toUpperCase()}:matte`,
+    );
+    const materials = keys.map((key) => paletteMaterialFor(live, key));
+    const twin = ghostMaterialFor(live, materials[0], { tier: 'skin' });
+    const tint = selectionMaterialFor(live, materials[0], 'plan', () => {});
+    const disposed = new Set();
+    for (const material of [...materials, twin, tint]) {
+      material.addEventListener('dispose', () => disposed.add(material));
+    }
+
+    // At or under the cap nothing goes, live or not.
+    expect(pruneWallFinishMaterials(live, new Set(), 6)).toBe(0);
+    expect(wallFinishMaterialKeys(live)).toHaveLength(6);
+
+    const removed = pruneWallFinishMaterials(live, new Set([keys[1], 'wall']), 4);
+    expect(removed).toBe(5);
+    expect(wallFinishMaterialKeys(live)).toEqual([keys[1]]);
+    expect(live[keys[1]]).toBe(materials[1]);
+    expect(disposed.has(materials[1])).toBe(false);
+    expect(disposed.has(materials[0])).toBe(true);
+    expect(disposed.has(twin)).toBe(true);
+    expect(disposed.has(tint)).toBe(true);
+    expect(ghostMaterialsOf(live)).not.toContain(twin);
+    expect(selectionMaterialsOf(live)).not.toContain(tint);
+    // Stock materials are never candidates.
+    expect(live.wall).toBeInstanceOf(THREE.Material);
+    // A pruned key simply builds again on the next ask.
+    expect(paletteMaterialFor(live, keys[0])).not.toBe(materials[0]);
+    disposeMaterialPalette(live);
+  });
+});
+
+describe('plank siding materials (spec §6.1)', () => {
+  const IPE_H140 = 'wallFinish:timber:siding:6B4226:satin:h140j6';
+
+  it('carries its course in the detail family the shader reads', () => {
+    const live = createMaterialPalette();
+    const siding = paletteMaterialFor(live, IPE_H140);
+    expect(siding.userData.detailFamily).toMatchObject({
+      ...DETAIL_FAMILIES.timber,
+      coursePitch: 146,
+      courseJoint: 6,
+      courseAxis: 0,
+      courseTone: SIDING_COURSE_TONE.timber,
+      courseLength: 3600,
+      courseRelief: SIDING_GROOVE_RELIEF,
+    });
+    expect(siding.userData).toMatchObject({ paletteKey: IPE_H140, tier: 'skin' });
+    const painted = paletteMaterialFor(live, 'wallFinish:paint:siding:AEBBC4:matte:v95j10');
+    expect(painted.userData.detailFamily).toMatchObject({
+      ...DETAIL_FAMILIES.fibreCement,
+      coursePitch: 105,
+      courseAxis: 1,
+      courseTone: SIDING_COURSE_TONE.paint,
+    });
+    disposeMaterialPalette(live);
+  });
+
+  it('shares one instance per finish and course, and makes a new one for a new exposure', () => {
+    const live = createMaterialPalette();
+    const a = paletteMaterialFor(live, IPE_H140);
+    expect(paletteMaterialFor(live, IPE_H140)).toBe(a);
+    const wider = paletteMaterialFor(live, 'wallFinish:timber:siding:6B4226:satin:h180j6');
+    expect(wider).not.toBe(a);
+    expect(wider.userData.detailFamily.coursePitch).toBe(186);
+    disposeMaterialPalette(live);
+  });
+
+  it('gives no other material a course', () => {
+    const live = createMaterialPalette();
+    for (const material of [
+      ...Object.values(live).filter((entry) => entry?.isMaterial),
+      paletteMaterialFor(live, 'wallFinish:paint:fc:E0701F:matte'),
+    ]) {
+      expect(material.userData.detailFamily?.coursePitch ?? 0, material.userData.paletteKey).toBe(0);
+    }
+    disposeMaterialPalette(live);
   });
 });

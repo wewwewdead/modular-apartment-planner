@@ -99,6 +99,7 @@ export default function SketchStudioLayout(props) {
     loadTemplate,
     duplicateEntities,
     dismissToast,
+    dismissDocumentError,
   } = props;
 
   const confirm = useConfirmDialog();
@@ -371,7 +372,7 @@ export default function SketchStudioLayout(props) {
       </section>
       {ui.shortcutOverlayOpen && <ShortcutOverlay onClose={closeShortcutOverlay} />}
       {documentPersistence.status === 'error' && documentPersistence.error && (
-        <Toast message={documentPersistence.error} type="error" onDismiss={() => {}} />
+        <Toast message={documentPersistence.error} type="error" onDismiss={dismissDocumentError ?? (() => {})} />
       )}
       {ui.toast && (
         <Toast

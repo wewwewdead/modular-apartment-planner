@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createProject } from '@/domain/models';
+import { createFloor, createProject, createSlab, createStair } from '@/domain/models';
 import { BUILDING_COMMANDS, executeBuildingCommand } from '@/domain/buildingCommands';
 import ProjectLifecyclePanel from './ProjectLifecyclePanel';
 
@@ -248,5 +248,110 @@ describe('Lifecycle stage rail', () => {
 
     mountAt('documents');
     expect(container.querySelector('[aria-label="Next stage"]').disabled).toBe(true);
+  });
+});
+
+describe('SystemsStage stair headroom form', () => {
+  // Three storeys. The first stair climbs to the first floor, whose slab has an
+  // opening it is already linked to; the second climbs to the second floor and
+  // has its own opening and headroom; the third climbs to a roof with no slab.
+  function projectWithStairs({ linkedOpeningId = 'opening_first' } = {}) {
+    const project = createProject();
+    const ground = project.floors[0];
+    const first = { ...createFloor('First Floor', 1), id: 'floor_first' };
+    const second = { ...createFloor('Second Floor', 2), id: 'floor_second' };
+    const roof = { ...createFloor('Roof', 3), id: 'floor_roof' };
+    const opening = (id, name) => ({ id, name, boundaryPoints: [] });
+    first.slabs = [createSlab(first.id, [], 200, 0, { openings: [opening('opening_first', 'Upper well')] })];
+    second.slabs = [createSlab(second.id, [], 200, 0, { openings: [opening('opening_second', 'Top well')] })];
+    const stair = (id, name, toFloorId, coordination) => {
+      const floorRelation = { fromFloorId: ground.id, toFloorId };
+      return { ...createStair({ x: 0, y: 0 }, 1000, 16, 175, 250, {}, floorRelation, { coordination }), id, name };
+    };
+    ground.stairs = [
+      stair('stair_lower', 'Lower stair', first.id, {
+        clearanceOpeningRef: { openingId: linkedOpeningId },
+        minimumHeadroom: 2100,
+      }),
+      stair('stair_upper', 'Upper stair', second.id, { minimumHeadroom: 2400 }),
+      stair('stair_roof', 'Roof stair', roof.id, { minimumHeadroom: 2200 }),
+    ];
+    return { ...project, floors: [ground, first, second, roof] };
+  }
+
+  function mountSystemsStage(project) {
+    const commands = [];
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() =>
+      root.render(
+        <ProjectLifecyclePanel
+          project={project}
+          derived={derivedFixture()}
+          activeStage="systems"
+          onStageChange={() => {}}
+          onExecuteCommand={(command) => commands.push(command)}
+        />,
+      ),
+    );
+    const field = (label) => container.querySelector(`[aria-label="${label}"]`);
+    const linkButton = () =>
+      [...container.querySelectorAll('button')].find(
+        (button) => button.textContent === 'Link and check headroom opening',
+      );
+    return { commands, field, linkButton };
+  }
+
+  function choose(select, value) {
+    select.value = value;
+    act(() => select.dispatchEvent(new Event('change', { bubbles: true })));
+  }
+
+  it('starts from the first stair, its linked opening and its headroom', () => {
+    const { field, linkButton } = mountSystemsStage(projectWithStairs());
+
+    expect(field('Headroom stair').value).toBe('stair_lower');
+    expect(field('Headroom slab opening').value).toBe('opening_first');
+    expect(field('Minimum stair headroom').value).toBe('2.1');
+    expect(linkButton().disabled).toBe(false);
+  });
+
+  it('takes the opening and headroom of the stair the user switches to, and links that', () => {
+    const { commands, field, linkButton } = mountSystemsStage(projectWithStairs());
+
+    choose(field('Headroom stair'), 'stair_upper');
+
+    expect(field('Headroom slab opening').value).toBe('opening_second');
+    expect(field('Minimum stair headroom').value).toBe('2.4');
+
+    act(() => linkButton().click());
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({
+      type: BUILDING_COMMANDS.LINK_STAIR_CLEARANCE_OPENING,
+      stairId: 'stair_upper',
+      openingFloorId: 'floor_second',
+      openingId: 'opening_second',
+      minimumHeadroom: 2400,
+    });
+  });
+
+  it('offers nothing to link for a stair whose destination has no opening', () => {
+    const { commands, field, linkButton } = mountSystemsStage(projectWithStairs());
+
+    choose(field('Headroom stair'), 'stair_roof');
+
+    expect(field('Headroom slab opening').value).toBe('');
+    expect(field('Minimum stair headroom').value).toBe('2.2');
+    expect(linkButton().disabled).toBe(true);
+    act(() => linkButton().click());
+    expect(commands).toEqual([]);
+  });
+
+  it('does not offer to link an opening that is no longer on the destination slab', () => {
+    const { field, linkButton } = mountSystemsStage(projectWithStairs({ linkedOpeningId: 'opening_removed' }));
+
+    expect(field('Headroom slab opening').value).toBe('');
+    expect(linkButton().disabled).toBe(true);
   });
 });

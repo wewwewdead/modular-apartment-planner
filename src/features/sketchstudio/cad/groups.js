@@ -2,7 +2,7 @@
 // named, nestable groups stored as parent pointers (model.groups[] with
 // parentId, instance.groupId). A node is an instance id or a group id. Pure:
 // models in, models and ids out. The kernel never reads either key.
-import { clone, pruneGroups, uid } from './model.js';
+import { clone, isExplodedSheet, pruneGroups, uid } from './model.js';
 import { shiftedPosition } from './movement.js';
 
 export { pruneGroups };
@@ -96,6 +96,30 @@ export function treeRows(model) {
       });
   };
   return build(null, 0);
+}
+
+// What a drawing sheet draws (Phase S, docs/sketch-studio-sheet-manager.md
+// §3): { kind: 'part' | 'parts' | 'assembly', partId?, instanceIds?, label }.
+// A chosen-parts list equal to one group's members reads as that group. It
+// lives here for memberIds: model.js is in the kernel worker and importing
+// groups.js there would pull in three (movement.js).
+export function sheetSubject(sheet, model) {
+  const suffix = sheet.section ? ' · section' : isExplodedSheet(sheet) ? ' · exploded' : '';
+  if (sheet.partId) {
+    const part = model?.parts?.find((p) => p.id === sheet.partId);
+    return { kind: 'part', partId: sheet.partId, label: `Part · ${part?.name || sheet.partId}${suffix}` };
+  }
+  const ids = sheet.instanceIds || [];
+  if (ids.length) {
+    const wanted = new Set(ids);
+    const group = groupsOf(model).find((g) => {
+      const members = memberIds(model, [g.id]);
+      return members.length === wanted.size && members.every((id) => wanted.has(id));
+    });
+    const label = group ? `Group · ${group.name}` : `${ids.length} part${ids.length === 1 ? '' : 's'}`;
+    return { kind: 'parts', instanceIds: ids, label: label + suffix };
+  }
+  return { kind: 'assembly', label: `Whole assembly${suffix}` };
 }
 
 // 'Group 1', 'Group 2', …: the first unused name.

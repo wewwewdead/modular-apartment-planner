@@ -30,6 +30,7 @@ import { disposeScene } from './disposeScene';
 import { freezeStaticMatrices } from './staticMatrices';
 import { createInspectNavigation } from './createInspectNavigation';
 import { createWalkNavigation } from './createWalkNavigation';
+import { isSameSunState } from './sunStateEquality';
 import { createWalkPhysics } from './createWalkPhysics';
 import { CLICK_DISTANCE_THRESHOLD, PRESETS } from './previewConfig';
 import {
@@ -191,6 +192,30 @@ function halton(index, base) {
   return result;
 }
 
+/*
+ * Losing a context is synchronous and waits on the GPU's in-flight work: a
+ * viewport torn down while its programs were still compiling (React's
+ * development double mount; an editor closed as it opens) blocked the main
+ * thread ~360 ms in `forceContextLoss`, and still ~300 ms at the next idle
+ * moment. So the release waits until any compile it could be caught behind
+ * has long finished, then takes an idle moment; the call is cheap by then.
+ */
+const CONTEXT_RELEASE_DELAY_MS = 3000;
+
+function releaseContextWhenIdle(renderer) {
+  const release = () => {
+    try {
+      renderer.forceContextLoss();
+    } catch {
+      // Already lost, or the extension is missing: nothing to give back.
+    }
+  };
+  window.setTimeout(() => {
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(release, { timeout: 2000 });
+    else release();
+  }, CONTEXT_RELEASE_DELAY_MS);
+}
+
 export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MODEL } = {}) {
   const materialPalette = createMaterialPalette({ look });
   // The ground's own colour in this look (see DEFAULT_GROUND_COLOR).
@@ -231,6 +256,8 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
   let viewMode = DEFAULT_VIEW_MODE;
   let requestedViewMode = DEFAULT_VIEW_MODE;
   let viewModeToken = 0;
+  // The frame hold the last request set while its programs compile, if any.
+  let viewModeGate = null;
   let viewModeFade = null;
   // How many twins the palette had when their opacities were last written, so
   // a twin a rebuild makes (a first roof, in X-ray) is given its opacity.
@@ -485,8 +512,21 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
    * back on, the map is whatever the last daylight pass left — the model or the
    * sun may have moved since — so the light's own `needsUpdate` forces one
    * fresh pass at the next sample regardless of whether the re-aim moved it.
+   *
+   * A pass that has never run has left no map at all, and three's stand-in for
+   * a missing one fails every lit draw (GL_INVALID_OPERATION), so the model
+   * vanishes. That is the preview opened with Night already on (or a study
+   * already past sunset): the light is dark from the first frame. So the first
+   * pass always runs, once, whatever the light's intensity — it allocates the
+   * map — and only then does the switch take over.
    */
   const setKeyLightShadowPass = (on) => {
+    if (!on && !keyLight.shadow.map) {
+      keyLight.shadow.autoUpdate = false;
+      keyLight.shadow.needsUpdate = true;
+      markShadowsDirty();
+      return;
+    }
     if (keyLight.shadow.autoUpdate === on) return;
     keyLight.shadow.autoUpdate = on;
     keyLight.shadow.needsUpdate = on;
@@ -708,6 +748,12 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
   };
 
   const renderFrame = (timestamp) => {
+    // A frame already requested when the viewport was disposed: its renderer
+    // and render targets are gone.
+    if (disposed) {
+      renderLoopRunning = false;
+      return;
+    }
     const frameStartedAt = PREVIEW_PERF_ENABLED ? performance.now() : 0;
     if (PREVIEW_PERF_ENABLED) renderer.info.reset();
     timer.update(timestamp);
@@ -803,7 +849,9 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
   };
 
   const startRenderLoop = () => {
-    if (suspended || renderLoopRunning) return;
+    // Disposed: a compile or warm-up promise still settling after the pane
+    // closed must not start drawing into a disposed renderer.
+    if (disposed || suspended || renderLoopRunning) return;
     renderLoopRunning = true;
     animationFrame = window.requestAnimationFrame(renderFrame);
   };
@@ -879,7 +927,9 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     try {
       // After the studio environment, whose arrival changes every lit program.
       compiling = studioEnvironmentPrepared.then(() =>
-        compileScenePrograms(renderer, scene, activeCamera, progressive.getSceneRenderTarget(), compileExtras()),
+        disposed
+          ? null
+          : compileScenePrograms(renderer, scene, activeCamera, progressive.getSceneRenderTarget(), compileExtras()),
       );
     } catch {
       return;
@@ -893,14 +943,14 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
    * gate superseding an earlier one.
    */
   const holdFramesUntil = (compiling) => {
-    if (typeof compiling?.then !== 'function') return;
+    if (typeof compiling?.then !== 'function') return null;
     const gate = {};
     lightCompileGate = gate;
     // Only on the way to a picture: a gate over a picture already on screen
     // holds that picture, which is not a loading state.
     if (loadPhase === 'building' || loadPhase === 'waking') emitLoadPhase('compiling');
     const release = () => {
-      if (lightCompileGate !== gate) return;
+      if (disposed || lightCompileGate !== gate) return;
       lightCompileGate = null;
       window.clearTimeout(gate.timeout);
       markShadowsDirty();
@@ -908,6 +958,10 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     };
     gate.timeout = window.setTimeout(release, LIGHT_COMPILE_GATE_MAX_MS);
     compiling.then(release, release);
+    // Handed back so the one who set it can let go early; once a later gate
+    // has superseded this one, `release` is a no-op.
+    gate.release = release;
+    return gate;
   };
 
   let shaderWarmupTimer = 0;
@@ -1544,6 +1598,13 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     requestedViewMode = mode;
     viewModeToken += 1;
     const token = viewModeToken;
+    // The request this one replaces will never be committed, so the picture it
+    // was holding is not worth waiting for: a mode that needs no compile lands
+    // at once, and would otherwise stay frozen behind the abandoned compile. Only
+    // that request's own hold is let go — a world gate set since has superseded
+    // it, and `release` leaves a superseded gate alone.
+    viewModeGate?.release();
+    viewModeGate = null;
     let timeout = 0;
     const commit = () => {
       if (disposed || token !== viewModeToken) return;
@@ -1562,10 +1623,12 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     let compiling = null;
     try {
       compiling = studioEnvironmentPrepared.then(() =>
-        compileScenePrograms(renderer, scene, activeCamera, progressive.getSceneRenderTarget(), {
-          extras: [stage],
-          includeScene: false,
-        }),
+        disposed
+          ? null
+          : compileScenePrograms(renderer, scene, activeCamera, progressive.getSceneRenderTarget(), {
+              extras: [stage],
+              includeScene: false,
+            }),
       );
     } catch {
       commit();
@@ -1575,7 +1638,7 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     // through is already the new mode's.
     timeout = window.setTimeout(commit, LIGHT_COMPILE_GATE_MAX_MS);
     compiling.then(commit, commit);
-    if (navigationMode === 'inspect') holdFramesUntil(compiling);
+    if (navigationMode === 'inspect') viewModeGate = holdFramesUntil(compiling);
   }
 
   /**
@@ -1940,6 +2003,7 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       const next = Boolean(nextSuspended);
       if (suspended === next) return;
       suspended = next;
+      walkNavigation.setInputSuspended(suspended);
 
       if (suspended) {
         if (animationFrame) window.cancelAnimationFrame(animationFrame);
@@ -1974,7 +2038,11 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       return viewMode;
     },
     setSun(nextSun) {
-      sunState = nextSun || null;
+      const next = nextSun || null;
+      // Every project edit hands over a freshly computed but usually equal
+      // vector; re-applying it re-ran the rig and its shadow pass for nothing.
+      if (isSameSunState(sunState, next)) return;
+      sunState = next;
       applySun();
     },
     setWorld(nextRoot, bounds, groundLevel = 0, { batchRoot: nextBatchRoot = null, lightsChanged = false } = {}) {
@@ -2318,6 +2386,10 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
         window.clearTimeout(shaderWarmupTimer);
         shaderWarmupTimer = 0;
       }
+      if (lightCompileGate) {
+        window.clearTimeout(lightCompileGate.timeout);
+        lightCompileGate = null;
+      }
       unpublishPerf?.();
       perf = null;
       walkPhysics.invalidateCollisions();
@@ -2367,6 +2439,10 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       disposeMaterialPalette(materialPalette);
       timer.dispose();
       renderer.dispose();
+      // Give the context back. Left for the browser to collect, a closed
+      // pane's context still counts against the live-context limit, and past
+      // it the oldest one — usually the main preview's — is lost.
+      releaseContextWhenIdle(renderer);
       renderer.domElement.remove();
     },
     setAxisIndicator(indicator) {

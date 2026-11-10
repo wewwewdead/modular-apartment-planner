@@ -211,3 +211,13 @@ describe('InputField number entry', () => {
     expect(committed).toEqual(['Un', 'Uni']);
   });
 });
+
+describe('InputField labelling', () => {
+  it('ties its label to its input', () => {
+    const node = mount(<InputField label="Address" value="" onChange={() => {}} />);
+    const label = node.querySelector('label');
+    const input = node.querySelector('input');
+    expect(input.id).toBeTruthy();
+    expect(label.htmlFor).toBe(input.id);
+  });
+});

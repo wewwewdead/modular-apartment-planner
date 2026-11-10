@@ -3,6 +3,8 @@ import {
   BOARD_OVERHANG_LIMIT,
   WALL_ASSEMBLY_PRESETS,
   WALL_BOARD_MATERIALS,
+  WALL_BOARD_OPTIONS,
+  applyWallFaceFinishToFloors,
   boardLayerAreaMultiplier,
   boardLayerUSpan,
   createWallAssembly,
@@ -10,7 +12,10 @@ import {
   deriveWallFramingLayout,
   resolveWallAssembly,
   wallAssemblyThickness,
+  wallBoardMaterialLabel,
   wallFaceViewMirrorsU,
+  wallFacesMatch,
+  withWallFaceFinish,
 } from './wallAssemblies';
 
 describe('wall assemblies', () => {
@@ -410,5 +415,379 @@ describe('board layer overhangs', () => {
     // And a flush wall's own spans are plain zeros, not the negative zero a bare
     // negation leaves behind — which is not deep-equal to zero.
     expect(flush.map((layer) => Object.is(layer.u0, 0))).toEqual([true, true]);
+  });
+});
+
+describe('face finishes (docs/wall-cladding-finishes.md §4, §5.2)', () => {
+  const ORANGE = {
+    kind: 'paint',
+    colour: { hex: '#E0701F', name: 'Signal Orange', catalogue: 'facade' },
+    sheen: 'matte',
+  };
+
+  it('leaves a stock layer exactly as it was before finishes existed — no finish key at all', () => {
+    const framed = createWallAssembly(WALL_ASSEMBLY_PRESETS.MIXED_BOARD);
+    expect(framed.exterior).toEqual({
+      material: 'fiber_cement',
+      thickness: 6,
+      layerCount: 1,
+      overhangStart: 0,
+      overhangEnd: 0,
+    });
+    expect('finish' in framed.interior).toBe(false);
+    const masonry = createWallAssembly(WALL_ASSEMBLY_PRESETS.CHB, {}, 150);
+    expect(masonry.interior).toEqual({
+      material: 'none',
+      thickness: 0,
+      layerCount: 0,
+      overhangStart: 0,
+      overhangEnd: 0,
+    });
+    // A stored null or junk finish normalises to the same stock layer.
+    expect(
+      createWallAssembly(WALL_ASSEMBLY_PRESETS.MIXED_BOARD, {
+        exterior: { material: 'fiber_cement', finish: null },
+      }).exterior,
+    ).toEqual(framed.exterior);
+    for (const layer of deriveWallAssemblyLayers(framed, 4000)) expect('finish' in layer).toBe(false);
+  });
+
+  it('keeps a finish through create → store → resolve, and hands it to the derived layer', () => {
+    const wall = {
+      start: { x: 0, y: 0 },
+      end: { x: 4000, y: 0 },
+      thickness: 100,
+      assembly: createWallAssembly(WALL_ASSEMBLY_PRESETS.MIXED_BOARD, {
+        exterior: { material: 'fiber_cement', thickness: 6, layerCount: 1, finish: ORANGE },
+      }),
+    };
+    const resolved = resolveWallAssembly(JSON.parse(JSON.stringify(wall)));
+
+    expect(resolved.exterior.finish).toEqual(ORANGE);
+    expect('finish' in resolved.interior).toBe(false);
+    const [interior, exterior] = deriveWallAssemblyLayers(resolved, 4000);
+    expect(exterior.finish).toEqual(ORANGE);
+    expect('finish' in interior).toBe(false);
+  });
+
+  it('drops a finish the face does not offer, so changing the board clears it on its own', () => {
+    const painted = createWallAssembly(WALL_ASSEMBLY_PRESETS.MIXED_BOARD, {
+      interior: { material: 'plywood', finish: { ...ORANGE, kind: 'timber' } },
+      exterior: { material: 'fiber_cement', finish: { ...ORANGE, kind: 'render' } },
+    });
+    expect(painted.interior.finish.kind).toBe('timber');
+    expect(painted.exterior.finish.kind).toBe('render');
+
+    // Timber on fibre cement and render on plywood are not finishes; a bare
+    // face takes none at all.
+    const swapped = createWallAssembly(painted.preset, {
+      ...painted,
+      interior: { ...painted.interior, material: 'fiber_cement' },
+      exterior: { ...painted.exterior, material: 'none' },
+    });
+    expect('finish' in swapped.interior).toBe(false);
+    expect('finish' in swapped.exterior).toBe(false);
+  });
+
+  it('finishes both faces of a masonry wall, paint or render, never timber', () => {
+    const masonry = createWallAssembly(WALL_ASSEMBLY_PRESETS.CHB, {
+      interior: { finish: { ...ORANGE, kind: 'render' } },
+      exterior: { finish: ORANGE },
+    });
+    expect(masonry.interior.finish.kind).toBe('render');
+    expect(masonry.exterior.finish).toEqual(ORANGE);
+    expect(
+      createWallAssembly(WALL_ASSEMBLY_PRESETS.CHB, { exterior: { finish: { ...ORANGE, kind: 'timber' } } }).exterior,
+    ).not.toHaveProperty('finish');
+    // A finish is look only: the wall is exactly as thick as it was.
+    expect(wallAssemblyThickness(masonry)).toBe(150);
+  });
+
+  it('keeps finishes on an arc wall while refusing its overhangs', () => {
+    const arc = resolveWallAssembly({
+      start: { x: 0, y: 0 },
+      end: { x: 4000, y: 0 },
+      controlPoint: { x: 2000, y: 900 },
+      thickness: 100,
+      assembly: createWallAssembly(WALL_ASSEMBLY_PRESETS.MIXED_BOARD, {
+        exterior: { material: 'fiber_cement', overhangStart: 250, finish: ORANGE },
+      }),
+    });
+    expect(arc.exterior).toMatchObject({ overhangStart: 0, finish: ORANGE });
+  });
+});
+
+describe('copying a face finish across walls', () => {
+  const ORANGE = {
+    kind: 'paint',
+    colour: { hex: '#E0701F', name: 'Signal Orange', catalogue: 'facade' },
+    sheen: 'matte',
+  };
+  const wall = (id, preset, overrides = {}, extra = {}) => ({
+    id,
+    start: { x: 0, y: 0 },
+    end: { x: 4000, y: 0 },
+    thickness: 100,
+    height: 2700,
+    assembly: createWallAssembly(preset, overrides),
+    ...extra,
+  });
+
+  it('writes only that face of the target wall', () => {
+    const target = wall('w2', WALL_ASSEMBLY_PRESETS.MIXED_BOARD, {}, { structuralRole: 'loadbearing' });
+    const next = withWallFaceFinish(target, 'exterior', ORANGE);
+
+    expect(next.assembly.exterior.finish).toEqual(ORANGE);
+    const { finish: _finish, ...rest } = next.assembly.exterior;
+    expect(rest).toEqual(target.assembly.exterior);
+    expect({ ...next, assembly: { ...next.assembly, exterior: target.assembly.exterior } }).toEqual(target);
+    // Stock back again, and the same object when nothing changes.
+    expect(withWallFaceFinish(next, 'exterior', null)).toEqual(target);
+    expect(withWallFaceFinish(next, 'exterior', ORANGE)).toBe(next);
+    // A face that cannot carry the finish is left alone, not cleared.
+    expect(withWallFaceFinish(next, 'exterior', { ...ORANGE, kind: 'timber' })).toBe(next);
+  });
+
+  it('applies to matching walls only — same system, same board on that face', () => {
+    const source = wall('w1', WALL_ASSEMBLY_PRESETS.MIXED_BOARD, {
+      exterior: { material: 'fiber_cement', finish: ORANGE },
+    });
+    const twin = wall('w2', WALL_ASSEMBLY_PRESETS.MIXED_BOARD);
+    const plywoodOutside = wall('w3', WALL_ASSEMBLY_PRESETS.PLYWOOD);
+    const masonry = wall('w4', WALL_ASSEMBLY_PRESETS.CHB);
+    const upstairsTwin = wall('w5', WALL_ASSEMBLY_PRESETS.FIBER_CEMENT);
+    const floors = [
+      { id: 'f1', walls: [source, twin, plywoodOutside, masonry] },
+      { id: 'f2', walls: [upstairsTwin] },
+    ];
+
+    const onFloor = applyWallFaceFinishToFloors(floors, {
+      floorId: 'f1',
+      wallId: 'w1',
+      side: 'exterior',
+      scope: 'floor',
+    });
+    expect(onFloor[0].walls[1].assembly.exterior.finish).toEqual(ORANGE);
+    expect(onFloor[0].walls[2]).toBe(plywoodOutside);
+    expect(onFloor[0].walls[3]).toBe(masonry);
+    expect(onFloor[0].walls[0]).toBe(source);
+    // The other storey was out of scope, and comes back as the same object.
+    expect(onFloor[1]).toBe(floors[1]);
+
+    const building = applyWallFaceFinishToFloors(floors, {
+      floorId: 'f1',
+      wallId: 'w1',
+      side: 'exterior',
+      scope: 'building',
+    });
+    expect(building[1].walls[0].assembly.exterior.finish).toEqual(ORANGE);
+    // Done twice, the second pass has nothing to change.
+    expect(
+      applyWallFaceFinishToFloors(building, { floorId: 'f1', wallId: 'w1', side: 'exterior', scope: 'building' }),
+    ).toBe(building);
+  });
+
+  it('follows a facade stack across storeys, and does nothing for a wall with no stack', () => {
+    const source = wall('w1', WALL_ASSEMBLY_PRESETS.MIXED_BOARD, { exterior: { finish: ORANGE } }, { stackId: 's1' });
+    const above = wall('w2', WALL_ASSEMBLY_PRESETS.FIBER_CEMENT, {}, { stackId: 's1' });
+    const elsewhere = wall('w3', WALL_ASSEMBLY_PRESETS.FIBER_CEMENT, {}, { stackId: 's2' });
+    const floors = [
+      { id: 'f1', walls: [source] },
+      { id: 'f2', walls: [above, elsewhere] },
+    ];
+    const stacked = applyWallFaceFinishToFloors(floors, {
+      floorId: 'f1',
+      wallId: 'w1',
+      side: 'exterior',
+      scope: 'stack',
+    });
+    expect(stacked[1].walls[0].assembly.exterior.finish).toEqual(ORANGE);
+    expect(stacked[1].walls[1]).toBe(elsewhere);
+
+    const loose = [
+      {
+        id: 'f1',
+        walls: [
+          { ...source, stackId: null },
+          { ...above, stackId: null },
+        ],
+      },
+    ];
+    expect(applyWallFaceFinishToFloors(loose, { floorId: 'f1', wallId: 'w1', side: 'exterior', scope: 'stack' })).toBe(
+      loose,
+    );
+  });
+
+  it('matches walls on their system and the board on the named face', () => {
+    expect(
+      wallFacesMatch(
+        wall('a', WALL_ASSEMBLY_PRESETS.MIXED_BOARD),
+        wall('b', WALL_ASSEMBLY_PRESETS.FIBER_CEMENT),
+        'exterior',
+      ),
+    ).toBe(true);
+    expect(
+      wallFacesMatch(
+        wall('a', WALL_ASSEMBLY_PRESETS.MIXED_BOARD),
+        wall('b', WALL_ASSEMBLY_PRESETS.FIBER_CEMENT),
+        'interior',
+      ),
+    ).toBe(false);
+    expect(wallFacesMatch(wall('a', WALL_ASSEMBLY_PRESETS.CHB), wall('b', WALL_ASSEMBLY_PRESETS.CHB), 'interior')).toBe(
+      true,
+    );
+  });
+});
+
+describe('plank siding layers (spec §6.1)', () => {
+  const IPE = { kind: 'timber', colour: { hex: '#6B4226', name: 'Ipe', catalogue: 'timber' }, sheen: 'satin' };
+
+  it('is 19 mm by default, always coursed and always finished', () => {
+    const assembly = createWallAssembly(WALL_ASSEMBLY_PRESETS.MIXED_BOARD, { exterior: { material: 'siding' } });
+    expect(assembly.exterior).toEqual({
+      material: 'siding',
+      thickness: 19,
+      layerCount: 1,
+      overhangStart: 0,
+      overhangEnd: 0,
+      course: { orientation: 'horizontal', exposure: 140, joint: 6 },
+      finish: IPE,
+    });
+    const [, exterior] = deriveWallAssemblyLayers(assembly, 4000);
+    expect(exterior.course).toEqual({ orientation: 'horizontal', exposure: 140, joint: 6 });
+    expect(exterior.finish).toEqual(IPE);
+    expect(wallAssemblyThickness(assembly)).toBe(75 + 12 + 19);
+  });
+
+  it('gives no other layer a course key', () => {
+    for (const preset of Object.values(WALL_ASSEMBLY_PRESETS)) {
+      const assembly = createWallAssembly(preset, {}, 150);
+      for (const layer of [assembly.interior, assembly.exterior, ...deriveWallAssemblyLayers(assembly, 3000)]) {
+        expect('course' in layer).toBe(false);
+      }
+    }
+    // A course left behind when the board changes goes with it.
+    const back = createWallAssembly(WALL_ASSEMBLY_PRESETS.MIXED_BOARD, {
+      exterior: { material: 'fiber_cement', course: { exposure: 200 } },
+    });
+    expect('course' in back.exterior).toBe(false);
+  });
+
+  it('keeps the stored course and finish through a save and load', () => {
+    const wall = {
+      start: { x: 0, y: 0 },
+      end: { x: 4000, y: 0 },
+      thickness: 106,
+      assembly: createWallAssembly(WALL_ASSEMBLY_PRESETS.MIXED_BOARD, {
+        exterior: {
+          material: 'siding',
+          course: { orientation: 'vertical', exposure: 95, joint: 10 },
+          finish: { ...IPE, kind: 'paint', colour: { hex: '#AEBBC4', name: 'Fog Blue', catalogue: 'facade' } },
+        },
+      }),
+    };
+    const resolved = resolveWallAssembly(JSON.parse(JSON.stringify(wall)));
+    expect(resolved.exterior.course).toEqual({ orientation: 'vertical', exposure: 95, joint: 10 });
+    expect(resolved.exterior.finish.colour.name).toBe('Fog Blue');
+  });
+
+  it('treats "stock" on a siding face as its timber default', () => {
+    const wall = {
+      id: 'w',
+      start: { x: 0, y: 0 },
+      end: { x: 4000, y: 0 },
+      thickness: 106,
+      assembly: createWallAssembly(WALL_ASSEMBLY_PRESETS.MIXED_BOARD, {
+        exterior: { material: 'siding', finish: { ...IPE, kind: 'paint' } },
+      }),
+    };
+    const stocked = withWallFaceFinish(wall, 'exterior', null);
+    expect(stocked.assembly.exterior.finish).toEqual(IPE);
+    expect(withWallFaceFinish(stocked, 'exterior', null)).toBe(stocked);
+  });
+
+  it('is in the one board option list, with the names the pickers and the readouts use', () => {
+    expect(WALL_BOARD_OPTIONS.map((option) => option.value)).toEqual([
+      'none',
+      'fiber_cement',
+      'plywood',
+      'rainscreen',
+      'siding',
+    ]);
+    expect(WALL_BOARD_OPTIONS.find((option) => option.value === 'fiber_cement').label).toBe(
+      'HardieFlex / fiber cement',
+    );
+    expect(wallBoardMaterialLabel('fiber_cement')).toBe('Fiber cement');
+    expect(wallBoardMaterialLabel('siding')).toBe('Plank siding');
+    expect(wallBoardMaterialLabel('gypsum')).toBe('No board');
+  });
+});
+
+describe('accents on a board layer (docs/wall-cladding-finishes.md §7.1)', () => {
+  const ORANGE = {
+    kind: 'paint',
+    colour: { hex: '#E0701F', name: 'Signal Orange', catalogue: 'facade' },
+    sheen: 'matte',
+  };
+
+  it('has no accents key when there are none', () => {
+    for (const accents of [undefined, null, [], 'x', [{ finish: null }]]) {
+      const assembly = createWallAssembly(WALL_ASSEMBLY_PRESETS.MIXED_BOARD, {
+        exterior: { material: 'fiber_cement', accents },
+      });
+      expect('accents' in assembly.exterior).toBe(false);
+    }
+  });
+
+  it('normalises and keeps accents through create, store and resolve', () => {
+    const assembly = createWallAssembly(WALL_ASSEMBLY_PRESETS.MIXED_BOARD, {
+      exterior: {
+        material: 'fiber_cement',
+        accents: [
+          {
+            id: 'a',
+            u: 100.4,
+            v: 900,
+            width: 600,
+            height: 1200.6,
+            finish: ORANGE,
+            anchor: { openingId: 'w', du: 1, dv: 2 },
+          },
+        ],
+      },
+    });
+    expect(assembly.exterior.accents).toEqual([
+      {
+        id: 'a',
+        label: '',
+        u: 100,
+        v: 900,
+        width: 600,
+        height: 1201,
+        finish: ORANGE,
+        anchor: { openingId: 'w', du: 1, dv: 2 },
+      },
+    ]);
+    const resolved = resolveWallAssembly(
+      JSON.parse(JSON.stringify({ start: { x: 0, y: 0 }, end: { x: 4000, y: 0 }, thickness: 87, assembly })),
+    );
+    expect(resolved.exterior.accents).toEqual(assembly.exterior.accents);
+  });
+
+  it('drops an accent whose finish the face cannot carry, and every accent on a face that cannot carry any', () => {
+    const plywood = createWallAssembly(WALL_ASSEMBLY_PRESETS.MIXED_BOARD, {
+      interior: {
+        material: 'plywood',
+        accents: [
+          { id: 'render', u: 0, v: 0, width: 100, height: 100, finish: { ...ORANGE, kind: 'render' } },
+          { id: 'stain', u: 0, v: 0, width: 100, height: 100, finish: { ...ORANGE, kind: 'timber' } },
+        ],
+      },
+    });
+    expect(plywood.interior.accents.map((accent) => accent.id)).toEqual(['stain']);
+    const masonry = createWallAssembly(WALL_ASSEMBLY_PRESETS.CHB, {
+      exterior: { accents: [{ id: 'a', u: 0, v: 0, width: 100, height: 100, finish: ORANGE }] },
+    });
+    expect('accents' in masonry.exterior).toBe(false);
   });
 });

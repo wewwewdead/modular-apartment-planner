@@ -73,7 +73,12 @@ export function useNumericDraft(value, onChange) {
   const handleKeyDown = useCallback(
     (event) => {
       if (event.key === 'Enter') {
-        commit(event.target.value);
+        // An untouched field — no draft, and the box still showing the
+        // committed value — has nothing to commit. Committing the value it
+        // already holds would still be an edit upstream: an undo step that
+        // undoes nothing, and the project marked dirty.
+        const untouched = draft === null && event.target.value === String(value);
+        if (!untouched) commit(event.target.value);
         setDraft(null);
         return;
       }
@@ -86,7 +91,7 @@ export function useNumericDraft(value, onChange) {
       }
       typedRef.current = isTextEditingKey(event.key);
     },
-    [commit],
+    [commit, draft, value],
   );
 
   // Leaving the field is a commit — a number typed and then clicked away from was

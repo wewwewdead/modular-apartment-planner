@@ -4,7 +4,7 @@ import { useUnsavedChangesGuard } from '@/app/useUnsavedChangesGuard';
 import { createProject } from '@/domain/models';
 import { createDuplicatedFloor, getOrderedFloors } from '@/domain/floorModels';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
-import { deleteProject, listProjects, loadProject, saveProject } from '@/persistence/storage';
+import { deleteProject, listProjects, loadProject, pruneDrafts, saveProject } from '@/persistence/storage';
 import {
   exportProjectArchive,
   exportProjectFile,
@@ -16,11 +16,56 @@ import {
 import { afterPaint, LOADING_COPY } from '@/ui/loading';
 import { useAutosave } from '@/persistence/useAutosave';
 import floorplanReducer, { initializeFloorplanState } from '../store/floorplanReducer';
+import { projectOpenEventForStage, projectOpenMachine } from './projectOpenMachine';
+
+// An autosave that fails has nothing on screen to answer for it, so the
+// canvas status toast says so; the project stays dirty either way.
+function getAutosaveErrorMessage(err) {
+  return err?.name === 'QuotaExceededError'
+    ? 'Autosave failed: browser storage is full. Delete drafts you no longer need in Open Project, or save to a file (Ctrl+S).'
+    : 'Autosave failed. Save the project to a file (Ctrl+S) to keep your work.';
+}
+
+// A save the user asked for and did not get says so the same way; the file
+// write is what failed, so the project stays dirty.
+const SAVE_ERROR_MESSAGE = 'Save failed: the project file could not be written. Your changes are not saved to it.';
+
+// Clears drafts that hold nothing (see pruneDrafts); never the open one, and a
+// failure only means they stay.
+function pruneDraftsQuietly(keepId) {
+  pruneDrafts({ keepId }).catch((err) => console.warn('[drafts] Pruning failed:', err));
+}
 
 function getImportErrorMessage(err) {
   if (isNotAProjectFileError(err)) return LOADING_COPY.badProjectFile;
   const message = typeof err?.message === 'string' ? err.message.trim() : '';
   return message || 'The selected file could not be opened as an Apartment Planner project.';
+}
+
+/*
+  The open attempt in flight, held in a ref as `{ lastId, liveId, state }`:
+  `state` is where the live run stands in projectOpenMachine. Each attempt
+  gets the next id; closing the dialog cancels the live run and leaves no run
+  live. Whatever a run reports once it is not the live one, or that the table
+  has no move for, is dropped.
+*/
+function beginOpenRun(runRef) {
+  const id = runRef.current.lastId + 1;
+  runRef.current = { lastId: id, liveId: id, state: projectOpenMachine.initial };
+  return id;
+}
+
+function advanceOpenRun(runRef, runId, event) {
+  const run = runRef.current;
+  if (run.liveId !== runId || !projectOpenMachine.can(run.state, event)) return false;
+  runRef.current = { ...run, state: projectOpenMachine.next(run.state, event) };
+  return true;
+}
+
+function cancelOpenRun(runRef) {
+  if (!advanceOpenRun(runRef, runRef.current.liveId, 'CANCEL')) return false;
+  runRef.current = { ...runRef.current, liveId: null };
+  return true;
 }
 
 export default function useFloorplan({ initialProject, isPlayground = false } = {}) {
@@ -45,6 +90,9 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
   useEffect(() => {
     showLoadModalRef.current = showLoadModal;
   }, [showLoadModal]);
+  // Closing the dialog takes back a load still running: it must not replace
+  // the project, adopt a file handle or show an error after that.
+  const openRunRef = useRef({ lastId: 0, liveId: null, state: projectOpenMachine.initial });
   const importInputRef = useRef(null);
 
   const project = state.project;
@@ -53,7 +101,32 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
   const availableFloorIds = useMemo(() => orderedFloors.map((floor) => floor.id), [orderedFloors]);
   const availablePhaseIds = useMemo(() => (project.phases || []).map((phase) => phase.id), [project.phases]);
 
-  useAutosave(project, state.isDirty && !isPlayground, dispatch);
+  const handleAutosaveError = useCallback((err) => {
+    dispatch({ type: 'SET_STATUS_MESSAGE', message: getAutosaveErrorMessage(err) });
+  }, []);
+  const handleAutosaved = useCallback((savedProject) => pruneDraftsQuietly(savedProject.id), []);
+  useAutosave(
+    project,
+    state.isDirty && !isPlayground,
+    dispatch,
+    handleAutosaveError,
+    handleAutosaved,
+    state.changeVersion,
+  );
+
+  // On app start, once the workspace is idle: the drafts left from earlier
+  // sessions that hold nothing. The playground never touches stored drafts.
+  const startProjectIdRef = useRef(project.id);
+  useEffect(() => {
+    if (isPlayground) return undefined;
+    const prune = () => pruneDraftsQuietly(startProjectIdRef.current);
+    if (typeof window.requestIdleCallback === 'function') {
+      const handle = window.requestIdleCallback(prune, { timeout: 5000 });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const timer = window.setTimeout(prune, 3000);
+    return () => window.clearTimeout(timer);
+  }, [isPlayground]);
   useUnsavedChangesGuard(state.isDirty && !isPlayground);
 
   useEffect(() => {
@@ -105,7 +178,11 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
     setShowNewProjectModal(true);
   }, [confirm, state.isDirty]);
 
+  const changeVersion = state.changeVersion;
   const handleSave = useCallback(async () => {
+    // The version of the project this save writes; anything edited while the
+    // file write is awaited stays dirty.
+    const version = changeVersion;
     try {
       const { fileHandle } = await exportProjectFile(project, {
         fileHandle: projectFileHandle,
@@ -113,15 +190,17 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
       setProjectFileHandle(fileHandle);
       try {
         await saveProject(project);
+        pruneDraftsQuietly(project.id);
       } catch {
         // Browser draft sync is secondary to file save.
       }
-      dispatch({ type: 'MARK_SAVED' });
+      dispatch({ type: 'MARK_SAVED', version });
     } catch (err) {
       if (isFilePickerAbortError(err)) return;
       console.warn('[save] Failed to save project file:', err);
+      dispatch({ type: 'SET_STATUS_MESSAGE', message: SAVE_ERROR_MESSAGE });
     }
-  }, [project, projectFileHandle]);
+  }, [changeVersion, project, projectFileHandle]);
 
   // Sharing writes a standalone copy: it never adopts a file handle or clears the dirty flag.
   const handleShareProject = useCallback(async () => {
@@ -165,10 +244,12 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
     Everything after the read: the busy state has painted by now, and the
     load itself — the reducer's migration pass and the re-render of the whole
     workspace — runs as a transition so the page keeps answering through it.
-    The modal closes in that same commit, with the project already drawn.
+    The modal closes in that same commit, with the project already drawn. A
+    run the user cancelled before it got here commits nothing.
   */
-  const commitLoadedProject = useCallback(async ({ project: loadedProject, savedAt }, fileHandle) => {
+  const commitLoadedProject = useCallback(async ({ project: loadedProject, savedAt }, fileHandle, runId) => {
     await afterPaint();
+    if (!advanceOpenRun(openRunRef, runId, 'COMMIT')) return;
     startTransition(() => {
       dispatch({ type: 'PROJECT_LOAD', project: loadedProject, savedAt });
       setProjectFileHandle(fileHandle);
@@ -178,7 +259,8 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
   }, []);
 
   const failProjectOpen = useCallback(
-    async (err) => {
+    async (err, runId) => {
+      if (!advanceOpenRun(openRunRef, runId, 'FAIL')) return;
       setProjectOpening(null);
       const message = getImportErrorMessage(err);
       if (showLoadModalRef.current) {
@@ -190,7 +272,8 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
     [confirm],
   );
 
-  const trackOpenProgress = useCallback(({ stage, name }) => {
+  const trackOpenProgress = useCallback((runId, { stage, name }) => {
+    if (!advanceOpenRun(openRunRef, runId, projectOpenEventForStage(stage))) return;
     setProjectOpenError(null);
     setProjectOpening({ stage, name });
   }, []);
@@ -205,15 +288,20 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
       return;
     }
 
+    const runId = beginOpenRun(openRunRef);
+    advanceOpenRun(openRunRef, runId, 'PICK');
     try {
       // The picker owns the wait until a file is chosen; the progress callback
       // is the first moment there is a name to show.
-      const result = await openProjectFile({ onProgress: trackOpenProgress });
-      await commitLoadedProject(result, result.fileHandle);
+      const result = await openProjectFile({ onProgress: (progress) => trackOpenProgress(runId, progress) });
+      await commitLoadedProject(result, result.fileHandle, runId);
     } catch (err) {
-      if (isFilePickerAbortError(err)) return;
+      if (isFilePickerAbortError(err)) {
+        advanceOpenRun(openRunRef, runId, 'CANCEL');
+        return;
+      }
       console.warn('[open] Failed to import project file:', err);
-      await failProjectOpen(err);
+      await failProjectOpen(err, runId);
     }
   }, [commitLoadedProject, confirm, failProjectOpen, state.isDirty, trackOpenProgress]);
 
@@ -227,14 +315,15 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
         return;
       }
 
+      const runId = beginOpenRun(openRunRef);
       try {
-        trackOpenProgress({ stage: 'reading', name: file.name });
+        trackOpenProgress(runId, { stage: 'reading', name: file.name });
         await afterPaint();
-        const result = await importProjectFile(file, { onProgress: trackOpenProgress });
-        await commitLoadedProject(result, null);
+        const result = await importProjectFile(file, { onProgress: (progress) => trackOpenProgress(runId, progress) });
+        await commitLoadedProject(result, null, runId);
       } catch (err) {
         console.warn('[import] Failed to import project file:', err);
-        await failProjectOpen(err);
+        await failProjectOpen(err, runId);
       }
     },
     [commitLoadedProject, confirm, failProjectOpen, state.isDirty, trackOpenProgress],
@@ -244,18 +333,20 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
     async (projectId) => {
       if (state.isDirty && !(await confirm('Unsaved changes will be lost. Continue?'))) return;
 
+      const runId = beginOpenRun(openRunRef);
       try {
+        advanceOpenRun(openRunRef, runId, 'OPEN_DRAFT');
         setProjectOpenError(null);
         setProjectOpening({ stage: 'draft', draftId: projectId });
         await afterPaint();
         const result = await loadProject(projectId);
-        await commitLoadedProject(result, null);
+        await commitLoadedProject(result, null, runId);
       } catch (err) {
         console.warn('[load] Failed to load project:', err);
-        setProjectOpening(null);
+        await failProjectOpen(err, runId);
       }
     },
-    [commitLoadedProject, confirm, state.isDirty],
+    [commitLoadedProject, confirm, failProjectOpen, state.isDirty],
   );
 
   const handleDeleteDraft = useCallback(
@@ -406,6 +497,7 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
         toggleProperties: () => setIsPropertiesCollapsed((value) => !value),
         openLoadModal: handleLoadClick,
         closeLoadModal: () => {
+          if (cancelOpenRun(openRunRef)) setProjectOpening(null);
           setProjectOpenError(null);
           setShowLoadModal(false);
         },

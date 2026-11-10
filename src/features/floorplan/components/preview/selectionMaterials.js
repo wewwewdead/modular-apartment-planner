@@ -71,6 +71,19 @@ export function selectionMaterialsOf(materialPalette) {
   return registries.get(materialPalette)?.all || [];
 }
 
+/** Dispose and forget every overlay material made from one source. */
+export function disposeSelectionMaterialsFor(materialPalette, source) {
+  const registry = registries.get(materialPalette);
+  const perAccent = source ? registry?.bySource.get(source) : null;
+  if (!perAccent) return;
+  for (const { material } of perAccent.values()) {
+    const index = registry.all.indexOf(material);
+    if (index >= 0) registry.all.splice(index, 1);
+    material.dispose();
+  }
+  registry.bySource.delete(source);
+}
+
 export function disposeSelectionMaterials(materialPalette) {
   const registry = registries.get(materialPalette);
   if (!registry) return;

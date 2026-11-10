@@ -19,11 +19,14 @@ import {
   resolveWallAssembly,
   wallAssemblyCoreDepth,
 } from '@/domain/wallAssemblies';
+import { wallFinishHex } from '@/domain/wallFinishes';
 
 const BOARD_COLORS = {
   [WALL_BOARD_MATERIALS.FIBER_CEMENT]: '#d8d6cf',
   [WALL_BOARD_MATERIALS.PLYWOOD]: '#c9975d',
   [WALL_BOARD_MATERIALS.RAINSCREEN]: '#c08a63',
+  // Every siding face carries a finish, so this is only ever a fallback.
+  [WALL_BOARD_MATERIALS.SIDING]: '#9b6a45',
 };
 
 /**
@@ -205,6 +208,7 @@ function WallRenderer({ walls, columns, doors = [], windows = [] }) {
                       data-wall-id={wall.id}
                       data-assembly-side={layer.side}
                       data-board-material={layer.material}
+                      data-finish-kind={layer.finish?.kind || 'stock'}
                       data-overhang-start={layer.overhangStart || 0}
                       data-overhang-end={layer.overhangEnd || 0}
                       points={shiftedOutline(
@@ -216,7 +220,9 @@ function WallRenderer({ walls, columns, doors = [], windows = [] }) {
                       )
                         .map((point) => `${point.x},${point.y}`)
                         .join(' ')}
-                      fill={BOARD_COLORS[layer.material] || '#e5e7eb'}
+                      // A finished face is drawn in its own colour; a stock one
+                      // keeps the board tint it always had.
+                      fill={wallFinishHex(layer) || BOARD_COLORS[layer.material] || '#e5e7eb'}
                       stroke="#374151"
                       strokeWidth={0.75}
                       vectorEffect="non-scaling-stroke"

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { PALETTE_LOOKS, createMaterialPalette, ghostMaterialFor, ghostMaterialsOf } from './materials';
+import {
+  PALETTE_LOOKS,
+  createMaterialPalette,
+  ghostMaterialFor,
+  ghostMaterialsOf,
+  paletteMaterialFor,
+} from './materials';
 import { createWallAssembly, wallAssemblyThickness } from '@/domain/wallAssemblies';
 import { createWallDetailing } from '@/domain/wallDetailing';
 import { createPreviewSceneCache } from './previewSceneCache';
@@ -468,6 +474,64 @@ describe('view modes — a framed wall (§12, §13)', () => {
       expect(node.material).toBe(node.userData.baseMaterial);
       expect(node.castShadow).toBe(castBefore.get(node));
     }
+    cache.dispose();
+  });
+});
+
+describe('view modes — a finished wall (docs/wall-cladding-finishes.md §5.4)', () => {
+  const ORANGE = {
+    kind: 'paint',
+    colour: { hex: '#E0701F', name: 'Signal Orange', catalogue: 'facade' },
+    sheen: 'matte',
+  };
+  const KEY = 'wallFinish:paint:masonry:E0701F:matte';
+
+  it('reads a finish material’s tier off the material itself: skin, which X-ray ghosts', () => {
+    const palette = createMaterialPalette();
+    const material = paletteMaterialFor(palette, KEY);
+    expect(MATERIAL_TIERS[KEY]).toBeUndefined();
+    expect(tierOf(material)).toBe('skin');
+    expect(viewModePolicy(VIEW_MODES.XRAY, tierOf(material))).toMatchObject({ ghost: true, castShadow: false });
+    // Its twin answers the same.
+    expect(tierOf(ghostMaterialFor(palette, material, { tier: 'skin' }))).toBe('skin');
+  });
+
+  it('ghosts a finished wall in X-ray, batch and source alike, and puts it back in Solid', () => {
+    const palette = createMaterialPalette();
+    const cache = createPreviewSceneCache();
+    const { project } = deserializeProject(demoData);
+    const wall = project.floors.flatMap((floor) => floor.walls || [])[0];
+    wall.assembly = createWallAssembly(wall.assembly?.preset || 'chb', {
+      ...(wall.assembly || {}),
+      exterior: { ...(wall.assembly?.exterior || {}), finish: ORANGE },
+    });
+    const { root, batchRoot } = cache.build(buildPreviewScene(project, {}), palette);
+    const material = palette[KEY];
+    expect(material).toBeInstanceOf(THREE.Material);
+
+    const holders = () => {
+      const found = [];
+      for (const container of [root, batchRoot]) {
+        container.traverse((node) => {
+          if (node.isMesh && (node.userData.baseMaterial || node.material) === material) found.push(node);
+        });
+      }
+      return found;
+    };
+    const batches = holders().filter((node) => node.isInstancedMesh);
+    expect(batches.length).toBeGreaterThan(0);
+
+    applyViewModeToWorld(root, batchRoot, palette, VIEW_MODES.XRAY);
+    const twin = ghostMaterialFor(palette, material);
+    for (const node of holders()) {
+      expect(node.material).toBe(twin);
+      expect(node.castShadow).toBe(false);
+    }
+    expect(twin.transparent).toBe(true);
+    expect(paletteOpacities(palette, VIEW_MODES.XRAY).get(twin)).toBe(GHOST_OPACITY[VIEW_MODES.XRAY].skin);
+
+    applyViewModeToWorld(root, batchRoot, palette, VIEW_MODES.SOLID);
+    for (const node of holders()) expect(node.material).toBe(material);
     cache.dispose();
   });
 });

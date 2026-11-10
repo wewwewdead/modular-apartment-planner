@@ -259,9 +259,23 @@ export function createCeilingBeamPickHandler({
     onMouseUp() {},
 
     onDoubleClick(modelPos, e, toolState) {
-      // The click that opened the double-click has already toggled its beam, so
-      // this only has to close the selection.
-      commitCeiling(toolState.ceilingPickBeamIds || [], toolState);
+      // A double-click arrives as press, press, double-click: the first press
+      // picked the beam and the second took it straight back out. Finishing on
+      // a beam means finishing WITH it, so a valid beam under the cursor goes
+      // back in before the selection closes — hit-tested exactly as a press is.
+      const picked = toolState.ceilingPickBeamIds || [];
+      const floor = getFloor(resolveTargetFloorId(toolState));
+      const hit = floor ? findBeamSupportAtPoint(floor, modelPos, hitTolerance()) : null;
+      if (hit && isCeilingSupportBeam(hit.beam, floor) && !picked.includes(hit.beam.id)) {
+        const withBeam = [...picked, hit.beam.id];
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { ceilingPickBeamIds: withBeam, ceilingPickHoverBeamId: hit.beam.id },
+        });
+        commitCeiling(withBeam, { ...toolState, ceilingPickBeamIds: withBeam });
+        return;
+      }
+      commitCeiling(picked, toolState);
     },
 
     onKeyDown(e, toolState = {}) {

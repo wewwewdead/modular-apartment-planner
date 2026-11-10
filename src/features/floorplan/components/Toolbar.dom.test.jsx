@@ -180,3 +180,18 @@ describe('Toolbar furniture popover', () => {
     expect(document.querySelector('[role="menu"]')).toBeNull();
   });
 });
+
+describe('Toolbar model target buttons', () => {
+  it('say which of Floor, Roof, Truss and Sheets is current, like the view modes beside them', () => {
+    const container = renderToolbar();
+    const pressed = (label) =>
+      [...container.querySelectorAll('button')]
+        .find((button) => button.textContent.trim() === label)
+        ?.getAttribute('aria-pressed');
+
+    expect(pressed('Floor')).toBe('true');
+    expect(pressed('Roof')).toBe('false');
+    expect(pressed('Truss')).toBe('false');
+    expect(pressed('Sheets')).toBe('false');
+  });
+});

@@ -17,6 +17,8 @@ import {
   resolveWallAssembly,
   wallAssemblyCoreDepth,
 } from '@/domain/wallAssemblies';
+import { MASONRY_FINISH_COAT, wallFinishMaterialKey } from '@/domain/wallFinishes';
+import { accentAtPoint, resolveWallAccents, splitRectByAccents } from '@/domain/wallAccents';
 import {
   FASTENER_APPEARANCE_MODES,
   deriveRainscreenPanels,
@@ -242,17 +244,36 @@ function boardMaterialKey(material) {
   return 'wallFiberCement';
 }
 
-/** A board's material key, tone-cycled when the board is a rainscreen cassette. */
-function panelMaterialKey(material, panel) {
-  return material === WALL_BOARD_MATERIALS.RAINSCREEN ? rainscreenToneKey(panel) : boardMaterialKey(material);
+/**
+ * What a whole face is drawn in: its finish's key when it has one
+ * (docs/wall-cladding-finishes.md §5.3), its board's stock key otherwise. A
+ * stock face gets exactly the key it always did, which is what keeps a wall
+ * nobody has painted byte-identical in 3D.
+ */
+function layerMaterialKey(layer, system) {
+  return wallFinishMaterialKey(layer, system) || boardMaterialKey(layer.material);
+}
+
+/**
+ * A board's material key, tone-cycled when the board is a stock rainscreen
+ * cassette. A finished face is one finish on every board — a painted rainscreen
+ * is one colour with its joints, not a quilt — so the cycle is stock only.
+ */
+function panelMaterialKey(layer, system, panel) {
+  const finishKey = wallFinishMaterialKey(layer, system);
+  if (finishKey) return finishKey;
+  return layer.material === WALL_BOARD_MATERIALS.RAINSCREEN
+    ? rainscreenToneKey(panel)
+    : boardMaterialKey(layer.material);
 }
 
 function isRainscreenLayer(layer) {
   return layer.material === WALL_BOARD_MATERIALS.RAINSCREEN;
 }
 
-function fastenerMaterialKey(appearance, boardMaterial) {
-  if (appearance === FASTENER_APPEARANCE_MODES.TONAL) return boardMaterialKey(boardMaterial);
+function fastenerMaterialKey(appearance, layer, system) {
+  // A tonal screw head is painted with the face it sits in.
+  if (appearance === FASTENER_APPEARANCE_MODES.TONAL) return layerMaterialKey(layer, system);
   if (appearance === FASTENER_APPEARANCE_MODES.CONTRAST) return 'wallFastenerContrast';
   if (appearance === FASTENER_APPEARANCE_MODES.CONSTRUCTION) return 'wallFastenerConstruction';
   return 'wallFastener';
@@ -333,11 +354,133 @@ function skinEndPoint(segment, layer, run) {
     : segment.endPoint;
 }
 
+/**
+ * The accents that show on one face of the wall in this context
+ * (docs/wall-cladding-finishes.md §7.1), already placed and clipped in the
+ * wall's own u/v. Empty for a face nobody has picked out — and every builder
+ * below takes exactly its old path when this is empty.
+ */
+function faceAccentsOf(context, side) {
+  if (!context) return [];
+  return resolveWallAccents(context.wall, context.floor, side).filter((accent) => accent.visible);
+}
+
+/** An accent's palette key: the face's own key with the accent's finish on it (courses and all). */
+function accentMaterialKey(layer, system, accent) {
+  return wallFinishMaterialKey({ ...layer, finish: accent.finish }, system) || layerMaterialKey(layer, system);
+}
+
+/**
+ * One rectangle of skin cut across the face's accents, or `null` when no accent
+ * touches it — the caller then builds the descriptor it always built, under its
+ * own id. Pieces are numbered per kind in tiling order, so the ids are the
+ * same on every build: `<base id>:base:<n>` and `<base id>:accent:<id>:<n>`.
+ */
+function accentPiecesOf(baseId, rect, accents) {
+  if (!accents.length) return null;
+  const pieces = splitRectByAccents(rect, accents);
+  if (pieces.length === 1 && pieces[0].accentId === null) return null;
+  const counts = new Map();
+  return pieces.map((piece) => {
+    const name = piece.accentId ? `accent:${piece.accentId}` : 'base';
+    const n = (counts.get(name) || 0) + 1;
+    counts.set(name, n);
+    return {
+      id: `${baseId}:${name}:${n}`,
+      rect: piece.rect,
+      accent: piece.accentId ? accents.find((accent) => accent.id === piece.accentId) : null,
+    };
+  });
+}
+
+/** What an accent piece adds to the metadata of the board it was cut from. */
+function accentPieceMetadata(metadata, layer, system, accent) {
+  if (!accent) return metadata;
+  return {
+    ...metadata,
+    materialKey: accentMaterialKey(layer, system, accent),
+    // The editor's selection contract (`readAssemblyPart`): its pane lights the
+    // accent the drawing selects, and a click there selects it back.
+    wallDetailKind: 'accent',
+    wallDetailElementId: accent.id,
+  };
+}
+
+/** Distance along a wall's own line, unclamped — a lapped board runs past both ends. */
+function alongWall(wall, point) {
+  const direction = wallDirection(wall);
+  return (point.x - wall.start.x) * direction.x + (point.y - wall.start.y) * direction.y;
+}
+
+/** A box of skin placed on the body's line from a rectangle in the wall's u/v. */
+function skinPieceDescriptor(id, context, layer, normal, rect, metadata) {
+  return createLinearBoxDescriptor(
+    id,
+    'wall',
+    shiftedWallPoint(context.bodyWall, rect.u0, normal, layer.centerOffset),
+    shiftedWallPoint(context.bodyWall, rect.u1, normal, layer.centerOffset),
+    layer.buildUp,
+    context.wallBase + rect.v0,
+    rect.v1 - rect.v0,
+    metadata,
+  );
+}
+
+/**
+ * A segment's skin box as pieces across the face's accents, or `null` to build
+ * the stock box. The segment's rectangle is read off the very points the stock
+ * box would be built between — the trimmed run, the lap on the first and last
+ * segment — so the pieces cover exactly what the stock box covers.
+ */
+function accentedSegmentSkin(baseId, segment, layer, run, context, normal, accents, metadata, system) {
+  if (!accents.length) return null;
+  const rect = {
+    u0: alongWall(context.bodyWall, skinStartPoint(segment, layer, run)),
+    u1: alongWall(context.bodyWall, skinEndPoint(segment, layer, run)),
+    v0: segment.baseElevation - context.wallBase,
+    v1: segment.topElevation - context.wallBase,
+  };
+  const pieces = accentPiecesOf(baseId, rect, accents);
+  if (!pieces) return null;
+  return pieces.map((piece) =>
+    skinPieceDescriptor(
+      piece.id,
+      context,
+      layer,
+      normal,
+      piece.rect,
+      accentPieceMetadata(metadata, layer, system, piece.accent),
+    ),
+  );
+}
+
 /** Board skins for the given faces, one box per wall segment per face. */
-function buildSkinDescriptors(segments, layers, normal, assembly, run = null) {
+function buildSkinDescriptors(segments, layers, normal, assembly, run = null, context = null) {
+  const accentsBySide = new Map(layers.map((layer) => [layer.side, faceAccentsOf(context, layer.side)]));
   return segments.flatMap((segment) =>
-    layers.map((layer) => {
+    layers.flatMap((layer) => {
       const delta = scale(normal, layer.centerOffset);
+      const metadata = {
+        sourceId: segment.wallId,
+        floorId: segment.floorId,
+        wallId: segment.wallId,
+        wallAssembly: assembly,
+        materialKey: layerMaterialKey(layer, assembly.system),
+        assemblySide: layer.side,
+        boardMaterial: layer.material,
+      };
+      const accented = accentedSegmentSkin(
+        `${segment.id}:${layer.side}`,
+        segment,
+        layer,
+        run,
+        context,
+        normal,
+        accentsBySide.get(layer.side),
+        metadata,
+        assembly.system,
+      );
+      if (accented) return accented;
       return createLinearBoxDescriptor(
         `${segment.id}:${layer.side}`,
         'wall',
@@ -346,15 +489,7 @@ function buildSkinDescriptors(segments, layers, normal, assembly, run = null) {
         layer.buildUp,
         segment.baseElevation,
         segment.topElevation - segment.baseElevation,
-        {
-          sourceId: segment.wallId,
-          floorId: segment.floorId,
-          wallId: segment.wallId,
-          wallAssembly: assembly,
-          materialKey: boardMaterialKey(layer.material),
-          assemblySide: layer.side,
-          boardMaterial: layer.material,
-        },
+        metadata,
       );
     }),
   );
@@ -376,30 +511,48 @@ function buildSkinDescriptors(segments, layers, normal, assembly, run = null) {
  */
 function buildRainscreenDescriptors(context, assembly, layer) {
   const normal = perpendicular(wallDirection(context.sourceWall));
+  const accents = faceAccentsOf(context, layer.side);
   return deriveRainscreenPanels(context.wall, context.floor, layer.side).flatMap((panel) => {
-    const materialKey = rainscreenToneKey(panel);
-    return panel.fragments.map((fragment, fragmentIndex) =>
-      createLinearBoxDescriptor(
-        `${panel.id}:cassette:${fragmentIndex + 1}:3d`,
+    const materialKey = panelMaterialKey(layer, assembly.system, panel);
+    return panel.fragments.flatMap((fragment, fragmentIndex) => {
+      const id = `${panel.id}:cassette:${fragmentIndex + 1}:3d`;
+      const metadata = {
+        sourceId: context.wall.id,
+        floorId: context.floorId,
+        wallId: context.wall.id,
+        wallAssembly: assembly,
+        materialKey,
+        assemblySide: layer.side,
+        boardMaterial: layer.material,
+        panelLabel: panel.label,
+        panelFragmentIndex: fragmentIndex,
+      };
+      // A cassette an accent crosses is cut along it: the accent is painted
+      // on the cassettes it lands on, and the open joints stay where they are.
+      const pieces = accentPiecesOf(id, fragment, accents);
+      if (pieces) {
+        return pieces.map((piece) =>
+          skinPieceDescriptor(
+            piece.id,
+            context,
+            layer,
+            normal,
+            piece.rect,
+            accentPieceMetadata(metadata, layer, assembly.system, piece.accent),
+          ),
+        );
+      }
+      return createLinearBoxDescriptor(
+        id,
         'wall',
         shiftedWallPoint(context.bodyWall, fragment.u0, normal, layer.centerOffset),
         shiftedWallPoint(context.bodyWall, fragment.u1, normal, layer.centerOffset),
         layer.buildUp,
         context.wallBase + fragment.v0,
         fragment.v1 - fragment.v0,
-        {
-          sourceId: context.wall.id,
-          floorId: context.floorId,
-          wallId: context.wall.id,
-          wallAssembly: assembly,
-          materialKey,
-          assemblySide: layer.side,
-          boardMaterial: layer.material,
-          panelLabel: panel.label,
-          panelFragmentIndex: fragmentIndex,
-        },
-      ),
-    );
+        metadata,
+      );
+    });
   });
 }
 
@@ -454,8 +607,13 @@ function buildDetailedWallObjects(context, assembly, layers) {
     const face = detailing.sides[layer.side];
     if (!face?.enabled) continue;
     const panels = deriveWallPanels(context.wall, context.floor, layer.side);
+    const accents = faceAccentsOf(context, layer.side);
     for (const panel of panels) {
       if (panel.polygonal) {
+        // A traced cut is not split: it wears the accent its centre lies in.
+        const centroidAccent = accents.length
+          ? accentAtPoint(accents, { u: (panel.u0 + panel.u1) / 2, v: (panel.v0 + panel.v1) / 2 })
+          : null;
         panel.regions.forEach((region, regionIndex) => {
           descriptors.push(
             createWallPanelDescriptor(
@@ -465,7 +623,9 @@ function buildDetailedWallObjects(context, assembly, layers) {
               normal,
               layer,
               detailedWallMetadata(context, assembly, {
-                materialKey: panelMaterialKey(layer.material, panel),
+                materialKey: centroidAccent
+                  ? accentMaterialKey(layer, assembly.system, centroidAccent)
+                  : panelMaterialKey(layer, assembly.system, panel),
                 assemblySide: layer.side,
                 boardMaterial: layer.material,
                 wallDetailKind: 'panel',
@@ -474,6 +634,7 @@ function buildDetailedWallObjects(context, assembly, layers) {
                 wallDetailElementId: panel.localId,
                 panelLabel: panel.label,
                 panelRegionIndex: regionIndex,
+                ...(centroidAccent ? { accentId: centroidAccent.id } : {}),
               }),
             ),
           );
@@ -481,24 +642,42 @@ function buildDetailedWallObjects(context, assembly, layers) {
         continue;
       }
       panel.fragments.forEach((fragment, fragmentIndex) => {
+        const id = `${panel.id}:fragment:${fragmentIndex + 1}:3d`;
+        const metadata = detailedWallMetadata(context, assembly, {
+          materialKey: panelMaterialKey(layer, assembly.system, panel),
+          assemblySide: layer.side,
+          boardMaterial: layer.material,
+          wallDetailKind: 'panel',
+          wallDetailElementId: panel.localId,
+          panelLabel: panel.label,
+          panelFragmentIndex: fragmentIndex,
+        });
+        const pieces = accentPiecesOf(id, fragment, accents);
+        if (pieces) {
+          for (const piece of pieces) {
+            descriptors.push(
+              skinPieceDescriptor(
+                piece.id,
+                context,
+                layer,
+                normal,
+                piece.rect,
+                accentPieceMetadata(metadata, layer, assembly.system, piece.accent),
+              ),
+            );
+          }
+          return;
+        }
         descriptors.push(
           createLinearBoxDescriptor(
-            `${panel.id}:fragment:${fragmentIndex + 1}:3d`,
+            id,
             'wall',
             shiftedWallPoint(context.bodyWall, fragment.u0, normal, layer.centerOffset),
             shiftedWallPoint(context.bodyWall, fragment.u1, normal, layer.centerOffset),
             layer.buildUp,
             context.wallBase + fragment.v0,
             fragment.v1 - fragment.v0,
-            detailedWallMetadata(context, assembly, {
-              materialKey: panelMaterialKey(layer.material, panel),
-              assemblySide: layer.side,
-              boardMaterial: layer.material,
-              wallDetailKind: 'panel',
-              wallDetailElementId: panel.localId,
-              panelLabel: panel.label,
-              panelFragmentIndex: fragmentIndex,
-            }),
+            metadata,
           ),
         );
       });
@@ -517,7 +696,7 @@ function buildDetailedWallObjects(context, assembly, layers) {
         context.wallBase + fastener.v - fastenerRadius,
         Math.atan2(wallDirection(context.sourceWall).y, wallDirection(context.sourceWall).x),
         detailedWallMetadata(context, assembly, {
-          materialKey: fastenerMaterialKey(fastenerSettings.appearance, layer.material),
+          materialKey: fastenerMaterialKey(fastenerSettings.appearance, layer, assembly.system),
           assemblySide: layer.side,
           wallDetailKind: 'fastener',
           wallDetailElementId: fastener.id,
@@ -542,10 +721,31 @@ function buildDetailedWallObjects(context, assembly, layers) {
   const fallbackLayers = undetailedLayers.filter((layer) => !isRainscreenLayer(layer));
   const fallbackSegments = buildWallSolidSegments(context);
   const fallbackRun = boardRunOf(fallbackSegments, wallDirection(context.bodyWall));
+  const fallbackAccents = new Map(fallbackLayers.map((layer) => [layer.side, faceAccentsOf(context, layer.side)]));
   for (const segment of fallbackSegments) {
     const height = segment.topElevation - segment.baseElevation;
     fallbackLayers.forEach((layer) => {
       const delta = scale(normal, layer.centerOffset);
+      const metadata = detailedWallMetadata(context, assembly, {
+        materialKey: layerMaterialKey(layer, assembly.system),
+        assemblySide: layer.side,
+        boardMaterial: layer.material,
+      });
+      const accented = accentedSegmentSkin(
+        `${segment.id}:${layer.side}`,
+        segment,
+        layer,
+        fallbackRun,
+        context,
+        normal,
+        fallbackAccents.get(layer.side),
+        metadata,
+        assembly.system,
+      );
+      if (accented) {
+        descriptors.push(...accented);
+        return;
+      }
       descriptors.push(
         createLinearBoxDescriptor(
           `${segment.id}:${layer.side}`,
@@ -555,16 +755,93 @@ function buildDetailedWallObjects(context, assembly, layers) {
           layer.buildUp,
           segment.baseElevation,
           height,
-          detailedWallMetadata(context, assembly, {
-            materialKey: boardMaterialKey(layer.material),
-            assemblySide: layer.side,
-            boardMaterial: layer.material,
-          }),
+          metadata,
         ),
       );
     });
   }
   return descriptors;
+}
+
+/**
+ * A masonry wall with a finish on either face (docs/wall-cladding-finishes.md
+ * §5.3), or `null` for a stock one — whose caller then builds the single box
+ * per segment it always has, untouched.
+ *
+ * The block is one box, and a box is one material, so the two faces are told
+ * apart by splitting it: the BODY takes the outside look, because the ends, the
+ * jamb reveals and the top of a wall are what you see of it from the street,
+ * and an INTERIOR SKIN `MASONRY_FINISH_COAT` thick takes the inside look. The
+ * body gives up that coat's thickness and moves half of it outward, so body and
+ * skin tile the wall's thickness exactly and both outer faces stay where they
+ * were — the wall is the same size; only its colour is in two pieces. When both
+ * faces look alike there is nothing to tell apart and it stays one box.
+ *
+ * "Outward" is read off the same sign `deriveWallAssemblyLayers` gives the
+ * faces, against the same perpendicular the framed skins are offset along, so
+ * a masonry wall's inside is the side a framed wall's inside board would be on.
+ */
+function buildFinishedMasonryDescriptors(context, segments, assembly) {
+  const layers = deriveWallAssemblyLayers(assembly);
+  const interior = layers.find((layer) => layer.side === 'interior');
+  const exterior = layers.find((layer) => layer.side === 'exterior');
+  const exteriorKey = wallFinishMaterialKey(exterior, assembly.system);
+  const interiorKey = wallFinishMaterialKey(interior, assembly.system);
+  if (!exteriorKey && !interiorKey) return null;
+
+  const bodyKey = exteriorKey || 'wall';
+  const skinKey = interiorKey || 'wall';
+  const normal = perpendicular(wallDirection(context.renderWall));
+  return segments.flatMap((segment) => {
+    const metadata = {
+      sourceId: segment.wallId,
+      floorId: segment.floorId,
+      wallId: segment.wallId,
+      wallAssembly: assembly,
+    };
+    const height = segment.topElevation - segment.baseElevation;
+    if (skinKey === bodyKey) {
+      return [
+        createLinearBoxDescriptor(
+          segment.id,
+          'wall',
+          segment.startPoint,
+          segment.endPoint,
+          segment.thickness,
+          segment.baseElevation,
+          height,
+          { ...metadata, materialKey: bodyKey },
+        ),
+      ];
+    }
+    // Never more than half the wall: a coat thicker than its own block would
+    // turn the body inside out.
+    const coat = Math.min(MASONRY_FINISH_COAT, segment.thickness / 2);
+    const bodyShift = scale(normal, (-interior.sign * coat) / 2);
+    const skinShift = scale(normal, (interior.sign * (segment.thickness - coat)) / 2);
+    return [
+      createLinearBoxDescriptor(
+        segment.id,
+        'wall',
+        add(segment.startPoint, bodyShift),
+        add(segment.endPoint, bodyShift),
+        segment.thickness - coat,
+        segment.baseElevation,
+        height,
+        { ...metadata, materialKey: bodyKey },
+      ),
+      createLinearBoxDescriptor(
+        `${segment.id}:interior`,
+        'wall',
+        add(segment.startPoint, skinShift),
+        add(segment.endPoint, skinShift),
+        coat,
+        segment.baseElevation,
+        height,
+        { ...metadata, materialKey: skinKey, assemblySide: 'interior' },
+      ),
+    ];
+  });
 }
 
 function buildWallObjects(wallContexts, hiddenBoardSides = EMPTY_HIDDEN_BOARDS) {
@@ -579,12 +856,15 @@ function buildWallObjects(wallContexts, hiddenBoardSides = EMPTY_HIDDEN_BOARDS) 
         controlPoint: context.wall.controlPoint,
         thickness: context.renderWall.thickness,
       });
+      // One prism, so one look: the outside face's, which is what an arc wall
+      // is seen by. No skin — an arc has no inside box to hang one on.
+      const exteriorLayer = deriveWallAssemblyLayers(assembly).find((layer) => layer.side === 'exterior');
       return [
         createPrismDescriptor(context.wall.id, 'wall', outline, context.wallBase, context.wallTop - context.wallBase, {
           sourceId: context.wall.id,
           floorId: context.floorId,
           wallId: context.wall.id,
-          materialKey: 'wall',
+          materialKey: wallFinishMaterialKey(exteriorLayer, assembly.system) || 'wall',
           wallAssembly: assembly,
         }),
       ];
@@ -592,6 +872,8 @@ function buildWallObjects(wallContexts, hiddenBoardSides = EMPTY_HIDDEN_BOARDS) 
 
     const segments = buildWallSolidSegments(context);
     if (assembly.system !== 'framed') {
+      const finished = buildFinishedMasonryDescriptors(context, segments, assembly);
+      if (finished) return finished;
       return segments.map((segment) =>
         createLinearBoxDescriptor(
           segment.id,
@@ -661,7 +943,11 @@ function buildWallObjects(wallContexts, hiddenBoardSides = EMPTY_HIDDEN_BOARDS) 
     // batching folds them into one instanced call per framing material.
     const members = wallFrameDescriptors(context, assembly);
     if (members.length) {
-      return [...members, ...buildSkinDescriptors(segments, skinLayers, normal, assembly, boardRun), ...rainscreen];
+      return [
+        ...members,
+        ...buildSkinDescriptors(segments, skinLayers, normal, assembly, boardRun, context),
+        ...rainscreen,
+      ];
     }
 
     // Fallback: a framed wall whose layout yields no members — a custom frame
@@ -687,7 +973,7 @@ function buildWallObjects(wallContexts, hiddenBoardSides = EMPTY_HIDDEN_BOARDS) 
           height,
           { ...metadata, materialKey: coreMaterialKey, assemblySide: 'core' },
         );
-        return [core, ...buildSkinDescriptors([segment], skinLayers, normal, assembly, boardRun)];
+        return [core, ...buildSkinDescriptors([segment], skinLayers, normal, assembly, boardRun, context)];
       }),
       ...rainscreen,
     ];

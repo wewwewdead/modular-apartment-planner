@@ -1138,6 +1138,55 @@
   stroke: #8fd0f0;
   cursor: pointer;
 }
+/* Accent panels: a block of the face in another finish, outlined at the board
+   weight. Selection changes the fill, never the line (see the hierarchy above). */
+.accentShape {
+  stroke: #303943;
+  stroke-width: var(--cad-board-line);
+}
+.accentShape[data-selected='true'] {
+  fill: var(--assembly-selected-face);
+  stroke: var(--assembly-selected-line);
+}
+.canvas[data-tool='select'] .accentShape:not([data-selected='true']):hover {
+  stroke: #8fd0f0;
+  cursor: pointer;
+}
+.accentList {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+.accentListItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.accentListItem[data-selected='true'] {
+  border-color: var(--assembly-selected-line, #ffb45c);
+}
+.accentSwatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex: none;
+}
+/* Siding course joints: a set-out drawn over the board fill, at the lightest
+   weight on the sheet so it never reads as a board edge. */
+.sidingCourses {
+  fill: none;
+  stroke: rgba(48, 57, 67, 0.6);
+  stroke-width: var(--cad-frame-line);
+  pointer-events: none;
+}
 .frameShape {
   fill: rgba(49, 129, 168, 0.35);
   stroke: #2b789c;

@@ -11,6 +11,7 @@ import {
   WALL_BOARD_MATERIALS,
 } from './wallAssemblies';
 import { resolveWallSlabBands, resolveWallVerticalSpan } from './wallFit';
+import { resolveWallAccents } from './wallAccents';
 import {
   DEFAULT_WALL_JURISDICTION_PROFILE_ID,
   DEFAULT_WALL_PRODUCT_PROFILE_ID,
@@ -681,6 +682,23 @@ export function isRainscreenFace(wall, side = WALL_DETAIL_SIDES.INTERIOR) {
   return assembly.system === 'framed' && assembly[side]?.material === WALL_BOARD_MATERIALS.RAINSCREEN;
 }
 
+/** Whether the board hung on this face of the wall is plank siding. */
+export function isSidingFace(wall, side = WALL_DETAIL_SIDES.INTERIOR) {
+  const assembly = resolveWallAssembly(wall);
+  return assembly.system === 'framed' && assembly[side]?.material === WALL_BOARD_MATERIALS.SIDING;
+}
+
+/**
+ * A siding face in grid mode: ONE field covering the board's whole span and
+ * the frame's height, not a grid of sheets (spec §6.1). Siding is a few hundred
+ * boards set out in courses; the courses are a pattern on the field
+ * (`wallSiding.js`), and the only thing that cuts the field is an opening.
+ */
+function sidingFieldRects(span, height) {
+  const rect = { u0: span.u0, u1: span.u1, v0: 0, v1: height };
+  return rectangleArea(rect) > EPSILON ? [{ id: 'siding-field', ...rect, source: 'generated' }] : [];
+}
+
 /**
  * The cassette grid, set out from the bottom corner of the wall's RESOLVED span.
  *
@@ -859,6 +877,7 @@ function panelSourceRects(wall, side, face, span, height) {
     });
   }
   if (isRainscreenFace(wall, side)) return rainscreenGridRects(span, height);
+  if (isSidingFace(wall, side)) return sidingFieldRects(span, height);
   return deriveGridRects(face, span, height);
 }
 
@@ -1353,8 +1372,12 @@ export function deriveWallFasteners(wall, floor, side = WALL_DETAIL_SIDES.INTERI
   };
   const members = deriveWallFramingMembers(wall, floor).filter((member) => member.frameIndex === 0);
   const panels = deriveWallPanels(wall, floor, side);
+  // Siding is nailed board by board, through each course, and a generator laid
+  // out for sheet perimeters would scatter screws across the field that no
+  // board needs: no generated fasteners on a siding face (spec §6.1). Manual
+  // screws and guides the user placed still stand.
   const generated =
-    face.fasteners.mode === FASTENER_LAYOUT_MODES.GENERATED
+    face.fasteners.mode === FASTENER_LAYOUT_MODES.GENERATED && !isSidingFace(wall, side)
       ? panels.flatMap((panel) =>
           generatePanelFasteners(panel, members, pattern, face.fasteners.type || defaults.fastenerType || 'screw'),
         )
@@ -1454,6 +1477,13 @@ function validateFace(wall, floor, side, detailing, members) {
   const assembly = resolveWallAssembly(wall);
   const panels = deriveWallPanels(wall, floor, side);
   const fasteners = deriveWallFasteners(wall, floor, side);
+  // The checks below that are about SHEETS — joint system and reveal, fastener
+  // spacing and edge clearance, stock sheet size, sheet thickness, and every
+  // sheet edge landing on a stud — mean nothing for plank siding, which is a
+  // field of boards with no sheet edges (spec §6.1). The framing checks, the
+  // product and jurisdiction markers and a manual screw that misses the frame
+  // still apply.
+  const sheets = !isSidingFace(wall, side);
 
   if (profile.status !== WALL_PRODUCT_PROFILE_STATUS.VERIFIED) {
     issues.push(
@@ -1509,7 +1539,7 @@ function validateFace(wall, floor, side, detailing, members) {
       ),
     );
   }
-  if (!profile.jointSystems.includes(face.layout.jointSystem)) {
+  if (sheets && !profile.jointSystems.includes(face.layout.jointSystem)) {
     issues.push(
       issue(
         'WALL.JOINT_SYSTEM_NOT_ALLOWED',
@@ -1520,6 +1550,7 @@ function validateFace(wall, floor, side, detailing, members) {
     );
   }
   if (
+    sheets &&
     face.layout.jointSystem === 'express' &&
     face.layout.horizontalGap <= EPSILON &&
     face.layout.verticalGap <= EPSILON
@@ -1539,8 +1570,8 @@ function validateFace(wall, floor, side, detailing, members) {
     );
   }
   if (
-    face.layout.horizontalGap >= assembly.framing.studWidth ||
-    face.layout.verticalGap >= assembly.framing.studWidth
+    sheets &&
+    (face.layout.horizontalGap >= assembly.framing.studWidth || face.layout.verticalGap >= assembly.framing.studWidth)
   ) {
     issues.push(
       issue(
@@ -1579,7 +1610,7 @@ function validateFace(wall, floor, side, detailing, members) {
       ),
     );
   }
-  if (planningRules.edgeClearanceMm && face.fasteners.edgeClearance < planningRules.edgeClearanceMm) {
+  if (sheets && planningRules.edgeClearanceMm && face.fasteners.edgeClearance < planningRules.edgeClearanceMm) {
     issues.push(
       issue(
         'WALL.FASTENER_EDGE_CLEARANCE_BELOW_PROFILE',
@@ -1589,7 +1620,11 @@ function validateFace(wall, floor, side, detailing, members) {
       ),
     );
   }
-  if (planningRules.perimeterSpacingMm && face.fasteners.perimeterSpacing > planningRules.perimeterSpacingMm) {
+  if (
+    sheets &&
+    planningRules.perimeterSpacingMm &&
+    face.fasteners.perimeterSpacing > planningRules.perimeterSpacingMm
+  ) {
     issues.push(
       issue(
         'WALL.FASTENER_SPACING_EXCEEDS_PROFILE',
@@ -1599,7 +1634,7 @@ function validateFace(wall, floor, side, detailing, members) {
       ),
     );
   }
-  for (const storedGuide of face.fasteners.guides) {
+  for (const storedGuide of sheets ? face.fasteners.guides : []) {
     const guide = createFastenerGuide(storedGuide);
     const maximumSpacing =
       guide.zone === FASTENER_GUIDE_ZONES.FIELD ? planningRules.fieldSpacingMm : planningRules.perimeterSpacingMm;
@@ -1621,7 +1656,7 @@ function validateFace(wall, floor, side, detailing, members) {
       (Math.abs(stock.heightMm - face.layout.boardWidth) <= EPSILON &&
         Math.abs(stock.widthMm - face.layout.boardHeight) <= EPSILON),
   );
-  if (!matchesStockBoard) {
+  if (sheets && !matchesStockBoard) {
     issues.push(
       issue(
         'WALL.PANEL_SIZE_NOT_STOCK',
@@ -1649,7 +1684,7 @@ function validateFace(wall, floor, side, detailing, members) {
   }
 
   const faceMembers = members.filter((member) => member.frameIndex === 0);
-  panels.forEach((panel) => validatePanelSupport(panel, faceMembers, issues, wallLength(wall)));
+  if (sheets) panels.forEach((panel) => validatePanelSupport(panel, faceMembers, issues, wallLength(wall)));
   for (const fastener of fasteners) {
     if (faceMembers.some((member) => pointOnMember(fastener, member))) continue;
     issues.push(
@@ -1719,8 +1754,51 @@ export function deriveAsBuiltComparison(wall) {
   });
 }
 
+/**
+ * What a face's accents ask a reviewer to look at (spec §7.1): one that shows
+ * nothing at all — placed off the face, or wholly inside an opening — and one
+ * anchored to a door or window the wall no longer has, which has fallen back
+ * to the place it was last stored at. Checked whether or not the wall is
+ * detailed: an accent is a finish, not a documentation option.
+ */
+function accentIssues(wall, floor) {
+  return Object.values(WALL_DETAIL_SIDES).flatMap((side) =>
+    resolveWallAccents(wall, floor, side).flatMap((accent) => {
+      const name = accent.label || 'An accent';
+      const face = side === WALL_DETAIL_SIDES.INTERIOR ? 'inside' : 'outside';
+      const found = [];
+      if (!accent.visible) {
+        found.push(
+          issue(
+            'WALL.ACCENT_NOT_VISIBLE',
+            'warning',
+            `${name} on the ${face} face shows nothing: it is off the face or wholly inside an opening.`,
+            { type: 'accent', id: accent.id },
+            { side, requested: accent.requested },
+            side,
+          ),
+        );
+      }
+      if (accent.anchorMissing) {
+        found.push(
+          issue(
+            'WALL.ACCENT_ANCHOR_MISSING',
+            'info',
+            `${name} on the ${face} face followed an opening that is gone; it stays where it was last placed.`,
+            { type: 'accent', id: accent.id },
+            { side, openingId: accent.anchor.openingId },
+            side,
+          ),
+        );
+      }
+      return found;
+    }),
+  );
+}
+
 export function validateWallDetail(wall, floor) {
-  if (!wall?.assembly?.detailing?.enabled) return [];
+  const accents = accentIssues(wall, floor);
+  if (!wall?.assembly?.detailing?.enabled) return accents;
   const detailing = resolveWallDetailing(wall);
   if (resolveWallAssembly(wall).system !== 'framed') return [];
   const members = deriveWallFramingMembers(wall, floor);
@@ -1740,7 +1818,7 @@ export function validateWallDetail(wall, floor) {
       ),
     );
   }
-  return issues;
+  return accents.length ? [...issues, ...accents] : issues;
 }
 
 export function validateProjectWallDetails(project) {
@@ -1792,7 +1870,8 @@ export function deriveWallDetailTakeoff(wall, floor) {
       enabled: detailing.sides[side].enabled,
       productProfileId: detailing.sides[side].productProfileId,
       panelCount: panels.length,
-      stockSheetCount: panels.length,
+      // A siding field is boards, not stock sheets: none to order by the sheet.
+      stockSheetCount: isSidingFace(wall, side) ? 0 : panels.length,
       installedAreaMm2: panels.reduce((total, panel) => total + panel.netArea, 0),
       grossCutAreaMm2: panels.reduce((total, panel) => total + panel.grossArea, 0),
       fastenerCount: fasteners.length,

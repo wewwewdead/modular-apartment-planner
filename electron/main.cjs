@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, dialog, shell } = require('electron');
 const path = require('node:path');
 
 /*
@@ -79,19 +79,78 @@ function createWindow() {
   });
 
   // Anything targeting a new window (external docs links etc.) goes to the
-  // system browser instead of spawning chromeless Electron windows.
+  // system browser instead of spawning chromeless Electron windows — web and
+  // mail links only: openExternal hands any other scheme (file:, a custom
+  // protocol handler) to the OS to run.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (isExternalLink(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
 
-  // ELECTRON_START_URL lets `npm run app:dev` point the shell at the Vite dev
-  // server for hot reload; the packaged app always loads the built bundle.
+  // The page cancels unload while it has unsaved changes. A browser asks the
+  // user about that; Electron just keeps the window open, so the close button
+  // seemed to do nothing. Ask here instead — Stay is the default.
+  win.webContents.on('will-prevent-unload', (event) => {
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'question',
+      buttons: ['Leave', 'Stay'],
+      defaultId: 1,
+      cancelId: 1,
+      title: 'Unsaved changes',
+      message: 'This project has unsaved changes.',
+      detail: 'Leave without saving? Your changes will be lost.',
+    });
+    // preventDefault here overrides the page's veto: the window unloads.
+    if (choice === 0) event.preventDefault();
+  });
+
+  // A file dropped on the window would otherwise be navigated to, replacing
+  // the app. Only moves within the app itself go through.
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isSameApp(win.webContents.getURL(), url)) event.preventDefault();
+  });
+
+  // A crashed or killed renderer leaves a blank window; bring the app back.
+  // A renderer that dies again and again (a crash on load) is not reloaded
+  // forever: after three crashes inside a minute the window stays as it is.
+  const recentCrashes = [];
+  win.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason === 'clean-exit' || win.isDestroyed()) return;
+    const now = Date.now();
+    while (recentCrashes.length && now - recentCrashes[0] > 60000) recentCrashes.shift();
+    recentCrashes.push(now);
+    if (recentCrashes.length <= 3) win.reload();
+  });
+
+  // ELECTRON_START_URL points the shell at the Vite dev server for hot reload
+  // (start `npm run dev`, then set ELECTRON_START_URL to its URL and run
+  // `npm run app`); otherwise the shell loads the built bundle.
   const devUrl = process.env.ELECTRON_START_URL;
   if (devUrl) {
     win.loadURL(devUrl);
   } else {
     win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  }
+}
+
+function isExternalLink(url) {
+  try {
+    return ['http:', 'https:', 'mailto:'].includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}
+
+// The built app is one file:// document (a hash router moves within it);
+// the dev server's routes are paths on one origin.
+function isSameApp(currentUrl, targetUrl) {
+  try {
+    const current = new URL(currentUrl);
+    const target = new URL(targetUrl);
+    if (current.protocol === 'file:') return target.protocol === 'file:' && target.pathname === current.pathname;
+    return target.origin === current.origin;
+  } catch {
+    return false;
   }
 }
 

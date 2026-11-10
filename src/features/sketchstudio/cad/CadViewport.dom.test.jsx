@@ -8,7 +8,7 @@ import { createRef } from 'react';
 import { flipAxis, flipInstance, turnInstance } from './movement.js';
 import { rotateVector } from './model.js';
 
-const { frames } = vi.hoisted(() => ({ frames: [] }));
+const { frames, scenes } = vi.hoisted(() => ({ frames: [], scenes: [] }));
 vi.mock('three', async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -19,6 +19,7 @@ vi.mock('three', async (importOriginal) => {
       setSize() {}
       dispose() {}
       render(scene) {
+        scenes.push(scene);
         scene.updateMatrixWorld(true);
         const positions = {};
         scene.traverse((object) => {
@@ -262,4 +263,90 @@ it('restores the original position on Escape without committing a move', () => {
   act(() => TransformControls.current.dispatchEvent({ type: 'mouseUp' }));
   expect(frames.at(-1).item).toEqual([5, 5, 0]);
   expect(onMove).not.toHaveBeenCalled();
+});
+
+// The kernel posts its tessellation as transferred typed arrays.
+it('draws a snapshot whose tessellation arrives as typed arrays', () => {
+  const setIndex = vi.spyOn(THREE.BufferGeometry.prototype, 'setIndex');
+  const plain = snapshotAt();
+  const item = plain.instances[0];
+  const typed = {
+    ...plain,
+    instances: [
+      {
+        ...item,
+        mesh: {
+          vertices: Float32Array.from(item.mesh.vertices),
+          normals: Float32Array.from(item.mesh.normals),
+          triangles: Uint32Array.from(item.mesh.triangles),
+        },
+        edges: { lines: Float32Array.from([0, 0, 0, 10, 0, 0]) },
+      },
+    ],
+  };
+  render(<CadViewport model={model} snapshot={typed} ready />);
+  const indexed = setIndex.mock.contexts.filter((geometry) => geometry.index);
+  expect(indexed.length).toBeGreaterThan(0);
+  for (const geometry of indexed) {
+    expect(geometry.index.isBufferAttribute).toBe(true);
+    expect(geometry.index.count).toBe(3);
+  }
+  expect(frames.at(-1).item).toEqual([5, 5, 0]);
+  setIndex.mockRestore();
+});
+
+it('picks bodies without walking their edge segments', () => {
+  render(<CadViewport model={model} snapshot={snapshotAt()} ready />);
+  const scene = scenes.at(-1);
+  const parts = [];
+  scene.traverse((object) => {
+    if (object.isGroup && object.userData?.instanceId === 'item') parts.push(...object.children);
+  });
+  const edges = parts.find((object) => object.isLineSegments);
+  const body = parts.find((object) => object.isMesh);
+  expect(edges).toBeTruthy();
+  edges.geometry.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 10, 10, 0], 3));
+  const caster = new THREE.Raycaster(new THREE.Vector3(2, 3, 50), new THREE.Vector3(0, 0, -1));
+  caster.params.Line.threshold = 1000;
+  expect(caster.intersectObject(edges)).toEqual([]);
+  expect(caster.intersectObject(body)).toHaveLength(1);
+});
+
+// Placement edits chain while the kernel rebuilds, so the rebuild of one drop
+// can land while the next part is already being dragged.
+it('keeps a gizmo drag going when the previous drop’s rebuild lands mid-drag', () => {
+  const twoParts = {
+    parts: model.parts,
+    instances: [model.instances[0], { id: 'other', partId: 'part', position: [100, 0, 0] }],
+  };
+  const snapshotOf = (itemAt, otherAt) => {
+    const a = snapshotAt(itemAt).instances[0];
+    const b = { ...snapshotAt(otherAt).instances[0], id: 'other' };
+    return { parts: [], instances: [a, b] };
+  };
+  const onMove = vi.fn();
+  const props = {
+    model: twoParts,
+    snapshot: snapshotOf([0, 0, 0], [100, 0, 0]),
+    selectedId: 'item',
+    ready: true,
+    moveEnabled: true,
+    onMove,
+    onSelect: vi.fn(),
+  };
+  const { rerender } = render(<CadViewport {...props} />);
+  dragBy([20, 0, 0]);
+  act(() => TransformControls.current.dispatchEvent({ type: 'mouseUp' }));
+  expect(onMove).toHaveBeenLastCalledWith('item', [20, 0, 0]);
+  const moved = { ...twoParts, instances: [{ ...twoParts.instances[0], position: [20, 0, 0] }, twoParts.instances[1]] };
+  // Still rebuilding: the other part is picked up and dragged.
+  rerender(<CadViewport {...props} model={moved} ready={false} selectedId="other" />);
+  dragBy([0, 30, 0]);
+  expect(frames.at(-1).other).toEqual([105, 35, 0]);
+  // The first drop's rebuild lands now, in the middle of the second drag.
+  rerender(<CadViewport {...props} model={moved} snapshot={snapshotOf([20, 0, 0], [100, 0, 0])} selectedId="other" />);
+  expect(frames.at(-1).other).toEqual([105, 35, 0]);
+  expect(frames.at(-1).item).toEqual([25, 5, 0]);
+  act(() => TransformControls.current.dispatchEvent({ type: 'mouseUp' }));
+  expect(onMove).toHaveBeenLastCalledWith('other', [0, 30, 0]);
 });

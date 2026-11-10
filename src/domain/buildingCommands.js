@@ -174,17 +174,22 @@ export const BUILDING_COMMANDS = Object.freeze({
 });
 
 function commandError(project, command, code, message, details = {}) {
+  // A rejected mid-drag command skips the pass for the same reason a
+  // successful one does (see `commandSuccess`).
+  const deferValidation = Boolean(executionOptions?.deferValidation);
   return {
     ok: false,
     commandType: command?.type || null,
     project,
     error: { code, message, details },
     changes: { domain: [], derived: [] },
-    validation: {
-      issues: validateBuildingCoordination(project),
-      introduced: [],
-      resolved: [],
-    },
+    validation: deferValidation
+      ? { issues: null, introduced: [], resolved: [], deferred: true }
+      : {
+          issues: validateBuildingCoordination(project),
+          introduced: [],
+          resolved: [],
+        },
     undo: null,
   };
 }

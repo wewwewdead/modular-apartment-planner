@@ -9,16 +9,19 @@ function ProjectSummary({ project, floor, dispatch }) {
       <div className={styles.title}>Project Summary</div>
       <InputField
         label="Name"
+        commitOnBlur
         value={project.name}
         onChange={(value) => dispatch({ type: 'PROJECT_SET_NAME', name: value })}
       />
       <InputField
         label="Address"
+        commitOnBlur
         value={project.address || ''}
         onChange={(value) => dispatch({ type: 'PROJECT_UPDATE', updates: { address: value } })}
       />
       <InputField
         label="Drawn By"
+        commitOnBlur
         value={project.documentDefaults?.drawnBy || ''}
         onChange={(value) =>
           dispatch({
@@ -34,6 +37,7 @@ function ProjectSummary({ project, floor, dispatch }) {
       />
       <InputField
         label="Checked"
+        commitOnBlur
         value={project.documentDefaults?.checkedBy || ''}
         onChange={(value) =>
           dispatch({

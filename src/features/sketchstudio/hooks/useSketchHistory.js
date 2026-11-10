@@ -1,46 +1,20 @@
 import { useCallback } from 'react';
-import {
-  cancelDraft,
-  cancelAnchorDrag,
-  cancelHandleDrag,
-  cancelTransform,
-  endPan,
-  endSelectionBox,
-  undo,
-  redo,
-} from '../store/sketchStudioActions';
+import { cancelDraft, undo, redo } from '../store/sketchStudioActions';
+import { interactionEndAction } from '../store/interactionEnd';
+import { HOVER_DRAFT_TOOLS } from './sketchConstants';
 
 export default function useSketchHistory(state, dispatch) {
   const canUndo = state.history.past.length > 0;
   const canRedo = state.history.future.length > 0;
 
   const cancelTransientInteraction = useCallback(() => {
-    if (state.interaction.mode === 'transform') {
-      dispatch(cancelTransform());
+    const endAction = interactionEndAction(state.interaction.mode, 'undo');
+    if (endAction) {
+      dispatch(endAction);
       return true;
     }
 
-    if (state.interaction.mode === 'handle-drag') {
-      dispatch(cancelHandleDrag());
-      return true;
-    }
-
-    if (state.interaction.mode === 'anchor-drag') {
-      dispatch(cancelAnchorDrag());
-      return true;
-    }
-
-    if (state.interaction.mode === 'selection-box') {
-      dispatch(endSelectionBox());
-      return true;
-    }
-
-    if (state.interaction.mode === 'panning') {
-      dispatch(endPan());
-      return true;
-    }
-
-    if (state.draft.type && state.draft.type !== 'fillet') {
+    if (state.draft.type && !HOVER_DRAFT_TOOLS.has(state.draft.type)) {
       dispatch(cancelDraft());
       return true;
     }

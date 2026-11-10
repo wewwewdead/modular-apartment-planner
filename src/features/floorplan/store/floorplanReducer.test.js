@@ -9,6 +9,7 @@ import {
   createWall,
 } from '@/domain/models';
 import { createCeiling } from '@/domain/ceilingModels';
+import { createTrussInstance, createTrussSystem } from '@/domain/trussModels';
 import { createWallDetailing } from '@/domain/wallDetailing';
 import { HISTORY_LIMIT } from '@/domain/projectStateHelpers';
 import floorplanReducer, { initializeFloorplanState } from './floorplanReducer';
@@ -298,6 +299,46 @@ describe('floorplanReducer', () => {
     const reset = floorplanReducer(loaded, { type: 'PROJECT_NEW', project: createProject() });
     expect(reset.history).toEqual([]);
     expect(reset.future).toEqual([]);
+  });
+});
+
+describe('MARK_SAVED', () => {
+  function editedState() {
+    let state = initializeFloorplanState(createProject());
+    const floorId = state.project.floors[0].id;
+    state = floorplanReducer(state, { type: 'WALL_ADD', floorId, wall: createWall({ x: 0, y: 0 }, { x: 4000, y: 0 }) });
+    return { state, floorId };
+  }
+
+  it('keeps edits made while a save was in flight dirty', () => {
+    const { state, floorId } = editedState();
+    // The save started here and wrote this version...
+    const writtenVersion = state.changeVersion;
+    // ...while another edit landed before its write resolved.
+    const editedDuringSave = floorplanReducer(state, {
+      type: 'WALL_ADD',
+      floorId,
+      wall: createWall({ x: 0, y: 0 }, { x: 0, y: 4000 }),
+    });
+
+    const saved = floorplanReducer(editedDuringSave, { type: 'MARK_SAVED', version: writtenVersion });
+    expect(saved.isDirty).toBe(true);
+    expect(saved.savedVersion).toBe(writtenVersion);
+    expect(saved.lastSavedAt).not.toBeNull();
+  });
+
+  it('clears the dirty flag when the version written is the current one', () => {
+    const { state } = editedState();
+    expect(state.isDirty).toBe(true);
+    const saved = floorplanReducer(state, { type: 'MARK_SAVED', version: state.changeVersion });
+    expect(saved.isDirty).toBe(false);
+  });
+
+  it('marks the current version saved when no version is given (autosave)', () => {
+    const { state } = editedState();
+    const saved = floorplanReducer(state, { type: 'MARK_SAVED' });
+    expect(saved.isDirty).toBe(false);
+    expect(saved.savedVersion).toBe(state.changeVersion);
   });
 });
 
@@ -735,6 +776,59 @@ describe('ceilings — project collection', () => {
     // The beams the ceiling hangs from were shifted with the floor, so its own
     // stored snapshot must not be shifted a second time on top of them.
     expect(byId.ceiling_beam.baseElevation).toBe(2700);
+  });
+
+  it('carries manual ceilings and truss systems up with the floors a duplicate pushes up', () => {
+    const ground = createFloor('Ground Floor', 0, { elevation: 0, floorToFloorHeight: 3000 });
+    const upper = createFloor('Upper Floor', 1, { elevation: 3000, floorToFloorHeight: 3000 });
+    const project = {
+      ...createProject(),
+      floors: [ground, upper],
+      ceilings: [
+        createCeiling('Ground manual', {
+          id: 'ceiling_ground',
+          floorId: ground.id,
+          baseElevation: 2700,
+          attachment: { mode: 'manual', beamIds: [] },
+        }),
+        createCeiling('Upper manual', {
+          id: 'ceiling_upper',
+          floorId: upper.id,
+          baseElevation: 5700,
+          attachment: { mode: 'manual', beamIds: [] },
+        }),
+        createCeiling('Upper beam-hung', {
+          id: 'ceiling_upper_beam',
+          floorId: upper.id,
+          baseElevation: 5700,
+          attachment: { mode: 'beam', beamIds: ['beam_1'] },
+        }),
+      ],
+      trussSystems: [
+        { id: 'truss_ground', floor: ground, baseElevation: 3000 },
+        { id: 'truss_upper', floor: upper, baseElevation: 6000 },
+      ].map(({ id, floor, baseElevation }) =>
+        createTrussSystem(id, {
+          id,
+          floorId: floor.id,
+          baseElevation,
+          trussInstances: [
+            createTrussInstance({ floorId: floor.id, startPoint: { x: 0, y: 0 }, endPoint: { x: 3600, y: 0 } }),
+          ],
+        }),
+      ),
+    };
+    const state = initializeFloorplanState(project);
+
+    // A copy of the ground floor goes in at level 1 and pushes Upper Floor up a storey.
+    const duplicate = createFloor('Ground Floor copy', 1, { elevation: 3000, floorToFloorHeight: 3000 });
+    const next = floorplanReducer(state, { type: 'FLOOR_DUPLICATE', floor: duplicate });
+
+    expect(next.project.floors.find((floor) => floor.id === upper.id).elevation).toBe(6000);
+    const ceilings = Object.fromEntries(next.project.ceilings.map((entry) => [entry.id, entry.baseElevation]));
+    expect(ceilings).toEqual({ ceiling_ground: 2700, ceiling_upper: 8700, ceiling_upper_beam: 5700 });
+    const trusses = Object.fromEntries(next.project.trussSystems.map((entry) => [entry.id, entry.baseElevation]));
+    expect(trusses).toEqual({ truss_ground: 3000, truss_upper: 9000 });
   });
 
   it('clears ceiling phase assignments when the phase is deleted', () => {
@@ -1177,5 +1271,258 @@ describe('SLAB_PROJECT_BAY', () => {
 
     expect(floor.walls.map((wall) => wall.id)).toEqual(['existing', 'bay_return_a', 'bay_face', 'bay_return_b']);
     expect(floor.walls.find((wall) => wall.id === 'bay_face').stackId).toBe('wallstack_1');
+  });
+});
+
+describe('wall face finishes (docs/wall-cladding-finishes.md §5.7)', () => {
+  const ORANGE = {
+    kind: 'paint',
+    colour: { hex: '#E0701F', name: 'Signal Orange', catalogue: 'facade' },
+    sheen: 'matte',
+  };
+
+  function finishWall(id, preset, x, overrides = {}, extra = {}) {
+    return {
+      ...createWall({ x, y: 0 }, { x: x + 3000, y: 0 }, 100, { assembly: { preset, ...overrides } }),
+      id,
+      ...extra,
+    };
+  }
+
+  function loadFacade() {
+    let state = initializeFloorplanState(createProject());
+    const ground = state.project.floors[0];
+    const upper = { ...createFloor('Upper', 1, { elevation: 3000 }), id: 'floor_upper' };
+    const project = {
+      ...state.project,
+      floors: [
+        {
+          ...ground,
+          walls: [
+            finishWall(
+              'source',
+              'mixed_board',
+              0,
+              { exterior: { material: 'fiber_cement', finish: ORANGE } },
+              { stackId: 's1' },
+            ),
+            finishWall('twin', 'mixed_board', 4000, {}, { structuralRole: 'loadbearing', phaseId: 'phase_a' }),
+            finishWall('plywood', 'plywood', 8000),
+            finishWall('block', 'chb', 12000),
+          ],
+        },
+        {
+          ...upper,
+          walls: [
+            finishWall('above', 'fiber_cement', 0, {}, { stackId: 's1' }),
+            finishWall('upper_twin', 'mixed_board', 4000),
+          ],
+        },
+      ],
+    };
+    state = floorplanReducer(state, { type: 'PROJECT_LOAD', project });
+    return { state, groundId: ground.id };
+  }
+
+  const wallById = (state, id) => state.project.floors.flatMap((floor) => floor.walls).find((wall) => wall.id === id);
+  const withoutExteriorFinish = (wall) => {
+    const { finish: _finish, ...exterior } = wall.assembly.exterior;
+    return { ...wall, assembly: { ...wall.assembly, exterior } };
+  };
+
+  it('paints the matching walls on the floor in one undo step, and changes nothing else on them', () => {
+    const { state, groundId } = loadFacade();
+    const applied = floorplanReducer(state, {
+      type: 'WALL_FACE_FINISH_APPLY',
+      floorId: groundId,
+      wallId: 'source',
+      side: 'exterior',
+      scope: 'floor',
+    });
+
+    expect(applied.history).toHaveLength(state.history.length + 1);
+    expect(wallById(applied, 'twin').assembly.exterior.finish).toEqual(ORANGE);
+    expect(withoutExteriorFinish(wallById(applied, 'twin'))).toEqual(wallById(state, 'twin'));
+    // Different board outside, or different construction: not matching.
+    expect(wallById(applied, 'plywood')).toEqual(wallById(state, 'plywood'));
+    expect(wallById(applied, 'block')).toEqual(wallById(state, 'block'));
+    // Off the floor: untouched.
+    expect(wallById(applied, 'upper_twin')).toEqual(wallById(state, 'upper_twin'));
+
+    const undone = floorplanReducer(applied, { type: 'UNDO' });
+    expect(undone.project).toBe(state.project);
+  });
+
+  it('reaches every storey for the building, and follows the stack for the facade', () => {
+    const { state, groundId } = loadFacade();
+    const building = floorplanReducer(state, {
+      type: 'WALL_FACE_FINISH_APPLY',
+      floorId: groundId,
+      wallId: 'source',
+      side: 'exterior',
+      scope: 'building',
+    });
+    expect(wallById(building, 'upper_twin').assembly.exterior.finish).toEqual(ORANGE);
+    expect(wallById(building, 'above').assembly.exterior.finish).toEqual(ORANGE);
+    expect(building.history).toHaveLength(state.history.length + 1);
+
+    const stack = floorplanReducer(state, {
+      type: 'WALL_FACE_FINISH_APPLY',
+      floorId: groundId,
+      wallId: 'source',
+      side: 'exterior',
+      scope: 'stack',
+    });
+    expect(wallById(stack, 'above').assembly.exterior.finish).toEqual(ORANGE);
+    expect(wallById(stack, 'twin').assembly.exterior).not.toHaveProperty('finish');
+    expect(wallById(stack, 'upper_twin').assembly.exterior).not.toHaveProperty('finish');
+  });
+
+  it('is a true no-op when every target already looks like that', () => {
+    const { state, groundId } = loadFacade();
+    const action = {
+      type: 'WALL_FACE_FINISH_APPLY',
+      floorId: groundId,
+      wallId: 'source',
+      side: 'exterior',
+      scope: 'floor',
+    };
+    const once = floorplanReducer(state, action);
+    expect(floorplanReducer(once, action)).toBe(once);
+    expect(floorplanReducer(state, { ...action, wallId: 'no_such_wall' })).toBe(state);
+  });
+
+  it('makes a colour-picker drag one undo step when it is bracketed as a gesture', () => {
+    const { state, groundId } = loadFacade();
+    const source = wallById(state, 'source');
+    const paint = (current, hex) =>
+      floorplanReducer(current, {
+        type: 'WALL_UPDATE',
+        floorId: groundId,
+        wall: {
+          id: 'source',
+          assembly: {
+            ...source.assembly,
+            exterior: {
+              ...source.assembly.exterior,
+              finish: { ...ORANGE, colour: { hex, name: hex, catalogue: 'custom' } },
+            },
+          },
+        },
+      });
+
+    let picking = floorplanReducer(state, { type: 'BEGIN_DRAG_GESTURE' });
+    for (const hex of ['#110000', '#220000', '#330000']) picking = paint(picking, hex);
+    const settled = floorplanReducer(picking, { type: 'END_DRAG_GESTURE' });
+
+    expect(settled.history).toHaveLength(state.history.length + 1);
+    expect(wallById(settled, 'source').assembly.exterior.finish.colour.hex).toBe('#330000');
+    expect(settled.gesture.active).toBe(false);
+    expect(floorplanReducer(settled, { type: 'UNDO' }).project).toBe(state.project);
+
+    // The same three edits unbracketed are three steps.
+    let loose = state;
+    for (const hex of ['#110000', '#220000', '#330000']) loose = paint(loose, hex);
+    expect(loose.history).toHaveLength(state.history.length + 3);
+  });
+});
+
+describe('copying accents up a facade stack (docs/wall-cladding-finishes.md §7.1)', () => {
+  const ORANGE = {
+    kind: 'paint',
+    colour: { hex: '#E0701F', name: 'Signal Orange', catalogue: 'facade' },
+    sheen: 'matte',
+  };
+
+  function loadStack() {
+    let state = initializeFloorplanState(createProject());
+    const ground = state.project.floors[0];
+    const upper = { ...createFloor('Upper', 1, { elevation: 3000 }), id: 'floor_upper' };
+    const framed = (id, extra, exterior = {}) => ({
+      ...createWall({ x: 0, y: 0 }, { x: 4000, y: 0 }, 100, {
+        height: 2700,
+        assembly: { preset: 'fiber_cement', exterior: { material: 'fiber_cement', ...exterior } },
+      }),
+      id,
+      ...extra,
+    });
+    const project = {
+      ...state.project,
+      floors: [
+        {
+          ...ground,
+          walls: [
+            framed(
+              'source',
+              { stackId: 's1' },
+              {
+                accents: [
+                  {
+                    id: 'a1',
+                    label: 'Beside',
+                    u: 2600,
+                    v: 900,
+                    width: 600,
+                    height: 1200,
+                    finish: ORANGE,
+                    anchor: null,
+                  },
+                ],
+              },
+            ),
+            framed('neighbour', {}),
+          ],
+        },
+        {
+          ...upper,
+          walls: [framed('above', { stackId: 's1' }), framed('masonry_above', { stackId: 's1', assembly: undefined })],
+        },
+      ],
+    };
+    project.floors[1].walls[1] = { ...createWall({ x: 0, y: 0 }, { x: 4000, y: 0 }, 150), id: 'block', stackId: 's1' };
+    state = floorplanReducer(state, { type: 'PROJECT_LOAD', project });
+    return { state, groundId: ground.id };
+  }
+
+  const wallById = (state, id) => state.project.floors.flatMap((floor) => floor.walls).find((wall) => wall.id === id);
+
+  it('replaces the stacked walls’ accents with unanchored copies under new ids, in one undo step', () => {
+    const { state, groundId } = loadStack();
+    const copied = floorplanReducer(state, {
+      type: 'WALL_FACE_ACCENTS_APPLY',
+      floorId: groundId,
+      wallId: 'source',
+      side: 'exterior',
+      scope: 'stack',
+    });
+    expect(copied.history).toHaveLength(state.history.length + 1);
+    const [copy] = wallById(copied, 'above').assembly.exterior.accents;
+    expect(copy).toMatchObject({
+      label: 'Beside',
+      u: 2600,
+      v: 900,
+      width: 600,
+      height: 1200,
+      finish: ORANGE,
+      anchor: null,
+    });
+    expect(copy.id).not.toBe('a1');
+    // Off the stack, or a face that cannot carry accents: untouched.
+    expect(wallById(copied, 'neighbour')).toEqual(wallById(state, 'neighbour'));
+    expect(wallById(copied, 'block')).toEqual(wallById(state, 'block'));
+    expect(floorplanReducer(copied, { type: 'UNDO' }).project).toBe(state.project);
+  });
+
+  it('clears the stack when the source face has none, and is a no-op when there is nothing to do', () => {
+    const { state, groundId } = loadStack();
+    const action = {
+      type: 'WALL_FACE_ACCENTS_APPLY',
+      floorId: groundId,
+      wallId: 'source',
+      side: 'interior',
+      scope: 'stack',
+    };
+    expect(floorplanReducer(state, action)).toBe(state);
+    expect(floorplanReducer(state, { ...action, wallId: 'neighbour', side: 'exterior' })).toBe(state);
   });
 });

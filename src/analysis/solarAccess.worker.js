@@ -11,6 +11,7 @@
  */
 
 import { computeSolarAccess } from './solarAccessRunner';
+import { handleLatestRequestOnly } from './latestRequestOnly';
 
 /**
  * The per-sensor results are typed arrays, often a megabyte or two. Handing
@@ -31,9 +32,8 @@ function transferablesOf(result) {
   ];
 }
 
-self.onmessage = (event) => {
-  const { id, project, solarAccess } = event.data || {};
-
+// Only the newest queued request is solved (see `handleLatestRequestOnly`).
+self.onmessage = handleLatestRequestOnly(({ id, project, solarAccess }) => {
   try {
     const result = computeSolarAccess({ project, solarAccess }, (progress) =>
       self.postMessage({ id, type: 'progress', progress }),
@@ -44,4 +44,4 @@ self.onmessage = (event) => {
     // forever on a promise nobody will settle.
     self.postMessage({ id, type: 'error', message: error?.message || 'Solar study failed.' });
   }
-};
+});

@@ -989,6 +989,7 @@ it('Hardware: Axial offset applies as you type (Phase L), keeps the field, and w
 
 // Phase Q (docs/sketch-studio-hardware-seat-side.md §4.5): Flip side, from the
 // panel and with F, in Place and seated; Apply writes side: 'far'.
+// An explicit timeout: about 2 s alone, it ran past the 5 s default under full-suite load.
 it('Hardware: Flip side (F and the button) moves the chosen holes to the far opening; Apply writes side: far', () => {
   const { setCadModel, model } = holesSetup();
   openHardware();
@@ -1024,4 +1025,4 @@ it('Hardware: Flip side (F and the button) moves the chosen holes to the far ope
     [100, 100, 0],
     [200, 100, 0],
   ]);
-});
+}, 15000);

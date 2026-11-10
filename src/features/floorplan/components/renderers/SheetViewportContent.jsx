@@ -36,6 +36,22 @@ const SHEET_PREVIEW_OPTIONS = {
   style: 'realistic',
 };
 const sheetPreviewCache = new Map();
+// The cache key each project + floor + view last rendered under. Every edit
+// stamps a new `updatedAt`, so without this the cache kept one full-size PNG
+// data URL per edit for as long as the page lived; only the latest is ever
+// shown again.
+const sheetPreviewKeyBySlot = new Map();
+
+function getSheetPreviewSlotKey(source) {
+  return [
+    source?.project?.id || 'project',
+    source?.activeFloorId || 'all',
+    SHEET_PREVIEW_OPTIONS.width,
+    SHEET_PREVIEW_OPTIONS.height,
+    SHEET_PREVIEW_OPTIONS.preset,
+    SHEET_PREVIEW_OPTIONS.style,
+  ].join(':');
+}
 
 function getSheetPreviewCacheKey(source) {
   return [
@@ -49,9 +65,13 @@ function getSheetPreviewCacheKey(source) {
   ].join(':');
 }
 
-function renderSheetPreviewImage(source) {
+export function renderSheetPreviewImage(source) {
   const cacheKey = getSheetPreviewCacheKey(source);
   if (!sheetPreviewCache.has(cacheKey)) {
+    const slotKey = getSheetPreviewSlotKey(source);
+    const supersededKey = sheetPreviewKeyBySlot.get(slotKey);
+    if (supersededKey && supersededKey !== cacheKey) sheetPreviewCache.delete(supersededKey);
+    sheetPreviewKeyBySlot.set(slotKey, cacheKey);
     sheetPreviewCache.set(
       cacheKey,
       import('@/features/floorplan/components/preview/renderToImage')

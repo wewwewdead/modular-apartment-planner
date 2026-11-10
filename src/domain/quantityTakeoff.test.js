@@ -158,6 +158,40 @@ describe('quantity takeoff', () => {
     });
   });
 
+  it('bills plank siding by the square metre, net of openings, and by its run of board (area ÷ pitch)', () => {
+    // No siding anywhere: no siding lines on the bill either.
+    const stockItems = new Set(deriveQuantityTakeoff(makeMeasuredProject()).items.map((entry) => entry.id));
+    expect(stockItems.has('siding_board')).toBe(false);
+    expect(stockItems.has('siding_board_length')).toBe(false);
+
+    const project = makeMeasuredProject();
+    project.floors[0].walls[0].assembly = {
+      preset: 'fiber_cement',
+      system: 'framed',
+      interior: { material: 'fiber_cement', thickness: 6, layerCount: 1 },
+      exterior: { material: 'siding', thickness: 19, layerCount: 1, course: { exposure: 140, joint: 6 } },
+      framing: { material: 'light_gauge_steel', studWidth: 50, studDepth: 75, spacing: 400, nogginRows: 1 },
+    };
+
+    const byId = new Map(deriveQuantityTakeoff(project).items.map((entry) => [entry.id, entry]));
+
+    // The same face the lining bills, as the rainscreen test above measures it.
+    expect(byId.get('siding_board').quantity).toBeCloseTo(11.67);
+    expect(byId.get('siding_board')).toMatchObject({
+      rateKey: 'sidingBoard',
+      unit: 'm²',
+      provenance: QUANTITY_PROVENANCE.CONFIGURED_ASSEMBLY,
+      inputs: { openingsDeducted: true, boardLayersIncluded: true, framedWallCount: 1, boardStockLengthMm: 3600 },
+    });
+    // 11.67 m² over a 146 mm pitch is about 79.9 m of board: 23 boards of 3.6 m.
+    const run = byId.get('siding_board_length');
+    expect(run.unit).toBe('m');
+    expect(run.quantity).toBeCloseTo(byId.get('siding_board').quantity / 0.146, 1);
+    expect(run.inputs.boardCount).toBe(Math.ceil((run.quantity * 1000) / 3600));
+    expect(run.inputs.boardCount).toBe(23);
+    expect(byId.has('rainscreen_board')).toBe(false);
+  });
+
   it('separates framed board-wall quantities from masonry and includes double-wall framing', () => {
     const project = makeMeasuredProject();
     project.floors[0].walls[0].assembly = {
@@ -392,5 +426,50 @@ describe('roof quantities', () => {
     const takeoff = deriveQuantityTakeoff(await projectWithRoof('flat'));
     expect(itemById(takeoff, 'roofing').quantity).toBeCloseTo(80, 3);
     expect(itemById(takeoff, 'roof_fascia')).toBeUndefined();
+  });
+});
+
+describe('the finish schedule (docs/wall-cladding-finishes.md §7.1)', () => {
+  const ORANGE = {
+    kind: 'paint',
+    colour: { hex: '#E0701F', name: 'Signal Orange', catalogue: 'facade' },
+    sheen: 'matte',
+  };
+  const WHITE = { kind: 'paint', colour: { hex: '#F2EEE4', name: 'Warm White', catalogue: 'facade' }, sheen: 'matte' };
+
+  it('lists each look once, nets the accents out of their face, and sums to the finished board area', () => {
+    const project = makeMeasuredProject();
+    project.floors[0].walls[0].assembly = {
+      preset: 'fiber_cement',
+      system: 'framed',
+      interior: { material: 'fiber_cement', thickness: 6, layerCount: 1 },
+      exterior: {
+        material: 'fiber_cement',
+        thickness: 6,
+        layerCount: 1,
+        finish: WHITE,
+        accents: [{ id: 'a', u: 4300, v: 300, width: 500, height: 1000, finish: ORANGE }],
+      },
+      framing: { material: 'light_gauge_steel', studWidth: 50, studDepth: 75, spacing: 400, nogginRows: 1 },
+    };
+    const byId = new Map(deriveQuantityTakeoff(project).items.map((entry) => [entry.id, entry]));
+    const white = byId.get('finish_paint_F2EEE4_matte');
+    const orange = byId.get('finish_paint_E0701F_matte');
+    expect(orange).toMatchObject({
+      category: 'finishes',
+      unit: 'm²',
+      rateKey: null,
+      label: 'Finish · Paint · Signal Orange · matte',
+    });
+    expect(orange.quantity).toBeCloseTo(0.5, 6);
+    // The outside face's board area, the same basis the board line uses.
+    expect(white.quantity + orange.quantity).toBeCloseTo(byId.get('fiber_cement_board').quantity / 2, 6);
+    // The inside face is stock: not on the schedule.
+    expect([...byId.keys()].filter((id) => id.startsWith('finish_'))).toHaveLength(2);
+  });
+
+  it('lists nothing for a project of stock faces', () => {
+    const items = deriveQuantityTakeoff(makeMeasuredProject()).items;
+    expect(items.some((entry) => entry.id.startsWith('finish_'))).toBe(false);
   });
 });

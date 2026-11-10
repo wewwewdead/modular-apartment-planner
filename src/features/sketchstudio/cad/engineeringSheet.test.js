@@ -235,3 +235,49 @@ describe('hole rows on drawings', () => {
     }
   });
 });
+
+// Phase R (docs/sketch-studio-drawing-fit.md §§3, 10): the workshop export's
+// automatic part sheets fit the page, so a big part no longer breaks it, and
+// hole chains / callouts (paper-mm offsets) stay inside their cells when fitted.
+describe('fit to page on real geometry', () => {
+  it('fits the bracket detail at 2:1 on A0 with its chain and callout; own view scales stay fixed', () => {
+    const model = pumpBracketExample(),
+      session = createKernelSession(model);
+    try {
+      const snapshot = session.snapshot(),
+        detail = session.drawings()[1];
+      const svg = sheetSvg({ ...detail, size: 'A0', scaleMode: 'fit' }, model, snapshot);
+      expect(svg).toContain('FRONT   2:1');
+      expect(svg).toContain('ISOMETRIC   1:2');
+      expect(svg).toContain('>AS SHOWN / mm / 1 of 1<');
+      expect(svg).toContain('5 × Ø25 THRU');
+      expect(svg.match(/>30<\/text>/g)).toHaveLength(4);
+      // The isometric's own 1:2 is never fitted: on A4 it does not fit.
+      expect(() => sheetSvg({ ...detail, size: 'A4', scaleMode: 'fit' }, model, snapshot)).toThrow(
+        /Isometric does not fit on A4 at 1:2\. Reduce its view scale, or use A3\./,
+      );
+    } finally {
+      session.dispose();
+    }
+  });
+  it('carry scaleMode fit, keep the guessed scale as the fallback and render at a fitted ratio', () => {
+    const model = {
+      ...emptyModel(),
+      parts: [
+        { id: 'beam', name: 'Beam', features: [{ id: 'base', type: 'box', width: 9000, depth: 300, height: 400 }] },
+      ],
+      instances: [{ id: 'i', partId: 'beam', position: [0, 0, 0], rotation: [0, 0, 0] }],
+    };
+    const session = createKernelSession(model);
+    try {
+      const snapshot = session.snapshot();
+      const sheet = session.drawings({ includeParts: true }).find((s) => s.id === 'detail-beam');
+      expect(sheet).toMatchObject({ scaleMode: 'fit', scale: 0.005 });
+      const svg = sheetSvg(sheet, model, snapshot);
+      expect(svg).toMatch(/Scale 1:\d+ ·/);
+      expect(svg).not.toMatch(/NaN|Infinity|data-overflow/);
+    } finally {
+      session.dispose();
+    }
+  });
+});

@@ -294,6 +294,9 @@ export default function sketchStudioReducer(state, action) {
           mode: 'panning',
           isPointerDown: true,
           pointerId: action.payload.pointerId,
+          // Only a left-button release is followed by a click, so how a pan ends
+          // depends on which button started it.
+          panButton: action.payload.button ?? null,
           panStartScreen: action.payload.screenPoint,
           panStartViewport: action.payload.startViewport,
         },
@@ -326,6 +329,7 @@ export default function sketchStudioReducer(state, action) {
           mode: getIdleMode(state.draft.type),
           isPointerDown: false,
           pointerId: null,
+          panButton: null,
           panStartScreen: null,
           panStartViewport: null,
         },
@@ -610,6 +614,7 @@ export default function sketchStudioReducer(state, action) {
           handleDrag: {
             ...action.payload,
             historySnapshot: buildUndoableSketchStateSnapshot(state),
+            startSelectedIds: state.selection.selectedIds,
           },
           isPointerDown: true,
         },
@@ -646,6 +651,7 @@ export default function sketchStudioReducer(state, action) {
           anchorDrag: {
             ...action.payload,
             historySnapshot: buildUndoableSketchStateSnapshot(state),
+            startSelectedIds: state.selection.selectedIds,
           },
           isPointerDown: true,
         },
@@ -682,6 +688,10 @@ export default function sketchStudioReducer(state, action) {
           transform: {
             ...action.payload,
             historySnapshot: buildUndoableSketchStateSnapshot(state),
+            // The snapshot is document-only and a cancel clears the selection, so
+            // Escape reads the selection the drag started with from here (a
+            // Ctrl-drag swaps the live selection to the copies).
+            startSelectedIds: state.selection.selectedIds,
           },
           isPointerDown: true,
         },

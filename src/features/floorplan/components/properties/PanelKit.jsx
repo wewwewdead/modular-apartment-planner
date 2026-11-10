@@ -240,8 +240,41 @@ function normalizeHex(value) {
  * The hex text keeps its own draft so a half-typed value stays on screen; it
  * commits the moment it is a whole six-digit hex, and reverts on blur if it
  * never became one.
+ *
+ * `onPickStart` / `onPickEnd` (optional) bracket a pick in the system picker.
+ * The picker fires an `input` event for every colour the pointer passes over,
+ * and each one is an `onChange`; a caller that would rather that burst were one
+ * edit — one undo step, one settle — brackets it. Start fires on the first
+ * picker `input` after the last end; end fires on the native `change` (the
+ * picker closing on a colour) and on blur, whichever comes first, and at most
+ * once per start. Swatches and the hex box are single edits and never bracket.
  */
-export function ColourField({ label, value, onChange, catalogues = null, id }) {
+export function ColourField({ label, value, onChange, catalogues = null, id, onPickStart, onPickEnd }) {
+  const pickerRef = useRef(null);
+  const pickingRef = useRef(false);
+  // Read through refs so the native listener below is bound once and still
+  // calls the callbacks of the latest render.
+  const pickEndRef = useRef(onPickEnd);
+  useEffect(() => {
+    pickEndRef.current = onPickEnd;
+  });
+  const endPick = useCallback(() => {
+    if (!pickingRef.current) return;
+    pickingRef.current = false;
+    pickEndRef.current?.();
+  }, []);
+  // React's onChange on a colour input is the native `input` event; the
+  // native `change` — the one that means "the picker closed on this" — has to
+  // be listened for directly.
+  useEffect(() => {
+    const picker = pickerRef.current;
+    if (!picker) return undefined;
+    picker.addEventListener('change', endPick);
+    return () => picker.removeEventListener('change', endPick);
+  }, [endPick]);
+  // A field that unmounts mid-pick (the selection moved on) still closes it.
+  useEffect(() => endPick, [endPick]);
+
   const hex = normalizeHex(value?.hex) || '#000000';
   const catalogueKeys = Object.keys(catalogues || {});
   const [draft, setDraft] = useState(hex);
@@ -273,10 +306,18 @@ export function ColourField({ label, value, onChange, catalogues = null, id }) {
         <span className={styles.fieldLabel}>{label}</span>
         <span className={styles.colourControls}>
           <input
+            ref={pickerRef}
             type="color"
             className={styles.colourPicker}
             value={hex.toLowerCase()}
-            onChange={(event) => commitCustom(event.target.value)}
+            onChange={(event) => {
+              if (!pickingRef.current && onPickStart) {
+                pickingRef.current = true;
+                onPickStart();
+              }
+              commitCustom(event.target.value);
+            }}
+            onBlur={endPick}
             aria-label={`${label} picker`}
           />
           <input

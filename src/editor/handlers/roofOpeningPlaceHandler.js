@@ -2,6 +2,7 @@ import { SNAP_DISTANCE_PX } from '@/domain/defaults';
 import { createRoofOpening, isValidRoofPolygon } from '@/domain/roofModels';
 import { distance } from '@/geometry/point';
 import { roofContainsPoint } from '@/geometry/roofPlanGeometry';
+import { dropTrailingRepeatedPoints } from './handlerSnapUtils';
 
 function resetToolState(editorDispatch) {
   editorDispatch({
@@ -74,7 +75,8 @@ export function createRoofOpeningPlaceHandler({ dispatch, editorDispatch, roofSy
     },
 
     onDoubleClick(modelPos, e, toolState) {
-      const points = toolState.roofOpeningPoints || [];
+      // The double-click's second press put its corner down a second time.
+      const points = dropTrailingRepeatedPoints(toolState.roofOpeningPoints, SNAP_DISTANCE_PX / viewport.zoom);
       if (points.length < 3) return;
       commitRoofOpening(points);
     },

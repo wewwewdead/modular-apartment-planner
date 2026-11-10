@@ -5,8 +5,14 @@ import { isCircularCutFeature, numeric, resolveParameters, uid } from './model.j
 import { describeManualDimension, isManualDimension } from './sheetAnnotations.js';
 import { sheetHasPartsList } from './partsList.js';
 import MaterialSelect from './MaterialSelect.jsx';
+import SheetScaleControl from './SheetScaleControl.jsx';
+import { nodeName, treeRows } from './groups.js';
 
 const directions = ['front', 'top', 'right', 'isometric', 'rear', 'bottom', 'left'];
+// The Drawing subject choice that draws a list of instances (sheet.instanceIds).
+const CHOSEN = '__chosen-parts';
+// Parts tree rows, depth first.
+const flatRows = (rows) => rows.flatMap((row) => [row, ...(row.children ? flatRows(row.children) : [])]);
 export default function SheetEditor({
   sheet,
   model,
@@ -16,6 +22,13 @@ export default function SheetEditor({
   dimensionTool = null,
   onDimensionTool = () => {},
   previewReady = false,
+  // Phase R: the generated views (scale marks), the parts list rows a
+  // workshop sheet reserves room for, the slider's live draft, and the 3D
+  // selection ({ ids: member instance ids, name: its group's name or '' }).
+  drawingViews = null,
+  drawingParts = [],
+  onScaleDraft = () => {},
+  viewportSelection = { ids: [], name: '' },
 }) {
   const [chosenPart, setAnnotationPart] = useState(model.parts[0]?.id || '');
   const annotationPart = sheet.partId || chosenPart;
@@ -53,6 +66,20 @@ export default function SheetEditor({
     return count === 1 ? '' : ` · row of ${count}`;
   };
   const manual = (sheet.annotations || []).filter(isManualDimension);
+  // A new subject: this sheet's annotations go (Undo restores them).
+  const changeSubject = (patch) => {
+    onChange({ ...sheet, partId: undefined, instanceIds: undefined, ...patch, annotations: [] });
+    setAnnotationPart(patch.partId || model.parts[0]?.id || '');
+    setSelectedHoles([]);
+    setAnnotationInstance('');
+  };
+  const chosen = !sheet.partId && sheet.instanceIds?.length ? sheet.instanceIds : null;
+  // Kept in model order; never empty.
+  const choose = (ids) => {
+    const wanted = new Set(ids);
+    const next = model.instances.map((i) => i.id).filter((id) => wanted.has(id));
+    if (next.length) changeSubject({ instanceIds: next });
+  };
   const changeAnnotation = (id, patch) =>
     update(
       'annotations',
@@ -96,27 +123,69 @@ export default function SheetEditor({
       <label className="cad-field">
         Drawing subject
         <select
-          value={sheet.partId || ''}
+          value={sheet.partId || (chosen ? CHOSEN : '')}
           onChange={(e) => {
-            const partId = e.target.value || undefined;
-            onChange({ ...sheet, partId, instanceIds: undefined, annotations: [] });
-            setAnnotationPart(partId || model.parts[0]?.id || '');
-            setSelectedHoles([]);
-            setAnnotationInstance('');
+            const value = e.target.value;
+            if (value === CHOSEN)
+              changeSubject({
+                instanceIds: viewportSelection.ids.length ? viewportSelection.ids : model.instances.map((i) => i.id),
+              });
+            else changeSubject({ partId: value || undefined });
           }}
         >
-          <option value="">
-            {sheet.instanceIds?.length
-              ? `Assembly selection (${sheet.instanceIds.length} instances)`
-              : 'Whole assembly'}
+          <option value="">Whole assembly</option>
+          <option value={CHOSEN} disabled={!model.instances.length}>
+            Chosen parts
           </option>
-          {model.parts.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
+          <optgroup label="One part">
+            {model.parts.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </optgroup>
         </select>
       </label>
+      {chosen && (
+        <fieldset className="cad-section-fields cad-chosen-parts">
+          <legend>
+            Chosen parts · {chosen.length} of {model.instances.length}
+          </legend>
+          <button
+            type="button"
+            disabled={!viewportSelection.ids.length}
+            title={
+              viewportSelection.ids.length
+                ? `Draw the parts selected in the 3D view${viewportSelection.name ? ` (${viewportSelection.name})` : ''}`
+                : 'Select a group or parts in the 3D view first'
+            }
+            onClick={() => choose(viewportSelection.ids)}
+          >
+            Use 3D selection ({viewportSelection.ids.length})
+          </button>
+          {viewportSelection.name && <p className="cad-help">3D selection: {viewportSelection.name}</p>}
+          {flatRows(treeRows(model)).map((row) =>
+            row.kind === 'group' ? (
+              <p key={row.id} className="cad-chosen-group" style={{ '--cad-tree-depth': row.depth }}>
+                {row.group.name}
+              </p>
+            ) : (
+              <label key={row.id} className="cad-sheet-check" style={{ '--cad-tree-depth': row.depth }}>
+                <input
+                  type="checkbox"
+                  checked={chosen.includes(row.id)}
+                  // The last chosen part stays: an empty list is not a subject.
+                  disabled={chosen.length === 1 && chosen.includes(row.id)}
+                  onChange={(e) =>
+                    choose(e.target.checked ? [...chosen, row.id] : chosen.filter((id) => id !== row.id))
+                  }
+                />
+                {nodeName(model, row.id)}
+              </label>
+            ),
+          )}
+        </fieldset>
+      )}
       <p className="cad-help">Changing the subject clears this sheet’s annotations. Undo restores them.</p>
       <div className="cad-sheet-fields">
         <label className="cad-field">
@@ -135,11 +204,12 @@ export default function SheetEditor({
           </select>
         </label>
       </div>
-      <ValueField
-        key="scale"
-        label="Sheet scale (1 = full size)"
-        value={sheet.scale}
-        onChange={(v) => update('scale', v)}
+      <SheetScaleControl
+        sheet={sheet}
+        views={drawingViews}
+        parts={drawingParts}
+        onChange={(patch) => onChange({ ...sheet, ...patch })}
+        onDraft={onScaleDraft}
       />
       <details open>
         <summary>Title block & notes</summary>

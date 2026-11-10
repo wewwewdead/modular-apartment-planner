@@ -230,8 +230,8 @@ in step 2), which is also how you add parts the preset does not have.
     dimensions and the "n × Ø4 THRU" / "Ø5 DEPTH 10" callouts.
     **Sheet properties** → notes: screw spec, glue all joints, 32 mm pin
     system, material, sand edges.
-26. Export: **SVG sheet**, **DXF sheet** (CNC or print shop), **Vector PDF**
-    (all sheets).
+26. Export: **SVG sheet**, **DXF sheet** (CNC or print shop), **Export PDF…**
+    (this sheet, the ticked sheets or all sheets, as one true-size PDF).
 
 ---
 

@@ -45,6 +45,14 @@ function dxfPolygon(layer, points = [], close = true) {
   return lines.join('');
 }
 
+// Plan coordinates are y-down and DXF is y-up, so model space flips y about
+// the origin — the Sketch Studio exporters' convention (`toDxfPoint`) — and
+// the plan's north stays at the top of the drawing.
+const modelPoint = (point) => (point ? { x: point.x, y: -point.y } : point);
+const modelLine = (layer, start, end) => dxfLine(layer, modelPoint(start), modelPoint(end));
+const modelText = (layer, point, value, height) => dxfText(layer, modelPoint(point), value, height);
+const modelPolygon = (layer, points = [], close = true) => dxfPolygon(layer, points.map(modelPoint), close);
+
 function rotatedRectangle(column) {
   const halfW = (column.width || 0) / 2;
   const halfD = (column.depth || 0) / 2;
@@ -86,7 +94,7 @@ function wallOpeningLine(floor, opening, layer) {
   const length = Math.hypot(dx, dy) || 1;
   const startDistance = Math.max(0, Number(opening.offset) || 0);
   const endDistance = startDistance + (Number(opening.width) || 0);
-  return dxfLine(
+  return modelLine(
     layer,
     {
       x: wall.start.x + (dx / length) * startDistance,
@@ -104,44 +112,44 @@ function floorEntities(project, floor, mode) {
   if (!floor) return content;
   if (mode !== 'structural_only') {
     for (const room of floor.rooms || []) {
-      content += dxfPolygon('A-ROOM', room.boundaryPoints || room.points || [], true);
+      content += modelPolygon('A-ROOM', room.boundaryPoints || room.points || [], true);
       const point = room.centroid || room.labelPoint || room.boundaryPoints?.[0];
-      if (point) content += dxfText('A-ROOM-TEXT', point, room.name || room.use || room.id, 120);
+      if (point) content += modelText('A-ROOM-TEXT', point, room.name || room.use || room.id, 120);
     }
     for (const wall of floor.walls || []) {
       const axis = wallBodyAxis(floor, wall);
-      content += dxfLine('A-WALL', axis.start, axis.end);
+      content += modelLine('A-WALL', axis.start, axis.end);
     }
     for (const door of floor.doors || []) content += wallOpeningLine(floor, door, 'A-DOOR');
     for (const window of floor.windows || []) content += wallOpeningLine(floor, window, 'A-WINDOW');
   }
   for (const slab of floor.slabs || []) {
-    content += dxfPolygon('S-SLAB', slab.boundaryPoints, true);
-    for (const opening of slab.openings || []) content += dxfPolygon('S-OPENING', opening.boundaryPoints, true);
+    content += modelPolygon('S-SLAB', slab.boundaryPoints, true);
+    for (const opening of slab.openings || []) content += modelPolygon('S-OPENING', opening.boundaryPoints, true);
   }
-  for (const column of floor.columns || []) content += dxfPolygon('S-COLUMN', rotatedRectangle(column), true);
+  for (const column of floor.columns || []) content += modelPolygon('S-COLUMN', rotatedRectangle(column), true);
   for (const beam of floor.beams || []) {
     const start = supportPoint(floor, beam.startRef);
     const end = supportPoint(floor, beam.endRef);
-    if (start && end) content += dxfLine('S-BEAM', start, end);
+    if (start && end) content += modelLine('S-BEAM', start, end);
   }
   if (mode === 'services') {
     const systems = project.building?.systems || {};
     for (const shaft of systems.plumbing?.shafts || []) {
       if (shaft.floorId && shaft.floorId !== floor.id) continue;
-      if (shaft.boundaryPoints?.length) content += dxfPolygon('P-SHAFT', shaft.boundaryPoints, true);
+      if (shaft.boundaryPoints?.length) content += modelPolygon('P-SHAFT', shaft.boundaryPoints, true);
       else if (Number.isFinite(shaft.x) && Number.isFinite(shaft.y))
-        content += dxfText('P-SHAFT', shaft, shaft.name || shaft.id, 120);
+        content += modelText('P-SHAFT', shaft, shaft.name || shaft.id, 120);
     }
     for (const route of systems.plumbing?.drainageRoutes || [])
       if (!route.floorId || route.floorId === floor.id)
-        content += dxfPolygon('P-DRAIN', route.points || route.routePoints || [], false);
+        content += modelPolygon('P-DRAIN', route.points || route.routePoints || [], false);
     for (const route of systems.egress?.routes || [])
       if (!route.floorId || route.floorId === floor.id)
-        content += dxfPolygon('E-EGRESS', route.points || route.routePoints || [], false);
+        content += modelPolygon('E-EGRESS', route.points || route.routePoints || [], false);
     for (const riser of systems.electrical?.riserZones || []) {
       if (riser.floorId && riser.floorId !== floor.id) continue;
-      content += dxfPolygon('E-RISER', riser.boundaryPoints || [], true);
+      content += modelPolygon('E-RISER', riser.boundaryPoints || [], true);
     }
   }
   return content;
@@ -158,19 +166,19 @@ function gridEntities(project) {
       const offsetPoint = vertical
         ? { x: origin.x + axis.offset, y: origin.y }
         : { x: origin.x, y: origin.y + axis.offset };
-      content += dxfLine(
+      content += modelLine(
         'S-GRID',
         vertical ? { x: offsetPoint.x, y: -extent } : { x: -extent, y: offsetPoint.y },
         vertical ? { x: offsetPoint.x, y: extent } : { x: extent, y: offsetPoint.y },
       );
-      content += dxfText('S-GRID-TEXT', offsetPoint, axis.label || axis.id, 140);
+      content += modelText('S-GRID-TEXT', offsetPoint, axis.label || axis.id, 140);
     }
   }
   return content;
 }
 
 function entitiesForSheet(project, sheet) {
-  let content = dxfText('X-SHEET', { x: 0, y: 0 }, `${sheet.number} - ${sheet.title}`, 250);
+  let content = modelText('X-SHEET', { x: 0, y: 0 }, `${sheet.number} - ${sheet.title}`, 250);
   const renderedFloors = new Set();
   for (const viewport of sheet.viewports || []) {
     const floor = (project.floors || []).find((entry) => entry.id === viewport.sourceFloorId);
@@ -188,13 +196,13 @@ function entitiesForSheet(project, sheet) {
       if (viewport.sourceView === 'structural_plan') content += gridEntities(project);
     }
     if (viewport.sourceView === 'site_plan')
-      content += dxfPolygon('C-SITE', project.building?.site?.boundary || [], true);
+      content += modelPolygon('C-SITE', project.building?.site?.boundary || [], true);
     if (viewport.sourceView === 'roof_plan') {
       for (const plane of project.roofSystem?.roofPlanes || [])
-        content += dxfPolygon('A-ROOF', plane.boundaryPoints || plane.points || [], true);
+        content += modelPolygon('A-ROOF', plane.boundaryPoints || plane.points || [], true);
     }
     if (viewport.sourceView === 'building_report')
-      content += dxfText(
+      content += modelText(
         'X-REPORT',
         { x: 0, y: -500 - renderedFloors.size * 300 },
         `Report: ${viewport.sourceRefId || 'coordination register'}`,
@@ -224,24 +232,63 @@ function sheetLayer(element) {
   return 'SHEET-GEOMETRY';
 }
 
-function transformedPoint(element, x, y) {
+// The sheet's height in its own user units (its viewBox, else its height):
+// the rendered sheet's y-down layout is flipped about it for the y-up DXF.
+function svgUserHeight(svgElement) {
+  const viewBox = numberList(svgElement.getAttribute('viewBox'));
+  if (viewBox.length === 4) return viewBox[3];
+  return Number(svgElement.getAttribute('height')) || 0;
+}
+
+function transformedPoint(sheetHeight, element, x, y) {
   const matrix = element.getCTM?.();
-  if (!matrix) return { x, y };
-  return { x: matrix.a * x + matrix.c * y + matrix.e, y: matrix.b * x + matrix.d * y + matrix.f };
+  const point = matrix
+    ? { x: matrix.a * x + matrix.c * y + matrix.e, y: matrix.b * x + matrix.d * y + matrix.f }
+    : { x, y };
+  return { x: point.x, y: sheetHeight - point.y };
+}
+
+// Containers SVG never draws in place; geometry inside them is only ever
+// drawn by reference, so none of it is sheet linework.
+const NON_RENDERED_TAGS = new Set([
+  'defs',
+  'clippath',
+  'pattern',
+  'marker',
+  'lineargradient',
+  'radialgradient',
+  'filter',
+]);
+
+function isRenderedGeometry(element, root) {
+  for (let current = element.parentElement; current && current !== root; current = current.parentElement) {
+    if (NON_RENDERED_TAGS.has(current.tagName.toLowerCase())) return false;
+  }
+  return true;
 }
 
 function numberList(value) {
   return (String(value || '').match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) || []).map(Number);
 }
 
-function renderedElementEntities(element) {
+function renderedElementEntities(element, sheetHeight) {
   const tag = element.tagName.toLowerCase();
   const layer = sheetLayer(element);
   if (tag === 'line')
     return dxfLine(
       layer,
-      transformedPoint(element, Number(element.getAttribute('x1')) || 0, Number(element.getAttribute('y1')) || 0),
-      transformedPoint(element, Number(element.getAttribute('x2')) || 0, Number(element.getAttribute('y2')) || 0),
+      transformedPoint(
+        sheetHeight,
+        element,
+        Number(element.getAttribute('x1')) || 0,
+        Number(element.getAttribute('y1')) || 0,
+      ),
+      transformedPoint(
+        sheetHeight,
+        element,
+        Number(element.getAttribute('x2')) || 0,
+        Number(element.getAttribute('y2')) || 0,
+      ),
     );
   if (tag === 'rect' || tag === 'image') {
     const x = Number(element.getAttribute('x')) || 0;
@@ -251,10 +298,10 @@ function renderedElementEntities(element) {
     return dxfPolygon(
       layer,
       [
-        transformedPoint(element, x, y),
-        transformedPoint(element, x + width, y),
-        transformedPoint(element, x + width, y + height),
-        transformedPoint(element, x, y + height),
+        transformedPoint(sheetHeight, element, x, y),
+        transformedPoint(sheetHeight, element, x + width, y),
+        transformedPoint(sheetHeight, element, x + width, y + height),
+        transformedPoint(sheetHeight, element, x, y + height),
       ],
       true,
     );
@@ -263,7 +310,7 @@ function renderedElementEntities(element) {
     const values = numberList(element.getAttribute('points'));
     const points = [];
     for (let index = 0; index < values.length; index += 2)
-      points.push(transformedPoint(element, values[index], values[index + 1]));
+      points.push(transformedPoint(sheetHeight, element, values[index], values[index + 1]));
     return dxfPolygon(layer, points, tag === 'polygon');
   }
   if (tag === 'circle') {
@@ -272,7 +319,7 @@ function renderedElementEntities(element) {
     const radius = Number(element.getAttribute('r')) || 0;
     const points = Array.from({ length: 32 }, (_, index) => {
       const angle = (index / 32) * Math.PI * 2;
-      return transformedPoint(element, cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
+      return transformedPoint(sheetHeight, element, cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
     });
     return dxfPolygon(layer, points, true);
   }
@@ -282,7 +329,7 @@ function renderedElementEntities(element) {
       const count = Math.max(2, Math.min(1000, Math.ceil(length / 0.8)));
       const points = Array.from({ length: count + 1 }, (_, index) => {
         const point = element.getPointAtLength((length * index) / count);
-        return transformedPoint(element, point.x, point.y);
+        return transformedPoint(sheetHeight, element, point.x, point.y);
       });
       return dxfPolygon(layer, points, false);
     } catch {
@@ -292,7 +339,12 @@ function renderedElementEntities(element) {
   if (tag === 'text') {
     return dxfText(
       layer,
-      transformedPoint(element, Number(element.getAttribute('x')) || 0, Number(element.getAttribute('y')) || 0),
+      transformedPoint(
+        sheetHeight,
+        element,
+        Number(element.getAttribute('x')) || 0,
+        Number(element.getAttribute('y')) || 0,
+      ),
       element.textContent || '',
       Math.max(1.5, Number.parseFloat(getComputedStyle(element).fontSize) || 2.5),
     );
@@ -302,8 +354,10 @@ function renderedElementEntities(element) {
 
 export function buildRenderedSheetDxf(svgElement, sheet) {
   const header = `${dxfPair(0, 'SECTION')}${dxfPair(2, 'HEADER')}${dxfPair(9, '$ACADVER')}${dxfPair(1, 'AC1009')}${dxfPair(9, '$INSUNITS')}${dxfPair(70, 4)}${dxfPair(999, `${sheet.number} - ${sheet.title}; sheet-layout coordinates in millimetres`)}${dxfPair(0, 'ENDSEC')}`;
+  const sheetHeight = svgUserHeight(svgElement);
   const body = [...svgElement.querySelectorAll('line,rect,polygon,polyline,path,circle,text,image')]
-    .map(renderedElementEntities)
+    .filter((element) => isRenderedGeometry(element, svgElement))
+    .map((element) => renderedElementEntities(element, sheetHeight))
     .join('');
   return `${header}${dxfPair(0, 'SECTION')}${dxfPair(2, 'ENTITIES')}${body}${dxfPair(0, 'ENDSEC')}${dxfPair(0, 'EOF')}`;
 }

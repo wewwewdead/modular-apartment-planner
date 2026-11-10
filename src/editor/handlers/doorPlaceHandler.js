@@ -2,6 +2,7 @@ import { createDoor } from '@/domain/models';
 import { distanceToSegment } from '@/geometry/line';
 import { clampWallOpeningOffset, projectPointOnWall, wallLength } from '@/geometry/wallGeometry';
 import { DOOR_WIDTH } from '@/domain/defaults';
+import { isBareKey } from './bareKey';
 
 const WALL_DETECT_RADIUS = 500; // mm
 
@@ -77,11 +78,25 @@ export function createDoorPlaceHandler({ dispatch, editorDispatch, getFloor, act
     onMouseDown(modelPos, e, toolState) {
       if (e.button !== 0) return;
       if (!toolState.previewWallId || toolState.previewBlocked) return;
+      // The preview's verdict is from the last move. A second press with no
+      // move between (a double-click) would otherwise stack a door on the one
+      // the first press just placed, so the press checks the floor as it is now.
+      const floor = getFloor(activeFloorId);
+      if (!floor) return;
+      if (overlapsExisting(toolState.previewWallId, toolState.previewOffset, DOOR_WIDTH, floor.doors, floor.windows)) {
+        return;
+      }
 
       const openDir = toolState.openDirection || 'left';
       const door = createDoor(toolState.previewWallId, toolState.previewOffset, DOOR_WIDTH, openDir);
       door.phaseId = activePhaseId || null;
       dispatch({ type: 'DOOR_ADD', floorId: activeFloorId, door });
+    },
+
+    // F flips the swing; without the claim the plan's F (Fixture tool)
+    // shortcut took the key first.
+    claimsKey(e) {
+      return isBareKey(e, 'f');
     },
 
     onKeyDown(e, toolState) {

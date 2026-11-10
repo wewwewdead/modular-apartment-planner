@@ -5,6 +5,9 @@ import { buildEndClosureLayout } from '@/truss/endClosures';
 import { buildProjectTrussQuantities } from '@/truss/trussSchedule';
 import { buildRoofScheduleSummary } from '@/roof/roofSchedule';
 import { WALL_BOARD_MATERIALS, boardLayerUSpan, deriveWallFramingLayout, resolveWallAssembly } from './wallAssemblies';
+import { SIDING_BOARD_LENGTH, sidingCoursePitch } from './wallSiding';
+import { resolveWallAccents } from './wallAccents';
+import { describeWallFinish } from './wallFinishes';
 import {
   deriveWallDetailTakeoff,
   resolveWallDetailFrame,
@@ -26,6 +29,7 @@ export const QUANTITY_RATE_KEYS = Object.freeze([
   'fiberCementBoard',
   'plywoodBoard',
   'rainscreenBoard',
+  'sidingBoard',
   'wallFraming',
   'wallFasteners',
   'wallJoints',
@@ -279,6 +283,17 @@ function deriveGeometry(project) {
   let fiberCementBoardAreaMm2 = 0;
   let plywoodBoardAreaMm2 = 0;
   let rainscreenBoardAreaMm2 = 0;
+  let sidingBoardAreaMm2 = 0;
+  let sidingBoardLengthMm = 0;
+  // One entry per distinct look — kind, colour, sheen — across the project.
+  const finishAreas = new Map();
+  const addFinishArea = (finish, areaMm2) => {
+    if (!finish || !(areaMm2 > 0)) return;
+    const key = `${finish.kind}|${finish.colour?.hex}|${finish.sheen}`;
+    const entry = finishAreas.get(key) || { key, finish, areaMm2: 0 };
+    entry.areaMm2 += areaMm2;
+    finishAreas.set(key, entry);
+  };
   let wallFramingLinearMm = 0;
   let wallPanelCount = 0;
   let wallFastenerCount = 0;
@@ -339,6 +354,7 @@ function deriveGeometry(project) {
       if (assembly.system === 'masonry') {
         wallNetAreaMm2 += netFaceArea;
         wallPaintAreaMm2 += netFaceArea * 2;
+        for (const side of ['interior', 'exterior']) addFinishArea(assembly[side].finish, netFaceArea);
       } else {
         framedWallCount += 1;
         const detailing = resolveWallDetailing(wall);
@@ -367,6 +383,22 @@ function deriveGeometry(project) {
           // the elevation, and a facade is ordered by the panel anyway, so
           // deducting them would be false precision.
           if (layer?.material === WALL_BOARD_MATERIALS.RAINSCREEN) rainscreenBoardAreaMm2 += layeredArea;
+          // Plank siding bills by face area, net of openings, and by the run of
+          // board it takes: each pitch of height (or width, for vertical boards)
+          // is one board's worth of length, so area ÷ pitch.
+          if (layer?.material === WALL_BOARD_MATERIALS.SIDING) {
+            sidingBoardAreaMm2 += layeredArea;
+            sidingBoardLengthMm += layeredArea / sidingCoursePitch(layer.course);
+          }
+          // The finish schedule (spec §7.1): the face's own finish over its
+          // visible board area less its accents, each accent over its net area,
+          // so a wall's lines always sum to the board area it shows.
+          if (layer?.material && layer.material !== WALL_BOARD_MATERIALS.NONE && layer.layerCount > 0) {
+            const accents = resolveWallAccents(wall, floor, side);
+            const accentArea = accents.reduce((total, accent) => total + accent.netArea, 0);
+            addFinishArea(layer.finish, Math.max(0, faceArea - accentArea));
+            for (const accent of accents) addFinishArea(accent.finish, accent.netArea);
+          }
         }
         wallPaintAreaMm2 +=
           netFaceArea *
@@ -463,6 +495,13 @@ function deriveGeometry(project) {
     fiberCementBoardAreaM2: squareMeters(fiberCementBoardAreaMm2),
     plywoodBoardAreaM2: squareMeters(plywoodBoardAreaMm2),
     rainscreenBoardAreaM2: squareMeters(rainscreenBoardAreaMm2),
+    sidingBoardAreaM2: squareMeters(sidingBoardAreaMm2),
+    finishSchedule: [...finishAreas.values()]
+      .map((entry) => ({ ...entry, areaM2: squareMeters(entry.areaMm2) }))
+      .sort((a, b) => a.key.localeCompare(b.key)),
+    sidingBoardLengthM: sidingBoardLengthMm / 1000,
+    // Whole boards of the one length the set-out (and the 3D stagger) assumes.
+    sidingBoardCount: Math.ceil(sidingBoardLengthMm / SIDING_BOARD_LENGTH - 1e-9),
     wallFramingLinearM: wallFramingLinearMm / 1000,
     wallPanelCount,
     wallFastenerCount,
@@ -587,6 +626,41 @@ export function deriveQuantityTakeoff(project, options = {}) {
         provenance: QUANTITY_PROVENANCE.CONFIGURED_ASSEMBLY,
         rateKey: 'rainscreenBoard',
         inputs: { openingsDeducted: true, boardLayersIncluded: true, framedWallCount: geometry.framedWallCount },
+      },
+      profile,
+      scenarioId,
+    ),
+    item(
+      {
+        id: 'siding_board',
+        category: 'envelope',
+        label: 'Plank siding',
+        quantity: geometry.sidingBoardAreaM2,
+        unit: 'm²',
+        provenance: QUANTITY_PROVENANCE.CONFIGURED_ASSEMBLY,
+        rateKey: 'sidingBoard',
+        inputs: {
+          openingsDeducted: true,
+          boardLayersIncluded: true,
+          framedWallCount: geometry.framedWallCount,
+          boardLengthM: geometry.sidingBoardLengthM,
+          boardCount: geometry.sidingBoardCount,
+          boardStockLengthMm: SIDING_BOARD_LENGTH,
+        },
+      },
+      profile,
+      scenarioId,
+    ),
+    item(
+      {
+        id: 'siding_board_length',
+        category: 'envelope',
+        label: 'Plank siding — board run (area ÷ course pitch)',
+        quantity: geometry.sidingBoardLengthM,
+        unit: 'm',
+        provenance: QUANTITY_PROVENANCE.CONFIGURED_ASSEMBLY,
+        rateKey: null,
+        inputs: { boardCount: geometry.sidingBoardCount, boardStockLengthMm: SIDING_BOARD_LENGTH },
       },
       profile,
       scenarioId,
@@ -856,6 +930,24 @@ export function deriveQuantityTakeoff(project, options = {}) {
       },
       profile,
       scenarioId,
+    ),
+    // The finish schedule: one line per look, in m², unpriced — a colour is
+    // ordered with the board or the paint line, not by itself.
+    ...geometry.finishSchedule.map((entry) =>
+      item(
+        {
+          id: `finish_${entry.finish.kind}_${String(entry.finish.colour?.hex || '').replace('#', '')}_${entry.finish.sheen}`,
+          category: 'finishes',
+          label: `Finish · ${describeWallFinish(entry.finish)}`,
+          quantity: entry.areaM2,
+          unit: 'm²',
+          provenance: QUANTITY_PROVENANCE.CONFIGURED_ASSEMBLY,
+          rateKey: null,
+          inputs: { finish: entry.finish, accentsDeducted: true, openingsDeducted: true },
+        },
+        profile,
+        scenarioId,
+      ),
     ),
     ...profile.manualItems.map((manual) =>
       item(

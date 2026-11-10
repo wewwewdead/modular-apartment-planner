@@ -1,6 +1,6 @@
 import { numeric, resolveParameters } from './model.js';
 import { mapPlacement } from './placement.js';
-import { PAGE_SIZES, xml, annotationText, viewDataAttributes } from './drawings.js';
+import { xml, annotationText, viewDataAttributes } from './drawings.js';
 import { circularCut } from './circularCuts.js';
 import { isDrawnAnnotation, manualDimensionsSvg } from './sheetAnnotations.js';
 import {
@@ -11,8 +11,17 @@ import {
   sheetHasPartsList,
   PARTS_LIST_WIDTH,
 } from './partsList.js';
+import {
+  fitsCell,
+  overflowMessage,
+  placeView,
+  resolveSheetScale,
+  scaleLabel,
+  sheetFit,
+  viewCells,
+} from './sheetLayout.js';
 
-export const scaleLabel = (scale) => (scale >= 1 ? `${scale}:1` : `1:${+(1 / scale).toFixed(3)}`);
+export { scaleLabel };
 const number = (n, units) => String(+(units === 'inch' ? n / 25.4 : n).toFixed(units === 'inch' ? 3 : 2));
 const text = (x, y, value, attrs = '') => `<text x="${x}" y="${y}" ${attrs}>${xml(value)}</text>`;
 const path = (d, attrs = '') => `<path d="${d}" fill="none" stroke="#20252b" stroke-width="0.18" ${attrs}/>`;
@@ -112,10 +121,9 @@ function wrap(value, limit) {
     });
 }
 
-export function engineeringSheetSvg(sheet, model, snapshot, page, pages) {
-  const [width, height] = PAGE_SIZES[sheet.size] || PAGE_SIZES.A3;
-  const scale = numeric(sheet.scale);
-  if (scale <= 0) throw new Error('Drawing scale must be positive.');
+// allowOverflow (the live preview): a view too big for its cell is still
+// drawn, centred, and its cell outlined red; exports throw instead.
+export function engineeringSheetSvg(sheet, model, snapshot, page, pages, { allowOverflow = false } = {}) {
   if (sheet.views.length > 4)
     throw new Error('Engineering layout supports up to four views. Add another sheet for more views.');
   for (const a of sheet.annotations || []) {
@@ -126,33 +134,28 @@ export function engineeringSheetSvg(sheet, model, snapshot, page, pages) {
       throw new Error('Hole annotations on sectioned geometry are not supported. Use a separate uncut detail sheet.');
   }
   const parts = sheetHasPartsList(sheet) ? partsListRows(model, snapshot, sheet) : [];
+  const scale = resolveSheetScale(sheet);
+  if (scale <= 0) throw new Error('Drawing scale must be positive.');
   let balloonsDone = false;
-  const titleY = height - 58,
-    divisions = sheet.views.length === 1 ? 1 : 2,
-    cellW = (width - 30) / divisions,
-    cellH = (titleY - 20) / divisions;
+  const { width, height, titleY, cells } = viewCells(sheet);
   let body = '';
-  // Explicitly arranged views, rather than pretending to follow a projection
-  // standard whose camera definitions may differ between imported models.
-  const used = new Set();
-  sheet.views.forEach((view) => {
+  sheet.views.forEach((view, index) => {
     const kind = view.view || view.name;
-    let slot = divisions === 1 ? 0 : { top: 0, isometric: 1, front: 2, right: 3 }[kind];
-    if (slot == null || used.has(slot)) slot = [0, 1, 2, 3].find((i) => !used.has(i));
-    used.add(slot);
+    const cell = cells[index],
+      slot = cell.slot,
+      cellW = cell.width,
+      cellH = cell.height,
+      cx = cell.x,
+      cy = cell.y;
     const s = view.scale == null ? scale : numeric(view.scale);
     if (s <= 0) throw new Error('View scale must be positive.');
     const [vx, vy, vw, vh] = view.viewBox;
-    const marginX = 26,
-      marginY = 46;
-    if (vw * s > cellW - marginX || vh * s > cellH - marginY)
-      throw new Error(
-        `${sheet.title}: ${view.name} does not fit at ${scaleLabel(s)}. Use a larger page or smaller view scale.`,
-      );
-    const cx = 15 + (slot % 2) * cellW,
-      cy = 12 + Math.floor(slot / 2) * cellH;
-    const x = cx + 18 + (cellW - marginX - vw * s) / 2;
-    const y = cy + 25 + (cellH - marginY - vh * s) / 2;
+    const overflow = !fitsCell(cell, view.viewBox, s);
+    if (overflow && !allowOverflow)
+      throw new Error(overflowMessage(sheet, view, sheetFit(sheet, sheet.views, { scale })));
+    if (overflow)
+      body += `<rect x="${cx}" y="${cy}" width="${cellW}" height="${cellH}" fill="none" stroke="#c62828" stroke-width="0.5" stroke-dasharray="3 2" data-overflow="true"/>`;
+    const [x, y] = placeView(cell, view.viewBox, s);
     const tx = x - vx * s,
       ty = y - vy * s;
     const point = (p) => [tx + p[0] * s, ty + p[1] * s];
@@ -220,8 +223,10 @@ export function engineeringSheetSvg(sheet, model, snapshot, page, pages) {
           if (a.fromEdge !== false && Math.abs(coords[0] - start) > 1e-5) coords.unshift(start);
           const offset = numeric(a.offset ?? 12);
           const location = vertical ? x - offset : y - offset;
+          // An overflowing preview view is flagged already; its dimensions may leave the cell.
           if (
-            vertical ? location < cx + 4 || location > cx + cellW - 4 : location < cy + 4 || location > cy + cellH - 6
+            !overflow &&
+            (vertical ? location < cx + 4 || location > cx + cellW - 4 : location < cy + 4 || location > cy + cellH - 6)
           )
             throw new Error('Dimension offset leaves its view area. Reduce the offset or use a smaller view scale.');
           coords.slice(1).forEach((v, i) => {
@@ -253,7 +258,7 @@ export function engineeringSheetSvg(sheet, model, snapshot, page, pages) {
             r = (h.diameter * s) / 2;
           const tip = [center[0] + r * 0.707, center[1] - r * 0.707];
           const end = [tip[0] + numeric(a.dx ?? 7), tip[1] + numeric(a.dy ?? -12)];
-          if (end[0] < cx + 2 || end[0] > cx + cellW - 2 || end[1] < cy + 4 || end[1] > cy + cellH - 6)
+          if (!overflow && (end[0] < cx + 2 || end[0] > cx + cellW - 2 || end[1] < cy + 4 || end[1] > cy + cellH - 6))
             throw new Error('Leader offset leaves its view area. Reduce the offset or use a smaller view scale.');
           const thread = h.holeSpec
             ? `${h.holeSpec.mode === 'tap' ? 'TAP' : 'FOR'} ${h.holeSpec.size} × ${h.holeSpec.pitch}; DRILL `

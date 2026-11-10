@@ -9,6 +9,7 @@ import {
 } from '@/geometry/wallGeometry';
 import { ELECTRICAL_PLATE, ELECTRICAL_SYMBOL_SIZE } from '@/domain/defaults';
 import { ELECTRICAL_DEVICE_TYPES } from '@/editor/tools';
+import { isBareKey } from './bareKey';
 
 const WALL_DETECT_RADIUS = 500; // mm
 
@@ -95,6 +96,11 @@ export function createElectricalPlaceHandler({ dispatch, editorDispatch, getFloo
     onMouseDown(modelPos, e, toolState) {
       if (e.button !== 0) return;
       if (!toolState.previewWallId || toolState.previewBlocked) return;
+      // The preview's verdict is from the last move; a double-click's second
+      // press checks the floor as it is now (see the door tool).
+      const floor = getFloor(activeFloorId);
+      if (!floor) return;
+      if (isBlocked(toolState.previewWallId, toolState.previewOffset, toolState.previewSide || 'right', floor)) return;
 
       const device = createElectricalDevice(
         toolState.previewWallId,
@@ -104,6 +110,12 @@ export function createElectricalPlaceHandler({ dispatch, editorDispatch, getFloo
       );
       device.phaseId = activePhaseId || null;
       dispatch({ type: 'ELECTRICAL_DEVICE_ADD', floorId: activeFloorId, device });
+    },
+
+    // F flips the face; without the claim the plan's F (Fixture tool)
+    // shortcut took the key first.
+    claimsKey(e) {
+      return isBareKey(e, 'f');
     },
 
     onKeyDown(e, toolState) {

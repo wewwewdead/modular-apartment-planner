@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { createDoor, createFloor, createRailing, createSlab, createStair, createWall } from '@/domain/models';
+import {
+  createColumn,
+  createDoor,
+  createFloor,
+  createRailing,
+  createSlab,
+  createStair,
+  createWall,
+} from '@/domain/models';
 import { buildFloorPreviewObjects } from './objectBuilders';
 import { buildPreviewScene } from './buildPreviewScene';
 import { createWallDetailing } from '@/domain/wallDetailing';
@@ -1043,5 +1051,427 @@ describe('a board run past the end of its wall', () => {
     const options = { assembly: { preset: 'fiber_cement', detailing } };
 
     expect(wallsFor({ overhangStart: 0, overhangEnd: 0 }, options)).toEqual(wallsFor(null, options));
+  });
+});
+
+describe('wall face finishes in 3D (docs/wall-cladding-finishes.md §5.3)', () => {
+  const ORANGE = {
+    kind: 'paint',
+    colour: { hex: '#E0701F', name: 'Signal Orange', catalogue: 'facade' },
+    sheen: 'matte',
+  };
+  const ORANGE_FC = 'wallFinish:paint:fc:E0701F:matte';
+
+  function wallsFor(options, { controlPoint = null } = {}) {
+    const floor = createFloor('Ground Floor', 0);
+    floor.id = 'floor_1';
+    floor.elevation = 0;
+    floor.walls = [
+      {
+        ...createWall({ x: 0, y: 0 }, { x: 6000, y: 0 }, 150, { height: 2400, ...options }),
+        id: 'wall_1',
+        ...(controlPoint ? { controlPoint } : {}),
+      },
+    ];
+    floor.windows = [
+      { id: 'window_1', wallId: 'wall_1', offset: 3000, width: 1200, height: 1200, sillHeight: 900, type: 'standard' },
+    ];
+    return buildFloorPreviewObjects(floor).filter(
+      (entry) => entry.kind === 'wall' && entry.metadata?.wallId === 'wall_1',
+    );
+  }
+
+  const geometryOf = ({ materialKey: _key, metadata: _metadata, ...rest }) => rest;
+
+  it('repaints only the painted face, and moves nothing', () => {
+    const stock = wallsFor({ assembly: { preset: 'fiber_cement' } });
+    const painted = wallsFor({
+      assembly: { preset: 'fiber_cement', exterior: { material: 'fiber_cement', finish: ORANGE } },
+    });
+
+    expect(painted.map(geometryOf)).toEqual(stock.map(geometryOf));
+    painted.forEach((entry, index) => {
+      const before = stock[index];
+      if (entry.metadata.assemblySide === 'exterior') {
+        expect(before.materialKey).toBe('wallFiberCement');
+        expect(entry.materialKey).toBe(ORANGE_FC);
+      } else {
+        expect(entry.materialKey).toBe(before.materialKey);
+      }
+    });
+    expect(painted.some((entry) => entry.metadata.assemblySide === 'exterior')).toBe(true);
+  });
+
+  it('paints a rainscreen in one colour, and leaves a stock one cycling its three tones', () => {
+    const cassettesOf = (entries) => entries.filter((entry) => entry.metadata.boardMaterial === 'rainscreen');
+    const stock = cassettesOf(
+      wallsFor({ height: 5400, assembly: { preset: 'fiber_cement', exterior: { material: 'rainscreen' } } }),
+    );
+    const painted = cassettesOf(
+      wallsFor({
+        height: 5400,
+        assembly: { preset: 'fiber_cement', exterior: { material: 'rainscreen', finish: ORANGE } },
+      }),
+    );
+
+    expect(new Set(stock.map((entry) => entry.materialKey)).size).toBe(3);
+    expect(new Set(painted.map((entry) => entry.materialKey))).toEqual(
+      new Set(['wallFinish:paint:cassette:E0701F:matte']),
+    );
+    // Same cassettes, same joints: one colour, not one board.
+    expect(painted.map(geometryOf)).toEqual(stock.map(geometryOf));
+  });
+
+  it('carries the finish onto detailed panels and tonal screw heads, not onto the other face', () => {
+    const detailing = createWallDetailing({
+      enabled: true,
+      sides: {
+        interior: {
+          enabled: true,
+          layout: { boardWidth: 1000, boardHeight: 1500, horizontalGap: 10, verticalGap: 10 },
+        },
+      },
+    });
+    const entries = wallsFor({
+      assembly: {
+        preset: 'fiber_cement',
+        interior: { material: 'fiber_cement', finish: { ...ORANGE, sheen: 'satin' } },
+        detailing,
+      },
+    });
+    const panels = entries.filter((entry) => entry.metadata.wallDetailKind === 'panel');
+    const screws = entries.filter((entry) => entry.metadata.wallDetailKind === 'fastener');
+
+    expect(panels.length).toBeGreaterThan(2);
+    expect(new Set(panels.map((entry) => entry.materialKey))).toEqual(new Set(['wallFinish:paint:fc:E0701F:satin']));
+    expect(screws.length).toBeGreaterThan(0);
+    expect(new Set(screws.map((entry) => entry.materialKey))).toEqual(new Set(['wallFinish:paint:fc:E0701F:satin']));
+    // The undetailed outside face keeps its stock skin.
+    const outside = entries.filter((entry) => entry.metadata.assemblySide === 'exterior');
+    expect(outside.length).toBeGreaterThan(0);
+    expect(outside.every((entry) => entry.materialKey === 'wallFiberCement')).toBe(true);
+  });
+
+  describe('masonry', () => {
+    const boundsOf = (entries) => ({
+      minX: Math.min(...entries.map((entry) => entry.bounds.minX)),
+      maxX: Math.max(...entries.map((entry) => entry.bounds.maxX)),
+      minY: Math.min(...entries.map((entry) => entry.bounds.minY)),
+      maxY: Math.max(...entries.map((entry) => entry.bounds.maxY)),
+    });
+
+    it('is the single box per segment it always was when neither face is finished', () => {
+      const stock = wallsFor({});
+      expect(stock.every((entry) => entry.materialKey === 'wall')).toBe(true);
+      expect(stock.some((entry) => entry.id.endsWith(':interior'))).toBe(false);
+      expect(stock.every((entry) => entry.size.z === 150)).toBe(true);
+    });
+
+    it('splits into an outside-coloured body and a 10 mm inside skin that tile the wall exactly', () => {
+      const stock = wallsFor({});
+      const finished = wallsFor({ assembly: { preset: 'chb', exterior: { finish: ORANGE } } });
+      const bodies = finished.filter((entry) => !entry.id.endsWith(':interior'));
+      const skins = finished.filter((entry) => entry.id.endsWith(':interior'));
+
+      expect(bodies.map((entry) => entry.id)).toEqual(stock.map((entry) => entry.id));
+      expect(skins).toHaveLength(stock.length);
+      expect(bodies.every((entry) => entry.materialKey === 'wallFinish:paint:masonry:E0701F:matte')).toBe(true);
+      expect(skins.every((entry) => entry.materialKey === 'wall' && entry.metadata.assemblySide === 'interior')).toBe(
+        true,
+      );
+      expect(bodies.every((entry) => entry.size.z === 140)).toBe(true);
+      expect(skins.every((entry) => entry.size.z === 10)).toBe(true);
+
+      // Segment by segment, body + skin cover exactly the plain box: the same
+      // outer faces, no gap and no overlap between them.
+      stock.forEach((box, index) => {
+        const pair = [bodies[index], skins[index]];
+        expect(boundsOf(pair)).toEqual(boundsOf([box]));
+        const [body, skin] = pair;
+        // The wall runs along +x, so its thickness is in y.
+        const bodySpan = [body.bounds.minY, body.bounds.maxY];
+        const skinSpan = [skin.bounds.minY, skin.bounds.maxY];
+        const touching = Math.abs(bodySpan[1] - skinSpan[0]) < 1e-9 || Math.abs(skinSpan[1] - bodySpan[0]) < 1e-9;
+        expect(touching).toBe(true);
+        expect(bodySpan[1] - bodySpan[0] + (skinSpan[1] - skinSpan[0])).toBeCloseTo(150, 9);
+      });
+    });
+
+    it('puts the skin on the inside face, and flips with it', () => {
+      const leftInside = wallsFor({ assembly: { preset: 'chb', interior: { finish: ORANGE } } });
+      const rightInside = wallsFor({
+        assembly: { preset: 'chb', interior: { finish: ORANGE }, interiorSide: 'right' },
+      });
+      const skinOf = (entries) => entries.find((entry) => entry.id.endsWith(':interior'));
+      const bodyOf = (entries) => entries.find((entry) => !entry.id.endsWith(':interior'));
+
+      // The same sign the framed skins use: a left-inside framed wall puts its
+      // inside board at negative y on this +x wall (see the mixed-board test).
+      expect(skinOf(leftInside).center.y).toBeLessThan(bodyOf(leftInside).center.y);
+      expect(skinOf(rightInside).center.y).toBeGreaterThan(bodyOf(rightInside).center.y);
+      expect(skinOf(leftInside).materialKey).toBe('wallFinish:paint:masonry:E0701F:matte');
+      expect(bodyOf(leftInside).materialKey).toBe('wall');
+    });
+
+    it('stays one box when both faces wear the same finish', () => {
+      const both = wallsFor({
+        assembly: { preset: 'chb', interior: { finish: ORANGE }, exterior: { finish: ORANGE } },
+      });
+      expect(both.some((entry) => entry.id.endsWith(':interior'))).toBe(false);
+      expect(
+        both.every((entry) => entry.size.z === 150 && entry.materialKey === 'wallFinish:paint:masonry:E0701F:matte'),
+      ).toBe(true);
+    });
+  });
+
+  it('draws an arc wall in its outside face’s look', () => {
+    const arc = wallsFor(
+      { assembly: { preset: 'fiber_cement', exterior: { material: 'fiber_cement', finish: ORANGE } } },
+      { controlPoint: { x: 3000, y: 900 } },
+    );
+    expect(arc).toHaveLength(1);
+    expect(arc[0].geometry).toBe('prism');
+    expect(arc[0].materialKey).toBe(ORANGE_FC);
+    expect(
+      wallsFor({ assembly: { preset: 'fiber_cement' } }, { controlPoint: { x: 3000, y: 900 } })[0].materialKey,
+    ).toBe('wall');
+  });
+
+  it('builds the same descriptors every time, so a drag carries a finished wall over', () => {
+    const options = { assembly: { preset: 'chb', exterior: { finish: ORANGE } } };
+    expect(wallsFor(options)).toEqual(wallsFor(options));
+  });
+});
+
+describe('plank siding in 3D (spec §6.1)', () => {
+  const KEY = 'wallFinish:timber:siding:6B4226:satin:h140j6';
+
+  function sidingWalls(extra = {}) {
+    const floor = createFloor('Ground Floor', 0);
+    floor.id = 'floor_1';
+    floor.walls = [
+      {
+        ...createWall({ x: 0, y: 0 }, { x: 6000, y: 0 }, 150, {
+          height: 2400,
+          assembly: { preset: 'fiber_cement', exterior: { material: 'siding' }, ...extra },
+        }),
+        id: 'wall_1',
+      },
+    ];
+    floor.windows = [
+      { id: 'window_1', wallId: 'wall_1', offset: 3000, width: 1200, height: 1200, sillHeight: 900, type: 'standard' },
+    ];
+    return buildFloorPreviewObjects(floor).filter(
+      (entry) => entry.kind === 'wall' && entry.metadata?.wallId === 'wall_1',
+    );
+  }
+
+  it('draws the courses on the skin boxes it already had: no geometry per board', () => {
+    const entries = sidingWalls();
+    const skins = entries.filter((entry) => entry.metadata.assemblySide === 'exterior');
+    // One box per solid segment of the wall — left, under and over the window,
+    // right — exactly as a fibre-cement skin builds.
+    expect(skins).toHaveLength(4);
+    expect(skins.every((entry) => entry.geometry === 'box' && entry.size.z === 19)).toBe(true);
+    expect(new Set(skins.map((entry) => entry.materialKey))).toEqual(new Set([KEY]));
+    const fibreCement = buildFloorPreviewObjects(
+      Object.assign(createFloor('Ground Floor', 0), {
+        id: 'floor_1',
+        walls: [
+          {
+            ...createWall({ x: 0, y: 0 }, { x: 6000, y: 0 }, 150, {
+              height: 2400,
+              assembly: { preset: 'fiber_cement', exterior: { material: 'fiber_cement', thickness: 19 } },
+            }),
+            id: 'wall_1',
+          },
+        ],
+        windows: [
+          {
+            id: 'window_1',
+            wallId: 'wall_1',
+            offset: 3000,
+            width: 1200,
+            height: 1200,
+            sillHeight: 900,
+            type: 'standard',
+          },
+        ],
+      }),
+    ).filter((entry) => entry.kind === 'wall' && entry.metadata?.assemblySide === 'exterior');
+    expect(skins.map((entry) => entry.id)).toEqual(fibreCement.map((entry) => entry.id));
+  });
+
+  it('keys a detailed siding field the same as the stock-path skin, and adds no screws', () => {
+    const detailing = createWallDetailing({ enabled: true, sides: { exterior: { enabled: true } } });
+    const entries = sidingWalls({ detailing });
+    const panels = entries.filter(
+      (entry) => entry.metadata.wallDetailKind === 'panel' && entry.metadata.assemblySide === 'exterior',
+    );
+    expect(panels.length).toBeGreaterThan(0);
+    expect(new Set(panels.map((entry) => entry.materialKey))).toEqual(new Set([KEY]));
+    expect(
+      entries.some(
+        (entry) => entry.metadata.wallDetailKind === 'fastener' && entry.metadata.assemblySide === 'exterior',
+      ),
+    ).toBe(false);
+  });
+
+  it('puts a different course in a different key', () => {
+    const vertical = sidingWalls({
+      exterior: { material: 'siding', course: { orientation: 'vertical', exposure: 95, joint: 10 } },
+    });
+    expect(vertical.find((entry) => entry.metadata.assemblySide === 'exterior').materialKey).toBe(
+      'wallFinish:timber:siding:6B4226:satin:v95j10',
+    );
+  });
+});
+
+describe('accent panels in 3D (spec §7.1)', () => {
+  const ORANGE = {
+    kind: 'paint',
+    colour: { hex: '#E0701F', name: 'Signal Orange', catalogue: 'facade' },
+    sheen: 'matte',
+  };
+  const ORANGE_FC = 'wallFinish:paint:fc:E0701F:matte';
+  const accent = (id, u, v, width, height, extra = {}) => ({ id, u, v, width, height, finish: ORANGE, ...extra });
+
+  // A wall trimmed by a column at each end and lapping both corners, with a
+  // window — every way the stock skin's outline differs from a plain rectangle.
+  function build({ accents, exterior = {}, detailing = null, height = 2400 } = {}) {
+    const floor = createFloor('Ground Floor', 0);
+    floor.id = 'floor_1';
+    floor.columns = [
+      { ...createColumn(0, 0, 300, 300), id: 'col_a' },
+      { ...createColumn(6000, 0, 300, 300), id: 'col_b' },
+    ];
+    floor.walls = [
+      {
+        ...createWall({ x: 0, y: 0 }, { x: 6000, y: 0 }, 150, {
+          height,
+          assembly: {
+            preset: 'fiber_cement',
+            exterior: {
+              material: 'fiber_cement',
+              overhangStart: 40,
+              overhangEnd: 25,
+              ...(accents ? { accents } : {}),
+              ...exterior,
+            },
+            ...(detailing ? { detailing } : {}),
+          },
+        }),
+        id: 'wall_1',
+      },
+    ];
+    floor.windows = [
+      { id: 'win_1', wallId: 'wall_1', offset: 3000, width: 1200, height: 1200, sillHeight: 900, type: 'standard' },
+    ];
+    return buildFloorPreviewObjects(floor).filter(
+      (entry) => entry.kind === 'wall' && entry.metadata?.wallId === 'wall_1',
+    );
+  }
+
+  const outside = (entries) => entries.filter((entry) => entry.metadata.assemblySide === 'exterior');
+  const faceArea = (entries) => entries.reduce((sum, entry) => sum + entry.size.x * entry.size.y, 0);
+  const boundsOf = (entries) => ({
+    minX: Math.min(...entries.map((entry) => entry.bounds.minX)),
+    maxX: Math.max(...entries.map((entry) => entry.bounds.maxX)),
+    minY: Math.min(...entries.map((entry) => entry.bounds.minY)),
+    maxY: Math.max(...entries.map((entry) => entry.bounds.maxY)),
+    minElevation: Math.min(...entries.map((entry) => entry.bounds.minElevation)),
+    maxElevation: Math.max(...entries.map((entry) => entry.bounds.maxElevation)),
+  });
+
+  const ACCENTS = [
+    accent('beside', 3600, 900, 600, 1200),
+    accent('band', -200, 2200, 7000, 400),
+    accent('low', 400, 0, 800, 600),
+  ];
+
+  it('covers exactly the area and the outline the stock skin covers', () => {
+    const stock = outside(build());
+    const accented = outside(build({ accents: ACCENTS }));
+    expect(faceArea(accented)).toBeCloseTo(faceArea(stock), 3);
+    const a = boundsOf(accented);
+    const b = boundsOf(stock);
+    for (const key of Object.keys(b)) expect(a[key], key).toBeCloseTo(b[key], 6);
+    // And every piece is a 6 mm skin box on the same plane as the stock skin.
+    expect(accented.every((entry) => entry.size.z === 6)).toBe(true);
+    expect(new Set(accented.map((entry) => entry.rotation))).toEqual(new Set(stock.map((entry) => entry.rotation)));
+  });
+
+  it('keys accent pieces by their finish and tags them so the editor can pick them', () => {
+    const accented = outside(build({ accents: ACCENTS }));
+    const pieces = accented.filter((entry) => entry.metadata.wallDetailKind === 'accent');
+    expect(new Set(pieces.map((entry) => entry.metadata.wallDetailElementId))).toEqual(
+      new Set(['beside', 'band', 'low']),
+    );
+    expect(pieces.every((entry) => entry.materialKey === ORANGE_FC)).toBe(true);
+    const base = accented.filter((entry) => entry.metadata.wallDetailKind !== 'accent');
+    expect(base.every((entry) => entry.materialKey === 'wallFiberCement')).toBe(true);
+    // The accent area is the accents' net area on this face: beside 0.72 m²,
+    // the band clipped to the trimmed, lapped run, low 0.48 m².
+    const beside = pieces.filter((entry) => entry.metadata.wallDetailElementId === 'beside');
+    expect(faceArea(beside)).toBeCloseTo(600 * 1200, 3);
+  });
+
+  it('gives deterministic ids, and only changes ids on a face that has accents', () => {
+    const first = build({ accents: ACCENTS }).map((entry) => entry.id);
+    expect(build({ accents: ACCENTS }).map((entry) => entry.id)).toEqual(first);
+    const accentedIds = outside(build({ accents: ACCENTS })).map((entry) => entry.id);
+    expect(accentedIds.some((id) => /:exterior:accent:beside:1$/.test(id))).toBe(true);
+    expect(accentedIds.some((id) => /:exterior:base:1$/.test(id))).toBe(true);
+    // The inside face and the frame are untouched.
+    const stock = build();
+    const notOutside = (entries) => entries.filter((entry) => entry.metadata.assemblySide !== 'exterior');
+    expect(notOutside(build({ accents: ACCENTS })).map((entry) => entry.id)).toEqual(
+      notOutside(stock).map((entry) => entry.id),
+    );
+  });
+
+  it('builds a face whose accents are all off it exactly as the stock face', () => {
+    const geometryOf = ({ metadata: _metadata, ...rest }) => rest;
+    const stock = outside(build());
+    const hidden = outside(build({ accents: [accent('far', 9000, 0, 300, 300)] }));
+    expect(hidden.map(geometryOf)).toEqual(stock.map(geometryOf));
+  });
+
+  it('splits detailed panel fragments the same way, area for area', () => {
+    const detailing = createWallDetailing({ enabled: true, sides: { exterior: { enabled: true } } });
+    const panelsOf = (entries) =>
+      outside(entries).filter((entry) => ['panel', 'accent'].includes(entry.metadata.wallDetailKind));
+    const stock = panelsOf(build({ detailing }));
+    const accented = panelsOf(build({ detailing, accents: ACCENTS }));
+    expect(faceArea(accented)).toBeCloseTo(faceArea(stock), 3);
+    expect(
+      accented.some((entry) => entry.metadata.wallDetailKind === 'accent' && entry.materialKey === ORANGE_FC),
+    ).toBe(true);
+    expect(accented.some((entry) => /:accent:beside:\d+$/.test(entry.id))).toBe(true);
+  });
+
+  it('splits cassettes, keeping the stock tones on the base and one key on the accent', () => {
+    const cassettes = (entries) => outside(entries).filter((entry) => entry.metadata.boardMaterial === 'rainscreen');
+    const stock = cassettes(build({ exterior: { material: 'rainscreen', thickness: 8 } }));
+    const accented = cassettes(build({ exterior: { material: 'rainscreen', thickness: 8 }, accents: ACCENTS }));
+    expect(faceArea(accented)).toBeCloseTo(faceArea(stock), 3);
+    const accentKeys = new Set(
+      accented.filter((entry) => entry.metadata.wallDetailKind === 'accent').map((entry) => entry.materialKey),
+    );
+    expect(accentKeys).toEqual(new Set(['wallFinish:paint:cassette:E0701F:matte']));
+    const baseKeys = new Set(
+      accented.filter((entry) => entry.metadata.wallDetailKind !== 'accent').map((entry) => entry.materialKey),
+    );
+    expect([...baseKeys].every((key) => key.startsWith('wallRainscreen'))).toBe(true);
+  });
+
+  it('keeps the courses on a siding accent', () => {
+    const entries = outside(
+      build({ exterior: { material: 'siding', thickness: 19 }, accents: [accent('beside', 3600, 900, 600, 1200)] }),
+    );
+    const keys = new Set(
+      entries.filter((entry) => entry.metadata.wallDetailKind === 'accent').map((entry) => entry.materialKey),
+    );
+    expect(keys).toEqual(new Set(['wallFinish:paint:siding:E0701F:matte:h140j6']));
   });
 });

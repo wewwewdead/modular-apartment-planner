@@ -363,6 +363,7 @@ function Toolbar({
           className={
             workspaceMode === 'model' && modelTarget === 'floor' ? styles.segmentedBtnActive : styles.segmentedBtn
           }
+          aria-pressed={workspaceMode === 'model' && modelTarget === 'floor'}
           onClick={() => {
             editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'floor' });
             if (viewMode === 'truss_detail') {
@@ -376,6 +377,7 @@ function Toolbar({
           className={
             workspaceMode === 'model' && modelTarget === 'roof' ? styles.segmentedBtnActive : styles.segmentedBtn
           }
+          aria-pressed={workspaceMode === 'model' && modelTarget === 'roof'}
           onClick={() => {
             editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'roof' });
             if (viewMode === 'truss_detail') {
@@ -389,6 +391,7 @@ function Toolbar({
           className={
             workspaceMode === 'model' && modelTarget === 'truss' ? styles.segmentedBtnActive : styles.segmentedBtn
           }
+          aria-pressed={workspaceMode === 'model' && modelTarget === 'truss'}
           onClick={() => {
             editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'truss' });
             if (viewMode !== 'plan' && viewMode !== 'section_view' && viewMode !== 'truss_detail') {
@@ -400,6 +403,7 @@ function Toolbar({
         </button>
         <button
           className={workspaceMode === 'sheet' ? styles.segmentedBtnActive : styles.segmentedBtn}
+          aria-pressed={workspaceMode === 'sheet'}
           onClick={() => editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'sheet' })}
         >
           Sheets

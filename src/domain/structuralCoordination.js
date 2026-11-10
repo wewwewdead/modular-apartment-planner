@@ -177,37 +177,101 @@ function beamAxis(beam, floor) {
     : null;
 }
 
-function polygonClearance(first, second) {
-  if (intersectionArea(first, second) > 0) return 0;
-  let minimum = Number.POSITIVE_INFINITY;
-  for (const point of first) {
-    for (let index = 0; index < second.length; index += 1) {
-      minimum = Math.min(minimum, distanceToSegment(point, second[index], second[(index + 1) % second.length]));
-    }
-  }
-  for (const point of second) {
-    for (let index = 0; index < first.length; index += 1) {
-      minimum = Math.min(minimum, distanceToSegment(point, first[index], first[(index + 1) % first.length]));
-    }
-  }
-  return minimum;
-}
-
 function openingPlanSegment(wall, opening) {
   const half = (opening.width || 0) / 2;
   return [positionOnWall(wall, opening.offset - half), positionOnWall(wall, opening.offset + half)];
 }
 
-function openingClearanceToColumn(wall, opening, column) {
-  const segment = openingPlanSegment(wall, opening);
-  const thinOpening = [
-    segment[0],
-    segment[1],
-    { x: segment[1].x + 0.1, y: segment[1].y + 0.1 },
-    { x: segment[0].x + 0.1, y: segment[0].y + 0.1 },
-  ];
-  return polygonClearance(thinOpening, columnOutline(column));
+// Below this (mm) a point counts as on the column's boundary, not inside it.
+const OPENING_CONTACT_TOLERANCE = 1e-6;
+
+function segmentToSegmentDistance(a, b, c, d) {
+  if (segmentIntersection(a, b, c, d)) return 0;
+  return Math.min(
+    distanceToSegment(a, c, d),
+    distanceToSegment(b, c, d),
+    distanceToSegment(c, a, b),
+    distanceToSegment(d, a, b),
+  );
 }
+
+function distanceToPolygonBoundary(point, polygon) {
+  let minimum = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < polygon.length; index += 1) {
+    minimum = Math.min(minimum, distanceToSegment(point, polygon[index], polygon[(index + 1) % polygon.length]));
+  }
+  return minimum;
+}
+
+/*
+ * Whether the opening's plan line passes through the column's interior —
+ * not merely along or against its face. The line is cut at every point where
+ * it meets the outline, and each piece is tested at its midpoint: a piece
+ * inside the polygon and off its boundary is a real crossing.
+ */
+function segmentCrossesPolygonInterior(a, b, polygon) {
+  const along = subtract(b, a);
+  const lengthSquared = dot(along, along);
+  const cuts = [0, 1];
+  const parameterOf = (point) => (lengthSquared > 0 ? dot(subtract(point, a), along) / lengthSquared : 0);
+  for (let index = 0; index < polygon.length; index += 1) {
+    const c = polygon[index];
+    const d = polygon[(index + 1) % polygon.length];
+    const hit = segmentIntersection(a, b, c, d);
+    if (hit) cuts.push(parameterOf(hit));
+    // A face lying along the line meets it in a stretch rather than a point.
+    for (const corner of [c, d]) {
+      if (distanceToSegment(corner, a, b) <= OPENING_CONTACT_TOLERANCE) cuts.push(parameterOf(corner));
+    }
+  }
+  const sorted = cuts.filter((t) => t >= 0 && t <= 1).sort((first, second) => first - second);
+  for (let index = 1; index < sorted.length; index += 1) {
+    if (sorted[index] - sorted[index - 1] <= 1e-12) continue;
+    const t = (sorted[index] + sorted[index - 1]) / 2;
+    const probe = { x: a.x + along.x * t, y: a.y + along.y * t };
+    if (pointInPolygon(probe, polygon) && distanceToPolygonBoundary(probe, polygon) > OPENING_CONTACT_TOLERANCE) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * How an opening's plan line meets a column: `intersects` when it passes
+ * through the column, else the clearance — the least distance from the line
+ * to the column outline, 0 for an opening standing flush against a face.
+ */
+function openingClearanceToColumn(wall, opening, column) {
+  const [a, b] = openingPlanSegment(wall, opening);
+  const outline = columnOutline(column);
+  if (segmentCrossesPolygonInterior(a, b, outline)) return { intersects: true, clearance: 0 };
+  let clearance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < outline.length; index += 1) {
+    clearance = Math.min(
+      clearance,
+      segmentToSegmentDistance(a, b, outline[index], outline[(index + 1) % outline.length]),
+    );
+  }
+  return { intersects: false, clearance };
+}
+
+// Column outline's box grown by `margin`, to rule columns out cheaply.
+function boxAround(points, margin) {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+  return { minX: minX - margin, minY: minY - margin, maxX: maxX + margin, maxY: maxY + margin };
+}
+
+const boxesOverlap = (first, second) =>
+  first.minX <= second.maxX && second.minX <= first.maxX && first.minY <= second.maxY && second.minY <= first.maxY;
 
 function cantileverSupportColumnId(beam) {
   if (beam.startRef?.kind === 'column') return beam.startRef.id;
@@ -490,12 +554,18 @@ function validateOpeningsNearColumns(floor, profile) {
     ...(floor.doors || []).map((entry) => ({ ...entry, kind: 'door' })),
     ...(floor.windows || []).map((entry) => ({ ...entry, kind: 'window' })),
   ];
+  // A column further than the minimum clearance from an opening's box can
+  // raise nothing, so only those within reach get the exact test.
+  const reach = Math.max(0, Number(profile.minOpeningClearanceFromColumn) || 0);
+  const columns = (floor.columns || []).map((column) => ({ column, box: boxAround(columnOutline(column), reach) }));
   for (const opening of openings) {
     const wall = walls.get(opening.wallId);
     if (!wall) continue;
-    for (const column of floor.columns || []) {
-      const clearance = openingClearanceToColumn(wall, opening, column);
-      if (clearance === 0) {
+    const openingBox = boxAround(openingPlanSegment(wall, opening), 0);
+    for (const { column, box } of columns) {
+      if (!boxesOverlap(openingBox, box)) continue;
+      const { intersects, clearance } = openingClearanceToColumn(wall, opening, column);
+      if (intersects) {
         issues.push(
           issue(
             'STRUCT.OPENING_INTERSECTS_COLUMN',
@@ -1007,7 +1077,9 @@ export function deriveConceptualLoadPath(project) {
     nodes.push(node);
   };
   const addEdge = (edge) => edges.push({ id: `${edge.from}->${edge.to}:${edge.kind}`, ...edge });
-  const floorIndex = new Map((project.floors || []).map((floor, index) => [floor.id, index]));
+  // Storey order, not array order: a column stack runs upper → lower by where
+  // its floors stand, whatever order the project happens to list them in.
+  const floorIndex = new Map(getOrderedFloors(project).map((floor, index) => [floor.id, index]));
 
   for (const floor of project.floors || []) {
     for (const column of floor.columns || []) {

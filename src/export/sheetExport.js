@@ -2,6 +2,20 @@ import { getPaperPreset } from '@/sheets/paper';
 
 const MM_TO_PT = 72 / 25.4;
 const ARC_SEGMENTS = 10;
+// Line segments per flattened Bézier curve, and per full turn of a circle or ellipse.
+const CURVE_SEGMENTS = 16;
+const ELLIPSE_SEGMENTS = 48;
+// SVG containers that never draw where they stand: their content is only
+// drawn by reference (a clip, a fill pattern, a marker, a gradient).
+const NON_RENDERED_TAGS = new Set([
+  'defs',
+  'clippath',
+  'pattern',
+  'marker',
+  'lineargradient',
+  'radialgradient',
+  'filter',
+]);
 const MM_PER_INCH = 25.4;
 const DEFAULT_PNG_DPI = 300;
 const JPEG_QUALITY = 0.92;
@@ -166,12 +180,56 @@ function fmt(value) {
   return Math.abs(number) < 1e-8 ? '0' : number.toFixed(3).replace(/\.?0+$/, '');
 }
 
-function escapePdfText(value = '') {
-  return String(value)
-    .replace(/[^\x20-\x7E]/g, '?')
-    .replace(/\\/g, '\\\\')
-    .replace(/\(/g, '\\(')
-    .replace(/\)/g, '\\)');
+// The Unicode code points WinAnsiEncoding (Windows-1252) places in 0x80–0x9F;
+// its 0xA0–0xFF are Latin-1 as they are.
+const WIN_ANSI_HIGH = new Map([
+  [0x20ac, 0x80],
+  [0x201a, 0x82],
+  [0x0192, 0x83],
+  [0x201e, 0x84],
+  [0x2026, 0x85],
+  [0x2020, 0x86],
+  [0x2021, 0x87],
+  [0x02c6, 0x88],
+  [0x2030, 0x89],
+  [0x0160, 0x8a],
+  [0x2039, 0x8b],
+  [0x0152, 0x8c],
+  [0x017d, 0x8e],
+  [0x2018, 0x91],
+  [0x2019, 0x92],
+  [0x201c, 0x93],
+  [0x201d, 0x94],
+  [0x2022, 0x95],
+  [0x2013, 0x96],
+  [0x2014, 0x97],
+  [0x02dc, 0x98],
+  [0x2122, 0x99],
+  [0x0161, 0x9a],
+  [0x203a, 0x9b],
+  [0x0153, 0x9c],
+  [0x017e, 0x9e],
+  [0x0178, 0x9f],
+]);
+
+/**
+ * A PDF string literal's body for the WinAnsi-encoded Helvetica the exporter
+ * declares: printable ASCII as itself (with \, ( and ) escaped), any other
+ * character WinAnsi has — ², °, ±, é, – — as its byte in an octal escape, and
+ * only a character it cannot show at all as "?".
+ */
+export function escapePdfText(value = '') {
+  let out = '';
+  for (const character of String(value)) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint >= 0x20 && codePoint <= 0x7e) {
+      out += character === '\\' || character === '(' || character === ')' ? `\\${character}` : character;
+      continue;
+    }
+    const byte = codePoint >= 0xa0 && codePoint <= 0xff ? codePoint : WIN_ANSI_HIGH.get(codePoint);
+    out += byte ? `\\${byte.toString(8).padStart(3, '0')}` : '?';
+  }
+  return out;
 }
 
 function parseNumberList(value = '') {
@@ -278,40 +336,72 @@ function getLocalMatrix(element) {
   return matrix;
 }
 
-function parseColor(styleValue) {
+/**
+ * A CSS colour as `[r, g, b, alpha]`, each 0–1, or null for no paint at all.
+ * Computed styles give rgb()/rgba(); hex (#rgb, #rgba, #rrggbb, #rrggbbaa)
+ * and `transparent` are read as well.
+ */
+export function parseColor(styleValue) {
   if (!styleValue || styleValue === 'none') return null;
   const normalized = String(styleValue).trim();
+  if (normalized.toLowerCase() === 'transparent') return [0, 0, 0, 0];
 
   if (normalized.startsWith('#')) {
     const hex = normalized.slice(1);
     const chunks =
-      hex.length === 3
+      hex.length === 3 || hex.length === 4
         ? hex.split('').map((value) => value + value)
-        : [hex.slice(0, 2), hex.slice(2, 4), hex.slice(4, 6)];
-    return chunks.map((value) => parseInt(value, 16) / 255);
+        : [hex.slice(0, 2), hex.slice(2, 4), hex.slice(4, 6), ...(hex.length === 8 ? [hex.slice(6, 8)] : [])];
+    const [r, g, b, a = 'ff'] = chunks;
+    return [r, g, b, a].map((value) => parseInt(value, 16) / 255);
   }
 
   const rgb = normalized.match(/rgba?\(([^)]+)\)/i);
   if (rgb) {
-    const values = rgb[1].split(',').map((value) => Number.parseFloat(value.trim()));
-    return values.slice(0, 3).map((value) => value / 255);
+    // Legacy commas, or the space-and-slash form.
+    const parts = rgb[1].split(/[\s,/]+/).filter(Boolean);
+    const channels = parts.slice(0, 3).map((value) => Number.parseFloat(value) / 255);
+    const alphaText = parts[3];
+    const alpha =
+      alphaText === undefined
+        ? 1
+        : alphaText.endsWith('%')
+          ? Number.parseFloat(alphaText) / 100
+          : Number.parseFloat(alphaText);
+    return [...channels, Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1];
   }
 
   return null;
 }
 
+// An opacity property as 0–1: a missing or unreadable value is opaque, and 0 is 0.
+function opacityValue(raw) {
+  const value = Number.parseFloat(raw);
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1;
+}
+
 function computeStyle(element) {
-  const style = window.getComputedStyle(element);
-  const fill = parseColor(style.fill);
-  const stroke = parseColor(style.stroke);
+  return styleFromComputed(window.getComputedStyle(element));
+}
+
+/**
+ * The drawing style the exporters use, from a computed style. A colour with
+ * no alpha (`transparent`, `rgba(…, 0)`) is no paint — not black — and a
+ * colour's alpha folds into its fill or stroke opacity.
+ */
+export function styleFromComputed(style) {
+  const fillColor = parseColor(style.fill);
+  const strokeColor = parseColor(style.stroke);
+  const fill = fillColor && fillColor[3] > 0 ? fillColor.slice(0, 3) : null;
+  const stroke = strokeColor && strokeColor[3] > 0 ? strokeColor.slice(0, 3) : null;
   const strokeWidth = Number.parseFloat(style.strokeWidth) || 0;
   const lineCap = style.strokeLinecap || 'butt';
   const lineJoin = style.strokeLinejoin || 'miter';
   const dashArray = parseNumberList(style.strokeDasharray || '');
   const fontSize = Number.parseFloat(style.fontSize) || 12;
-  const opacity = Number.parseFloat(style.opacity || '1') || 1;
-  const fillOpacity = fill ? opacity * (Number.parseFloat(style.fillOpacity || '1') || 1) : 0;
-  const strokeOpacity = stroke ? opacity * (Number.parseFloat(style.strokeOpacity || '1') || 1) : 0;
+  const opacity = opacityValue(style.opacity);
+  const fillOpacity = fill ? opacity * opacityValue(style.fillOpacity) * fillColor[3] : 0;
+  const strokeOpacity = stroke ? opacity * opacityValue(style.strokeOpacity) * strokeColor[3] : 0;
 
   return {
     fill,
@@ -342,56 +432,103 @@ function lineJoinCode(value) {
   return 0;
 }
 
-function normalizeSweep(delta, sweepFlag) {
-  let result = delta;
-  if (sweepFlag && result < 0) result += Math.PI * 2;
-  if (!sweepFlag && result > 0) result -= Math.PI * 2;
-  return result;
-}
-
-function buildArcPoints(start, rx, ry, rotation, largeArcFlag, sweepFlag, end) {
+/**
+ * An SVG elliptical arc, start to end, as the points of its polyline (the
+ * end point last). The endpoint-to-centre conversion of SVG 1.1 §F.6.5, with
+ * §F.6.6's corrections: zero radii draw a straight line, and radii too small
+ * to span the chord are scaled up until they just do — what a browser draws.
+ */
+export function buildArcPoints(start, rx, ry, rotation, largeArcFlag, sweepFlag, end) {
   if (!start || !end) return [end];
-  if (Math.abs(rotation) > 1e-6 || Math.abs(rx - ry) > 1e-6) return [end];
-  const radius = Math.abs(rx);
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const chordLength = Math.hypot(dx, dy);
-  if (chordLength < 1e-6 || radius < chordLength / 2) return [end];
+  let rxAbs = Math.abs(rx);
+  let ryAbs = Math.abs(ry);
+  if (Math.hypot(end.x - start.x, end.y - start.y) < 1e-9 || rxAbs < 1e-9 || ryAbs < 1e-9) return [end];
 
-  const midX = (start.x + end.x) / 2;
-  const midY = (start.y + end.y) / 2;
-  const halfChord = chordLength / 2;
-  const offsetLength = Math.sqrt(Math.max(0, radius * radius - halfChord * halfChord));
-  const ux = -dy / chordLength;
-  const uy = dx / chordLength;
-
-  const centers = [
-    { x: midX + ux * offsetLength, y: midY + uy * offsetLength },
-    { x: midX - ux * offsetLength, y: midY - uy * offsetLength },
-  ];
-
-  for (const center of centers) {
-    const startAngle = Math.atan2(start.y - center.y, start.x - center.x);
-    const endAngle = Math.atan2(end.y - center.y, end.x - center.x);
-    const sweepDelta = normalizeSweep(endAngle - startAngle, Boolean(sweepFlag));
-    const isLarge = Math.abs(sweepDelta) > Math.PI;
-    if (isLarge !== Boolean(largeArcFlag)) continue;
-
-    const points = [];
-    for (let index = 1; index <= ARC_SEGMENTS; index += 1) {
-      const angle = startAngle + (sweepDelta * index) / ARC_SEGMENTS;
-      points.push({
-        x: center.x + radius * Math.cos(angle),
-        y: center.y + radius * Math.sin(angle),
-      });
-    }
-    return points;
+  const phi = ((Number(rotation) || 0) * Math.PI) / 180;
+  const cos = Math.cos(phi);
+  const sin = Math.sin(phi);
+  // F.6.5.1: the midpoint, in the ellipse's own (unrotated) frame.
+  const hx = (start.x - end.x) / 2;
+  const hy = (start.y - end.y) / 2;
+  const x1 = cos * hx + sin * hy;
+  const y1 = -sin * hx + cos * hy;
+  // F.6.6.2: scale radii up that cannot reach.
+  const lambda = (x1 * x1) / (rxAbs * rxAbs) + (y1 * y1) / (ryAbs * ryAbs);
+  if (lambda > 1) {
+    const grow = Math.sqrt(lambda);
+    rxAbs *= grow;
+    ryAbs *= grow;
   }
+  // F.6.5.2: the centre in that frame.
+  const rx2 = rxAbs * rxAbs;
+  const ry2 = ryAbs * ryAbs;
+  const numerator = rx2 * ry2 - rx2 * y1 * y1 - ry2 * x1 * x1;
+  const denominator = rx2 * y1 * y1 + ry2 * x1 * x1;
+  const factor =
+    (Boolean(largeArcFlag) === Boolean(sweepFlag) ? -1 : 1) * Math.sqrt(Math.max(0, numerator / denominator));
+  const cx1 = (factor * rxAbs * y1) / ryAbs;
+  const cy1 = (-factor * ryAbs * x1) / rxAbs;
+  // F.6.5.3: back to user space.
+  const cx = cos * cx1 - sin * cy1 + (start.x + end.x) / 2;
+  const cy = sin * cx1 + cos * cy1 + (start.y + end.y) / 2;
+  // F.6.5.5–6: the start angle and the sweep.
+  const angle = (ux, uy, vx, vy) => Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
+  const startAngle = angle(1, 0, (x1 - cx1) / rxAbs, (y1 - cy1) / ryAbs);
+  let sweep = angle((x1 - cx1) / rxAbs, (y1 - cy1) / ryAbs, (-x1 - cx1) / rxAbs, (-y1 - cy1) / ryAbs);
+  if (!sweepFlag && sweep > 0) sweep -= Math.PI * 2;
+  else if (sweepFlag && sweep < 0) sweep += Math.PI * 2;
 
-  return [end];
+  const points = [];
+  for (let index = 1; index < ARC_SEGMENTS; index += 1) {
+    const t = startAngle + (sweep * index) / ARC_SEGMENTS;
+    const ex = rxAbs * Math.cos(t);
+    const ey = ryAbs * Math.sin(t);
+    points.push({ x: cx + cos * ex - sin * ey, y: cy + sin * ex + cos * ey });
+  }
+  // The end point exactly, so the next command starts where this one ended.
+  points.push({ x: end.x, y: end.y });
+  return points;
 }
 
-function parsePathData(pathData = '') {
+// A Bézier segment flattened to CURVE_SEGMENTS points after its start (its end last).
+function cubicPoints(p0, p1, p2, p3) {
+  const points = [];
+  for (let index = 1; index <= CURVE_SEGMENTS; index += 1) {
+    const t = index / CURVE_SEGMENTS;
+    const u = 1 - t;
+    const a = u * u * u;
+    const b = 3 * u * u * t;
+    const c = 3 * u * t * t;
+    const d = t * t * t;
+    points.push(
+      index === CURVE_SEGMENTS
+        ? { x: p3.x, y: p3.y }
+        : { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y },
+    );
+  }
+  return points;
+}
+
+function quadraticPoints(p0, p1, p2) {
+  const points = [];
+  for (let index = 1; index <= CURVE_SEGMENTS; index += 1) {
+    const t = index / CURVE_SEGMENTS;
+    const u = 1 - t;
+    points.push(
+      index === CURVE_SEGMENTS
+        ? { x: p2.x, y: p2.y }
+        : { x: u * u * p0.x + 2 * u * t * p1.x + t * t * p2.x, y: u * u * p0.y + 2 * u * t * p1.y + t * t * p2.y },
+    );
+  }
+  return points;
+}
+
+/**
+ * SVG path data as absolute M / L / Z commands: lines as they are, and every
+ * curve — cubic and quadratic Béziers (C S Q T) and elliptical arcs (A) —
+ * flattened into line segments.
+ */
+export function parsePathData(pathData = '') {
   const tokens = String(pathData).match(/[AaCcHhLlMmQqSsTtVvZz]|-?\d*\.?\d+(?:e[-+]?\d+)?/g) || [];
   const commands = [];
   let index = 0;
@@ -399,16 +536,58 @@ function parsePathData(pathData = '') {
   let subpathStart = { x: 0, y: 0 };
   let command = null;
 
+  // The last cubic / quadratic control point, for S and T to reflect; any
+  // other command forgets it, as the SVG spec has it.
+  let lastCubic = null;
+  let lastQuad = null;
+
   const nextNumber = () => Number(tokens[index++]);
   const hasNumber = () => index < tokens.length && !/^[A-Za-z]$/.test(tokens[index]);
+  const nextPoint = (relative) => {
+    const x = nextNumber();
+    const y = nextNumber();
+    return relative ? { x: current.x + x, y: current.y + y } : { x, y };
+  };
+  const reflect = (control) => (control ? { x: 2 * current.x - control.x, y: 2 * current.y - control.y } : current);
 
   while (index < tokens.length) {
     if (/^[A-Za-z]$/.test(tokens[index])) {
       command = tokens[index++];
     }
     if (!command) break;
+    if (!'CcSs'.includes(command)) lastCubic = null;
+    if (!'QqTt'.includes(command)) lastQuad = null;
 
     switch (command) {
+      case 'C':
+      case 'c':
+      case 'S':
+      case 's':
+        while (hasNumber()) {
+          const relative = command === 'c' || command === 's';
+          const smooth = command === 'S' || command === 's';
+          const c1 = smooth ? reflect(lastCubic) : nextPoint(relative);
+          const c2 = nextPoint(relative);
+          const end = nextPoint(relative);
+          for (const point of cubicPoints(current, c1, c2, end)) commands.push({ type: 'L', ...point });
+          lastCubic = c2;
+          current = end;
+        }
+        break;
+      case 'Q':
+      case 'q':
+      case 'T':
+      case 't':
+        while (hasNumber()) {
+          const relative = command === 'q' || command === 't';
+          const smooth = command === 'T' || command === 't';
+          const control = smooth ? reflect(lastQuad) : nextPoint(relative);
+          const end = nextPoint(relative);
+          for (const point of quadraticPoints(current, control, end)) commands.push({ type: 'L', ...point });
+          lastQuad = control;
+          current = end;
+        }
+        break;
       case 'M':
       case 'm': {
         while (hasNumber()) {
@@ -589,7 +768,7 @@ class PdfBuilder {
       );
     });
     objects[fontObjectNumber] = encoder.encode(
-      `${fontObjectNumber} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`,
+      `${fontObjectNumber} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n`,
     );
 
     alphaObjects.forEach((entry, index) => {
@@ -647,11 +826,89 @@ class PdfBuilder {
   }
 }
 
+// A circle or ellipse as the closed polyline the exporters draw.
+function ellipsePoints(cx, cy, rx, ry) {
+  const points = [];
+  for (let index = 0; index < ELLIPSE_SEGMENTS; index += 1) {
+    const angle = (index / ELLIPSE_SEGMENTS) * Math.PI * 2;
+    points.push({ x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle) });
+  }
+  return points;
+}
+
+function roundShapePoints(element) {
+  const tagName = element.tagName.toLowerCase();
+  const cx = Number(element.getAttribute('cx')) || 0;
+  const cy = Number(element.getAttribute('cy')) || 0;
+  const rx = Number(element.getAttribute(tagName === 'circle' ? 'r' : 'rx')) || 0;
+  const ry = tagName === 'circle' ? rx : Number(element.getAttribute('ry')) || 0;
+  if (rx <= 0 || ry <= 0) return [];
+  return ellipsePoints(cx, cy, rx, ry);
+}
+
+// A basic shape's outline as subpaths of points, or null for anything else.
+function shapeSubpaths(element) {
+  switch (element.tagName.toLowerCase()) {
+    case 'rect': {
+      const x = Number(element.getAttribute('x')) || 0;
+      const y = Number(element.getAttribute('y')) || 0;
+      const width = Number(element.getAttribute('width')) || 0;
+      const height = Number(element.getAttribute('height')) || 0;
+      return [
+        [
+          { x, y },
+          { x: x + width, y },
+          { x: x + width, y: y + height },
+          { x, y: y + height },
+        ],
+      ];
+    }
+    case 'polygon':
+    case 'polyline':
+      return [parsePoints(element.getAttribute('points') || '')];
+    case 'circle':
+    case 'ellipse':
+      return [roundShapePoints(element)];
+    case 'path': {
+      const subpaths = [];
+      for (const command of parsePathData(element.getAttribute('d') || '')) {
+        if (command.type === 'M') subpaths.push([{ x: command.x, y: command.y }]);
+        else if (command.type === 'L' && subpaths.length)
+          subpaths[subpaths.length - 1].push({ x: command.x, y: command.y });
+      }
+      return subpaths;
+    }
+    default:
+      return null;
+  }
+}
+
+/*
+ * The clip region a `clip-path="url(#id)"` names, in the element's own user
+ * space: `{ subpaths, evenOdd }`. Only the plain case the drawings use is
+ * honoured — a userSpaceOnUse clipPath holding one untransformed basic shape;
+ * anything else draws unclipped, as every clip did before.
+ */
+export function resolveClip(element) {
+  const match = /url\(\s*["']?#([^"')]+)["']?\s*\)/.exec(element.getAttribute('clip-path') || '');
+  if (!match) return null;
+  const clipPath = element.ownerDocument?.getElementById(match[1]);
+  if (!clipPath || clipPath.tagName.toLowerCase() !== 'clippath') return null;
+  if (clipPath.getAttribute('clipPathUnits') === 'objectBoundingBox' || clipPath.getAttribute('transform')) return null;
+  const shapes = [...clipPath.children];
+  if (shapes.length !== 1 || shapes[0].getAttribute('transform')) return null;
+  const subpaths = shapeSubpaths(shapes[0])?.filter((points) => points.length >= 3);
+  if (!subpaths?.length) return null;
+  const rule = shapes[0].getAttribute('clip-rule') || window.getComputedStyle(shapes[0]).clipRule;
+  return { subpaths, evenOdd: rule === 'evenodd' };
+}
+
 function beginNode(builder, element) {
   const localMatrix = getLocalMatrix(element);
   const tagName = element.tagName.toLowerCase();
   const needsClip = tagName === 'svg' && element !== getExportSvg();
-  const shouldWrap = needsClip || !matrixIsIdentity(localMatrix);
+  const clip = resolveClip(element);
+  const shouldWrap = needsClip || Boolean(clip) || !matrixIsIdentity(localMatrix);
 
   if (!shouldWrap) return false;
 
@@ -666,6 +923,11 @@ function beginNode(builder, element) {
     const width = Number(element.getAttribute('width')) || 0;
     const height = Number(element.getAttribute('height')) || 0;
     builder.write(`0 0 ${fmt(width)} ${fmt(height)} re W n`);
+  }
+
+  if (clip) {
+    for (const points of clip.subpaths) emitPathFromPoints(builder, points, true);
+    builder.write(clip.evenOdd ? 'W* n' : 'W n');
   }
 
   return true;
@@ -693,6 +955,17 @@ function beginCanvasNode(context, element) {
     context.beginPath();
     context.rect(0, 0, width, height);
     context.clip();
+  }
+
+  const clip = resolveClip(element);
+  if (clip) {
+    context.beginPath();
+    for (const points of clip.subpaths) {
+      context.moveTo(points[0].x, points[0].y);
+      for (let index = 1; index < points.length; index += 1) context.lineTo(points[index].x, points[index].y);
+      context.closePath();
+    }
+    context.clip(clip.evenOdd ? 'evenodd' : 'nonzero');
   }
 }
 
@@ -759,9 +1032,8 @@ function drawLineToCanvas(context, element) {
   context.restore();
 }
 
-function drawPolygonToCanvas(context, element, closePath) {
+function drawPolygonToCanvas(context, element, closePath, points = parsePoints(element.getAttribute('points') || '')) {
   const style = computeStyle(element);
-  const points = parsePoints(element.getAttribute('points') || '');
   if (!points.length) return;
 
   context.save();
@@ -825,6 +1097,7 @@ function drawImageToCanvas(context, element, imageMap) {
 
 function drawElementToCanvas(context, element, imageMap) {
   const tagName = element.tagName.toLowerCase();
+  if (NON_RENDERED_TAGS.has(tagName)) return;
   beginCanvasNode(context, element);
 
   switch (tagName) {
@@ -844,6 +1117,10 @@ function drawElementToCanvas(context, element, imageMap) {
     case 'polyline':
       drawPolygonToCanvas(context, element, false);
       break;
+    case 'circle':
+    case 'ellipse':
+      drawPolygonToCanvas(context, element, true, roundShapePoints(element));
+      break;
     case 'path':
       drawPathToCanvas(context, element);
       break;
@@ -861,8 +1138,7 @@ function drawElementToCanvas(context, element, imageMap) {
   endCanvasNode(context);
 }
 
-function renderPolygonLike(builder, element, closePath) {
-  const points = parsePoints(element.getAttribute('points') || '');
+function renderPolygonLike(builder, element, closePath, points = parsePoints(element.getAttribute('points') || '')) {
   if (!points.length) return;
   const style = computeStyle(element);
   builder.write('q');
@@ -1000,6 +1276,7 @@ function renderImage(builder, element, imageMap) {
 
 function walkElement(builder, element, imageMap) {
   const tagName = element.tagName.toLowerCase();
+  if (NON_RENDERED_TAGS.has(tagName)) return;
   const wrapped = beginNode(builder, element);
 
   switch (tagName) {
@@ -1018,6 +1295,10 @@ function walkElement(builder, element, imageMap) {
       break;
     case 'polyline':
       renderPolygonLike(builder, element, false);
+      break;
+    case 'circle':
+    case 'ellipse':
+      renderPolygonLike(builder, element, true, roundShapePoints(element));
       break;
     case 'path':
       renderPath(builder, element);

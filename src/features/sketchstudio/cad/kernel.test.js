@@ -7,7 +7,7 @@ import { emptyModel, memberMetrics, resolveParameters, profileToPart, createPart
 import { translateInstance } from './movement.js';
 import { createCutFeature } from './cutPlacement.js';
 import { annotationText } from './drawings.js';
-import { createKernelSession } from './kernel.js';
+import { createKernelSession, snapshotTransferables } from './kernel.js';
 import { furnitureExample, bracketExample } from './examples.js';
 import { buildCutList, planLinearStock } from './fabrication.js';
 import { createHardware, hardwareDefaults } from './hardware.js';
@@ -335,6 +335,76 @@ describe('exact modeling kernel', () => {
       expect(sheets[0].views[0].hatch.length).toBeGreaterThan(0);
       expect(sheets[0].views[1].detail).toBe(true);
       expect(sheets[1].views[0].visible.length).toBeGreaterThan(0);
+    } finally {
+      session.dispose();
+    }
+  });
+  it('drawings({ sheetIds }) projects only those sheets: a section that misses fails its own request only', () => {
+    const model = fixture([{ id: 'base', type: 'box', width: 100, depth: 80, height: 50 }]);
+    model.sheets = [
+      { ...model.sheets[0], id: 'plain', views: ['top'] },
+      {
+        ...model.sheets[0],
+        id: 'missing',
+        title: 'Missing',
+        section: { origin: [0, 0, 5000], normal: [0, 0, 1], side: 'positive' },
+      },
+    ];
+    const session = createKernelSession(model);
+    try {
+      // Every sheet at once: the bad one fails the whole request (Phase R).
+      expect(() => session.drawings()).toThrow('Section Missing does not cross the model.');
+      const sheets = session.drawings({ sheetIds: ['plain'] });
+      expect(sheets.map((s) => s.id)).toEqual(['plain']);
+      expect(sheets[0].views[0].visible.length).toBeGreaterThan(0);
+      expect(() => session.drawings({ sheetIds: ['missing'] })).toThrow('does not cross the model');
+      expect(session.drawings({ sheetIds: [] })).toEqual([]);
+    } finally {
+      session.dispose();
+    }
+  });
+  it('includeParts with sheetIds adds part sheets only for parts without a sheet; collectErrors keeps the rest (Phase T)', () => {
+    const model = {
+      ...fixture([{ id: 'base', type: 'box', width: 100, depth: 80, height: 50 }]),
+      parts: [
+        { id: 'p', name: 'Test part', features: [{ id: 'base', type: 'box', width: 100, depth: 80, height: 50 }] },
+        { id: 'q', name: 'Second part', features: [{ id: 'base', type: 'box', width: 20, depth: 20, height: 20 }] },
+      ],
+      instances: [
+        { id: 'i', partId: 'p', position: [0, 0, 0], rotation: [0, 0, 0] },
+        { id: 'j', partId: 'q', position: [200, 0, 0], rotation: [0, 0, 0] },
+      ],
+    };
+    model.sheets = [
+      { ...emptyModel().sheets[0], id: 'plain', views: ['top'] },
+      { ...emptyModel().sheets[0], id: 'own-p', title: 'Part p', partId: 'p', views: ['top'] },
+      {
+        ...emptyModel().sheets[0],
+        id: 'missing',
+        title: 'Missing',
+        section: { origin: [0, 0, 5000], normal: [0, 0, 1], side: 'positive' },
+      },
+    ];
+    const session = createKernelSession(model);
+    try {
+      // Without includeParts: the sheets named, nothing more.
+      expect(session.drawings({ sheetIds: ['plain'] }).map((s) => s.id)).toEqual(['plain']);
+      // With it: part q's detail sheet only (p has a sheet), even when none is named.
+      expect(session.drawings({ sheetIds: [], includeParts: true }).map((s) => s.id)).toEqual(['detail-q']);
+      expect(session.drawings({ sheetIds: ['plain'], includeParts: true }).map((s) => s.id)).toEqual([
+        'plain',
+        'detail-q',
+      ]);
+      // A refused sheet comes back as its error; the others are drawn.
+      const sheets = session.drawings({ sheetIds: ['plain', 'missing'], collectErrors: true });
+      expect(sheets.map((s) => s.id)).toEqual(['plain', 'missing']);
+      expect(sheets[0].views[0].visible.length).toBeGreaterThan(0);
+      expect(sheets[1]).toEqual({
+        id: 'missing',
+        title: 'Missing',
+        error: 'Section Missing does not cross the model.',
+      });
+      expect(() => session.drawings({ sheetIds: ['plain', 'missing'] })).toThrow('does not cross the model');
     } finally {
       session.dispose();
     }
@@ -795,6 +865,32 @@ describe('angle bar in the kernel', () => {
       expect(Math.abs(volume - expected) / expected).toBeLessThan(1e-3);
       // The heel side (local −x) is the short side: less than the square volume.
       expect(volume).toBeLessThan(angleSectionArea(L50) * 496);
+    } finally {
+      session.dispose();
+    }
+  });
+});
+describe('snapshot transfer', () => {
+  it('tessellates into typed arrays and lists every buffer for the transfer', () => {
+    const created = createPart('member');
+    const session = createKernelSession({ ...emptyModel(), parts: [created.part], instances: [created.instance] });
+    try {
+      const snapshot = session.snapshot();
+      const [instance] = snapshot.instances;
+      expect(instance.mesh.vertices).toBeInstanceOf(Float32Array);
+      expect(instance.mesh.normals).toBeInstanceOf(Float32Array);
+      expect(instance.mesh.triangles).toBeInstanceOf(Uint32Array);
+      expect(instance.edges.lines).toBeInstanceOf(Float32Array);
+      expect(instance.mesh.vertices.length).toBeGreaterThan(0);
+      expect(instance.mesh.vertices.length).toBe(instance.mesh.normals.length);
+      expect(Math.max(...instance.mesh.triangles)).toBeLessThan(instance.mesh.vertices.length / 3);
+      const buffers = snapshotTransferables(snapshot);
+      expect(buffers).toHaveLength(4);
+      expect(buffers).toContain(instance.mesh.triangles.buffer);
+      // Structured clone with the transfer list, as postMessage does it.
+      const received = structuredClone(snapshot, { transfer: buffers });
+      expect(received.instances[0].mesh.triangles.length).toBeGreaterThan(0);
+      expect(received.parts[0].bounds).toEqual(snapshot.parts[0].bounds);
     } finally {
       session.dispose();
     }

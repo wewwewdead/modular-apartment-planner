@@ -95,9 +95,9 @@ export const setPointerDown = (isPointerDown) => ({
   payload: isPointerDown,
 });
 
-export const startPan = ({ pointerId, screenPoint, startViewport }) => ({
+export const startPan = ({ pointerId, button, screenPoint, startViewport }) => ({
   type: SKETCH_STUDIO_ACTIONS.START_PAN,
-  payload: { pointerId, screenPoint, startViewport },
+  payload: { pointerId, button, screenPoint, startViewport },
 });
 
 export const updatePan = ({ pointerId, viewport, screenPoint, worldPoint }) => ({

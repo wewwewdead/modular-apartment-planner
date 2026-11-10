@@ -113,6 +113,7 @@ const QUANTITY_RATE_FIELDS = Object.freeze([
   ['fiberCementBoard', 'HardieFlex / fiber-cement board / m²'],
   ['plywoodBoard', 'Plywood wall board / m²'],
   ['rainscreenBoard', 'Rainscreen panel / m²'],
+  ['sidingBoard', 'Plank siding / m²'],
   ['wallFraming', 'Wall framing / linear m'],
   ['formwork', 'Formwork / m²'],
   ['floorFinish', 'Floor finish / m²'],
@@ -2862,6 +2863,21 @@ function SystemsStage({
   const [headroomDraft, setHeadroomDraft] = useState(
     metersDraft(selectedStairEntry?.stair.coordination?.minimumHeadroom ?? 2000),
   );
+  // The opening and headroom belong to the stair they were seeded from: picking
+  // another stair seeds them again from that one, with the same expressions as
+  // the initialisers above. Adjusted during render rather than in an effect, so
+  // the form never shows a frame of the old stair's values.
+  const [headroomSeedStairId, setHeadroomSeedStairId] = useState(selectedStairId);
+  if (headroomSeedStairId !== selectedStairId) {
+    setHeadroomSeedStairId(selectedStairId);
+    setSelectedOpeningId(existingClearanceRef?.openingId || stairOpenings[0]?.opening.id || '');
+    setHeadroomDraft(metersDraft(selectedStairEntry?.stair.coordination?.minimumHeadroom ?? 2000));
+  }
+  // Only an opening the destination slab still has can be linked; anything
+  // else reads as nothing chosen.
+  const headroomOpeningId = stairOpenings.some((entry) => entry.opening.id === selectedOpeningId)
+    ? selectedOpeningId
+    : '';
   const setField = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
   const configure = () =>
     onExecuteCommand({
@@ -2944,7 +2960,7 @@ function SystemsStage({
     });
   };
   const linkStairOpening = () => {
-    const selection = stairOpenings.find((entry) => entry.opening.id === selectedOpeningId);
+    const selection = stairOpenings.find((entry) => entry.opening.id === headroomOpeningId);
     if (!selection || !selectedStairEntry) return;
     onExecuteCommand({
       type: BUILDING_COMMANDS.LINK_STAIR_CLEARANCE_OPENING,
@@ -3987,7 +4003,7 @@ function SystemsStage({
               <span>Destination slab opening</span>
               <select
                 aria-label="Headroom slab opening"
-                value={selectedOpeningId}
+                value={headroomOpeningId}
                 onChange={(event) => setSelectedOpeningId(event.target.value)}
               >
                 <option value="">Select opening</option>
@@ -4013,7 +4029,7 @@ function SystemsStage({
           <button
             type="button"
             className={styles.primaryAction}
-            disabled={!selectedOpeningId}
+            disabled={!headroomOpeningId}
             onClick={linkStairOpening}
           >
             Link and check headroom opening

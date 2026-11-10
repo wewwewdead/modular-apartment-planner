@@ -34,9 +34,10 @@
  *
  * ## What warmth costs the studies that cannot yet be interrupted
  *
- * The daylight and solar workers run their solve to completion inside one
- * message handler, so a superseded run BLOCKS its replacement until it finishes
- * rather than being killed. That is a deliberate, disclosed trade: the id
+ * The study workers run their solve to completion inside one task, so a
+ * superseded run already under way BLOCKS its replacement until it finishes
+ * rather than being killed (requests that queued behind it are skipped, not
+ * solved — see `handleLatestRequestOnly`). That is a deliberate, disclosed trade: the id
  * matching in rule 1 keeps the stale answer off the screen either way, and
  * terminating to shave that wait throws away the worker's cache. Giving the
  * workers chunked yields is the fix, and is not in this change.
@@ -53,6 +54,36 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** Requests are matched to responses by id, so a stale reply is recognisable. */
 let nextRequestId = 1;
+
+/**
+ * What a study panel is told, derived from what the hook stored.
+ *
+ * `result.key` is the request key last answered — by a study, an error, or the
+ * finding that no worker can be built — and `result.studyKey` the request key
+ * the study on screen was computed for. They differ after an error, which
+ * answers a run without replacing the study.
+ *
+ * "No worker" outlasts the inputs it was found for: reading `running` on every
+ * edit would make a study that falls back to the main thread swap its overlay
+ * out and back each time. A post clears it, which is only reached once a
+ * worker has been built.
+ *
+ * @param {object} options
+ * @param {boolean} options.active
+ * @param {string|null} options.requestKey  The current inputs.
+ * @param {{study: object|null, studyKey: string|null, key: string|null, error: string|null, unavailable: boolean}} options.result
+ * @returns {{status: 'idle'|'running'|'ready'|'error'|'unavailable', stale: boolean}}
+ */
+export function deriveStudyStatus({ active, requestKey, result }) {
+  if (!active) return { status: 'idle', stale: false };
+  // The overlay on screen belongs to an earlier version of the building. Worth
+  // saying so: a number read off a superseded plan is misleading in a way a
+  // blank canvas is not — and that holds beside an error too.
+  const stale = Boolean(result.study) && result.studyKey !== requestKey;
+  if (result.unavailable) return { status: 'unavailable', stale };
+  if (result.key !== requestKey) return { status: 'running', stale };
+  return { status: result.error ? 'error' : 'ready', stale };
+}
 
 /**
  * @param {object} options
@@ -75,7 +106,14 @@ export function useStudyWorker({ workerFactory, active, requestKey, payload, set
   const pendingRef = useRef({ id: 0, key: null });
   const payloadRef = useRef(payload);
   const answeredRef = useRef(null);
-  const [result, setResult] = useState({ study: null, key: null, error: null, progress: null, unavailable: false });
+  const [result, setResult] = useState({
+    study: null,
+    studyKey: null,
+    key: null,
+    error: null,
+    progress: null,
+    unavailable: false,
+  });
 
   // Kept current without being a dependency of the run effect: what to post is
   // not the same question as whether to post. Declared before that effect so it
@@ -91,7 +129,7 @@ export function useStudyWorker({ workerFactory, active, requestKey, payload, set
    * a worker, is not an answer — the next run gets to try again.
    */
   useEffect(() => {
-    answeredRef.current = result.study && !result.error && !result.unavailable ? result.key : null;
+    answeredRef.current = result.study && !result.error && !result.unavailable ? result.studyKey : null;
   }, [result]);
 
   /**
@@ -116,10 +154,35 @@ export function useStudyWorker({ workerFactory, active, requestKey, payload, set
       if (message.type === 'progress') {
         setResult((current) => ({ ...current, progress: message.progress }));
       } else if (message.type === 'result') {
-        setResult({ study: message.result, key, error: null, progress: null, unavailable: false });
+        setResult({ study: message.result, studyKey: key, key, error: null, progress: null, unavailable: false });
       } else if (message.type === 'error') {
         setResult((current) => ({ ...current, key, error: message.message, progress: null }));
       }
+    });
+
+    // The worker itself failing — its module would not load, or it died outside
+    // the solve's own try/catch — posts no reply at all, so without these the
+    // pending run stayed "running" forever. Either way the pending run is
+    // answered with an error. A worker that raised `error` is gone: it is
+    // dropped so the next run builds a fresh one rather than posting into it.
+    // A `messageerror` (a reply that could not be deserialised) leaves the
+    // worker as it is.
+    const fail = (message) => {
+      // Nothing pending (the run in flight was dropped because its inputs were
+      // undone) means nothing on screen is waiting for this run to answer.
+      if (!pendingRef.current.id) return;
+      const key = pendingRef.current.key;
+      setResult((current) => ({ ...current, key, error: message, progress: null }));
+    };
+    worker.addEventListener('error', (event) => {
+      if (workerRef.current === worker) {
+        worker.terminate();
+        workerRef.current = null;
+      }
+      fail(event?.message || 'The study stopped unexpectedly.');
+    });
+    worker.addEventListener('messageerror', () => {
+      fail('The study sent back a result that could not be read.');
     });
 
     workerRef.current = worker;
@@ -148,11 +211,21 @@ export function useStudyWorker({ workerFactory, active, requestKey, payload, set
     // The answer for exactly these inputs is already on screen. Re-posting would
     // recompute it, and — since disabling the study terminated the worker that
     // had the fields cached — recompute it the slow way.
-    if (answeredRef.current !== null && answeredRef.current === requestKey) return undefined;
+    //
+    // A run posted for inputs since undone (A → B → back to A before B replies)
+    // is still the pending one, and its reply would land on top of the answer
+    // that is already right. Adopting that answer drops the pending request, so
+    // the reply fails the id check. This is the one write the effect makes
+    // itself — deferred to a timer, it could come after the reply it exists to
+    // stop — and it is a ref, so it renders nothing.
+    if (answeredRef.current !== null && answeredRef.current === requestKey) {
+      pendingRef.current = { id: 0, key: null };
+      return undefined;
+    }
 
     // The worker is built inside the timer, not here: it is only genuinely
     // needed once a run survives the settle period, and building it in a
-    // callback keeps every write to a ref or to state out of the effect body.
+    // callback keeps every write to state out of the effect body.
     //
     // The id is allocated here too, at the moment of the post, so ids count
     // posts rather than keystrokes. Until this fires the PREVIOUS request is
@@ -167,8 +240,19 @@ export function useStudyWorker({ workerFactory, active, requestKey, payload, set
       const id = nextRequestId;
       nextRequestId += 1;
       pendingRef.current = { id, key: requestKey };
-      // Supersession is the worker's problem now: it sees a newer request and
-      // abandons the one in flight at its next chunk boundary. Terminating here
+      // The progress on screen was the superseded run's. And a worker exists
+      // now, so "no worker" stops being the answer to anything: it is withdrawn
+      // with the key it answered, leaving this run to read as running.
+      setResult((current) => {
+        if (current.progress === null && !current.unavailable) return current;
+        return current.unavailable
+          ? { ...current, key: null, unavailable: false, progress: null }
+          : { ...current, progress: null };
+      });
+      // Supersession is the worker's problem now. A solve already running
+      // cannot be interrupted — it finishes, and its reply is dropped by id
+      // above — but requests that queued behind it are skipped: the worker
+      // solves only the newest (`handleLatestRequestOnly`). Terminating here
       // instead would guarantee a cold start for the replacement.
       worker.postMessage({ id, ...payloadRef.current });
     }, settleMs);
@@ -176,25 +260,14 @@ export function useStudyWorker({ workerFactory, active, requestKey, payload, set
     return () => clearTimeout(timer);
   }, [active, ensureWorker, requestKey, settleMs]);
 
-  const settled = result.key === requestKey;
+  const { status, stale } = deriveStudyStatus({ active, requestKey, result });
 
   return {
     study: active ? result.study : null,
-    status: !active
-      ? 'idle'
-      : !settled
-        ? 'running'
-        : result.unavailable
-          ? 'unavailable'
-          : result.error
-            ? 'error'
-            : 'ready',
+    status,
     progress: result.progress,
     error: result.unavailable ? unavailableMessage : result.error,
-    // The overlay on screen belongs to an earlier version of the building.
-    // Worth saying so: a number read off a superseded plan is misleading in a
-    // way a blank canvas is not.
-    stale: Boolean(active && result.study && !settled),
+    stale,
   };
 }
 

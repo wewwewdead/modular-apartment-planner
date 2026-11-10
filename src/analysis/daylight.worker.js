@@ -11,6 +11,7 @@
  */
 
 import { computeDaylightGrids } from './daylightRunner';
+import { handleLatestRequestOnly } from './latestRequestOnly';
 
 /**
  * Grids come back as typed arrays inside plain objects. Collecting their
@@ -26,9 +27,8 @@ function transferablesOf(result) {
   return buffers;
 }
 
-self.onmessage = (event) => {
-  const { id, project, daylight, floorId } = event.data || {};
-
+// Only the newest queued request is solved (see `handleLatestRequestOnly`).
+self.onmessage = handleLatestRequestOnly(({ id, project, daylight, floorId }) => {
   try {
     const result = computeDaylightGrids({ project, daylight, floorId }, (progress) =>
       self.postMessage({ id, type: 'progress', progress }),
@@ -39,4 +39,4 @@ self.onmessage = (event) => {
     // forever on a promise nobody will settle.
     self.postMessage({ id, type: 'error', message: error?.message || 'Daylight study failed.' });
   }
-};
+});

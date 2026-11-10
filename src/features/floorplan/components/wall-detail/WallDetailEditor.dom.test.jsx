@@ -632,3 +632,349 @@ describe('board overhang in the wall detail editor', () => {
     expect(canvasTitles(container).some((title) => title.startsWith('Wall start · Board set back 150'))).toBe(true);
   });
 });
+
+/**
+ * At fit zoom one pixel of this canvas is about 3.3 mm of wall, so a hand that
+ * drifts a pixel between press and release has moved the piece by more than a
+ * millimetre. Committing that as a move rewrites a generated board, stud or
+ * screw layout as custom and freezes the whole pattern — so whether the pointer
+ * moved is judged on screen, not in millimetres.
+ */
+describe('WallDetailEditor clicking a piece on the elevation', () => {
+  const at = { button: 0, pointerId: 1, clientX: 400, clientY: 300 };
+
+  it('selects the board and commits nothing, though the pointer drifts a pixel', () => {
+    const { container } = render(<WallDetailEditor />);
+    const board = shapeWithTitle(container, 'P1 ·');
+
+    fireEvent.pointerDown(board, at);
+    fireEvent.pointerUp(board, { ...at, clientX: 401 });
+
+    expect(container.textContent).toContain('board panel selected');
+    // Any dispatch here is a move nobody made: the only edit a click can make is
+    // to the selection, which the editor holds itself.
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('ignores a drag too small to see, and still commits one that is not', () => {
+    const { container } = render(<WallDetailEditor />);
+    const stud = shapeWithTitle(container, 'Stud · 50 × 3000 mm · Light-gauge steel · 75 mm deep · centre U 400');
+
+    fireEvent.pointerDown(stud, at);
+    fireEvent.pointerUp(stud, { ...at, clientX: 400.5 });
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+
+    dragShape(stud);
+    expect(committedFraming().mode).toBe('custom');
+  });
+
+  it('leaves a measurement where it was when the pointer drifts a pixel', () => {
+    giveWallAMeasurement();
+    const { container } = render(<WallDetailEditor />);
+    const measurement = shapeWithTitle(container, 'User dimension · ');
+
+    fireEvent.pointerDown(measurement, at);
+    fireEvent.pointerUp(measurement, { ...at, clientY: 301 });
+    expect(container.textContent).toContain('measurement selected');
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+
+    dragShape(measurement, { to: { x: 400, y: 240 } });
+    expect(committedDimensions()[0].start.v).toBeGreaterThan(1000);
+  });
+});
+
+/**
+ * A trace or a measurement is drawn on one face. Turning the elevation to the
+ * other face — from the face buttons or by picking a board in the 3D pane — has
+ * to drop it, or its next click lands on a face it was never started on.
+ */
+describe('WallDetailEditor turning to the other face mid-drawing', () => {
+  const canvas = (container) => container.querySelector('svg[data-tool]');
+  const tracePreview = (container) => container.querySelector('svg[data-tool] polyline[stroke="#ffb85c"]');
+  const acquisitionMarker = (container) => container.querySelector('svg[data-tool] g[data-snapped]');
+  const outsideButton = (container) =>
+    [...container.querySelectorAll('button')].find((node) => node.textContent.startsWith('Outside ·'));
+
+  function startTrace(container) {
+    fireEvent.click(container.querySelector('button[title^="Trace cut panel"]'));
+    fireEvent.pointerDown(canvas(container), { button: 0, pointerId: 1, clientX: 300, clientY: 300 });
+    fireEvent.pointerDown(canvas(container), { button: 0, pointerId: 1, clientX: 500, clientY: 300 });
+    expect(tracePreview(container)).not.toBeNull();
+  }
+
+  it('drops a half-drawn trace when the other face is chosen', () => {
+    const { container } = render(<WallDetailEditor />);
+    startTrace(container);
+
+    fireEvent.click(outsideButton(container));
+
+    expect(tracePreview(container)).toBeNull();
+  });
+
+  it('drops a measurement waiting for its second click when the other face is chosen', () => {
+    const { container } = render(<WallDetailEditor />);
+    fireEvent.click(container.querySelector('button[title^="Draw measurement"]'));
+    const press = { button: 0, pointerId: 1, clientX: 300, clientY: 300 };
+    fireEvent.pointerDown(canvas(container), press);
+    fireEvent.pointerUp(canvas(container), press);
+    expect(acquisitionMarker(container)).not.toBeNull();
+
+    fireEvent.click(outsideButton(container));
+
+    expect(acquisitionMarker(container)).toBeNull();
+  });
+
+  it('drops a half-drawn trace when a pick in the 3D pane turns the elevation around', () => {
+    const { container } = render(<WallDetailEditor />);
+    startTrace(container);
+
+    act(() => previewProps.pick({ kind: 'panel', id: 'P2', side: 'exterior' }));
+
+    expect(previewProps.current.assemblySelection).toEqual({ kind: 'panel', id: 'P2', side: 'exterior' });
+    expect(tracePreview(container)).toBeNull();
+  });
+
+  it('keeps the trace for a pick on the face already in front of you', () => {
+    const { container } = render(<WallDetailEditor />);
+    startTrace(container);
+
+    act(() => previewProps.pick({ kind: 'panel', id: 'P1', side: 'interior' }));
+
+    expect(tracePreview(container)).not.toBeNull();
+  });
+});
+
+/**
+ * Escape in a number field belongs to the field — it throws the typed draft
+ * away — and must not also cancel the trace open on the drawing.
+ */
+describe('WallDetailEditor Escape while a trace is open', () => {
+  it('leaves the trace alone when Escape is pressed in a field, and cancels it otherwise', () => {
+    const { container } = render(<WallDetailEditor />);
+    const svg = container.querySelector('svg[data-tool]');
+    fireEvent.click(container.querySelector('button[title^="Trace cut panel"]'));
+    fireEvent.pointerDown(svg, { button: 0, pointerId: 1, clientX: 300, clientY: 300 });
+    const tracePreview = () => container.querySelector('svg[data-tool] polyline[stroke="#ffb85c"]');
+    expect(tracePreview()).not.toBeNull();
+
+    const field = container.querySelector('input[type="number"]');
+    fireEvent.focus(field);
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect(tracePreview()).not.toBeNull();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(tracePreview()).toBeNull();
+  });
+});
+
+describe('a finished face in the wall detail editor (docs/wall-cladding-finishes.md §5.5)', () => {
+  it('fills the boards with the finish knocked back for the drawing, and keeps the stock tint otherwise', () => {
+    const stock = render(<WallDetailEditor />);
+    expect(shapeWithTitle(stock.container, 'P1 ·').getAttribute('fill')).toBe('#dedbd1');
+    cleanup();
+
+    const wall = mocks.project.floors[0].walls[0];
+    wall.assembly = {
+      ...wall.assembly,
+      interior: {
+        ...wall.assembly.interior,
+        finish: {
+          kind: 'paint',
+          colour: { hex: '#E0701F', name: 'Signal Orange', catalogue: 'facade' },
+          sheen: 'matte',
+        },
+      },
+    };
+    const { container } = render(<WallDetailEditor />);
+    expect(shapeWithTitle(container, 'P1 ·').getAttribute('fill')).toBe('#ECBD99');
+  });
+});
+
+describe('a siding face in the wall detail editor (spec §6.1)', () => {
+  function sideTheWall(course) {
+    const wall = mocks.project.floors[0].walls[0];
+    wall.assembly = {
+      ...wall.assembly,
+      interior: { material: 'siding', thickness: 19, layerCount: 1, ...(course ? { course } : {}) },
+    };
+    return wall;
+  }
+
+  it('draws one field, its course lines from the set-out, clipped to the boards', () => {
+    sideTheWall();
+    const { container } = render(<WallDetailEditor />);
+    const group = container.querySelector('[data-siding-courses="interior"]');
+    expect(group).not.toBeNull();
+    const path = group.querySelector('path[clip-path]');
+    // 146 mm courses on a wall standing at elevation 0, wallHeight tall: a line
+    // at every 146 up to the top.
+    const lines = path.getAttribute('d').match(/M /g).length;
+    expect(lines).toBe(Math.floor(wallHeight / 146) + 1);
+    expect(path.getAttribute('d').startsWith('M 0 0 H 3000')).toBe(true);
+    // The clip is the panel field, so the openings cut the lines too.
+    expect(group.querySelectorAll('path[clip-rule="evenodd"]').length).toBeGreaterThan(0);
+    expect(shapeWithTitle(container, 'P1 ·')).not.toBeNull();
+    expect(shapeWithTitle(container, 'P2 ·')).toBeNull();
+  });
+
+  it('runs vertical boards as full-height lines along the wall', () => {
+    sideTheWall({ orientation: 'vertical', exposure: 140, joint: 6 });
+    const { container } = render(<WallDetailEditor />);
+    const d = container.querySelector('[data-siding-courses="interior"] path[clip-path]').getAttribute('d');
+    expect(d).toMatch(new RegExp(`^M 0 0 V ${wallHeight}`));
+    expect(d.match(/M /g).length).toBe(Math.floor(3000 / 146) + 1);
+  });
+
+  it('draws no course lines on a sheet face', () => {
+    const { container } = render(<WallDetailEditor />);
+    expect(container.querySelector('[data-siding-courses]')).toBeNull();
+  });
+});
+
+describe('accent panels in the wall detail editor (spec §7.1)', () => {
+  const ORANGE = {
+    kind: 'paint',
+    colour: { hex: '#E0701F', name: 'Signal Orange', catalogue: 'facade' },
+    sheen: 'matte',
+  };
+  const canvas = (container) => container.querySelector('svg[data-tool]');
+  const lastAction = () => mocks.dispatch.mock.calls.at(-1)?.[0];
+  const committedAccents = () => lastAction()?.wall?.assembly?.interior?.accents;
+
+  function seed(accents, { windows = [] } = {}) {
+    const floor = mocks.project.floors[0];
+    const wall = floor.walls[0];
+    wall.assembly = { ...wall.assembly, interior: { ...wall.assembly.interior, accents } };
+    floor.windows = windows;
+    return wall;
+  }
+
+  it('draws a new accent with the Accent tool, in Signal Orange, as an assembly-only edit', () => {
+    const { container } = render(<WallDetailEditor />);
+    fireEvent.click(container.querySelector('button[title^="Draw accent panel"]'));
+    expect(canvas(container).getAttribute('data-tool')).toBe('draw_accent');
+    const svg = canvas(container);
+    fireEvent.pointerDown(svg, { button: 0, pointerId: 1, clientX: 300, clientY: 300 });
+    fireEvent.pointerMove(svg, { button: 0, pointerId: 1, clientX: 450, clientY: 450 });
+    fireEvent.pointerUp(svg, { button: 0, pointerId: 1, clientX: 450, clientY: 450 });
+
+    expect(lastAction().type).toBe('WALL_UPDATE');
+    expect(Object.keys(lastAction().wall)).toEqual(['id', 'assembly']);
+    const [accent] = committedAccents();
+    expect(accent.finish).toEqual(ORANGE);
+    expect(accent.width).toBeGreaterThan(100);
+    expect(accent.height).toBeGreaterThan(100);
+    expect(accent.anchor).toBeNull();
+  });
+
+  it('takes the A key for the tool', () => {
+    const { container } = render(<WallDetailEditor />);
+    fireEvent.keyDown(window, { key: 'a' });
+    expect(canvas(container).getAttribute('data-tool')).toBe('draw_accent');
+  });
+
+  it('draws a stored accent in its drawing tint, selects it, and deletes it with the Delete key', () => {
+    seed([{ id: 'acc', label: 'Beside', u: 400, v: 900, width: 600, height: 800, finish: ORANGE }]);
+    const { container } = render(<WallDetailEditor />);
+    const rect = container.querySelector('[data-accent-id="acc"]');
+    expect(rect.getAttribute('fill')).toBe('#ECBD99');
+    expect(rect.getAttribute('width')).toBe('600');
+
+    fireEvent.pointerDown(rect, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+    fireEvent.pointerUp(rect, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+    expect(container.querySelector('[data-selected-accent="acc"]')).not.toBeNull();
+    expect(container.querySelector('[data-accent-id="acc"]').getAttribute('data-selected')).toBe('true');
+    // A click is not a move.
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(lastAction().wall.assembly.interior).not.toHaveProperty('accents');
+  });
+
+  it('moves an accent with one edit on release', () => {
+    seed([{ id: 'acc', u: 400, v: 900, width: 600, height: 800, finish: ORANGE }]);
+    const { container } = render(<WallDetailEditor />);
+    const rect = container.querySelector('[data-accent-id="acc"]');
+    fireEvent.pointerDown(rect, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+    fireEvent.pointerMove(rect, { button: 0, pointerId: 1, clientX: 280, clientY: 300 });
+    // The drag is local until it lands: nothing is committed while it moves.
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+    fireEvent.pointerUp(rect, { button: 0, pointerId: 1, clientX: 280, clientY: 300 });
+    expect(mocks.dispatch).toHaveBeenCalledTimes(1);
+    // The inside face is drawn mirrored: 120 px left is 400 mm up the wall.
+    expect(committedAccents()[0]).toMatchObject({ u: 800, v: 900, width: 600, height: 800 });
+  });
+
+  it('edits the exact fields: colour, and attaching to an opening', () => {
+    seed([{ id: 'acc', u: 400, v: 900, width: 600, height: 800, finish: ORANGE }], {
+      windows: [
+        {
+          id: 'win',
+          wallId: mocks.project.floors[0].walls[0].id,
+          offset: 1800,
+          width: 900,
+          height: 1200,
+          sillHeight: 900,
+        },
+      ],
+    });
+    const { container } = render(<WallDetailEditor />);
+    const rect = container.querySelector('[data-accent-id="acc"]');
+    fireEvent.pointerDown(rect, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+    fireEvent.pointerUp(rect, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+    const card = container.querySelector('[data-selected-accent="acc"]');
+    const select = (label) =>
+      [...card.querySelectorAll('label')]
+        .find((node) => node.firstElementChild?.textContent === label)
+        .querySelector('select');
+
+    fireEvent.change(select('Colour'), { target: { value: 'facade:Slate Blue' } });
+    expect(committedAccents()[0].finish.colour).toEqual({ hex: '#6F8597', name: 'Slate Blue', catalogue: 'facade' });
+
+    fireEvent.change(select('Attach to'), { target: { value: 'win' } });
+    // Attached where it stands: the window is 1350 → 2250 along, 900 up.
+    expect(committedAccents()[0]).toMatchObject({ u: 400, v: 900, anchor: { openingId: 'win', du: -950, dv: 0 } });
+  });
+
+  it('adds an anchored accent beside an opening', () => {
+    seed(undefined, {
+      windows: [
+        {
+          id: 'win',
+          wallId: mocks.project.floors[0].walls[0].id,
+          offset: 1800,
+          width: 900,
+          height: 1200,
+          sillHeight: 900,
+        },
+      ],
+    });
+    const { container } = render(<WallDetailEditor />);
+    const section = container.querySelector('[data-accent-at-opening="true"]');
+    const field = (label) =>
+      [...section.querySelectorAll('label')].find((node) => node.firstElementChild?.textContent === label);
+    fireEvent.change(field('Placement').querySelector('select'), { target: { value: 'right' } });
+    fireEvent.click(
+      [...section.querySelectorAll('button')].find((node) => node.textContent === 'Add accent at opening'),
+    );
+    expect(committedAccents()).toEqual([
+      expect.objectContaining({
+        u: 2250,
+        v: 900,
+        width: 600,
+        height: 1200,
+        anchor: { openingId: 'win', du: 900, dv: 0 },
+      }),
+    ]);
+  });
+
+  it('offers no accents on a face with no board, and says so', () => {
+    const wall = mocks.project.floors[0].walls[0];
+    wall.assembly = { ...wall.assembly, interior: { material: 'none', thickness: 0, layerCount: 0 } };
+    const { container } = render(<WallDetailEditor />);
+    expect(container.querySelector('button[title^="Draw accent panel"]').disabled).toBe(true);
+    expect(container.textContent).toContain('No accents on this face');
+    fireEvent.keyDown(window, { key: 'a' });
+    expect(canvas(container).getAttribute('data-tool')).not.toBe('draw_accent');
+  });
+});

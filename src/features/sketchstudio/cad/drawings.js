@@ -2,17 +2,19 @@ import { numeric, resolveParameters } from './model.js';
 import { engineeringSheetSvg } from './engineeringSheet.js';
 import { threadNote } from './hardware.js';
 import { circularCut } from './circularCuts.js';
-import { isDrawnAnnotation, manualDimensionsSvg } from './sheetAnnotations.js';
+import { manualDimensionsSvg } from './sheetAnnotations.js';
+import { balloonsSvg, partsListRows, partsListSvg, sheetHasPartsList, PARTS_LIST_WIDTH } from './partsList.js';
 import {
-  balloonsSvg,
-  partsListHeight,
-  partsListRows,
-  partsListSvg,
-  sheetHasPartsList,
-  PARTS_LIST_WIDTH,
-} from './partsList.js';
+  fitsCell,
+  overflowMessage,
+  placeView,
+  resolveSheetScale,
+  scaleLabel,
+  sheetFit,
+  viewCells,
+} from './sheetLayout.js';
 
-export const PAGE_SIZES = { A3: [420, 297], A4: [297, 210], Letter: [279.4, 215.9] };
+export { PAGE_SIZES } from './sheetLayout.js';
 export const xml = (value) =>
   String(value ?? '').replace(
     /[<>&"']/g,
@@ -85,23 +87,18 @@ export function annotationText(annotation, model, snapshot) {
   return fmt(bounds[1][axis] - bounds[0][axis], annotation.units);
 }
 
-export function sheetSvg(sheet, model, snapshot, page = 1, pages = 1) {
-  if (sheet.layout === 'engineering') return engineeringSheetSvg(sheet, model, snapshot, page, pages);
-  const [width, height] = PAGE_SIZES[sheet.size] || PAGE_SIZES.A3;
-  const scale = numeric(sheet.scale);
-  if (scale <= 0) throw new Error('Drawing scale must be positive.');
-  const views = sheet.views,
-    columns = views.length > 1 ? 2 : 1,
-    rows = Math.ceil(views.length / columns);
-  // Dimensions and callouts are drawn in their views; the rest are notes.
-  const notes = (sheet.annotations || []).filter((a) => !isDrawnAnnotation(a));
-  // The parts list sits under the title rule, clear of the border and page label.
+// allowOverflow (the live preview): a view too big for its cell is still
+// drawn, centred, and its cell outlined red; exports throw instead.
+export function sheetSvg(sheet, model, snapshot, page = 1, pages = 1, { allowOverflow = false } = {}) {
+  if (sheet.layout === 'engineering')
+    return engineeringSheetSvg(sheet, model, snapshot, page, pages, { allowOverflow });
+  const views = sheet.views;
   const parts = sheetHasPartsList(sheet) ? partsListRows(model, snapshot, sheet) : [];
-  const notesHeight = Math.max(36, 27 + notes.length * 4, parts.length ? partsListHeight(parts) + 20 : 0);
+  const { width, height, notesHeight, notes, cells } = viewCells(sheet, views, parts);
+  const scale = resolveSheetScale(sheet, views, parts);
+  if (scale <= 0) throw new Error('Drawing scale must be positive.');
   if (notesHeight > height / 2)
     throw new Error('Too many annotations for this sheet. Move some to another detail sheet.');
-  const cellW = (width - 30) / columns,
-    cellH = (height - notesHeight - 26) / rows;
   let body = '',
     balloonsDone = false;
   const dimension = (x1, x2, y, label) =>
@@ -110,14 +107,20 @@ export function sheetSvg(sheet, model, snapshot, page = 1, pages = 1) {
     const viewScale = view.scale == null ? scale : numeric(view.scale);
     if (viewScale <= 0) throw new Error('View scale must be positive.');
     const [vx, vy, vw, vh] = view.viewBox;
-    if (vw * viewScale > cellW - 18 || vh * viewScale > cellH - 24)
-      throw new Error(`${sheet.title}: ${view.name} does not fit at this scale. Reduce the sheet scale.`);
-    const cx = 15 + (index % columns) * cellW,
-      cy = 12 + Math.floor(index / columns) * cellH;
-    const tx = cx + (cellW - vw * viewScale) / 2 - vx * viewScale,
-      ty = cy + 10 + (cellH - 24 - vh * viewScale) / 2 - vy * viewScale;
+    const cell = cells[index],
+      cellW = cell.width,
+      cellH = cell.height,
+      cx = cell.x,
+      cy = cell.y;
+    if (!fitsCell(cell, view.viewBox, viewScale)) {
+      if (!allowOverflow) throw new Error(overflowMessage(sheet, view, sheetFit(sheet, views, { scale, parts })));
+      body += `<rect x="${cx}" y="${cy}" width="${cellW}" height="${cellH}" fill="none" stroke="#c62828" stroke-width="0.5" stroke-dasharray="3 2" data-overflow="true"/>`;
+    }
+    const [x, y] = placeView(cell, view.viewBox, viewScale);
+    const tx = x - vx * viewScale,
+      ty = y - vy * viewScale;
     const paths = (items, attrs = '') => items.map((d) => `<path d="${xml(d)}" ${attrs}/>`).join('');
-    body += `<text x="${cx + 2}" y="${cy + 3}" font-weight="bold">${xml(view.name.toUpperCase())}${sheet.section ? ' — SECTION' : ''}${view.scale ? ` · SCALE ${viewScale}:1` : ''}</text>`;
+    body += `<text x="${cx + 2}" y="${cy + 3}" font-weight="bold">${xml(view.name.toUpperCase())}${sheet.section ? ' — SECTION' : ''}${view.scale ? ` · SCALE ${scaleLabel(viewScale)}` : ''}</text>`;
     const clipId = `view-clip-${index}`;
     body += `<defs><clipPath id="${clipId}"><rect x="${vx}" y="${vy}" width="${vw}" height="${vh}"/></clipPath><pattern id="hatch-${index}" width="${2 / viewScale}" height="${2 / viewScale}" patternUnits="userSpaceOnUse"><path d="M0 ${2 / viewScale}L${2 / viewScale} 0" stroke="#80909d" stroke-width="${0.12 / viewScale}"/></pattern></defs>`;
     body += `<g ${viewDataAttributes(view)} transform="translate(${tx} ${ty}) scale(${viewScale})" fill="none" stroke="#253444" stroke-width="${0.22 / viewScale}"${view.detail ? ` clip-path="url(#${clipId})"` : ''}>${paths(view.hatch || [], `fill="url(#hatch-${index})" fill-rule="evenodd" stroke="none"`)}${paths(view.visible)}${sheet.hiddenLines === false ? '' : paths(view.hidden, `stroke="#82909e" stroke-dasharray="${2 / viewScale} ${1 / viewScale}"`)}</g>`;
@@ -150,7 +153,7 @@ export function sheetSvg(sheet, model, snapshot, page = 1, pages = 1) {
   });
   const titleY = height - notesHeight;
   body += `<path d="M10 ${titleY}H${width - 10}" stroke="#253444" stroke-width="0.3"/><text x="14" y="${titleY + 7}" font-size="5" font-weight="bold">${xml(sheet.title)}</text>`;
-  body += `<text x="14" y="${titleY + 14}">Rev ${xml(sheet.revision)} · Scale ${scale >= 1 ? `${scale}:1` : `1:${+(1 / scale).toFixed(3)}`} · ${xml(sheet.units || 'mm')} · Tolerance ${xml(sheet.tolerance)} · ${xml(sheet.material || 'See material list')}</text>`;
+  body += `<text x="14" y="${titleY + 14}">Rev ${xml(sheet.revision)} · Scale ${scaleLabel(scale)} · ${xml(sheet.units || 'mm')} · Tolerance ${xml(sheet.tolerance)} · ${xml(sheet.material || 'See material list')}</text>`;
   body += `<text x="${width - 14}" y="${height - 13}" text-anchor="end">${page} / ${pages} · ${xml(sheet.size)} LANDSCAPE</text>`;
   notes.forEach((a, index) => {
     body += `<text x="14" y="${titleY + 20 + index * 4}">${xml(annotationText({ ...a, units: sheet.units }, model, snapshot))}</text>`;

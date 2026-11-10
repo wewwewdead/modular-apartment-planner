@@ -49,6 +49,42 @@ const GRID_ROTATE_SNAP_DEGREES = 15;
  * the plate would run away from the cursor. Every frame is therefore computed
  * from this snapshot, cumulatively from mousedown.
  */
+// Selections whose drag rewrites the project on every pointer frame (rather
+// than previewing and committing on release).
+const PER_FRAME_DRAG_TYPES = new Set([
+  'column',
+  'fixture',
+  'stair',
+  'landing',
+  'railing',
+  'plumbingShaft',
+  'electricalRiser',
+  'electricalPanelZone',
+  'door',
+  'window',
+  'electricalDevice',
+]);
+
+/**
+ * The drag state of a select tool that is not dragging anything. Every way a
+ * drag ends, and every press that starts a move, writes this whole set: a key
+ * one of them left out outlived its drag, and a slab edit origin left behind
+ * by a lost release would make the next move's Escape restore that slab.
+ */
+const IDLE_DRAG_STATE = Object.freeze({
+  dragging: false,
+  pendingDrag: false,
+  dragType: null,
+  handle: null,
+  handleIndex: null,
+  startPos: null,
+  originalPos: null,
+  currentPos: null,
+  wallDragPreview: null,
+  slabEditOrigin: null,
+  slabEdgeDrag: null,
+});
+
 function captureSlabEditOrigin(floor, slabId) {
   if (!slabId) return null;
   const slab = (floor.slabs || []).find((entry) => entry.id === slabId);
@@ -333,12 +369,11 @@ export function createSelectHandler({
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
           payload: {
+            ...IDLE_DRAG_STATE,
             pendingDrag: true,
-            dragging: false,
             dragType: 'move',
             startPos: modelPos,
             originalPos: modelPos,
-            wallDragPreview: null,
           },
         });
       } else {
@@ -349,6 +384,9 @@ export function createSelectHandler({
             dragType: 'marquee',
             startPos: modelPos,
             currentPos: modelPos,
+            // A preview left by a drag that never saw its release must not
+            // ride along into the marquee and commit on its mouse-up.
+            wallDragPreview: null,
           },
         });
       }
@@ -934,17 +972,7 @@ export function createSelectHandler({
           }
         }
 
-        editorDispatch({
-          type: 'UPDATE_TOOL_STATE',
-          payload: {
-            dragging: false,
-            dragType: null,
-            handle: null,
-            handleIndex: null,
-            startPos: null,
-            currentPos: null,
-          },
-        });
+        editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: IDLE_DRAG_STATE });
         return;
       }
 
@@ -980,22 +1008,7 @@ export function createSelectHandler({
       }
 
       if (toolState.dragging || toolState.pendingDrag) {
-        editorDispatch({
-          type: 'UPDATE_TOOL_STATE',
-          payload: {
-            dragging: false,
-            pendingDrag: false,
-            dragType: null,
-            handle: null,
-            handleIndex: null,
-            startPos: null,
-            originalPos: null,
-            currentPos: null,
-            wallDragPreview: null,
-            slabEditOrigin: null,
-            slabEdgeDrag: null,
-          },
-        });
+        editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: IDLE_DRAG_STATE });
       }
     },
 
@@ -1009,6 +1022,12 @@ export function createSelectHandler({
         // is usually still down), so the drag and its undo collapse into one
         // history entry that ends where it began.
         const slabOrigin = toolState.slabEditOrigin;
+        // The other drags that commit per frame — column, fixture, stair,
+        // landing, railing, service, door, window, device — are put back by
+        // the store, which still holds the pre-drag project
+        // (CANCEL_DRAG_GESTURE). Wall, section and grid drags only preview, so
+        // they have nothing to put back and dispatch nothing.
+        if (!slabOrigin && PER_FRAME_DRAG_TYPES.has(selectedType)) dispatch({ type: 'CANCEL_DRAG_GESTURE' });
         if (slabOrigin) {
           const floor = getFloor(activeFloorId);
           const slab = (floor?.slabs || []).find((entry) => entry.id === slabOrigin.slabId);
@@ -1024,22 +1043,7 @@ export function createSelectHandler({
           }
         }
 
-        editorDispatch({
-          type: 'UPDATE_TOOL_STATE',
-          payload: {
-            dragging: false,
-            pendingDrag: false,
-            dragType: null,
-            handle: null,
-            handleIndex: null,
-            startPos: null,
-            originalPos: null,
-            currentPos: null,
-            wallDragPreview: null,
-            slabEditOrigin: null,
-            slabEdgeDrag: null,
-          },
-        });
+        editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: IDLE_DRAG_STATE });
         return;
       }
 

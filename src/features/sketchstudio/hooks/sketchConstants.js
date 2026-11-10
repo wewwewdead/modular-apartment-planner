@@ -132,6 +132,13 @@ export const TOOL_DEFINITIONS = [
 
 export const TOOL_SHORTCUT_MAP = new Map(TOOL_DEFINITIONS.map((tool) => [tool.shortcut.toLowerCase(), tool.id]));
 
+// Tools whose draft is a hover preview: pointer move starts it under the cursor
+// whenever none exists and rebuilds it on every move, and the draft type is the
+// tool id. Cancelling such a draft only lasts until the mouse next moves, so
+// undo must not spend itself on that (it goes to the history), and Escape
+// leaves the tool instead.
+export const HOVER_DRAFT_TOOLS = new Set(['fillet', 'chamfer', 'trim', 'extend', 'fastener']);
+
 // Object snap overrides Ortho (the standard CAD rule). A snap that lands on a
 // definite point of an entity -- endpoint, vertex, midpoint, corner, centre,
 // intersection, control or arc point -- is used exactly, because forcing it

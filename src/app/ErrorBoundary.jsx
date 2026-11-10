@@ -78,7 +78,7 @@ export function ErrorScreen({ error, onRetry }) {
         </details>
         <div style={{ display: 'flex', gap: '8px' }}>
           <a
-            href="/"
+            href={homeHref()}
             style={{
               display: 'inline-block',
               padding: '8px 20px',
@@ -110,6 +110,12 @@ export function ErrorScreen({ error, onRetry }) {
       </div>
     </div>
   );
+}
+
+// The home route. The desktop build runs from file:// under a hash router,
+// where "/" is the root of the disk rather than the app.
+export function homeHref(protocol = typeof window !== 'undefined' ? window.location.protocol : 'http:') {
+  return protocol === 'file:' ? '#/' : './';
 }
 
 export default class ErrorBoundary extends Component {

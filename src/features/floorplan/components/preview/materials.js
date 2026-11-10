@@ -1,6 +1,13 @@
 import * as THREE from 'three';
-import { applyProceduralDetail, cloneWithProceduralDetail, setDetailScale } from './proceduralDetail';
-import { disposeSelectionMaterials, selectionMaterialsOf } from './selectionMaterials';
+import { parseWallFinishMaterialKey } from '@/domain/wallFinishes';
+import { SIDING_BOARD_LENGTH } from '@/domain/wallSiding';
+import {
+  applyCoursePattern,
+  applyProceduralDetail,
+  cloneWithProceduralDetail,
+  setDetailScale,
+} from './proceduralDetail';
+import { disposeSelectionMaterials, disposeSelectionMaterialsFor, selectionMaterialsOf } from './selectionMaterials';
 
 /**
  * The preview's material library.
@@ -557,6 +564,18 @@ function disposeGhostMaterials(materialPalette) {
   ghostRegistries.delete(materialPalette);
 }
 
+/** Dispose and forget the twin made for one source, if one was. */
+function disposeGhostMaterialFor(materialPalette, source) {
+  const registry = ghostRegistries.get(materialPalette);
+  const twin = registry?.bySource.get(source);
+  if (!twin) return;
+  registry.bySource.delete(source);
+  registry.sourceOf.delete(twin);
+  const index = registry.all.indexOf(twin);
+  if (index >= 0) registry.all.splice(index, 1);
+  twin.dispose();
+}
+
 /**
  * Point the whole palette at a render style.
  *
@@ -663,6 +682,156 @@ export function applyRoofAppearanceToPalette(materialPalette, appearance) {
   if (result.changed) syncGhostMaterials(materialPalette);
 
   return result;
+}
+
+// ── Wall finishes (docs/wall-cladding-finishes.md §5.4) ──────────────────────
+
+/** Which stock material a finish is painted over, by the substrate its key names. */
+const WALL_FINISH_SUBSTRATE_KEYS = Object.freeze({
+  fc: 'wallFiberCement',
+  ply: 'wallPlywood',
+  cassette: 'wallRainscreen',
+  masonry: 'wall',
+  // Siding has no stock look to start from (every siding face wears a finish),
+  // so it clones the timber board; colour, roughness and family are rewritten.
+  siding: 'wallPlywood',
+});
+
+/**
+ * How far one siding board's tone swings from the next (spec §6.1): a stained
+ * timber varies board to board, a factory-painted plank barely at all.
+ */
+export const SIDING_COURSE_TONE = Object.freeze({ timber: 0.22, paint: 0.03 });
+/** The depth of the siding groove's bevel, in millimetres, at full detail. */
+export const SIDING_GROOVE_RELIEF = 0.5;
+
+/** Roughness of a wall finish by sheen. A render is never below `WALL_RENDER_MIN_ROUGHNESS`. */
+export const WALL_FINISH_ROUGHNESS = Object.freeze({ matte: 0.9, satin: 0.6, gloss: 0.35 });
+export const WALL_RENDER_MIN_ROUGHNESS = 0.8;
+
+const WALL_FINISH_KEY_PREFIX = 'wallFinish:';
+
+/**
+ * The detail family a finish wears: paint is a film, so the board's own
+ * texture shows through it; a render is a new surface with its own tooth; a
+ * stain is read as timber whatever it went on. Painted siding is a
+ * fibre-cement plank (spec §6), so it wears that sheet's near-flat character.
+ */
+function wallFinishDetailFamily(kind, substrate, substrateKey) {
+  if (kind === 'render') return 'render';
+  if (kind === 'timber') return 'timber';
+  if (substrate === 'siding') return 'fibreCement';
+  return DETAIL_ASSIGNMENTS[substrateKey] || 'plaster';
+}
+
+/**
+ * Build one wall-finish material from its parsed key.
+ *
+ * A `cloneWithProceduralDetail` of the substrate's stock material, so it is in
+ * the detailed palette's one program family (a finish appearing mid-session
+ * links nothing new), keeps the stock material's side and depth state, and
+ * starts at whatever relief strength the render style has the palette at.
+ * Everything that makes it look like itself — colour, roughness, metalness,
+ * detail family — comes from the key alone and is then written over the
+ * clone, so the same key builds the same material in the white-model palette,
+ * the classic palette the detail editors use and the one a sheet still builds
+ * for itself.
+ */
+function buildWallFinishMaterial(materialPalette, parsed, key) {
+  const substrateKey = WALL_FINISH_SUBSTRATE_KEYS[parsed.substrate];
+  const source = materialPalette[substrateKey];
+  if (!source?.isMaterial) return null;
+  const material = cloneWithProceduralDetail(source);
+  material.name = key;
+  material.color.set(parsed.hex);
+  const roughness = WALL_FINISH_ROUGHNESS[parsed.sheen] ?? WALL_FINISH_ROUGHNESS.matte;
+  material.roughness = parsed.kind === 'render' ? Math.max(WALL_RENDER_MIN_ROUGHNESS, roughness) : roughness;
+  material.metalness = 0;
+  material.envMapIntensity = 1;
+  applyProceduralDetail(material, wallFinishDetailFamily(parsed.kind, parsed.substrate, substrateKey));
+  // A siding key names its courses; the shader draws them (proceduralDetail.js
+  // DETAIL_COURSE). Every other finish carries none, so its course uniforms
+  // stay zero.
+  if (parsed.course) {
+    applyCoursePattern(material, {
+      pitch: parsed.course.exposure + parsed.course.joint,
+      joint: parsed.course.joint,
+      axis: parsed.course.orientation === 'vertical' ? 1 : 0,
+      tone: SIDING_COURSE_TONE[parsed.kind] ?? SIDING_COURSE_TONE.paint,
+      length: SIDING_BOARD_LENGTH,
+      relief: SIDING_GROOVE_RELIEF,
+    });
+  }
+  // Owned by the palette like every material in it: batchable, never disposed
+  // with an object, ghosted by its own tier rather than a table row.
+  material.userData = {
+    ...material.userData,
+    paletteKey: key,
+    tier: 'skin',
+    ownedByPalette: true,
+  };
+  delete material.userData.ownedByPreviewObject;
+  delete material.userData.baseOpacity;
+  delete material.userData.ghostTwin;
+  delete material.userData.selectionClone;
+  return material;
+}
+
+/**
+ * The palette material a descriptor's key names.
+ *
+ * Exactly `palette[key]` for every key the palette was born with. A wall-finish
+ * key (`wallFinish:<kind>:<substrate>:<HEX6>:<sheen>`) the palette has not seen
+ * yet is built on the spot and kept under that key, so the second face in the
+ * same colour gets the same instance — and the batcher, which buckets on
+ * identity, draws them in one call. Any other unknown key answers `undefined`,
+ * as indexing always did.
+ */
+export function paletteMaterialFor(materialPalette, key) {
+  if (!materialPalette) return undefined;
+  const existing = materialPalette[key];
+  if (existing) return existing;
+  const parsed = parseWallFinishMaterialKey(key);
+  if (!parsed) return undefined;
+  const material = buildWallFinishMaterial(materialPalette, parsed, key);
+  if (!material) return undefined;
+  materialPalette[key] = material;
+  return material;
+}
+
+/** Every wall-finish key the palette holds a material for. */
+export function wallFinishMaterialKeys(materialPalette) {
+  return Object.keys(materialPalette || {}).filter((key) => key.startsWith(WALL_FINISH_KEY_PREFIX));
+}
+
+/**
+ * Keep the palette's finish materials from piling up.
+ *
+ * A colour-picker drag makes one material per hex it passes through, and each
+ * holds a ghost twin and selection tints once a mode or a selection has seen
+ * it. Below `cap` they are left alone — a material costs a few uniforms, and
+ * keeping it is what makes dragging back over a colour free. Above it, every
+ * finish material whose key nothing in the scene uses (`liveKeys`) is
+ * disposed with its twin and its tints, and deleted from the palette; the next
+ * face to ask for it simply builds it again.
+ *
+ * Returns how many were removed.
+ */
+export function pruneWallFinishMaterials(materialPalette, liveKeys, cap = 48) {
+  const keys = wallFinishMaterialKeys(materialPalette);
+  if (keys.length <= cap) return 0;
+  const live = liveKeys instanceof Set ? liveKeys : new Set(liveKeys || []);
+  let removed = 0;
+  for (const key of keys) {
+    if (live.has(key)) continue;
+    const material = materialPalette[key];
+    disposeGhostMaterialFor(materialPalette, material);
+    disposeSelectionMaterialsFor(materialPalette, material);
+    material?.dispose?.();
+    delete materialPalette[key];
+    removed += 1;
+  }
+  return removed;
 }
 
 export function disposeMaterialPalette(materialPalette) {

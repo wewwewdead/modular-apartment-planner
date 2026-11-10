@@ -3,7 +3,6 @@
  * Pure package assembly lives in buildWorkshopPackageContents; ZIP download stays in generateWorkshopZip.
  */
 
-import JSZip from 'jszip';
 import { exportBomWithCost } from '../../utils/bomExportUtils';
 import { generateAssemblyHtml } from './assemblyHtmlExport';
 import { generateBomHtml } from './bomHtmlExport';
@@ -349,6 +348,10 @@ export async function generateWorkshopZip(
     options,
   );
 
+  // Loaded on demand: JSZip is ~97 KB that the studio needs only for this
+  // download, and a static import put it on the /sketch route's first load.
+  const jszip = await import('jszip');
+  const JSZip = jszip.default || jszip;
   const zip = new JSZip();
   const folder = zip.folder(packageContents.folderName);
   packageContents.files.forEach((file) => {

@@ -172,6 +172,8 @@ export function furnitureExample(kind = 'table', options = {}) {
       model.instances.push(instance('brace-instance', 'bent-brace', [400, 325, 100]));
     }
   }
+  // The examples keep their fixed paper scale (no scaleMode = fixed).
+  delete model.sheets[0].scaleMode;
   model.sheets[0].title =
     kind === 'bookshelf'
       ? 'Bookshelf assembly'
@@ -220,6 +222,7 @@ export function bracketExample() {
   ];
   model.instances = [instance('bracket-1', 'bracket')];
   model.sheets[0].title = 'Bracket machining details';
+  delete model.sheets[0].scaleMode;
   model.sheets[0].scale = 0.5;
   return model;
 }

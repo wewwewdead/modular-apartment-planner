@@ -71,6 +71,15 @@ export function createWindowPlaceHandler({ dispatch, editorDispatch, getFloor, a
     onMouseDown(modelPos, e, toolState) {
       if (e.button !== 0) return;
       if (!toolState.previewWallId || toolState.previewBlocked) return;
+      // The preview's verdict is from the last move; a double-click's second
+      // press checks the floor as it is now (see the door tool).
+      const floor = getFloor(activeFloorId);
+      if (!floor) return;
+      if (
+        overlapsExisting(toolState.previewWallId, toolState.previewOffset, WINDOW_WIDTH, floor.doors, floor.windows)
+      ) {
+        return;
+      }
 
       const win = createWindow(toolState.previewWallId, toolState.previewOffset);
       win.phaseId = activePhaseId || null;

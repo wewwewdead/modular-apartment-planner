@@ -346,6 +346,11 @@ export function createRoofSelectHandler({ dispatch, editorDispatch, roofSystem, 
       }
 
       if (e.key === 'Escape' && toolState.dragging) {
+        // Every roof drag commits on each pointer frame, so cancelling means
+        // putting back the project the store held when the press opened the
+        // drag gesture — the plan's select tool does the same. A drag that has
+        // not moved yet recorded nothing, and the cancel leaves it alone.
+        dispatch({ type: 'CANCEL_DRAG_GESTURE' });
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
           payload: {

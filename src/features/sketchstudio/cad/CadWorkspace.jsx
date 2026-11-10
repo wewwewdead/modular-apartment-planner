@@ -6,6 +6,8 @@ import ConnectionEditor from './ConnectionEditor.jsx';
 import DraftingImport from './DraftingImport.jsx';
 import OperationPanel from './OperationPanel.jsx';
 import SheetEditor from './SheetEditor.jsx';
+import SheetScaleControl from './SheetScaleControl.jsx';
+import SheetsPanel, { PdfExportStatus } from './SheetsPanel.jsx';
 import HardwarePanel from './HardwarePanel.jsx';
 import MaterialSelect from './MaterialSelect.jsx';
 import { createHardware, holePreset, METRIC_THREADS } from './hardware.js';
@@ -61,6 +63,7 @@ import {
   nodeName,
   nodeParent,
   rigidMovers,
+  sheetSubject,
   topNode,
   treeRows,
   ungroupNodes,
@@ -72,7 +75,18 @@ import { CUT_TOOLS, cutRowDirection, cutTemplate } from './placementCuts.js';
 import { changeRowCount, rowCountLabel } from './placementRows.js';
 import { canFlipSide, chosenHoleRows, flipHardwareSide, pickRowHoles, removeChosenHole } from './placementHardware.js';
 import { mapPlacement, unmapPlacement } from './placement.js';
-import { clone, createPart, normalizeModel, numeric, removeInstance, removePart, uid } from './model.js';
+import {
+  clone,
+  createPart,
+  duplicateSheet,
+  findSheetFor,
+  normalizeModel,
+  numeric,
+  removeInstance,
+  removePart,
+  removeSheets,
+  uid,
+} from './model.js';
 import { furnitureExample, bracketExample } from './examples.js';
 import { ConstraintEditor, FeatureForm, JsonEditor, SketchForm, ValueField, VectorFields } from './CadEditors.jsx';
 import { buildCutList, cutListCsv } from './fabrication.js';
@@ -84,6 +98,7 @@ import { PLANE_NAMES } from './originPlanes.js';
 import { anchorWorld, formatMm, markOffset, markValue, modelPoses } from './marks.js';
 import { entityPolyline } from './sketchProfile.js';
 import { mateInstance, mateNodes } from './mate.js';
+import { MATE, PDF_RUN, activeTool } from './toolSession.js';
 import SheetPreview from './SheetPreview.jsx';
 import { FieldContexts } from './liveField.js';
 import { DesignParametersForm, ParametersPanel } from './ParametersPanel.jsx';
@@ -101,7 +116,12 @@ import {
   sketchView,
 } from './sketchOperations.js';
 import { sheetSvg } from './drawings.js';
+import { layoutParts, resolveSheetScale, scaleLabel, sheetFit } from './sheetLayout.js';
+import { pdfTextIssueMessage, pdfTextIssues } from './pdfText.js';
+import { download } from './download.js';
 import NumericInput from '../components/NumericInput.jsx';
+import { isFilePickerAbortError } from '../utils/sketchWorkspaceFileUtils';
+import { sanitizeFileNamePart } from '@/persistence/fileNames';
 import { BusyButton, LOADING_COPY, LoadingBar, PanePlaceholder, kernelBuilding } from '@/ui/loading';
 import './cad.css';
 
@@ -137,6 +157,19 @@ const icons = {
 };
 // Centre of a world box [min, max].
 const boxCentre = ([min, max]) => min.map((v, i) => (v + max[i]) / 2);
+// Projected views stay valid while only a sheet's annotations, title block
+// or parts-list setting change; the model geometry and these sheet keys
+// decide which views are projected.
+const DRAWING_SOURCE_KEYS = ['parameters', 'sketches', 'parts', 'instances', 'connections'];
+const DRAWN_SHEET_KEYS = ['views', 'section', 'partId', 'instanceIds', 'explodeDistance'];
+const sameDrawingSource = (a, b) => Boolean(a && b) && DRAWING_SOURCE_KEYS.every((k) => a[k] === b[k]);
+const sameDrawnSheet = (a, b) => DRAWN_SHEET_KEYS.every((k) => JSON.stringify(a?.[k]) === JSON.stringify(b?.[k]));
+// The stale reasons the open sheet generates by itself for (Phase S §7);
+// a model change waits for Update drawing preview, as before.
+const AUTO_DRAWING_REASONS = ['This sheet has no views yet', 'The view list changed', 'The drawing subject changed'];
+// The sheet PDF's Save dialog file type (Phase T).
+const PDF_FILE_TYPES = [{ description: 'PDF document', accept: { 'application/pdf': ['.pdf'] } }];
+const pdfAbortError = () => new DOMException('PDF export cancelled.', 'AbortError');
 // A face mate moves one part, or a group's rigid movers (§3.6).
 const mateMove = (model, session, parameters) =>
   session.movers ? mateNodes(model, session, parameters) : mateInstance(model, session, parameters);
@@ -346,11 +379,34 @@ export default function CadWorkspace({
     [busy, setBusy] = useState(false),
     // The export a ribbon button started, so that button alone shows the busy face.
     [exportingType, setExportingType] = useState(null),
+    // Generated views (Phase S §7): { source: the model the geometry came
+    // from, sheets: Map sheet id → { sheet: the definition projected,
+    // result } or { sheet, error } }, filled one sheet at a time.
     [drawings, setDrawings] = useState(null),
     [split, setSplit] = useState(false),
     [drawingZoom, setDrawingZoom] = useState(1),
+    // A scale slider mid-drag (SheetScaleControl): { sheetId, scale }, drawn
+    // live and committed once when the gesture ends.
+    [scaleDraft, setScaleDraft] = useState(null),
+    // A new sheet whose views are generated once its model has rebuilt.
+    [pendingDrawings, setPendingDrawings] = useState(null),
     [sheetId, setSheetId] = useState(model.sheets[0]?.id),
+    // The Sheets panel's result line ({ text, undo, model }): shown while the
+    // model is the one it describes, so the next commit (or the Undo) clears it.
+    [sheetNotice, setSheetNotice] = useState(null),
+    // A sheet PDF under way (Phase T, docs/sketch-studio-sheet-pdf.md §5):
+    // { stage: 'working' | 'report' | 'refit', ids, includeParts, name,
+    // title, handle (the Save dialog's file, held until written), controller,
+    // progress, … the report's failures and warnings }; null when idle.
+    [pdfRun, setPdfRun] = useState(null),
+    // Its result line ({ text, warnings, model }), cleared by the next commit.
+    [pdfNotice, setPdfNotice] = useState(null),
+    // Bumped by Export PDF… so the Sheets panel focuses its export section.
+    [pdfFocus, setPdfFocus] = useState(0),
     [inspection, setInspection] = useState(null);
+  // The sheet and model each auto-generation last tried (sheet id → model),
+  // so a sheet that fails or projects nothing is not requested again and again.
+  const autoDrawn = useRef(new Map());
   const [treeOpen, setTreeOpen] = useState(true),
     [propertiesOpen, setPropertiesOpen] = useState(true);
   useLayoutEffect(() => {
@@ -434,6 +490,8 @@ export default function CadWorkspace({
     fieldModel.current = session ? normalized : null;
     setCadModel(normalized, { skipHistory: coalesce });
     setError('');
+    // The model as committed (the Sheets panel's notice keys on it).
+    return normalized;
   };
   // A field's live value through perform: a failure stays silent until the
   // commit on Enter / blur reports it (spec §4).
@@ -554,9 +612,16 @@ export default function CadWorkspace({
   const changePart = (next) => commit({ ...model, parts: model.parts.map((p) => (p.id === next.id ? next : p)) });
   const changeInstance = (next) =>
     commit({ ...model, instances: model.instances.map((i) => (i.id === next.id ? next : i)) });
+  // A new selection closes the tool panels. An open operation is dropped the
+  // way Cancel drops it (its placement may have isolated a part), and a mate
+  // ends: a placed one keeps its committed move, as Done does, and a pick in
+  // progress has committed nothing. The mate's own picks select directly
+  // (setSelectedId / setSelection), so they never end their own session.
   const resetSelectionTools = () => {
     setHoleMode(null);
+    if (operationDraft) setIsolated(operationDraft.previousIsolation);
     setOperationDraft(null);
+    setMateSession(null);
     setSelectedMarkId(null);
     setSketchId(null);
     setFeatureId(null);
@@ -798,6 +863,8 @@ export default function CadWorkspace({
     // After the commit reaches this component and the model has rebuilt.
     if (!reopen || model === reopen.before || !runtime.ready || operationDraft) return;
     setReopen(null);
+    // A tool started meanwhile (S works during the rebuild) keeps the view.
+    if (activeTool({ operationDraft, sketchSession, mateSession, measureSession, holeMode })) return;
     perform(() => beginOperation(reopen.type, null, { template: reopen.template, row: reopen.row }));
     // Runs once the committed model has rebuilt; beginOperation reads that render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1037,7 +1104,8 @@ export default function CadWorkspace({
     if (!runtime.ready) throw new Error('Wait for the model to rebuild first.');
     resetModesForSketch();
     setSketchSession(null);
-    setMateSession({ stage: 'moving' });
+    // Always a fresh session (the ribbon is off while one runs).
+    setMateSession({ stage: MATE.next(MATE.initial, 'START') });
     setPanel('mate');
   };
   const pickMateFace = (info) => {
@@ -1058,7 +1126,7 @@ export default function CadWorkspace({
         setSelection([node]);
         setOpenGroupId(context);
         setMateSession({
-          stage: 'target',
+          stage: MATE.next(mateSession.stage, 'PICK'),
           instanceId: info.instanceId,
           nodeId: node,
           members,
@@ -1085,7 +1153,7 @@ export default function CadWorkspace({
       if (!moving || !bounds) throw new Error('Pick a face of a visible part.');
       setSelectedId(moving.id);
       setMateSession({
-        stage: 'target',
+        stage: MATE.next(mateSession.stage, 'PICK'),
         instanceId: moving.id,
         moving: { point: info.point, normal: info.normal },
         base: { position: [...(moving.position || [0, 0, 0])], rotation: [...(moving.rotation || [0, 0, 0])] },
@@ -1096,7 +1164,11 @@ export default function CadWorkspace({
     }
     if (mateSession.members?.includes(info.instanceId)) throw new Error(GROUP_COPY.outside);
     if (info.instanceId === mateSession.instanceId) throw new Error('Pick a face on a different part.');
-    const next = { ...mateSession, stage: 'placed', target: { point: info.point, normal: info.normal } };
+    const next = {
+      ...mateSession,
+      stage: MATE.next(mateSession.stage, 'PICK'),
+      target: { point: info.point, normal: info.normal },
+    };
     commit(mateMove(model, next, runtime.snapshot.parameters));
     setMateSession(next);
   };
@@ -1330,16 +1402,119 @@ export default function CadWorkspace({
       setError(e.message || String(e));
     }
   };
-  const requestDrawings = async () => {
+  // Generate views (Phase S §7): only the sheets asked for, the open one by
+  // default. Results merge into the cache while the geometry is the one it
+  // was built from (else they replace it); each entry keeps the definition
+  // it was projected from. A sheet the kernel refuses keeps that error as its
+  // own, so one broken sheet leaves the other sheets' previews alone.
+  const requestDrawings = async (ids = [sheet.id]) => {
     setBusy(true);
     try {
-      const result = await runtime.request('drawings');
-      setDrawings({ source: model, sheets: result });
+      const definition = (id) => model.sheets.find((s) => s.id === id);
+      let entries;
+      try {
+        const result = await runtime.request('drawings', { sheetIds: ids });
+        entries = result.filter((r) => definition(r.id)).map((r) => [r.id, { sheet: definition(r.id), result: r }]);
+      } catch (e) {
+        // Not ready, or the model moved on mid-request: nothing to say about these sheets.
+        if (!runtime.ready || latestModel.current !== model) throw e;
+        entries = ids.filter(definition).map((id) => [id, { sheet: definition(id), error: e.message || String(e) }]);
+      }
+      setDrawings((old) => ({
+        source: model,
+        sheets: new Map([...(sameDrawingSource(old?.source, model) ? old.sheets : []), ...entries]),
+      }));
       setSplit(true);
     } finally {
       setBusy(false);
     }
   };
+  // The 3D selection as a drawing subject (Phase R §7): one part, a group's
+  // or several parts' instances, or nothing (the whole assembly).
+  const selectionSubject = part
+    ? { partId: part.id }
+    : selectionMembers.length
+      ? { instanceIds: selectionMembers, ...(selectedGroup ? { title: selectedGroup.name } : {}) }
+      : {};
+  // One "new sheet" path (Phase S §4): a subject that already has a plain
+  // sheet opens it (no commit) unless forceNew; otherwise a Phase R sheet is
+  // added — titled after its subject, fitted to the page, its views generated
+  // once its model has rebuilt. Either way it shows on the Drawings tab, split.
+  const openOrCreateSheet = (subject = {}, { forceNew = false, panel: shownPanel = 'sheet' } = {}) => {
+    const found = forceNew ? null : findSheetFor(model, subject);
+    if (found) setSheetId(found.id);
+    else {
+      const subjectPart = subject.partId ? model.parts.find((p) => p.id === subject.partId) : null;
+      if (subject.partId && !subjectPart) throw new Error(`Unknown part: ${subject.partId}`);
+      const members = subjectPart ? [] : subject.instanceIds || [];
+      const title = subjectPart
+        ? subjectPart.name
+        : subject.title ||
+          (members.length ? `${members.length} part${members.length === 1 ? '' : 's'}` : document.name || 'Assembly');
+      const next = {
+        id: uid('sheet'),
+        title: title.slice(0, 65),
+        ...(subjectPart ? { partId: subjectPart.id } : members.length ? { instanceIds: members } : {}),
+        layout: 'engineering',
+        size: 'A3',
+        units: 'mm',
+        scaleMode: 'fit',
+        scale: 1,
+        revision: 'A',
+        tolerance: 'Not specified',
+        material: subjectPart?.material || '',
+        views: ['top', 'isometric', 'front', 'right'],
+        annotations: [],
+        notes: '',
+      };
+      commit({ ...model, sheets: [...model.sheets, next] });
+      setSheetId(next.id);
+      setPendingDrawings(next.id);
+    }
+    setPanel(shownPanel);
+    setSplit(true);
+    setTab('Drawings');
+    setSearch('');
+  };
+  // The selection's "Drawing sheet" button: the same sheet, shown on the Drawings tab.
+  const drawSelection = () => perform(() => openOrCreateSheet(selectionSubject));
+  // A tree row's draw icon: the Sheets panel stays open if it is.
+  const drawNode = (subject) =>
+    perform(() => openOrCreateSheet(subject, { panel: panel === 'sheets' ? 'sheets' : 'sheet' }));
+  // Sheets panel (Phase S §5): each change is one commit, so Undo restores it.
+  const openSheet = (id) => {
+    setSheetId(id);
+    setSplit(true);
+  };
+  const renameSheet = (id, title) => {
+    const name = title.trim().slice(0, 65);
+    if (!name || model.sheets.find((s) => s.id === id)?.title === name) return;
+    commit({ ...model, sheets: model.sheets.map((s) => (s.id === id ? { ...s, title: name } : s)) });
+  };
+  const copySheet = (id) => {
+    const next = commit(duplicateSheet(model, id));
+    setSheetId(next.sheets[model.sheets.findIndex((s) => s.id === id) + 1].id);
+    setSplit(true);
+  };
+  // The open sheet, when deleted, hands over to the next row, else the
+  // previous one; its slider draft and dimension tool go with it.
+  const deleteSheets = (ids) => {
+    const gone = new Set(ids);
+    const count = model.sheets.filter((s) => gone.has(s.id)).length;
+    const next = commit(removeSheets(model, ids));
+    if (gone.has(sheet.id)) {
+      const index = model.sheets.indexOf(sheet);
+      const neighbour =
+        model.sheets.slice(index + 1).find((s) => !gone.has(s.id)) ||
+        model.sheets.slice(0, index).findLast((s) => !gone.has(s.id));
+      setSheetId(neighbour.id);
+      setDimensionTool(null);
+    }
+    if (scaleDraft && gone.has(scaleDraft.sheetId)) setScaleDraft(null);
+    setSheetNotice({ text: `Deleted ${count} sheet${count === 1 ? '' : 's'}`, undo: true, model: next });
+  };
+  const changeSheet = (patch) =>
+    commit({ ...model, sheets: model.sheets.map((s) => (s.id === sheet.id ? { ...s, ...patch } : s)) });
   const exportFile = async (type) => {
     if (operationDraft) throw new Error('Apply or cancel the operation before exporting.');
     const generation = ++exportGeneration.current;
@@ -1350,7 +1525,7 @@ export default function CadWorkspace({
     setBusy(true);
     setExportingType(type);
     try {
-      const { download, workshopZip, vectorPdf } = await import('./exports.js');
+      const { workshopZip } = await import('./exports.js');
       assertCurrent();
       if (type === 'csv') {
         download(
@@ -1360,10 +1535,11 @@ export default function CadWorkspace({
         return;
       }
       if (type === 'svg' || type === 'dxf') {
-        const views = await runtime.request('drawings');
+        // The open sheet only (Phase S §7); its page number is its place in the model.
+        const views = await runtime.request('drawings', { sheetIds: [sheet.id] });
         const selected = views.find((s) => s.id === sheet.id);
         if (!selected) throw new Error('Add geometry to this sheet before exporting.');
-        const svg = sheetSvg(selected, model, runtime.snapshot, views.indexOf(selected) + 1, views.length);
+        const svg = sheetSvg(selected, model, runtime.snapshot, model.sheets.indexOf(sheet) + 1, model.sheets.length);
         const content = type === 'svg' ? svg : (await import('./sheetDxf.js')).sheetDxf(svg);
         assertCurrent();
         download(
@@ -1372,18 +1548,13 @@ export default function CadWorkspace({
         );
         return;
       }
+      // The sheet PDF has its own path (exportSheetsPdf): only its sheets' views, never STEP/STL.
       const data = await runtime.request(type === 'step' || type === 'stl' ? 'solids' : 'export');
       assertCurrent();
-      if (type === 'zip' || type === 'pdf') {
-        const blob =
-          type === 'zip'
-            ? await workshopZip(model, runtime.snapshot, data, document.name)
-            : await vectorPdf(data.drawings, model, runtime.snapshot);
+      if (type === 'zip') {
+        const blob = await workshopZip(model, runtime.snapshot, data, document.name);
         assertCurrent();
-        download(
-          blob,
-          type === 'zip' ? `${document.name.replace(/[^a-zA-Z0-9_-]/g, '-')}-workshop.zip` : 'workshop.pdf',
-        );
+        download(blob, `${document.name.replace(/[^a-zA-Z0-9_-]/g, '-')}-workshop.zip`);
       } else if (type === 'step') {
         if (!data.assembly) throw new Error('Add an assembly instance first.');
         download(data.assembly, 'assembly.step');
@@ -1399,6 +1570,235 @@ export default function CadWorkspace({
       }
     }
   };
+  // Sheet PDF (Phase T, docs/sketch-studio-sheet-pdf.md §5). The Save dialog
+  // opens first, synchronously in the click (user activation expires during a
+  // long render and a late picker throws SecurityError); then only the
+  // chosen sheets' views are fetched (current cache entries reused, the rest
+  // merged into the cache), every sheet is rendered once as the PDF will
+  // print it, and a sheet that cannot be exported stops the run with a
+  // report while the dialog's file is held, unwritten, until the user fixes
+  // it, exports the other sheets or cancels.
+  const exportSheetsPdf = (ids, { includeParts = false } = {}) => {
+    if (operationDraft) throw new Error('Apply or cancel the operation before exporting.');
+    if (!ids.length) throw new Error('Choose the sheets to export.');
+    const one = ids.length === 1 && !includeParts ? model.sheets.find((s) => s.id === ids[0]) : null;
+    const name = `${sanitizeFileNamePart(document.name, 'Sketch-Studio')} - ${one ? sanitizeFileNamePart(one.title, 'sheet') : 'drawings'}.pdf`;
+    const title = `${document.name || 'Sketch Studio'} - ${one ? one.title : 'drawings'}`;
+    const picking =
+      typeof window.showSaveFilePicker === 'function'
+        ? window.showSaveFilePicker({ suggestedName: name, types: PDF_FILE_TYPES })
+        : null;
+    return runSheetsPdf({ ids, includeParts, name, title, picking });
+  };
+  // The chosen sheets in model order (then the automatic part sheets), each
+  // with its generated views or the kernel's refusal.
+  const pdfSheets = async (ids, includeParts, assertCurrent) => {
+    const live = drawings && sameDrawingSource(drawings.source, model) ? drawings.sheets : null;
+    const chosen = model.sheets.filter((s) => ids.includes(s.id));
+    const missing = chosen
+      .filter((s) => {
+        const entry = live?.get(s.id);
+        return !(entry && sameDrawnSheet(entry.sheet, s));
+      })
+      .map((s) => s.id);
+    let fetched = [];
+    if (missing.length || includeParts) {
+      fetched = await runtime.request('drawings', {
+        sheetIds: missing,
+        collectErrors: true,
+        ...(includeParts ? { includeParts: true } : {}),
+      });
+      assertCurrent();
+      const entries = fetched
+        .filter((r) => missing.includes(r.id))
+        .map((r) => {
+          const sheet = chosen.find((s) => s.id === r.id);
+          return [r.id, r.error ? { sheet, error: r.error } : { sheet, result: r }];
+        });
+      // The previews benefit: these sheets need no Generate views now.
+      if (entries.length)
+        setDrawings((old) => ({
+          source: model,
+          sheets: new Map([...(sameDrawingSource(old?.source, model) ? old.sheets : []), ...entries]),
+        }));
+    }
+    const items = chosen.map((sheet) => {
+      const got = fetched.find((r) => r.id === sheet.id);
+      const entry = got ? (got.error ? { error: got.error } : { result: got }) : live?.get(sheet.id) || {};
+      return { id: sheet.id, title: sheet.title, sheet, error: entry.error, result: entry.result };
+    });
+    if (includeParts)
+      for (const r of fetched)
+        if (!model.sheets.some((s) => s.id === r.id))
+          items.push({ id: r.id, title: r.title, auto: true, sheet: r, error: r.error, result: r.error ? null : r });
+    return items;
+  };
+  // Fit to page in the report fixes an overflow only when every view that
+  // does not fit takes the sheet scale (a view's own scale is always fixed).
+  const pdfFitFix = (item, drawn) => {
+    if (item.auto || item.sheet.scaleMode === 'fit') return false;
+    try {
+      const fit = sheetFit(drawn, drawn.views, { parts: layoutParts(drawn, model, runtime.snapshot) });
+      const bad = fit.views.filter((v) => !v.fits);
+      return bad.length > 0 && bad.every((v) => !v.ownScale);
+    } catch {
+      return false;
+    }
+  };
+  const runSheetsPdf = async ({ ids, includeParts, name, title, picking = null, handle = null, skip = null }) => {
+    const generation = ++exportGeneration.current;
+    const assertCurrent = () => {
+      if (generation !== exportGeneration.current || latestModel.current !== model)
+        throw new Error('Export cancelled or the model changed. Export the current design again.');
+    };
+    const controller = new AbortController();
+    const run = { ids, includeParts, name, title, handle, controller };
+    let report = null;
+    setBusy(true);
+    setExportingType('pdf');
+    setPdfNotice(null);
+    setPdfRun({ ...run, stage: 'working', progress: null });
+    try {
+      if (picking) {
+        try {
+          run.handle = await picking;
+        } catch (e) {
+          // The Save dialog was closed: nothing requested, nothing to say.
+          if (isFilePickerAbortError(e)) return;
+          throw e;
+        }
+      }
+      // The PDF chunk loads while the views are fetched.
+      const library = import('./sheetPdf.js');
+      library.catch(() => {});
+      const items = await pdfSheets(ids, includeParts, assertCurrent);
+      if (!items.length) throw new Error('Those sheets no longer exist.');
+      if (controller.signal.aborted) throw pdfAbortError();
+      // Preflight: each sheet rendered as it will print (an export never
+      // overflows); these strings are the pages unless a skip renumbers them.
+      const total = items.length;
+      const checked = items.map((item, index) => {
+        if (item.error) return { ...item, failure: item.error };
+        if (!item.result) return { ...item, failure: 'Add geometry to this sheet before exporting.' };
+        const drawn = item.auto ? item.result : { ...item.sheet, bounds: item.result.bounds, views: item.result.views };
+        try {
+          const svg = sheetSvg(drawn, model, runtime.snapshot, index + 1, total, { allowOverflow: false });
+          return { ...item, drawn, svg, issue: pdfTextIssues(svg, item.title) };
+        } catch (e) {
+          return { ...item, drawn, failure: e.message || String(e), fit: pdfFitFix(item, drawn) };
+        }
+      });
+      const good = checked.filter((c) => !c.failure);
+      const warnings = good.filter((c) => c.issue).map((c) => pdfTextIssueMessage(c.issue));
+      if (checked.some((c) => c.failure && !skip?.has(c.id))) {
+        report = {
+          ...run,
+          stage: PDF_RUN.next('working', 'REPORT'),
+          total,
+          passing: good.length,
+          warnings,
+          failures: checked
+            .filter((c) => c.failure)
+            .map((c) => ({
+              id: c.id,
+              title: c.title,
+              auto: Boolean(c.auto),
+              fit: Boolean(c.fit),
+              // "Frame: front does not fit…" reads "Frame — front does not fit…".
+              error: c.failure.startsWith(`${c.title}: `) ? c.failure.slice(c.title.length + 2) : c.failure,
+            })),
+        };
+        setPanel('sheets');
+        setPropertiesOpen(true);
+        return;
+      }
+      if (!good.length) throw new Error('None of these sheets can be exported.');
+      // Skipped sheets renumber the rest: page n of the pages written.
+      const pages = good.map((c, index) => ({
+        svg:
+          good.length === total
+            ? c.svg
+            : sheetSvg(c.drawn, model, runtime.snapshot, index + 1, good.length, { allowOverflow: false }),
+        size: c.drawn.size,
+        title: c.title,
+      }));
+      const { sheetsPdf } = await library;
+      assertCurrent();
+      const blob = await sheetsPdf(null, model, runtime.snapshot, {
+        title,
+        pages,
+        signal: controller.signal,
+        onProgress: (progress) => setPdfRun((r) => (r?.controller === controller ? { ...r, progress } : r)),
+      });
+      assertCurrent();
+      if (controller.signal.aborted) throw pdfAbortError();
+      let saved = name;
+      if (run.handle) {
+        // The writable is created only now: a run that stops earlier leaves the picked file as the dialog left it.
+        const writable = await run.handle.createWritable();
+        try {
+          if (controller.signal.aborted) throw pdfAbortError();
+          await writable.write(blob);
+          await writable.close();
+        } catch (e) {
+          // Discards the swap file: the picked file keeps what it had.
+          try {
+            await writable.abort?.();
+          } catch {
+            // Already closed or errored: nothing more to discard.
+          }
+          throw e;
+        }
+        saved = run.handle.name || name;
+      } else download(blob, name);
+      const count = `${pages.length} page${pages.length === 1 ? '' : 's'}`;
+      setPdfNotice({ text: `${run.handle ? 'Saved' : 'Downloaded'} ${saved} (${count})`, warnings, model });
+    } catch (e) {
+      if (e?.name !== 'AbortError') throw e;
+      setPdfNotice({ text: 'PDF export cancelled — nothing was written.', warnings: [], model });
+    } finally {
+      if (generation === exportGeneration.current) {
+        setBusy(false);
+        setExportingType(null);
+        setPdfRun(report);
+      }
+    }
+  };
+  // The report's Fit to page: one commit, then the same sheets and file again.
+  const fitPdfSheet = (id) => {
+    commit({ ...model, sheets: model.sheets.map((s) => (s.id === id ? { ...s, scaleMode: 'fit' } : s)) });
+    setPdfRun((r) => r && { ...r, stage: PDF_RUN.next(r.stage, 'FIT'), before: model });
+  };
+  const pdfActions = {
+    cancel: () => (pdfRun?.stage === 'working' ? pdfRun.controller.abort() : setPdfRun(null)),
+    fit: (id) => perform(() => fitPdfSheet(id)),
+    open: (id) => openSheet(id),
+    skip: () => {
+      const { ids, includeParts, name, title, handle, failures } = pdfRun;
+      perform(() => runSheetsPdf({ ids, includeParts, name, title, handle, skip: new Set(failures.map((f) => f.id)) }));
+    },
+    dismiss: () => setPdfRun(null),
+  };
+  // The status bar's Cancel: stops the rebuild and whatever is busy. An export
+  // skips its own reset once the generation has moved on, so its state ends
+  // here: a working PDF run is aborted (nothing is written) and one waiting to
+  // refit is dropped; a report on screen is not an export under way and stays.
+  const cancelWork = () => {
+    exportGeneration.current++;
+    if (pdfRun?.stage === 'working') pdfRun.controller.abort();
+    runtime.cancel();
+    setBusy(false);
+    setExportingType(null);
+    setPdfRun((r) => (r && PDF_RUN.next(r.stage, 'CANCEL') === 'idle' ? null : r));
+  };
+  // After a fix, once its commit is the model on show and rebuilt.
+  useEffect(() => {
+    if (pdfRun?.stage !== 'refit' || model === pdfRun.before || !runtime.ready || busy) return;
+    const { ids, includeParts, name, title, handle } = pdfRun;
+    perform(() => runSheetsPdf({ ids, includeParts, name, title, handle }));
+    // runSheetsPdf reads this render's model and views.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfRun, model, runtime.ready, busy]);
   const commands = [
     { tab: 'Sketch', label: 'New sketch', run: startSketchPick },
     {
@@ -1540,7 +1940,17 @@ export default function CadWorkspace({
         setPanel('inspection');
       },
     },
-    { tab: 'Drawings', label: 'Generate views', current: true, run: requestDrawings },
+    {
+      tab: 'Drawings',
+      label: 'Sheets',
+      title: 'Manage drawing sheets: draw a part, open, rename, duplicate or delete sheets',
+      run: () => {
+        setPanel('sheets');
+        setPropertiesOpen(true);
+      },
+    },
+    // The open sheet only (Phase S §7).
+    { tab: 'Drawings', label: 'Generate views', current: true, run: () => requestDrawings() },
     {
       tab: 'Drawings',
       label: 'Dimension',
@@ -1555,29 +1965,9 @@ export default function CadWorkspace({
     {
       tab: 'Drawings',
       label: 'New engineering sheet',
-      run: () => {
-        const bounds = runtime.snapshot?.parts.find((p) => p.id === part?.id)?.bounds;
-        const span = bounds ? Math.max(...bounds[1].map((v, i) => v - bounds[0][i])) : 1000;
-        const next = {
-          id: uid('sheet'),
-          title: part?.name || 'Engineering drawing',
-          partId: part?.id,
-          layout: 'engineering',
-          size: 'A3',
-          units: 'mm',
-          scale: [1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005].find((s) => span * s < 60) || 0.001,
-          revision: 'A',
-          tolerance: 'Not specified',
-          material: part?.material || '',
-          views: ['top', 'isometric', 'front', 'right'],
-          annotations: [],
-          notes: '',
-        };
-        commit({ ...model, sheets: [...model.sheets, next] });
-        setSheetId(next.id);
-        setPanel('sheet');
-        setSplit(true);
-      },
+      title:
+        'A sheet of the 3D selection (part, group or parts) or the whole assembly, fitted to the page; opens its sheet if it has one',
+      run: () => openOrCreateSheet(selectionSubject),
     },
     { tab: 'Drawings', label: 'Pump bracket example', run: () => loadExample('pump') },
     { tab: 'Drawings', label: 'SVG sheet', current: true, run: () => exportFile('svg') },
@@ -1623,26 +2013,52 @@ export default function CadWorkspace({
     },
     {
       tab: 'Drawings',
-      label: 'Add part sheets',
+      label: 'Add missing part sheets',
+      title: 'A sheet for every part that has no plain sheet yet',
       run: () => {
-        const added = model.parts.map((p) => ({
-          ...clone(model.sheets[0]),
-          id: uid('sheet'),
-          partId: p.id,
-          title: p.name,
-          views: ['front', 'top', 'right', 'isometric'],
-          annotations: [{ id: uid('annotation'), type: 'part-number', partId: p.id }],
-        }));
-        commit({ ...model, sheets: [...model.sheets, ...added] });
+        // Only parts with no plain sheet (Phase S §4), so a second click adds nothing.
+        const added = model.parts
+          .filter((p) => !findSheetFor(model, { partId: p.id }))
+          .map((p) => {
+            const base = clone(model.sheets[0]);
+            // A plain part sheet whatever sheet 1 is.
+            delete base.section;
+            delete base.instanceIds;
+            delete base.explodeDistance;
+            return {
+              ...base,
+              id: uid('sheet'),
+              partId: p.id,
+              title: p.name,
+              scaleMode: 'fit',
+              views: ['front', 'top', 'right', 'isometric'],
+              annotations: [{ id: uid('annotation'), type: 'part-number', partId: p.id }],
+            };
+          });
+        const next = added.length ? commit({ ...model, sheets: [...model.sheets, ...added] }) : model;
+        setSheetNotice({
+          text: added.length
+            ? `Added ${added.length} sheet${added.length === 1 ? '' : 's'}`
+            : 'Every part already has a sheet',
+          model: next,
+        });
+        setPanel('sheets');
+        setPropertiesOpen(true);
       },
     },
+    // Phase T: the choice of sheets is in the Sheets panel's Export PDF section.
     {
       tab: 'Drawings',
-      label: 'Vector PDF',
+      label: 'Export PDF…',
+      title: 'Save this sheet, chosen sheets or every sheet as one true-size PDF',
       current: true,
       exportType: 'pdf',
       busyLabel: LOADING_COPY.sheetPdfWorkshop,
-      run: () => exportFile('pdf'),
+      run: () => {
+        setPanel('sheets');
+        setPropertiesOpen(true);
+        setPdfFocus((n) => n + 1);
+      },
     },
     { tab: 'Manufacture', label: 'Cutting list', current: true, run: () => setPanel('cuts') },
     { tab: 'Manufacture', label: 'Fabrication settings', run: () => setPanel('fabrication') },
@@ -1765,35 +2181,130 @@ export default function CadWorkspace({
   }, [model, runtime.ready, runtime.snapshot]);
   // Projected views stay valid while only a sheet's annotations, title block
   // or parts-list setting change; anything that changes geometry or which
-  // views are projected needs Generate views again.
-  const generated =
-    drawings &&
-    ['parameters', 'sketches', 'parts', 'instances', 'connections'].every((k) => drawings.source[k] === model[k])
-      ? drawings.sheets.find((s) => s.id === sheet?.id)
-      : null;
-  const drawnSheet = generated && drawings.source.sheets.find((s) => s.id === sheet.id);
+  // views are projected needs Generate views again. The cache holds each
+  // sheet's own result (or error) with the definition it was projected from.
+  const drawnEntry =
+    drawings && sheet && sameDrawingSource(drawings.source, model) ? drawings.sheets.get(sheet.id) : null;
+  const generated = drawnEntry?.result || null;
+  const drawnSheet = drawnEntry?.sheet;
+  const drawnCurrent = Boolean(drawnEntry) && sameDrawnSheet(drawnSheet, sheet);
   const activeDrawing =
-    generated &&
-    ['views', 'section', 'partId', 'instanceIds', 'explodeDistance'].every(
-      (k) => JSON.stringify(drawnSheet?.[k]) === JSON.stringify(sheet[k]),
-    )
-      ? { ...sheet, bounds: generated.bounds, views: generated.views }
-      : null;
-  let svg = '',
-    drawingError = '';
-  if (activeDrawing) {
-    try {
-      svg = sheetSvg(
-        activeDrawing,
-        model,
-        runtime.snapshot,
-        drawings.sheets.indexOf(generated) + 1,
-        drawings.sheets.length,
+    generated && drawnCurrent ? { ...sheet, bounds: generated.bounds, views: generated.views } : null;
+  // The kernel refused this sheet as it is now: its own error, in place of its preview.
+  const sheetError = drawnCurrent && drawnEntry.error ? drawnEntry.error : '';
+  // Why the views on show are not this sheet's (a clear call to action).
+  const drawingStale =
+    !activeDrawing && !sheetError && drawings && sheet
+      ? !drawnEntry
+        ? drawings.sheets.has(sheet.id)
+          ? 'The model changed'
+          : 'This sheet has no views yet'
+        : JSON.stringify(drawnSheet?.views) !== JSON.stringify(sheet.views)
+          ? 'The view list changed'
+          : ['partId', 'instanceIds'].some((k) => JSON.stringify(drawnSheet?.[k]) !== JSON.stringify(sheet[k]))
+            ? 'The drawing subject changed'
+            : 'The section or explode settings changed'
+      : '';
+  // Auto-generate on view (Phase S §7): a new sheet (pendingDrawings, as in
+  // Phase R) once its model has rebuilt, and the open sheet whenever it has
+  // no views yet (never generated) or its subject or view list changed, with
+  // the split pane on and no operation open. Each sheet is tried once per
+  // model, so an error or an empty projection never loops; Update drawing
+  // preview and Refresh drawings still retry by hand.
+  const autoDrawing =
+    Boolean(sheet) && !activeDrawing && !sheetError && (!drawings || AUTO_DRAWING_REASONS.includes(drawingStale));
+  useEffect(() => {
+    if (!runtime.ready || busy) return;
+    const tried = (id) => {
+      const source = autoDrawn.current.get(id);
+      return (
+        sameDrawingSource(source, model) &&
+        sameDrawnSheet(
+          source.sheets.find((s) => s.id === id),
+          model.sheets.find((s) => s.id === id),
+        )
       );
+    };
+    // After the new sheet's commit reaches this component.
+    if (pendingDrawings && model.sheets.some((s) => s.id === pendingDrawings)) {
+      const id = pendingDrawings;
+      setPendingDrawings(null);
+      autoDrawn.current.set(id, model);
+      perform(() => requestDrawings([id]));
+      return;
+    }
+    // A new sheet still on its way: not the sheet shown meanwhile.
+    if (pendingDrawings && pendingDrawings === sheetId) return;
+    if (!autoDrawing || !split || operationDraft || tried(sheet.id)) return;
+    autoDrawn.current.set(sheet.id, model);
+    perform(() => requestDrawings([sheet.id]));
+    // requestDrawings reads this render's model and sheet.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDrawings, runtime.ready, busy, model, sheetId, sheet, autoDrawing, split, operationDraft]);
+  // The preview draws a slider's draft scale, and an overflowing fixed scale
+  // with the view flagged (exports still refuse it).
+  const draftScale = scaleDraft && scaleDraft.sheetId === sheet?.id ? scaleDraft.scale : null;
+  const previewSheet =
+    activeDrawing && draftScale != null ? { ...activeDrawing, scaleMode: 'fixed', scale: draftScale } : activeDrawing;
+  let svg = '',
+    drawingError = sheetError,
+    drawingFit = null,
+    drawingParts = [];
+  if (previewSheet) {
+    try {
+      drawingParts = layoutParts(previewSheet, model, runtime.snapshot);
+      // Its page number is its place in the model (only this sheet is generated).
+      svg = sheetSvg(previewSheet, model, runtime.snapshot, model.sheets.indexOf(sheet) + 1, model.sheets.length, {
+        allowOverflow: true,
+      });
+      drawingFit = sheetFit(previewSheet, previewSheet.views, { parts: drawingParts });
     } catch (e) {
+      svg = '';
       drawingError = e.message;
     }
   }
+  const overflowing = drawingFit && !drawingFit.fits ? drawingFit.views.find((v) => !v.fits) : null;
+  const onScaleDraft = (scale) => setScaleDraft(scale == null ? null : { sheetId: sheet.id, scale });
+  // The last PDF's result line, while the model is the one it was made from.
+  const pdfNoticeShown = pdfNotice?.model === model ? pdfNotice : null;
+  // The Sheets panel's page and scale per sheet: the resolved scale once its
+  // views are current, else Fit or the fixed ratio.
+  const sheetScales = () =>
+    new Map(
+      model.sheets.map((s) => {
+        const entry = drawings && sameDrawingSource(drawings.source, model) ? drawings.sheets.get(s.id) : null;
+        const views = entry?.result && sameDrawnSheet(entry.sheet, s) ? entry.result.views : null;
+        let scale = '—';
+        try {
+          scale = views
+            ? scaleLabel(resolveSheetScale(s, views, layoutParts(s, model, runtime.snapshot)))
+            : s.scaleMode === 'fit'
+              ? 'Fit'
+              : scaleLabel(numeric(s.scale));
+        } catch {
+          // An unreadable scale reads "—".
+        }
+        return [s.id, `${s.size || 'A3'} · ${scale}`];
+      }),
+    );
+  // A tree row's "Draw <name>" icon (Drawings tab only, Phase S §6): opens
+  // or creates that subject's sheet without touching the 3D selection.
+  const drawButton = (name, subject) => (
+    <button
+      type="button"
+      className="cad-tree-draw"
+      aria-label={`Draw ${name}`}
+      title="Open or create a drawing sheet of this part"
+      disabled={busy || Boolean(operationDraft)}
+      onClick={(e) => {
+        e.stopPropagation();
+        drawNode(subject);
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+    >
+      <Icon name="Drawings" />
+    </button>
+  );
   return (
     <FieldContexts parameters={parameterContext} channel={fieldMeta}>
       <section className="cad-workspace" aria-label="Sketch Studio solid modeling">
@@ -1837,6 +2348,9 @@ export default function CadWorkspace({
                 onClick={() => {
                   setTab(t);
                   setSearch('');
+                  // The Drawings tab opens on its sheets when Properties shows nothing else.
+                  if (t === 'Drawings' && tab !== t && !panel && !part && !isBody && model.parts.length)
+                    setPanel('sheets');
                 }}
               >
                 <Icon name={t} />
@@ -1954,6 +2468,11 @@ export default function CadWorkspace({
                                   </small>
                                 </span>
                               </button>
+                              {tab === 'Drawings' &&
+                                drawButton(group.name, {
+                                  instanceIds: memberIds(model, [group.id]),
+                                  title: group.name,
+                                })}
                             </div>
                           )}
                           {expanded && (
@@ -1966,6 +2485,29 @@ export default function CadWorkspace({
                     }
                     const i = row.instance;
                     const p = model.parts.find((p) => p.id === i.partId);
+                    const item = (
+                      <button
+                        className={`cad-tree-item ${liveSelection.includes(i.id) ? 'is-selected' : ''}`}
+                        title="Double-click or F2 to rename"
+                        onClick={(e) => treeClick(i.id, e)}
+                        onDoubleClick={() => setRenaming({ id: i.id, value: i.name || p?.name || '' })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'F2') {
+                            e.preventDefault();
+                            setRenaming({ id: i.id, value: i.name || p?.name || '' });
+                          }
+                        }}
+                      >
+                        <Icon name="Solid" />
+                        <span>
+                          {i.name || p?.name || 'Broken part'}
+                          <small>
+                            {i.partId}
+                            {i.visible === false ? ' · hidden' : ''}
+                          </small>
+                        </span>
+                      </button>
+                    );
                     return (
                       <div key={i.id} className="cad-tree-node" style={{ '--cad-tree-depth': row.depth }}>
                         {renaming?.id === i.id ? (
@@ -1981,28 +2523,13 @@ export default function CadWorkspace({
                               if (e.key === 'Escape') setRenaming(null);
                             }}
                           />
+                        ) : tab === 'Drawings' ? (
+                          <div className="cad-tree-group-row">
+                            {item}
+                            {drawButton(i.name || p?.name || 'part', { partId: i.partId })}
+                          </div>
                         ) : (
-                          <button
-                            className={`cad-tree-item ${liveSelection.includes(i.id) ? 'is-selected' : ''}`}
-                            title="Double-click or F2 to rename"
-                            onClick={(e) => treeClick(i.id, e)}
-                            onDoubleClick={() => setRenaming({ id: i.id, value: i.name || p?.name || '' })}
-                            onKeyDown={(e) => {
-                              if (e.key === 'F2') {
-                                e.preventDefault();
-                                setRenaming({ id: i.id, value: i.name || p?.name || '' });
-                              }
-                            }}
-                          >
-                            <Icon name="Solid" />
-                            <span>
-                              {i.name || p?.name || 'Broken part'}
-                              <small>
-                                {i.partId}
-                                {i.visible === false ? ' · hidden' : ''}
-                              </small>
-                            </span>
-                          </button>
+                          item
                         )}
                         {selectedId === i.id && (
                           <div className="cad-feature-list">
@@ -2192,14 +2719,28 @@ export default function CadWorkspace({
                 </button>
               ))}
               <button
-                disabled={!part || !runtime.ready || Boolean(operationDraft) || Boolean(sketchSession)}
+                disabled={
+                  !part ||
+                  !runtime.ready ||
+                  Boolean(operationDraft) ||
+                  Boolean(sketchSession) ||
+                  Boolean(mateSession) ||
+                  busy
+                }
                 aria-pressed={holeMode === 'place'}
                 onClick={() => perform(() => startHoleTool('place'))}
               >
                 Place holes
               </button>
               <button
-                disabled={!part || !runtime.ready || Boolean(operationDraft) || Boolean(sketchSession)}
+                disabled={
+                  !part ||
+                  !runtime.ready ||
+                  Boolean(operationDraft) ||
+                  Boolean(sketchSession) ||
+                  Boolean(mateSession) ||
+                  busy
+                }
                 aria-pressed={holeMode === 'move'}
                 onClick={() => perform(() => startHoleTool('move'))}
               >
@@ -2510,22 +3051,58 @@ export default function CadWorkspace({
               </div>
               {split && (
                 <div className="cad-drawing">
-                  <select
-                    aria-label="Drawing sheet"
-                    value={sheet?.id || ''}
-                    onChange={(e) => setSheetId(e.target.value)}
-                  >
-                    {model.sheets.map((s) => (
-                      <option value={s.id} key={s.id}>
-                        {s.title}
-                      </option>
-                    ))}
-                  </select>
-                  <label className="cad-field">
-                    Drawing zoom
+                  <div className="cad-inline cad-sheet-switch">
+                    {/* Title and subject, so sheets with one title can be told apart. */}
+                    <select
+                      aria-label="Drawing sheet"
+                      value={sheet?.id || ''}
+                      onChange={(e) => setSheetId(e.target.value)}
+                    >
+                      {model.sheets.map((s) => (
+                        <option value={s.id} key={s.id}>
+                          {`${s.title} — ${sheetSubject(s, model).label}`}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      title="Draw a part, open, rename, duplicate or delete sheets"
+                      onClick={() => {
+                        setPanel('sheets');
+                        setPropertiesOpen(true);
+                      }}
+                    >
+                      Manage sheets
+                    </button>
+                    <button
+                      type="button"
+                      title="Save this sheet as a PDF"
+                      disabled={!sheet || !runtime.ready || busy || Boolean(operationDraft)}
+                      onClick={() => perform(() => exportSheetsPdf([sheet.id]))}
+                    >
+                      PDF
+                    </button>
+                  </div>
+                  {/* The PDF's progress and result here unless the Sheets panel shows them. */}
+                  {!(propertiesOpen && panel === 'sheets') && (
+                    <PdfExportStatus run={pdfRun} notice={pdfNoticeShown} actions={pdfActions} />
+                  )}
+                  {sheet && (
+                    <SheetScaleControl
+                      key={sheet.id}
+                      sheet={sheet}
+                      views={activeDrawing?.views || null}
+                      parts={drawingParts}
+                      onChange={(patch) => perform(() => changeSheet(patch))}
+                      onDraft={onScaleDraft}
+                    />
+                  )}
+                  <label className="cad-field" title="Zoom the preview only — does not change the printed scale">
+                    Screen zoom
                     <input
                       type="range"
-                      aria-label="Drawing zoom"
+                      aria-label="Screen zoom"
+                      title="Zoom the preview only — does not change the printed scale"
                       min="0.5"
                       max="4"
                       step="0.25"
@@ -2533,6 +3110,33 @@ export default function CadWorkspace({
                       onChange={(e) => setDrawingZoom(Number(e.target.value))}
                     />
                   </label>
+                  {overflowing && (
+                    <div className="cad-sheet-overflow" role="status">
+                      <span>
+                        {overflowing.name.charAt(0).toUpperCase() + overflowing.name.slice(1)} doesn’t fit on{' '}
+                        {sheet.size || 'A3'} at {scaleLabel(overflowing.scale)}.
+                      </span>
+                      {drawingFit.views.some((v) => !v.fits && !v.ownScale) && (
+                        <>
+                          <button onClick={() => perform(() => changeSheet({ scaleMode: 'fit' }))}>
+                            Fit to page ({scaleLabel(drawingFit.largestFittingScale)})
+                          </button>
+                          <button
+                            onClick={() =>
+                              perform(() => changeSheet({ scaleMode: 'fixed', scale: drawingFit.largestFittingScale }))
+                            }
+                          >
+                            Use {scaleLabel(drawingFit.largestFittingScale)}
+                          </button>
+                        </>
+                      )}
+                      {drawingFit.smallestFittingPage && drawingFit.smallestFittingPage !== sheet.size && (
+                        <button onClick={() => perform(() => changeSheet({ size: drawingFit.smallestFittingPage }))}>
+                          Use {drawingFit.smallestFittingPage} at {scaleLabel(drawingFit.scale)}
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {svg ? (
                     <SheetPreview
                       key={dimensionTool || 'view'}
@@ -2543,6 +3147,21 @@ export default function CadWorkspace({
                       onAdd={(annotation) => perform(() => addSheetAnnotation(annotation))}
                       onCancel={() => setDimensionTool(null)}
                     />
+                  ) : sheetError ? (
+                    // The kernel refused this sheet only (Phase S §7); other sheets keep their views.
+                    <p className="cad-sheet-error">
+                      {sheetError} —{' '}
+                      <button disabled={!runtime.ready || busy} onClick={() => perform(requestDrawings)}>
+                        Update drawing preview
+                      </button>
+                    </p>
+                  ) : drawingStale && !drawingError ? (
+                    <p className="cad-sheet-stale">
+                      {drawingStale} —{' '}
+                      <button disabled={!runtime.ready || busy} onClick={() => perform(requestDrawings)}>
+                        Update drawing preview
+                      </button>
+                    </p>
                   ) : (
                     <p>{drawingError || 'Generate drawing views from the current model.'}</p>
                   )}
@@ -3177,6 +3796,28 @@ export default function CadWorkspace({
                     Add weld note
                   </button>
                 </>
+              ) : panel === 'sheets' ? (
+                <SheetsPanel
+                  model={model}
+                  currentId={sheet?.id}
+                  selection={
+                    selectionMembers.length ? { subject: selectionSubject, count: selectionMembers.length } : null
+                  }
+                  scales={sheetScales()}
+                  notice={sheetNotice?.model === model ? sheetNotice : null}
+                  disabled={busy || Boolean(operationDraft)}
+                  onOpen={openSheet}
+                  onCreate={(subject, forceNew) =>
+                    perform(() => openOrCreateSheet(subject, { forceNew, panel: 'sheets' }))
+                  }
+                  onRename={(id, title) => perform(() => renameSheet(id, title))}
+                  onDuplicate={(id) => perform(() => copySheet(id))}
+                  onDelete={(ids) => perform(() => deleteSheets(ids))}
+                  onUndo={undo}
+                  pdf={{ run: pdfRun, notice: pdfNoticeShown, actions: pdfActions, focus: pdfFocus }}
+                  exportDisabled={!runtime.ready || busy || Boolean(operationDraft)}
+                  onExportPdf={(ids, options) => perform(() => exportSheetsPdf(ids, options))}
+                />
               ) : panel === 'sheet' && sheet ? (
                 <SheetEditor
                   key={sheet.id}
@@ -3190,6 +3831,10 @@ export default function CadWorkspace({
                     setSplit(true);
                   }}
                   previewReady={Boolean(svg)}
+                  drawingViews={activeDrawing?.views || null}
+                  drawingParts={drawingParts}
+                  onScaleDraft={onScaleDraft}
+                  viewportSelection={{ ids: selectionMembers, name: selectedGroup?.name || '' }}
                   onChange={(next) =>
                     commit({
                       ...model,
@@ -3382,6 +4027,14 @@ export default function CadWorkspace({
                     >
                       Duplicate
                     </button>
+                    <button
+                      type="button"
+                      disabled={busy || Boolean(operationDraft)}
+                      title="A drawing sheet of these parts, fitted to the page"
+                      onClick={drawSelection}
+                    >
+                      Drawing sheet
+                    </button>
                     <button type="button" className="cad-danger" onClick={() => perform(removeBody)}>
                       {selectedGroup
                         ? `Remove group · ${selectionMembers.length} parts`
@@ -3429,6 +4082,16 @@ export default function CadWorkspace({
                       </>
                     );
                   })()}
+                  <div className="cad-inline">
+                    <button
+                      type="button"
+                      disabled={busy || Boolean(operationDraft)}
+                      title="A drawing sheet of this part, fitted to the page"
+                      onClick={drawSelection}
+                    >
+                      Drawing sheet
+                    </button>
+                  </div>
                   <details open>
                     <summary>Placement & rotation</summary>
                     {moveHint && <p className="cad-help">{moveHint}</p>}
@@ -3687,15 +4350,7 @@ export default function CadWorkspace({
           <span className="cad-status-spacer" />
           {(!runtime.ready || busy) && (
             <>
-              <button
-                onClick={() => {
-                  exportGeneration.current++;
-                  runtime.cancel();
-                  setBusy(false);
-                }}
-              >
-                Cancel
-              </button>
+              <button onClick={cancelWork}>Cancel</button>
               <button onClick={runtime.retry}>Retry worker</button>
             </>
           )}

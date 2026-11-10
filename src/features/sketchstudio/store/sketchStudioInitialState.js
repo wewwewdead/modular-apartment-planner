@@ -56,6 +56,7 @@ const sketchStudioInitialState = {
     cursorWorld: { x: 0, y: 0 },
     isPointerDown: false,
     pointerId: null,
+    panButton: null,
     panStartScreen: null,
     panStartViewport: null,
     canvasSize: { width: 0, height: 0 },

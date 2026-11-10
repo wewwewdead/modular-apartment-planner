@@ -24,6 +24,40 @@ export const VIEW_PLANES = { front: 'front', rear: 'back', top: 'top', bottom: '
 
 // Own every retained native object. Operations consuming sketches can delete them
 // early; delete() is idempotent for Replicad wrappers.
+/*
+ * A snapshot's tessellation as typed arrays: the worker hands their buffers
+ * over (`snapshotTransferables`) instead of structured-cloning tens of
+ * thousands of plain numbers per part on every rebuild. Only what the viewport
+ * draws is kept — the face and edge groups had no reader.
+ */
+function typedMesh(mesh) {
+  return {
+    vertices: Float32Array.from(mesh.vertices),
+    normals: Float32Array.from(mesh.normals),
+    triangles: Uint32Array.from(mesh.triangles),
+  };
+}
+
+function typedEdges(edges) {
+  return { lines: Float32Array.from(edges.lines) };
+}
+
+/** The buffers of a snapshot's tessellation, for `postMessage`'s transfer list. */
+export function snapshotTransferables(snapshot) {
+  const buffers = [];
+  for (const instance of snapshot?.instances || []) {
+    for (const view of [
+      instance.mesh?.vertices,
+      instance.mesh?.normals,
+      instance.mesh?.triangles,
+      instance.edges?.lines,
+    ]) {
+      if (ArrayBuffer.isView(view) && !buffers.includes(view.buffer)) buffers.push(view.buffer);
+    }
+  }
+  return buffers;
+}
+
 export function createKernelSession(input) {
   const model = normalizeModel(input),
     params = resolveParameters(model.parameters);
@@ -689,8 +723,8 @@ export function createKernelSession(input) {
         instances: model.instances.map((i) => ({
           id: i.id,
           partId: i.partId,
-          mesh: placed.get(i.id).mesh({ tolerance: 0.15, angularTolerance: 0.15 }),
-          edges: placed.get(i.id).meshEdges({ tolerance: 0.15 }),
+          mesh: typedMesh(placed.get(i.id).mesh({ tolerance: 0.15, angularTolerance: 0.15 })),
+          edges: typedEdges(placed.get(i.id).meshEdges({ tolerance: 0.15 })),
           bounds: bounds(placed.get(i.id)),
           placement: placements.get(i.id),
         })),
@@ -707,12 +741,20 @@ export function createKernelSession(input) {
         }
       return collisions;
     },
-    drawings({ includeParts = false } = {}) {
+    // `sheetIds` (Phase S): project only those sheets, so a preview builds
+    // the sheet on show and one broken sheet cannot fail another's request.
+    // `includeParts` adds an automatic detail sheet for each part that has no
+    // sheet of its own, whatever `sheetIds` names (so `{ sheetIds: [],
+    // includeParts: true }` is those part sheets alone). `collectErrors`
+    // (Phase T, the PDF preflight) returns a sheet the kernel refuses as
+    // `{ id, title, error }` in its place instead of failing the request.
+    drawings({ includeParts = false, sheetIds = null, collectErrors = false } = {}) {
       if (!placed.size && !shapes.size) return [];
-      const sheets = [...model.sheets];
+      const wanted = sheetIds ? new Set(sheetIds) : null;
+      const sheets = wanted ? model.sheets.filter((sheet) => wanted.has(sheet.id)) : [...model.sheets];
       if (includeParts)
         for (const part of model.parts) {
-          if (sheets.some((sheet) => sheet.partId === part.id)) continue;
+          if (model.sheets.some((sheet) => sheet.partId === part.id)) continue;
           const box = bounds(shapes.get(part.id)),
             maxSize = Math.max(...box[1].map((x, i) => x - box[0][i]));
           const scale = [1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005].find((s) => s * maxSize < 55) || 0.001;
@@ -725,9 +767,11 @@ export function createKernelSession(input) {
             partId: part.id,
             size: 'A3',
             units: 'mm',
+            // Fit to page; the guessed scale stays as the fixed fallback.
+            scaleMode: 'fit',
             scale,
-            revision: model.sheets[0].revision,
-            tolerance: model.sheets[0].tolerance,
+            revision: model.sheets[0]?.revision ?? 'A',
+            tolerance: model.sheets[0]?.tolerance ?? 'Not specified',
             material: part.material,
             views: ['front', 'top', 'right', 'isometric'],
             annotations: [{ id: `label-${part.id}`, type: 'part-number', partId: part.id }, ...holes.slice(0, 6)],
@@ -742,7 +786,7 @@ export function createKernelSession(input) {
               annotations: holes.slice(start, start + 6),
             });
         }
-      return sheets.map((sheet) => {
+      const draw = (sheet) => {
         let shape = sheet.partId
           ? shapes.get(sheet.partId)
           : sheet.instanceIds?.length
@@ -806,6 +850,14 @@ export function createKernelSession(input) {
             };
           }),
         };
+      };
+      if (!collectErrors) return sheets.map(draw);
+      return sheets.map((sheet) => {
+        try {
+          return draw(sheet);
+        } catch (error) {
+          return { id: sheet.id, title: sheet.title, error: error.message || String(error) };
+        }
       });
     },
     exportSolids() {

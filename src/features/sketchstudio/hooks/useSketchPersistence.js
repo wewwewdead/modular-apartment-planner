@@ -18,6 +18,7 @@ import {
 import { createBlankSketchDocument } from '../utils/sketchDocumentUtils';
 import { clearSketchRecovery, loadSketchRecovery, saveSketchRecovery } from '../../../shared/sketchAssetStorage';
 import { isEditableTarget } from './sketchConstants';
+import { advancePersistenceMeta, resumeEventFor, sketchPersistenceMachine } from './sketchPersistenceMachine';
 
 export default function useSketchPersistence(state, dispatch) {
   const confirm = useConfirmDialog();
@@ -29,7 +30,7 @@ export default function useSketchPersistence(state, dispatch) {
     savedAt: null,
     fileName: null,
     savedDocumentName: null,
-    status: 'idle',
+    status: sketchPersistenceMachine.initial,
     error: null,
   });
   // The file being read right now, by name: the Reading … pill names it.
@@ -101,13 +102,13 @@ export default function useSketchPersistence(state, dispatch) {
         document: workspace.document,
         ui: workspace.ui,
       });
-      setDocumentPersistenceMeta({
-        savedAt: workspace.savedAt ?? null,
-        fileName: null,
-        savedDocumentName: workspace.document?.name ?? null,
-        status: 'recovered',
-        error: null,
-      });
+      setDocumentPersistenceMeta((current) =>
+        advancePersistenceMeta(current, 'RECOVER', {
+          savedAt: workspace.savedAt ?? null,
+          fileName: null,
+          savedDocumentName: workspace.document?.name ?? null,
+        }),
+      );
     } catch {
       persistedWorkspaceSnapshotRef.current = comparableWorkspaceSnapshot;
     }
@@ -137,18 +138,7 @@ export default function useSketchPersistence(state, dispatch) {
 
   // Dirty status tracking
   useEffect(() => {
-    setDocumentPersistenceMeta((current) => {
-      const nextStatus = documentIsDirty ? 'dirty' : current.status === 'dirty' ? 'idle' : current.status;
-
-      if (nextStatus === current.status) {
-        return current;
-      }
-
-      return {
-        ...current,
-        status: nextStatus,
-      };
-    });
+    setDocumentPersistenceMeta((current) => advancePersistenceMeta(current, documentIsDirty ? 'EDIT' : 'CLEAN'));
   }, [documentIsDirty]);
 
   const applyWorkspace = useCallback(
@@ -167,13 +157,13 @@ export default function useSketchPersistence(state, dispatch) {
         ui: workspace.ui,
       });
       setDocumentFileHandle(options.fileHandle ?? null);
-      setDocumentPersistenceMeta({
-        savedAt: workspace.savedAt ?? options.savedAt ?? null,
-        fileName: options.fileName ?? options.fileHandle?.name ?? null,
-        savedDocumentName: workspace.document?.name ?? null,
-        status: options.status ?? 'idle',
-        error: null,
-      });
+      setDocumentPersistenceMeta((current) =>
+        advancePersistenceMeta(current, options.status === 'opened' ? 'OPEN' : 'LOAD', {
+          savedAt: workspace.savedAt ?? options.savedAt ?? null,
+          fileName: options.fileName ?? options.fileHandle?.name ?? null,
+          savedDocumentName: workspace.document?.name ?? null,
+        }),
+      );
     },
     [dispatch],
   );
@@ -236,11 +226,9 @@ export default function useSketchPersistence(state, dispatch) {
           status: 'opened',
         });
       } catch (err) {
-        setDocumentPersistenceMeta((current) => ({
-          ...current,
-          status: 'error',
-          error: err.message || 'Failed to open sketch.',
-        }));
+        setDocumentPersistenceMeta((current) =>
+          advancePersistenceMeta(current, 'FAIL', { error: err.message || 'Failed to open sketch.' }),
+        );
       } finally {
         setReadingFileName(null);
       }
@@ -267,11 +255,9 @@ export default function useSketchPersistence(state, dispatch) {
         return;
       }
 
-      setDocumentPersistenceMeta((current) => ({
-        ...current,
-        status: 'error',
-        error: err.message || 'Failed to open sketch.',
-      }));
+      setDocumentPersistenceMeta((current) =>
+        advancePersistenceMeta(current, 'FAIL', { error: err.message || 'Failed to open sketch.' }),
+      );
     } finally {
       setReadingFileName(null);
     }
@@ -285,11 +271,9 @@ export default function useSketchPersistence(state, dispatch) {
         savedDocumentName: documentPersistenceMeta.savedDocumentName,
         documentName: state.document.name,
       });
-      setDocumentPersistenceMeta((current) => ({
-        ...current,
-        status: 'saving',
-        error: null,
-      }));
+      // Closing the picker puts the status back to this one.
+      const statusBeforeSave = documentPersistenceMeta.status;
+      setDocumentPersistenceMeta((current) => advancePersistenceMeta(current, 'SAVE'));
 
       try {
         const { savedAt, fileHandle, fileName } = await saveSketchWorkspaceFile(currentWorkspaceSnapshot, {
@@ -297,40 +281,39 @@ export default function useSketchPersistence(state, dispatch) {
         });
         persistedWorkspaceSnapshotRef.current = comparableWorkspaceSnapshot;
         setDocumentFileHandle(fileHandle);
-        setDocumentPersistenceMeta({
-          savedAt,
-          fileName,
-          savedDocumentName: state.document.name ?? null,
-          status: 'saved',
-          error: null,
-        });
+        setDocumentPersistenceMeta((current) =>
+          advancePersistenceMeta(current, 'SAVED', {
+            savedAt,
+            fileName,
+            savedDocumentName: state.document.name ?? null,
+          }),
+        );
         clearSketchRecovery();
       } catch (err) {
         if (isFilePickerAbortError(err)) {
-          setDocumentPersistenceMeta((current) => ({
-            ...current,
-            status: documentIsDirty ? 'dirty' : 'idle',
-            error: null,
-          }));
+          setDocumentPersistenceMeta((current) => advancePersistenceMeta(current, resumeEventFor(statusBeforeSave)));
           return;
         }
 
-        setDocumentPersistenceMeta((current) => ({
-          ...current,
-          status: 'error',
-          error: err.message || 'Failed to save sketch.',
-        }));
+        setDocumentPersistenceMeta((current) =>
+          advancePersistenceMeta(current, 'FAIL', { error: err.message || 'Failed to save sketch.' }),
+        );
       }
     },
     [
       comparableWorkspaceSnapshot,
       currentWorkspaceSnapshot,
       documentFileHandle,
-      documentIsDirty,
       documentPersistenceMeta.savedDocumentName,
+      documentPersistenceMeta.status,
       state.document.name,
     ],
   );
+
+  // The error toast's dismissal: the status stays, the message goes.
+  const dismissError = useCallback(() => {
+    setDocumentPersistenceMeta((current) => advancePersistenceMeta(current, 'DISMISS'));
+  }, []);
 
   // Ctrl+S shortcut
   useEffect(() => {
@@ -384,5 +367,6 @@ export default function useSketchPersistence(state, dispatch) {
     handleOpenSketch,
     handleImportSketchFile,
     handleSaveSketch,
+    dismissError,
   };
 }

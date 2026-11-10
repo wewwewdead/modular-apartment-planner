@@ -61,6 +61,15 @@ class StubWorker {
   terminate() {
     this.terminateCount += 1;
   }
+
+  /** Answer as the worker would: `data` reaches the hook's message listener. */
+  reply(data) {
+    act(() => {
+      for (const [type, handler] of this.listeners) {
+        if (type === 'message') handler({ data });
+      }
+    });
+  }
 }
 
 function workersFor(name) {
@@ -75,6 +84,32 @@ function DaylightProbe(props) {
 function SolarProbe(props) {
   const value = useSolarAccess(props);
   return <span data-probe="solar" data-status={value.status} />;
+}
+
+/** Everything a study panel reads off the hook, not just its status. */
+function SolarStudyProbe(props) {
+  const value = useSolarAccess(props);
+  return (
+    <span
+      data-probe="solar-study"
+      data-status={value.status}
+      data-stale={String(value.stale)}
+      data-study={value.study?.name ?? ''}
+      data-progress={value.progress ? JSON.stringify(value.progress) : ''}
+    />
+  );
+}
+
+function mountStudy(props) {
+  const view = render(<SolarStudyProbe {...props} />);
+  const read = (name) => view.container.querySelector('[data-probe]').getAttribute(`data-${name}`);
+  return {
+    status: () => read('status'),
+    stale: () => read('stale') === 'true',
+    study: () => read('study') || null,
+    progress: () => (read('progress') ? JSON.parse(read('progress')) : null),
+    update: (next) => view.rerender(<SolarStudyProbe {...next} />),
+  };
 }
 
 function mount(Probe, props) {
@@ -155,9 +190,50 @@ describe('study workers — shared contract (characterization)', () => {
     mount(SolarProbe, { project: shared, solarAccess: createSolarAccessState({ enabled: true }) });
     advance(SOLAR_SETTLE_MS);
     for (const worker of workers) {
-      expect(worker.listeners).toHaveLength(1);
-      expect(worker.listeners[0][0]).toBe('message');
+      const messageListeners = worker.listeners.filter(([type]) => type === 'message');
+      expect(messageListeners).toHaveLength(1);
     }
+  });
+
+  // A worker whose module fails to load, or that dies outside its solve's
+  // try/catch, posts nothing back. The study must still leave "running".
+  it('each reports a worker crash as an error and rebuilds the worker for the next run', () => {
+    const shared = project();
+    const daylight = mount(DaylightProbe, {
+      project: shared,
+      daylight: createDaylightState({ enabled: true, mode: 'grid' }),
+    });
+    const solar = mount(SolarProbe, { project: shared, solarAccess: createSolarAccessState({ enabled: true }) });
+    advance(SOLAR_SETTLE_MS);
+    expect(daylight.status()).toBe('running');
+    expect(solar.status()).toBe('running');
+
+    for (const worker of [...workers]) {
+      const [, onError] = worker.listeners.find(([type]) => type === 'error');
+      act(() => onError({ message: 'Failed to load module script' }));
+      expect(worker.terminateCount).toBe(1);
+    }
+    expect(daylight.status()).toBe('error');
+    expect(solar.status()).toBe('error');
+
+    // The next run gets a worker that is alive.
+    const edited = project();
+    daylight.update({ project: edited, daylight: createDaylightState({ enabled: true, mode: 'grid' }) });
+    solar.update({ project: edited, solarAccess: createSolarAccessState({ enabled: true }) });
+    advance(SOLAR_SETTLE_MS);
+    expect(workersFor('daylight')).toHaveLength(2);
+    expect(workersFor('solarAccess')).toHaveLength(2);
+    expect(workersFor('daylight')[1].messages).toHaveLength(1);
+  });
+
+  it('each reports an unreadable reply as an error and keeps its worker', () => {
+    const solar = mount(SolarProbe, { project: project(), solarAccess: createSolarAccessState({ enabled: true }) });
+    advance(SOLAR_SETTLE_MS);
+    const [worker] = workers;
+    const [, onMessageError] = worker.listeners.find(([type]) => type === 'messageerror');
+    act(() => onMessageError({}));
+    expect(solar.status()).toBe('error');
+    expect(worker.terminateCount).toBe(0);
   });
 });
 
@@ -326,5 +402,97 @@ describe('study workers — activation and scope diverge (characterization)', ()
     advance(DAYLIGHT_SETTLE_MS);
     const posted = workers.flatMap((worker) => worker.messages);
     expect(posted.map((message) => message.floorId)).toEqual(['floor_ground', 'floor_first']);
+  });
+});
+
+describe('study workers — what the panels are told while runs come and go', () => {
+  const solarOn = createSolarAccessState({ enabled: true });
+
+  /** Post the run for the current inputs and answer it with a study called `name`. */
+  function settleWith(name) {
+    advance(SOLAR_SETTLE_MS);
+    const [worker] = workers;
+    worker.reply({ id: worker.messages.at(-1).id, type: 'result', result: { name } });
+  }
+
+  it('keeps the answer on screen when an edit is undone before its run replies', () => {
+    const before = project();
+    const view = mountStudy({ project: before, solarAccess: solarOn });
+    settleWith('before');
+    expect(view.status()).toBe('ready');
+
+    view.update({ project: project(), solarAccess: solarOn });
+    advance(SOLAR_SETTLE_MS);
+    const [worker] = workers;
+    const editedRun = worker.messages.at(-1).id;
+
+    // Undone while the edited building was still being solved: the study on
+    // screen is the answer again, and nothing needs posting.
+    view.update({ project: before, solarAccess: solarOn });
+    expect(view.status()).toBe('ready');
+
+    worker.reply({ id: editedRun, type: 'result', result: { name: 'edited' } });
+    expect(view.study()).toBe('before');
+    expect(view.status()).toBe('ready');
+    expect(view.stale()).toBe(false);
+  });
+
+  it('marks the study stale beside an error from a later run', () => {
+    const view = mountStudy({ project: project(), solarAccess: solarOn });
+    settleWith('first');
+
+    view.update({ project: project(), solarAccess: solarOn });
+    advance(SOLAR_SETTLE_MS);
+    const [worker] = workers;
+    worker.reply({ id: worker.messages.at(-1).id, type: 'error', message: 'The solve failed.' });
+
+    expect(view.status()).toBe('error');
+    // The numbers still on screen are the first building's, not this one's.
+    expect(view.study()).toBe('first');
+    expect(view.stale()).toBe(true);
+  });
+
+  it('drops the progress of a run once a newer one is posted', () => {
+    const view = mountStudy({ project: project(), solarAccess: solarOn });
+    advance(SOLAR_SETTLE_MS);
+    const [worker] = workers;
+    worker.reply({ id: worker.messages[0].id, type: 'progress', progress: { done: 3, total: 10 } });
+    expect(view.progress()).toEqual({ done: 3, total: 10 });
+
+    view.update({ project: project(), solarAccess: solarOn });
+    advance(SOLAR_SETTLE_MS);
+
+    expect(worker.messages).toHaveLength(2);
+    expect(view.progress()).toBeNull();
+  });
+
+  it('stays unavailable across edits once no worker can be built, until one can', () => {
+    vi.stubGlobal(
+      'Worker',
+      class {
+        constructor() {
+          throw new Error('Blocked by the content security policy.');
+        }
+      },
+    );
+    const view = mountStudy({ project: project(), solarAccess: solarOn });
+    advance(SOLAR_SETTLE_MS);
+    expect(view.status()).toBe('unavailable');
+
+    // A study that falls back to computing on the main thread swaps its overlay
+    // out and back if this reads "running" for a settle period on every edit.
+    view.update({ project: project(), solarAccess: solarOn });
+    expect(view.status()).toBe('unavailable');
+    advance(SOLAR_SETTLE_MS);
+    expect(view.status()).toBe('unavailable');
+
+    // Every run still asks again, and the first that gets a worker posts.
+    vi.stubGlobal('Worker', StubWorker);
+    view.update({ project: project(), solarAccess: solarOn });
+    expect(view.status()).toBe('unavailable');
+    advance(SOLAR_SETTLE_MS);
+    expect(workers).toHaveLength(1);
+    expect(workers[0].messages).toHaveLength(1);
+    expect(view.status()).toBe('running');
   });
 });

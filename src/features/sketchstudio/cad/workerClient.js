@@ -5,6 +5,10 @@ export class RevisionWorker {
     this.pending = new Map();
     this.sequence = 0;
     this.revision = 0;
+    // Requests posted that the worker has not answered yet. Superseding drops
+    // interest in a reply, not the work: the worker still runs it, and every
+    // request gets a reply, so this says whether the worker is busy right now.
+    this.outstanding = new Set();
   }
   start() {
     if (this.worker) return;
@@ -15,6 +19,7 @@ export class RevisionWorker {
         this.onStatus?.(data.status);
         return;
       }
+      this.outstanding.delete(data.requestId);
       const pending = this.pending.get(data.requestId);
       if (!pending) return;
       clearTimeout(pending.timer);
@@ -33,11 +38,20 @@ export class RevisionWorker {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => this.cancel('Operation timed out. Retry or simplify the feature.'), this.timeout);
       this.pending.set(requestId, { resolve, reject, timer });
+      this.outstanding.add(requestId);
       this.worker.postMessage({ type, payload, revision, requestId });
     });
   }
   // Drop interest in older requests but keep the worker (and its loaded WASM
   // kernel) alive. The worker skips builds that a newer build has replaced.
+  /** The worker is running (or has queued) a request it has not answered yet. */
+  isBusy() {
+    return Boolean(this.worker) && this.outstanding.size > 0;
+  }
+  /** The worker is still alive: not terminated by a crash, a timeout or a cancel. */
+  isAlive() {
+    return Boolean(this.worker);
+  }
   supersede() {
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
@@ -46,8 +60,12 @@ export class RevisionWorker {
     this.pending.clear();
   }
   cancel(message = 'Operation cancelled.') {
+    const hadWorker = Boolean(this.worker);
     this.worker?.terminate();
     this.worker = null;
+    this.outstanding.clear();
+    // Whatever the next worker is, it has to load its WASM again.
+    if (hadWorker) this.onTerminate?.();
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
       pending.reject(new Error(message));

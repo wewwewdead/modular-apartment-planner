@@ -2,6 +2,7 @@ import { getEligibleCeilingSupportBeams, selectCeilingBeamsForArea } from '@/dom
 import { CEILING_ATTACHMENT_MODES, CEILING_BOUNDARY_SOURCES, createCeilingForProject } from '@/domain/ceilingModels';
 import { SNAP_DISTANCE_PX } from '@/domain/defaults';
 import { distance } from '@/geometry/point';
+import { dropTrailingRepeatedPoints } from './handlerSnapUtils';
 
 function resetCeilingToolState(editorDispatch) {
   editorDispatch({
@@ -159,7 +160,8 @@ export function createCeilingPlaceHandler({
     },
 
     onDoubleClick(modelPos, e, toolState) {
-      const points = toolState.ceilingPoints || [];
+      // The double-click's second press put its corner down a second time.
+      const points = dropTrailingRepeatedPoints(toolState.ceilingPoints, SNAP_DISTANCE_PX / viewport.zoom);
       if (points.length < 3) return;
       commitCeiling(points, toolState);
     },

@@ -12,7 +12,7 @@
  * numbers hold on both faces.
  */
 
-import { WALL_BOARD_MATERIALS, WALL_FRAME_MATERIALS } from '@/domain/wallAssemblies';
+import { WALL_BOARD_MATERIALS, WALL_FRAME_MATERIALS, wallBoardMaterialLabel } from '@/domain/wallAssemblies';
 
 /**
  * Tag text size and its stand-off from the piece, in screen pixels. Both the
@@ -50,11 +50,9 @@ export function frameMaterialLabel(material) {
   return 'Framing';
 }
 
+/** A board's short name, from the one option list every picker reads. */
 export function boardMaterialLabel(material) {
-  if (material === WALL_BOARD_MATERIALS.PLYWOOD) return 'Plywood';
-  if (material === WALL_BOARD_MATERIALS.FIBER_CEMENT) return 'Fiber cement';
-  if (material === WALL_BOARD_MATERIALS.RAINSCREEN) return 'Rainscreen panel';
-  return 'No board';
+  return wallBoardMaterialLabel(material);
 }
 
 /**

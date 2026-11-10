@@ -282,6 +282,8 @@ export default function useSketchStudio() {
       isometricPlane: state.ui.isometricPlane,
     },
     documentPersistence: persistence.documentPersistence,
+    // Stable identity, like dismissToast: the error toast times out through it.
+    dismissDocumentError: persistence.dismissError,
     jointDiagnostics: state.jointDiagnostics || [],
     manufacturingPreviewEntities: state.manufacturingPreviewEntities || [],
     manufacturingExportEntities: state.manufacturingExportEntities || [],

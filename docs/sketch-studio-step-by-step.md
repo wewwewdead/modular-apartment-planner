@@ -263,7 +263,7 @@ sheet before exporting a selected sheet.
 | Editable project | Save / Save as                                | Model features, placements, and drawing settings                |
 | SVG              | Drawings → SVG sheet                          | Selected drawing sheet as a vector image                        |
 | DXF              | Drawings → DXF sheet                          | Selected drawing sheet as CAD linework and text                 |
-| PDF              | Drawings → Vector PDF                         | Drawing set, including any automatically generated part details |
+| PDF              | Drawings → Export PDF…                        | This sheet, chosen sheets or all sheets; optional part details. |
 | STEP             | Manufacture → STEP assembly                   | 3D assembly geometry                                            |
 | STL              | Select the plate, then Manufacture → STL part | Selected part as a mesh                                         |
 | Workshop ZIP     | Manufacture → Workshop ZIP                    | Model, drawings, and available workshop outputs                 |

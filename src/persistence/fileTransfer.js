@@ -7,6 +7,7 @@ import {
   readProjectArchive,
 } from './projectArchive';
 import { serializeProject } from './serialize';
+import { sanitizeFileNamePart } from './fileNames';
 
 const PROJECT_FILE_TYPES = [
   {
@@ -35,19 +36,6 @@ const PROJECT_OPEN_FILE_TYPES = [
     },
   },
 ];
-
-function sanitizeFileNamePart(value) {
-  return (
-    String(value || 'project')
-      .trim()
-      // Strip filesystem-illegal characters and C0 control chars (U+0000-U+001F) from file names.
-      // eslint-disable-next-line no-control-regex
-      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '') || 'project'
-  );
-}
 
 function getProjectFileName(project) {
   return `${sanitizeFileNamePart(project?.name)}.json`;

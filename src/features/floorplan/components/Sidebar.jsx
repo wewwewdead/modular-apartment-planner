@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
 import { useEditorState } from '@/features/floorplan/context/FloorplanContext';
 import { useConfirmDialog } from '@/ui/ConfirmDialog';
+import { useTextDraft } from '@/hooks/useTextDraft';
 import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { getColumnListLabel } from '@/domain/columnLabels';
 import { createFloorAboveHighest, getFloorElevation, getFloorLevelIndex, getOrderedFloors } from '@/domain/floorModels';
@@ -120,6 +121,23 @@ function Section({ title, count, collapsed, onToggle, collapsible = true, action
         <div className={styles.sectionContentInner}>{hasOpened ? children : null}</div>
       </div>
     </div>
+  );
+}
+
+// Commits the name once on Enter or blur (see useTextDraft): dispatching every
+// keystroke made each character an undo step and a coordination pass.
+export function ProjectNameInput({ name, dispatch }) {
+  const commitName = useCallback((value) => dispatch({ type: 'PROJECT_SET_NAME', name: value }), [dispatch]);
+  const { displayValue, handleChange, handleKeyDown, handleBlur } = useTextDraft(name, commitName);
+  return (
+    <input
+      className={styles.projectName}
+      aria-label="Project name"
+      value={displayValue}
+      onChange={handleChange}
+      onKeyDown={handleKeyDown}
+      onBlur={handleBlur}
+    />
   );
 }
 
@@ -390,11 +408,7 @@ function Sidebar() {
   return (
     <div className={styles.sidebar}>
       <Section title="Project" collapsible={false}>
-        <input
-          className={styles.projectName}
-          value={project.name}
-          onChange={(e) => dispatch({ type: 'PROJECT_SET_NAME', name: e.target.value })}
-        />
+        <ProjectNameInput name={project.name} dispatch={dispatch} />
       </Section>
 
       {/* Sits above the lifecycle block because it collapses to a single line

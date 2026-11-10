@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { snapToGrid, resolvePoint } from './handlerSnapUtils';
+import { dropTrailingRepeatedPoints, snapToGrid, resolvePoint } from './handlerSnapUtils';
 import { GRID_MINOR } from '@/domain/defaults';
 
 describe('snapToGrid', () => {
@@ -41,5 +41,31 @@ describe('resolvePoint', () => {
     const result = resolvePoint(input, false);
     expect(result).not.toBe(input);
     expect(result).toEqual({ x: 10, y: 20 });
+  });
+});
+
+describe('dropTrailingRepeatedPoints', () => {
+  const A = { x: 0, y: 0 };
+  const B = { x: 1000, y: 0 };
+  const C = { x: 1000, y: 1000 };
+
+  it('drops the corner a double-click put down twice', () => {
+    expect(dropTrailingRepeatedPoints([A, B, C, { ...C }], 100)).toEqual([A, B, C]);
+  });
+
+  it('drops every trailing repeat within the tolerance, and only trailing ones', () => {
+    const nearlyC = { x: 1040, y: 1030 };
+    expect(dropTrailingRepeatedPoints([A, { ...A }, B, C, nearlyC, { ...nearlyC }], 100)).toEqual([A, { ...A }, B, C]);
+  });
+
+  it('keeps a last corner that is farther than the tolerance from the one before', () => {
+    expect(dropTrailingRepeatedPoints([A, B, C], 100)).toEqual([A, B, C]);
+  });
+
+  it('never empties the list and leaves the input alone', () => {
+    const input = [A, { ...A }];
+    expect(dropTrailingRepeatedPoints(input, 100)).toEqual([A]);
+    expect(input).toHaveLength(2);
+    expect(dropTrailingRepeatedPoints(undefined, 100)).toEqual([]);
   });
 });

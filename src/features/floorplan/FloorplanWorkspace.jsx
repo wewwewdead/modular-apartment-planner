@@ -5,6 +5,7 @@ import NewProjectModal from '@/ui/NewProjectModal';
 import { ConfirmDialogProvider } from '@/ui/ConfirmDialog';
 import styles from '@/app/App.module.css';
 import { ChevronDownIcon, ChevronUpIcon } from '@/ui/ToolbarIcons';
+import { isToolFlowInProgress } from '@/editor/toolSession';
 import modalStyles from '@/ui/Modal.module.css';
 import { FloorplanProvider, useEditorState, useFloorplanContext, useToolState } from './context/FloorplanContext';
 import { DaylightStudyProvider } from './context/DaylightStudyContext';
@@ -13,8 +14,9 @@ import Sidebar from './components/Sidebar';
 import PropertiesPanel from './components/PropertiesPanel';
 import SvgCanvas from './components/renderers/SvgCanvas';
 import SheetCanvas from './components/renderers/SheetCanvas';
-import WallDetailEditor from './components/wall-detail/WallDetailEditor';
-import CeilingDetailEditor from './components/ceiling-detail/CeilingDetailEditor';
+// Shells only: each editor's own code loads on demand (and on idle, below).
+import WallDetailEditor, { prefetchWallDetailEditor } from './components/wall-detail/WallDetailEditorLazy';
+import CeilingDetailEditor, { prefetchCeilingDetailEditor } from './components/ceiling-detail/CeilingDetailEditorLazy';
 import { floorSilhouette } from './components/preview/loadingSilhouettes';
 import {
   BusyButton,
@@ -67,12 +69,12 @@ function FocusExitHint() {
  * flight, and you press Escape twice — once to cancel what you were doing, once
  * to come back out. That is the order people expect.
  *
- * The list below is of *in-progress markers*, deliberately not "is a placement
- * tool active". Tools do not all return to select on Escape — the wall tool
- * clears its chain and stays on the wall tool — so keying off the active tool
- * would mean the keyboard could never leave focus again. Every marker here is
- * cleared by the very Escape that was withheld, which is what guarantees the
- * second press gets through and focus can never trap you.
+ * What it checks is *in-progress markers* (`isToolFlowInProgress`), deliberately
+ * not "is a placement tool active". Tools do not all return to select on
+ * Escape — the wall tool clears its chain and stays on the wall tool — so keying
+ * off the active tool would mean the keyboard could never leave focus again.
+ * Every marker there is cleared by the very Escape that was withheld, which is
+ * what guarantees the second press gets through and focus can never trap you.
  *
  * This listener belongs to a parent, and React flushes child effects first, so
  * the canvas has already had its turn at the key by the time this runs.
@@ -99,14 +101,7 @@ function FocusEscapeGuard({ focusedPanel }) {
 
       if (focusedPanel === 'canvas') {
         const markers = markersRef.current || {};
-        const activeToolState = markers.toolState || {};
-        const cancellingSomething =
-          markers.pastePreview?.active ||
-          activeToolState.dragging ||
-          activeToolState.pendingDrag ||
-          activeToolState.start ||
-          activeToolState.chainStart ||
-          activeToolState.startColumnId;
+        const cancellingSomething = markers.pastePreview?.active || isToolFlowInProgress(markers.toolState);
         if (cancellingSomething) return;
       }
 
@@ -472,9 +467,9 @@ function FloorplanShell() {
       <LoadingBar active={Boolean(projectOpening)} placement="viewport" />
       {openingFile ? <LoadingPill label={openingLabel} placement="viewport" /> : null}
 
-      {state.editor.wallDetailEditor && <WallDetailEditor mountShellFirst />}
+      {state.editor.wallDetailEditor && <WallDetailEditor />}
 
-      {state.editor.ceilingDetailEditor && <CeilingDetailEditor mountShellFirst />}
+      {state.editor.ceilingDetailEditor && <CeilingDetailEditor />}
 
       {showNewProjectModal && (
         <NewProjectModal onConfirm={actions.project.createProject} onClose={actions.workspace.closeNewProjectModal} />
@@ -566,7 +561,28 @@ function FloorplanShell() {
   );
 }
 
+/*
+ * The assembly editors' code, fetched once the floorplan has settled, so the
+ * first Design Face / Edit ceiling usually opens with it already here. A failed
+ * prefetch costs nothing: the opening asks again and reports it.
+ */
+function usePrefetchDetailEditors() {
+  useEffect(() => {
+    const prefetch = () => {
+      prefetchWallDetailEditor();
+      prefetchCeilingDetailEditor();
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      const handle = window.requestIdleCallback(prefetch, { timeout: 4000 });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const timer = window.setTimeout(prefetch, 2000);
+    return () => window.clearTimeout(timer);
+  }, []);
+}
+
 export default function FloorplanWorkspace({ initialProject, isPlayground = false }) {
+  usePrefetchDetailEditors();
   return (
     <div className="editorRoot">
       <ClipboardProvider>
