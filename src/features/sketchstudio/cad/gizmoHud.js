@@ -4,6 +4,9 @@
 // plane squares 'XY' | 'YZ' | 'XZ' and the free centre 'XYZ'.
 
 const AXES = { X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };
+// The rotate rings' and the toolbar / HUD axis colours (cad.css .cad-axis-x/y/z),
+// shared with the press brake's grip (brakeGrip.js).
+export const AXIS_COLORS = Object.freeze({ X: '#c62f2f', Y: '#2f8f2f', Z: '#2f5fc6' });
 const escape = (text) =>
   String(text).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
 const tidy = (value, digits) => {

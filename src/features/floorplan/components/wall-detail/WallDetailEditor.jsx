@@ -93,7 +93,8 @@ import {
   snapWallLocalPoint,
   zoomWallViewport,
 } from './wallDetailEditorGeometry';
-import { createWallDetailPreviewProject } from './wallDetailPreviewProject';
+import { createWallDetailPreviewProject, wallFacePreviewFacing } from './wallDetailPreviewProject';
+import { fastenerHaloRadius, fastenerSymbolRadius, tonalFastenerInk } from './fastenerSymbol';
 import {
   CanvasReadoutChip,
   CanvasSizeTag,
@@ -120,17 +121,21 @@ import {
   AdvancedGroup,
   CollapsibleSection,
   EmptyState,
+  IconButton,
   InfoHint,
-  Metric,
+  MenuItem,
   NumberField,
+  Popover,
+  ReadoutRow,
+  SegmentedControl,
   SelectField,
   SignedNumberField,
-  StepStrip,
   TextField,
   Toggle,
   ToolButton,
   ToolGlyph,
   ToolbarButton,
+  isPopoverOpen,
 } from './WallDetailUiKit';
 import styles from './WallDetailEditor.module.css';
 
@@ -143,6 +148,8 @@ import {
   lastBoardCounts,
   readFocusModePreference,
   resolveWallShellTarget,
+  wallDisplayName,
+  wallFaceName,
 } from './wallDetailEditorShell';
 
 const ThreePreviewPanel = lazy(() => import('@/features/floorplan/components/preview/ThreePreviewPanel'));
@@ -152,7 +159,9 @@ const ThreePreviewPanel = lazy(() => import('@/features/floorplan/components/pre
  * or screw picked on the elevation lights up orange here, and one picked here
  * comes back to the elevation. The selection arrives as primitives rather than
  * as an object so this stays cheap to re-render — the pane has no interest in
- * the elevation's own viewport.
+ * the elevation's own viewport. The face being edited crosses the same way, as
+ * four numbers (`wallFacePreviewFacing`), so the pane looks at the face you are
+ * working on rather than whichever one a fixed direction happens to show.
  */
 const WallLivePreview = memo(function WallLivePreview({
   className,
@@ -161,6 +170,10 @@ const WallLivePreview = memo(function WallLivePreview({
   selectionKind,
   selectionId,
   selectionSide,
+  faceNormalX,
+  faceNormalZ,
+  facePlaneX,
+  facePlaneZ,
   onPick,
   silhouette,
   loadingSince,
@@ -177,10 +190,15 @@ const WallLivePreview = memo(function WallLivePreview({
       selectionAccent="assembly"
       onAssemblyPick={onPick}
       paneKind="wall"
+      placeholderTone="paper"
       loadingLabel={LOADING_COPY.livePreview}
       compilingLabel={LOADING_COPY.compilingWall}
       silhouette={silhouette}
       loadingSince={loadingSince}
+      faceNormalX={faceNormalX}
+      faceNormalZ={faceNormalZ}
+      facePlaneX={facePlaneX}
+      facePlaneZ={facePlaneZ}
     />
   );
 });
@@ -318,20 +336,32 @@ const TOOL_SHORTCUTS = Object.freeze(
   TOOL_DEFINITIONS.reduce((map, definition) => ({ ...map, [definition.shortcut.toLowerCase()]: definition }), {}),
 );
 
-/** Left-panel workflow, in the order a real wall gets detailed. */
+/**
+ * Left-panel workflow, in the order a real wall gets detailed. The collapsed
+ * section headers are the map of the job (number, title, live summary); one
+ * step is open at a time and each ends with "Next: …". Optional steps keep
+ * their place in the order but are skipped by Next.
+ */
 const WORKFLOW_STEPS = Object.freeze([
-  { id: 'face', short: 'Face', title: 'Wall face', hint: 'Pick which side of the wall you are drawing' },
-  {
-    id: 'assembly',
-    short: 'Assembly',
-    title: 'Complete wall assembly',
-    hint: 'Boards and framing this wall is made of',
-  },
-  { id: 'panels', short: 'Boards', title: 'Panel layout', hint: 'Board sizes, shadow gaps, and custom cuts' },
-  { id: 'framing', short: 'Framing', title: 'Framing', hint: 'Studs and noggins behind the boards' },
-  { id: 'fasteners', short: 'Screws', title: 'Fasteners', hint: 'Spacing, pencil guides, and screw placement' },
-  { id: 'dimensions', short: 'Sizes', title: 'Construction dimensions', hint: 'Measurements the builder works from' },
-  { id: 'checks', short: 'Check', title: 'Coordination checks', hint: 'Review clashes, then export the drawing' },
+  { id: 'face', title: 'Wall face' },
+  { id: 'assembly', title: 'Complete wall assembly' },
+  { id: 'panels', title: 'Panel layout' },
+  { id: 'accents', title: 'Accent panels', optional: true },
+  { id: 'framing', title: 'Framing' },
+  { id: 'fasteners', title: 'Fasteners' },
+  { id: 'dimensions', title: 'Construction dimensions' },
+]);
+
+/** The step "Next" leads to from `id`: the following required step, or null after the last. */
+function nextWorkflowStep(id) {
+  const index = WORKFLOW_STEPS.findIndex((step) => step.id === id);
+  return WORKFLOW_STEPS.slice(index + 1).find((step) => !step.optional) || null;
+}
+
+const WORKSPACE_VIEW_OPTIONS = Object.freeze([
+  { value: WORKSPACE_VIEWS.ELEVATION, label: 'Elevation', title: 'Show the flat elevation drawing only' },
+  { value: WORKSPACE_VIEWS.SPLIT, label: 'Split', title: 'Show the elevation drawing above the live 3D preview' },
+  { value: WORKSPACE_VIEWS.THREE_D, label: '3D', title: 'Show the live 3D preview only' },
 ]);
 
 const LAYER_LABELS = Object.freeze({
@@ -437,7 +467,7 @@ function openingOptionLabel(opening, index) {
   return `${kind} ${index + 1} · ${Math.round(opening.u1 - opening.u0)} × ${Math.round(opening.v1 - opening.v0)}`;
 }
 
-function fastenerVisualPalette(appearance, material) {
+function fastenerVisualPalette(appearance, boardFill) {
   if (appearance === FASTENER_APPEARANCE_MODES.METAL) {
     return { fill: '#858d91', stroke: '#343c40', slot: '#d5dbde' };
   }
@@ -447,11 +477,9 @@ function fastenerVisualPalette(appearance, material) {
   if (appearance === FASTENER_APPEARANCE_MODES.CONSTRUCTION) {
     return { fill: '#d4523f', stroke: '#ffffff', slot: '#ffffff' };
   }
-  return {
-    fill: faceColor(material),
-    stroke: material === WALL_BOARD_MATERIALS.PLYWOOD ? '#7a5937' : '#777772',
-    slot: material === WALL_BOARD_MATERIALS.PLYWOOD ? '#9a7044' : '#a19f99',
-  };
+  // Tonal: the colour the board is actually drawn in — its finish's tint on a
+  // finished face, not the stock board's — ringed just hard enough to read.
+  return tonalFastenerInk(boardFill);
 }
 
 function panelRegionPath(region) {
@@ -677,18 +705,24 @@ function FastenerGuideGraphic({ guide, view, precision, selected = false, onPoin
   );
 }
 
+/*
+ * A screw as a symbol, not to scale (docs/wall-fastener-visibility.md §2.3):
+ * never smaller than a 6 px dot, true size once zoomed in past that, with the
+ * halo a fixed 7 px outside it — the ceiling plan's `CeilingScrewLayer` rule.
+ * `unitPx` is wall millimetres per screen pixel.
+ */
 function FastenerGraphic({
   fastener,
   appearance,
-  material,
+  boardFill,
   headDiameter,
   selected,
-  minimumRadius,
+  unitPx,
   title = null,
   onPointerDown,
 }) {
-  const palette = fastenerVisualPalette(appearance, material);
-  const radius = Math.max(headDiameter / 2, minimumRadius);
+  const palette = fastenerVisualPalette(appearance, boardFill);
+  const radius = fastenerSymbolRadius(headDiameter, unitPx);
   const slot = radius * 0.92;
   return (
     <g
@@ -703,7 +737,7 @@ function FastenerGraphic({
           className={styles.fastenerHalo}
           cx={fastener.u}
           cy={fastener.v}
-          r={radius + 7}
+          r={fastenerHaloRadius(radius, unitPx)}
           fill="none"
           vectorEffect="non-scaling-stroke"
         />
@@ -819,20 +853,18 @@ export function WallDetailEditorBody({ openedAt }) {
     measuredValue: 0,
     tolerance: 6,
   });
+  // The left panel is an exclusive accordion: one workflow step open at a time
+  // (bodies stay mounted and `hidden`). The right panel's sections are
+  // independent; Selection is always open and has no entry here.
+  const [openStep, setOpenStep] = useState('face');
   const [openSections, setOpenSections] = useState({
-    face: true,
-    assembly: true,
-    panels: false,
-    framing: false,
-    fasteners: false,
-    accents: false,
-    dimensions: false,
-    selection: true,
     takeoff: true,
     schedule: false,
     asBuilt: false,
     checks: true,
   });
+  // Set by "Next": the step to bring into view once it has opened.
+  const pendingStepScrollRef = useRef(null);
   const [orientationDismissed, setOrientationDismissed] = useState(readOrientationDismissed);
   const [focusMode, setFocusMode] = useState(readFocusModePreference);
   const [panelPeek, setPanelPeek] = useState(null);
@@ -857,10 +889,21 @@ export function WallDetailEditorBody({ openedAt }) {
 
   useEffect(() => () => clearTimeout(toolHudTimer.current), []);
 
+  // "Next" opens the following step; once it has rendered open, scroll its
+  // header to the top of the panel so the body is what the eye lands on.
+  useEffect(() => {
+    const id = pendingStepScrollRef.current;
+    if (!id || id !== openStep) return;
+    pendingStepScrollRef.current = null;
+    sectionNodes.current[id]?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [openStep]);
+
   useEffect(() => {
     if (!panelTrace) return undefined;
     const cancelTrace = (event) => {
       if (event.key !== 'Escape') return;
+      // An open popover takes Escape for itself (WallDetailUiKit Popover).
+      if (isPopoverOpen()) return;
       // Escape in a field throws away what was typed there, and nothing else.
       const target = event.target;
       if (target?.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target?.tagName)) return;
@@ -945,6 +988,8 @@ export function WallDetailEditorBody({ openedAt }) {
   // draws (`wallSiding.js`), so the joints on this drawing are the joints on
   // the model (docs/wall-cladding-finishes.md §6.1).
   const activeLayer = assembly ? deriveWallAssemblyLayers(assembly).find((layer) => layer.side === activeSide) : null;
+  // Which way the 3D pane looks to see this face (docs/wall-fastener-visibility.md §2.1).
+  const previewFacing = wall ? wallFacePreviewFacing(wall, activeLayer) : null;
   const sidingCoursePath =
     detail && wall && activeLayer?.material === WALL_BOARD_MATERIALS.SIDING
       ? sidingCoursePathData(activeLayer.course, wall, resolveWallDetailFrame(wall, floor), boardSpan)
@@ -1046,6 +1091,8 @@ export function WallDetailEditorBody({ openedAt }) {
   }
 
   const toggleSection = (id) => setOpenSections((value) => ({ ...value, [id]: !value[id] }));
+  // Opening a step closes the one that was open; clicking the open step closes it.
+  const toggleStep = (id) => setOpenStep((current) => (current === id ? null : id));
   const sectionRef = (id) => {
     if (!sectionRefSetters.current[id]) {
       sectionRefSetters.current[id] = (node) => {
@@ -1055,8 +1102,19 @@ export function WallDetailEditorBody({ openedAt }) {
     return sectionRefSetters.current[id];
   };
   const focusStep = (id) => {
-    setOpenSections((value) => ({ ...value, [id]: true }));
-    sectionNodes.current[id]?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    pendingStepScrollRef.current = id;
+    setOpenStep(id);
+  };
+  /** The props that make a left-panel section one step of the exclusive accordion. */
+  const stepProps = (id) => {
+    const next = nextWorkflowStep(id);
+    return {
+      id,
+      open: openStep === id,
+      onToggle: () => toggleStep(id),
+      innerRef: sectionRef(id),
+      next: next ? { label: next.title, onClick: () => focusStep(next.id) } : null,
+    };
   };
   const dismissOrientation = () => {
     persistOrientationDismissed();
@@ -2574,6 +2632,9 @@ export function WallDetailEditorBody({ openedAt }) {
     const target = event.target;
     if (target?.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target?.tagName)) return;
     if (event.key === 'Escape') {
+      // An open popover owns Escape (it closes, and nothing else happens);
+      // a closed one never sees it.
+      if (isPopoverOpen()) return;
       // The panel-trace effect owns Escape while a trace is open; never swallow it here.
       if (panelTrace) return;
       if (gesture || dimensionAcquisition) {
@@ -2618,6 +2679,15 @@ export function WallDetailEditorBody({ openedAt }) {
     flashToolHud(definition);
   };
 
+  const closeEditor = () => editorDispatch({ type: 'CLOSE_WALL_DETAIL_EDITOR' });
+  const activeFaceName = wallFaceName(activeSide);
+  const snappedLabel = activeRevealSnap
+    ? `Snapped: ${activeRevealSnap.gap} mm panel gap`
+    : activeDimensionSnap || activeFastenerGuideSnap
+      ? `Snapped to ${describeReference(activeDimensionSnap || activeFastenerGuideSnap)}`
+      : null;
+  const hiddenLayerCount = Object.values(layerVisibility).filter((visible) => !visible).length;
+
   const renderToolButton = (toolId, overrides = {}) => {
     const definition = TOOL_BY_ID[toolId];
     return (
@@ -2637,15 +2707,48 @@ export function WallDetailEditorBody({ openedAt }) {
   return (
     <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="Wall assembly detail editor">
       <header className={styles.header}>
-        <div className={styles.headerIdentity}>
-          <span className={styles.eyebrow}>Construction-detail workspace</span>
-          <h1>Wall-local assembly editor</h1>
-          <p>
-            {wall.id} · {detail.length.toFixed(0)} × {detail.height.toFixed(0)} mm · {profile.manufacturer}{' '}
-            {profile.product}
-          </p>
+        <div className={styles.headerLead}>
+          <button
+            type="button"
+            className={styles.backButton}
+            title="Close the wall detail editor and return to the floorplan"
+            onClick={closeEditor}
+          >
+            <ToolGlyph name="back" />
+            <span>Back to plan</span>
+          </button>
+          <span className={styles.headerDivider} aria-hidden="true" />
+          <div className={styles.headerIdentity}>
+            <h1>
+              {wallDisplayName(wall)} · {activeFaceName}
+            </h1>
+            <span className={styles.headerMeta} title={`${profile.manufacturer} ${profile.product}`}>
+              {detail.length.toFixed(0)} × {detail.height.toFixed(0)} mm · {activeBoardLabel}
+            </span>
+          </div>
         </div>
         <div className={styles.headerActions}>
+          <Popover
+            label="Export"
+            icon="download"
+            title="Download this face as a drawing or a takeoff"
+            kind="menu"
+            panelLabel="Export"
+            triggerClassName={styles.popoverTriggerButton}
+          >
+            <MenuItem
+              label="Drawing SVG"
+              detail="The scaled elevation of this face"
+              title="Download the scaled elevation drawing as SVG"
+              onSelect={() => downloadWallDetailSvg(wall, floor, activeSide)}
+            />
+            <MenuItem
+              label="Takeoff CSV"
+              detail="Boards, framing and screws, counted"
+              title="Download the material takeoff as CSV"
+              onSelect={() => downloadWallDetailCsv(wall, floor, activeSide)}
+            />
+          </Popover>
           <ToolbarButton
             title={
               focusMode
@@ -2655,25 +2758,12 @@ export function WallDetailEditorBody({ openedAt }) {
             aria-pressed={focusMode}
             onClick={toggleFocusMode}
           >
+            <ToolGlyph name="focus" />
             {focusMode ? 'Show panels' : 'Focus canvas'}
           </ToolbarButton>
-          <ToolbarButton
-            title="Download the scaled elevation drawing as SVG"
-            onClick={() => downloadWallDetailSvg(wall, floor, activeSide)}
-          >
-            Export drawing SVG
-          </ToolbarButton>
-          <ToolbarButton
-            title="Download the material takeoff as CSV"
-            onClick={() => downloadWallDetailCsv(wall, floor, activeSide)}
-          >
-            Export takeoff CSV
-          </ToolbarButton>
-          <ToolbarButton
-            title="Close the wall detail editor and return to the floorplan"
-            onClick={() => editorDispatch({ type: 'CLOSE_WALL_DETAIL_EDITOR' })}
-          >
+          <ToolbarButton title="Close the wall detail editor and return to the floorplan" onClick={closeEditor}>
             Close
+            <ToolGlyph name="close" />
           </ToolbarButton>
         </div>
       </header>
@@ -2688,69 +2778,46 @@ export function WallDetailEditorBody({ openedAt }) {
         >
           {orientationDismissed ? null : (
             <div className={styles.orientationCard}>
-              <span className={styles.eyebrow}>Start here</span>
-              <h2>Detail this wall in six steps</h2>
-              <p>
-                Work down the numbered steps on the left, draw on the elevation in the middle, and read the numbers on
-                the right. Nothing is locked in — you can revisit any step at any time.
-              </p>
-              <ol>
-                <li>Pick the wall face</li>
-                <li>Choose the assembly</li>
-                <li>Lay out the boards</li>
-                <li>Adjust the framing</li>
-                <li>Place the screws</li>
-                <li>Add dimensions, then check and export</li>
-              </ol>
-              <p className={styles.orientationTip}>
-                Every drawing tool has a one-key shortcut — hover a tool to see it.
-              </p>
               <div className={styles.orientationActions}>
+                <h2>Detail this wall in six steps</h2>
                 <ToolbarButton onClick={dismissOrientation}>Got it</ToolbarButton>
               </div>
+              <p>Work down the steps; draw in the middle.</p>
             </div>
           )}
 
-          <StepStrip steps={WORKFLOW_STEPS} isOpen={(id) => Boolean(openSections[id])} onSelect={focusStep} />
-
           <CollapsibleSection
-            id="face"
+            {...stepProps('face')}
             step={1}
             title="Wall face"
-            summary={`Editing the ${activeSide === WALL_DETAIL_SIDES.INTERIOR ? 'inside' : 'outside'} face`}
-            open={openSections.face}
-            onToggle={() => toggleSection('face')}
-            innerRef={sectionRef('face')}
+            // The face being edited and its board, said once: the switch below
+            // says which face, this says what it is boarded in.
+            summary={`${wallFaceName(activeSide)} · ${boardMaterialLabel(assembly[activeSide].material)}`}
           >
-            <div className={styles.segmented}>
+            <div className={styles.segmented} role="group" aria-label="Wall face">
               {Object.values(WALL_DETAIL_SIDES).map((side) => (
                 <button
                   key={side}
+                  type="button"
                   className={activeSide === side ? styles.segmentActive : ''}
+                  aria-pressed={activeSide === side}
+                  title={`${wallFaceName(side)} · ${boardMaterialLabel(assembly[side].material)}`}
                   onClick={() => chooseSide(side)}
                 >
-                  {side === WALL_DETAIL_SIDES.INTERIOR ? 'Inside' : 'Outside'} ·{' '}
-                  {boardMaterialLabel(assembly[side].material)}
+                  {wallFaceName(side)}
                 </button>
               ))}
             </div>
-            <p className={styles.activeFaceNotice}>
-              Editing {activeSide === WALL_DETAIL_SIDES.INTERIOR ? 'inside' : 'outside'} face ·{' '}
-              {boardMaterialLabel(assembly[activeSide].material)}
-            </p>
             <Toggle checked={face.enabled} onChange={(enabled) => updateFace({ enabled })} label="Detail this face" />
           </CollapsibleSection>
 
           <CollapsibleSection
-            id="assembly"
+            {...stepProps('assembly')}
             step={2}
             title="Complete wall assembly"
             summary={`${boardMaterialLabel(assembly[activeSide].material)} · ${wallAssemblyThickness(assembly).toFixed(
               0,
             )} mm built`}
-            open={openSections.assembly}
-            onToggle={() => toggleSection('assembly')}
-            innerRef={sectionRef('assembly')}
           >
             <SelectField label="System" value={assembly.preset} onChange={chooseAssemblyPreset}>
               <option value={WALL_ASSEMBLY_PRESETS.FIBER_CEMENT}>HardieFlex / fiber cement</option>
@@ -2761,7 +2828,7 @@ export function WallDetailEditorBody({ openedAt }) {
             {framedAssembly ? (
               <>
                 <SelectField
-                  label={`${activeSide} board`}
+                  label={`${activeSide === WALL_DETAIL_SIDES.INTERIOR ? 'Inside' : 'Outside'} board`}
                   value={assembly[activeSide].material}
                   onChange={chooseBoardMaterial}
                 >
@@ -2905,15 +2972,12 @@ export function WallDetailEditorBody({ openedAt }) {
           </CollapsibleSection>
 
           <CollapsibleSection
-            id="panels"
+            {...stepProps('panels')}
             step={3}
             title="Panel layout"
             summary={`${panels.length} board${panels.length === 1 ? '' : 's'} · ${
               face.layout.mode === PANEL_LAYOUT_MODES.CUSTOM ? 'custom' : 'generated grid'
             }`}
-            open={openSections.panels}
-            onToggle={() => toggleSection('panels')}
-            innerRef={sectionRef('panels')}
           >
             <div className={styles.toolRow} aria-label="Board drawing tools">
               {renderToolButton(CANVAS_TOOLS.DRAW_PANEL)}
@@ -3035,16 +3099,14 @@ export function WallDetailEditorBody({ openedAt }) {
           </CollapsibleSection>
 
           <CollapsibleSection
-            id="accents"
+            {...stepProps('accents')}
+            optional
             title="Accent panels"
             summary={
               accentsAllowed
                 ? `${faceAccents.length} accent${faceAccents.length === 1 ? '' : 's'} on this face`
                 : 'Not on this face'
             }
-            open={openSections.accents}
-            onToggle={() => toggleSection('accents')}
-            innerRef={sectionRef('accents')}
           >
             {accentsAllowed ? (
               <>
@@ -3122,15 +3184,12 @@ export function WallDetailEditorBody({ openedAt }) {
           </CollapsibleSection>
 
           <CollapsibleSection
-            id="framing"
+            {...stepProps('framing')}
             step={4}
             title="Framing"
             summary={`${frameMembers.length} member${frameMembers.length === 1 ? '' : 's'} · ${
               configuration.framing.mode === FRAMING_LAYOUT_MODES.CUSTOM ? 'custom' : 'automatic'
             }`}
-            open={openSections.framing}
-            onToggle={() => toggleSection('framing')}
-            innerRef={sectionRef('framing')}
           >
             <div className={styles.toolRow} aria-label="Framing drawing tools">
               {renderToolButton(CANVAS_TOOLS.DRAW_STUD)}
@@ -3186,15 +3245,12 @@ export function WallDetailEditorBody({ openedAt }) {
           </CollapsibleSection>
 
           <CollapsibleSection
-            id="fasteners"
+            {...stepProps('fasteners')}
             step={5}
             title="Fasteners"
             summary={`${fasteners.length} screw${fasteners.length === 1 ? '' : 's'} · ${
               face.fasteners.perimeterSpacing
             } mm perimeter`}
-            open={openSections.fasteners}
-            onToggle={() => toggleSection('fasteners')}
-            innerRef={sectionRef('fasteners')}
           >
             <div className={styles.toolRow} aria-label="Fastener tools">
               {renderToolButton(CANVAS_TOOLS.ADD_FASTENER)}
@@ -3465,15 +3521,12 @@ export function WallDetailEditorBody({ openedAt }) {
           </CollapsibleSection>
 
           <CollapsibleSection
-            id="dimensions"
+            {...stepProps('dimensions')}
             step={6}
             title="Construction dimensions"
             summary={`${dimensions.length} shown · ${
               dimensions.filter((dimension) => dimension.source === 'custom').length
             } yours`}
-            open={openSections.dimensions}
-            onToggle={() => toggleSection('dimensions')}
-            innerRef={sectionRef('dimensions')}
           >
             <div className={styles.toolRow} aria-label="Measuring tools">
               {renderToolButton(CANVAS_TOOLS.DRAW_DIMENSION)}
@@ -3483,7 +3536,7 @@ export function WallDetailEditorBody({ openedAt }) {
                 Click two exact points to measure, or drag; hold Shift to keep the run level or plumb. Dimensions use
                 64-bit model geometry: endpoints project continuously onto wall, panel, opening, and framing edges and
                 stay associatively linked when geometry changes. Free endpoints use the measurement precision—not the
-                coarse drawing grid. Aim for the green snap target before clicking; with Select, drag the amber line to
+                coarse drawing grid. Aim for the green snap target before clicking; with Select, drag the blue line to
                 move the whole guide, or drag either green endpoint to reshape it. Place Screw snaps continuously to
                 user measurements and their crossings.
               </p>
@@ -3525,7 +3578,7 @@ export function WallDetailEditorBody({ openedAt }) {
         </aside>
 
         <main className={styles.workspace}>
-          <div className={styles.canvasToolbar}>
+          <div className={styles.toolbar}>
             <div className={styles.toolPalette} role="toolbar" aria-label="Drawing tools">
               {['navigate', 'board', 'frame', 'detail'].map((group) => (
                 <div key={group} className={styles.toolCluster} title={TOOL_GROUP_LABELS[group]}>
@@ -3543,6 +3596,7 @@ export function WallDetailEditorBody({ openedAt }) {
                   shortcut="Ctrl+Z"
                   title="Undo the last change (Ctrl+Z)"
                   toggle={false}
+                  iconOnly
                   disabled={!canUndo}
                   onClick={() => dispatch({ type: 'UNDO' })}
                 />
@@ -3552,11 +3606,10 @@ export function WallDetailEditorBody({ openedAt }) {
                   shortcut="Ctrl+Y"
                   title="Redo the undone change (Ctrl+Y)"
                   toggle={false}
+                  iconOnly
                   disabled={!canRedo}
                   onClick={() => dispatch({ type: 'REDO' })}
                 />
-              </div>
-              <div className={styles.toolCluster}>
                 <ToolButton
                   icon="trash"
                   label="Delete"
@@ -3564,51 +3617,40 @@ export function WallDetailEditorBody({ openedAt }) {
                   title="Delete selected — remove the selected board, member, screw, or measurement (Delete)"
                   danger
                   toggle={false}
+                  iconOnly
                   disabled={!selectionIsDeletable}
                   onClick={deleteSelection}
                 />
               </div>
             </div>
-            <div className={styles.toolGroup}>
-              <span>View</span>
-              <ToolbarButton
-                active={workspaceView === WORKSPACE_VIEWS.ELEVATION}
-                title="Show the flat elevation drawing only"
-                onClick={() => setWorkspaceView(WORKSPACE_VIEWS.ELEVATION)}
-              >
-                Elevation
-              </ToolbarButton>
-              <ToolbarButton
-                active={workspaceView === WORKSPACE_VIEWS.SPLIT}
-                title="Show the elevation drawing above the live 3D preview"
-                onClick={() => setWorkspaceView(WORKSPACE_VIEWS.SPLIT)}
-              >
-                Split
-              </ToolbarButton>
-              <ToolbarButton
-                active={workspaceView === WORKSPACE_VIEWS.THREE_D}
-                title="Show the live 3D preview only"
-                onClick={() => setWorkspaceView(WORKSPACE_VIEWS.THREE_D)}
-              >
-                Live 3D
-              </ToolbarButton>
-              <ToolbarButton
-                title="Zoom out"
-                aria-label="Zoom out"
-                onClick={() => zoomViewportAt((zoom) => zoom / 1.2)}
-              >
-                −
-              </ToolbarButton>
-              <span className={styles.zoomReadout}>{Math.round(viewport.zoom * 100)}%</span>
-              <ToolbarButton title="Zoom in" aria-label="Zoom in" onClick={() => zoomViewportAt((zoom) => zoom * 1.2)}>
-                +
-              </ToolbarButton>
-              <ToolbarButton title="Fit the whole wall in view (0)" onClick={fitWallInViewport}>
-                Fit wall
-              </ToolbarButton>
-            </div>
-            <div className={styles.toolGroup}>
-              <span>Snap</span>
+            <span className={styles.toolbarSpacer} />
+            <SegmentedControl
+              label="Workspace view"
+              options={WORKSPACE_VIEW_OPTIONS}
+              value={workspaceView}
+              onChange={setWorkspaceView}
+            />
+          </div>
+          <div className={styles.contextBar} data-snapped={snappedLabel ? 'true' : 'false'}>
+            <span className={styles.contextLive} role="status">
+              <span className={styles.contextTool}>
+                <ToolGlyph name={activeToolDefinition.icon} />
+                <span>{activeToolDefinition.label}</span>
+              </span>
+              {snappedLabel ? (
+                <span className={styles.contextSnap}>{snappedLabel}</span>
+              ) : (
+                <span className={styles.contextHint}>{TOOL_HINTS[canvasTool]}</span>
+              )}
+              {intrusionCount > 0 ? (
+                <span className={styles.contextAlert}>
+                  <ToolGlyph name="alert" />
+                  {intrusionCount} framing {intrusionCount === 1 ? 'member' : 'members'} inside an opening
+                </span>
+              ) : null}
+              <span className={styles.contextSelection}>{selectionSummary}</span>
+            </span>
+            <div className={styles.contextControls}>
               <Toggle checked={snapEnabled} onChange={setSnapEnabled} label="Snap" />
               <label className={styles.snapControl}>
                 <span>Grid</span>
@@ -3622,43 +3664,77 @@ export function WallDetailEditorBody({ openedAt }) {
                   <option value={100}>100 mm</option>
                 </select>
               </label>
+              <Popover
+                label="Layers"
+                icon="layers"
+                title={
+                  hiddenLayerCount
+                    ? `Show or hide drawing layers — ${hiddenLayerCount} hidden`
+                    : 'Show or hide drawing layers'
+                }
+                panelLabel="Drawing layers"
+                indicator={hiddenLayerCount > 0}
+              >
+                <p className={styles.popoverTitle}>Show on the drawing</p>
+                <div className={styles.layerList}>
+                  {Object.keys(layerVisibility).map((key) => (
+                    <Toggle
+                      key={key}
+                      checked={layerVisibility[key]}
+                      onChange={(checked) => setLayerVisibility((value) => ({ ...value, [key]: checked }))}
+                      label={LAYER_LABELS[key] || key}
+                    />
+                  ))}
+                </div>
+              </Popover>
+              <span className={styles.contextDivider} aria-hidden="true" />
+              <IconButton icon="minus" label="Zoom out" onClick={() => zoomViewportAt((zoom) => zoom / 1.2)} />
+              <span className={styles.zoomReadout}>{Math.round(viewport.zoom * 100)}%</span>
+              <IconButton icon="plus" label="Zoom in" onClick={() => zoomViewportAt((zoom) => zoom * 1.2)} />
+              <ToolbarButton title="Fit the whole wall in view (0)" onClick={fitWallInViewport}>
+                Fit
+              </ToolbarButton>
+              <span className={styles.contextDivider} aria-hidden="true" />
+              <Popover
+                icon="help"
+                caret={false}
+                title="Shortcuts and drawing notes"
+                ariaLabel="Shortcuts and drawing notes"
+                panelLabel="Shortcuts and drawing notes"
+                panelClassName={styles.helpPanel}
+              >
+                <div className={styles.popoverSection}>
+                  <p className={styles.popoverTitle}>Shortcuts</p>
+                  <dl className={styles.helpList}>
+                    <dt>Ctrl + drag</dt>
+                    <dd>Copies the piece you drag</dd>
+                    <dt>Space + drag</dt>
+                    <dd>Pans the drawing; the wheel zooms</dd>
+                    <dt>0</dt>
+                    <dd>Fits the wall in view</dd>
+                    <dt>Esc</dt>
+                    <dd>Cancels, then returns to Select</dd>
+                    <dt>Delete</dt>
+                    <dd>Removes the selected piece</dd>
+                  </dl>
+                </div>
+                <div className={styles.popoverSection}>
+                  <p className={styles.popoverTitle}>This drawing</p>
+                  <ul className={styles.helpNotes}>
+                    <li>
+                      Origin: wall start ({mirrorU ? 'right' : 'left'} edge as you face this side) / finished floor
+                    </li>
+                    <li>Face: {activeSide === WALL_DETAIL_SIDES.INTERIOR ? 'inside' : 'outside'}</li>
+                    <li>Measure precision: {face.dimensions.precision} mm</li>
+                    <li>{dimensions.length} visible construction dimensions</li>
+                    <li>
+                      3D pane: Updates after every committed panel, frame, screw, gap, or assembly edit. Orbit: drag ·
+                      pan: right drag · zoom: wheel.
+                    </li>
+                  </ul>
+                </div>
+              </Popover>
             </div>
-            <div className={styles.toolGroup}>
-              <span>Layers</span>
-              {Object.keys(layerVisibility).map((key) => (
-                <Toggle
-                  key={key}
-                  checked={layerVisibility[key]}
-                  onChange={(checked) => setLayerVisibility((value) => ({ ...value, [key]: checked }))}
-                  label={LAYER_LABELS[key] || key}
-                />
-              ))}
-            </div>
-          </div>
-          <div
-            className={styles.statusBar}
-            data-snapped={activeRevealSnap || activeDimensionSnap || activeFastenerGuideSnap ? 'true' : 'false'}
-          >
-            <span className={styles.statusLive} role="status">
-              <span className={styles.statusTool}>
-                <ToolGlyph name={activeToolDefinition.icon} />
-                <strong>{activeToolDefinition.label}</strong>
-                <kbd className={styles.kbd}>{activeToolDefinition.shortcut}</kbd>
-              </span>
-              <span className={styles.statusHint}>{TOOL_HINTS[canvasTool]}</span>
-              {activeRevealSnap || activeDimensionSnap || activeFastenerGuideSnap ? (
-                <span className={styles.statusSnap}>
-                  {activeRevealSnap
-                    ? `Snapped: ${activeRevealSnap.gap} mm panel gap`
-                    : `Snapped to ${describeReference(activeDimensionSnap || activeFastenerGuideSnap)}`}
-                </span>
-              ) : null}
-              <span className={styles.statusSelection}>{selectionSummary}</span>
-            </span>
-            <span className={styles.statusShortcut}>
-              Ctrl + drag copies a piece · Hold Space + drag to pan · scroll to zoom · 0 fits the wall · Esc cancels,
-              then returns to Select
-            </span>
           </div>
           <div
             className={styles.workspaceViews}
@@ -3716,7 +3792,7 @@ export function WallDetailEditorBody({ openedAt }) {
                       setDimensionAcquisition(null);
                     }}
                   >
-                    <rect x={canvasMinX} width={bounds.spanU} height={detail.height} fill="#202830" />
+                    <rect className={styles.canvasSheet} x={canvasMinX} width={bounds.spanU} height={detail.height} />
                     <g
                       data-mirrored={mirrorU ? 'true' : 'false'}
                       transform={
@@ -3887,9 +3963,9 @@ export function WallDetailEditorBody({ openedAt }) {
                             key={fastener.id}
                             fastener={fastener}
                             appearance={face.fasteners.appearance}
-                            material={assembly[activeSide].material}
+                            boardFill={panelFill}
                             headDiameter={face.fasteners.headDiameter}
-                            minimumRadius={Math.min(detail.length, detail.height) / 600}
+                            unitPx={unitPx}
                             selected={selection?.type === 'fastener' && selection.id === fastener.id}
                             title={`Screw · ${
                               describeSelectedFastener(fastener, face.fasteners.headDiameter, sizePrecision).note
@@ -3923,7 +3999,8 @@ export function WallDetailEditorBody({ openedAt }) {
                               x2={measurement.measuredValue}
                               y1={0}
                               y2={detail.height}
-                              stroke={measurement.status === 'within_tolerance' ? '#4caf83' : '#e45545'}
+                              className={styles.asBuiltLine}
+                              data-status={measurement.status}
                               strokeWidth="1.25"
                               strokeDasharray="9 6"
                               vectorEffect="non-scaling-stroke"
@@ -3935,7 +4012,8 @@ export function WallDetailEditorBody({ openedAt }) {
                               x2={detail.length}
                               y1={measurement.measuredValue}
                               y2={measurement.measuredValue}
-                              stroke={measurement.status === 'within_tolerance' ? '#4caf83' : '#e45545'}
+                              className={styles.asBuiltLine}
+                              data-status={measurement.status}
                               strokeWidth="1.25"
                               strokeDasharray="9 6"
                               vectorEffect="non-scaling-stroke"
@@ -3949,8 +4027,7 @@ export function WallDetailEditorBody({ openedAt }) {
                             y={gesturePreview.v0}
                             width={gesturePreview.u1 - gesturePreview.u0}
                             height={gesturePreview.v1 - gesturePreview.v0}
-                            fill="rgba(255, 184, 92, .28)"
-                            stroke="#ffb85c"
+                            className={styles.previewShape}
                             strokeWidth="1.25"
                             strokeDasharray="8 5"
                             vectorEffect="non-scaling-stroke"
@@ -3962,8 +4039,7 @@ export function WallDetailEditorBody({ openedAt }) {
                               y={snap.axis === 'v' ? Math.min(snap.from, snap.to) : snap.start}
                               width={snap.axis === 'u' ? Math.abs(snap.to - snap.from) : snap.end - snap.start}
                               height={snap.axis === 'v' ? Math.abs(snap.to - snap.from) : snap.end - snap.start}
-                              fill="rgba(103, 197, 166, .5)"
-                              stroke="#67c5a6"
+                              className={styles.previewSnap}
                               strokeWidth="1"
                               vectorEffect="non-scaling-stroke"
                             />
@@ -3974,8 +4050,9 @@ export function WallDetailEditorBody({ openedAt }) {
                         <g className={styles.drawPreview}>
                           <polyline
                             points={panelTracePreview.map((point) => `${point.u},${point.v}`).join(' ')}
-                            fill={panelTracePreview.length >= 3 ? 'rgba(255, 184, 92, .2)' : 'none'}
-                            stroke="#ffb85c"
+                            className={styles.previewTrace}
+                            data-preview="trace"
+                            data-closed={panelTracePreview.length >= 3 ? 'true' : 'false'}
                             strokeWidth="1.25"
                             strokeDasharray="8 5"
                             vectorEffect="non-scaling-stroke"
@@ -3986,8 +4063,8 @@ export function WallDetailEditorBody({ openedAt }) {
                               cx={point.u}
                               cy={point.v}
                               r={3.5 * unitPx}
-                              fill={index === 0 ? '#67c5a6' : '#ffb85c'}
-                              stroke="#fff"
+                              className={styles.previewPoint}
+                              data-first={index === 0 ? 'true' : 'false'}
                               strokeWidth="1"
                               vectorEffect="non-scaling-stroke"
                             />
@@ -3996,13 +4073,12 @@ export function WallDetailEditorBody({ openedAt }) {
                       ) : null}
                       {gesturePreview && gesturePreviewType === 'framing' ? (
                         <rect
-                          className={styles.drawPreview}
+                          className={`${styles.drawPreview} ${styles.previewFrame}`}
+                          data-fouls={framingPreviewFouls ? 'true' : 'false'}
                           x={gesturePreview.u0}
                           y={gesturePreview.v0}
                           width={gesturePreview.u1 - gesturePreview.u0}
                           height={gesturePreview.v1 - gesturePreview.v0}
-                          fill={framingPreviewFouls ? 'rgba(214, 84, 68, .46)' : 'rgba(82, 183, 232, .46)'}
-                          stroke={framingPreviewFouls ? '#e4634f' : '#72d0f5'}
                           strokeWidth="1.25"
                           strokeDasharray="8 5"
                           vectorEffect="non-scaling-stroke"
@@ -4010,12 +4086,10 @@ export function WallDetailEditorBody({ openedAt }) {
                       ) : null}
                       {gesturePreview && gesturePreviewType === 'fastener' ? (
                         <circle
-                          className={styles.drawPreview}
+                          className={`${styles.drawPreview} ${styles.previewPoint}`}
                           cx={gesturePreview.u}
                           cy={gesturePreview.v}
                           r={3 * unitPx}
-                          fill="#ffd166"
-                          stroke="#fff"
                           strokeWidth="1"
                           vectorEffect="non-scaling-stroke"
                         />
@@ -4127,34 +4201,15 @@ export function WallDetailEditorBody({ openedAt }) {
                     </div>
                   ) : null}
                 </div>
-                <div className={styles.dimensionBar}>
-                  <span>U 0 → {detail.length.toFixed(0)} mm</span>
-                  <span>V 0 → {detail.height.toFixed(0)} mm</span>
-                  <span>{dimensions.length} visible construction dimensions</span>
-                  <span>Measure precision: {face.dimensions.precision} mm</span>
-                  <span>
-                    Origin: wall start ({mirrorU ? 'right' : 'left'} edge as you face this side) / finished floor
-                  </span>
-                  <span>Face: {activeSide === WALL_DETAIL_SIDES.INTERIOR ? 'inside' : 'outside'}</span>
-                  {intrusionCount > 0 ? (
-                    <span className={styles.dimensionBarAlert}>
-                      {intrusionCount} framing {intrusionCount === 1 ? 'member' : 'members'} inside an opening
-                    </span>
-                  ) : null}
-                </div>
               </div>
             ) : null}
             {workspaceView !== WORKSPACE_VIEWS.ELEVATION && previewProject ? (
               <div className={styles.previewPane} aria-label="Live wall assembly 3D preview">
-                <div className={styles.liveBadge}>
-                  <span>Live wall preview</span>
-                  <small>Updates after every committed panel, frame, screw, gap, or assembly edit</small>
-                </div>
                 <Suspense
                   fallback={
                     <PanePlaceholder
                       overlay
-                      tone="dark"
+                      tone="paper"
                       label={LOADING_COPY.livePreview}
                       silhouette={previewSilhouette}
                       since={openedAt}
@@ -4169,6 +4224,10 @@ export function WallDetailEditorBody({ openedAt }) {
                     selectionKind={selection?.type || null}
                     selectionId={selection?.id || null}
                     selectionSide={activeSide}
+                    faceNormalX={previewFacing?.normalX}
+                    faceNormalZ={previewFacing?.normalZ}
+                    facePlaneX={previewFacing?.pointX}
+                    facePlaneZ={previewFacing?.pointZ}
                     onPick={handlePreviewPick}
                     silhouette={previewSilhouette}
                     loadingSince={openedAt}
@@ -4190,8 +4249,7 @@ export function WallDetailEditorBody({ openedAt }) {
             id="selection"
             title="Selection"
             summary={selectionSummary}
-            open={openSections.selection}
-            onToggle={() => toggleSection('selection')}
+            collapsible={false}
             innerRef={sectionRef('selection')}
           >
             {selectedPanel || selectedAccent || selectedMember || selectedFastener || selectedDimension ? null : (
@@ -4457,8 +4515,8 @@ export function WallDetailEditorBody({ openedAt }) {
                   <>
                     <InfoHint label="Reshaping and screw snapping">
                       <p className={styles.inlineHelp}>
-                        Drag the amber measurement line to move the complete guide. Drag either green endpoint to
-                        reshape it. When placing screws, the cyan pencil line, both endpoints, and crossings with other
+                        Drag the blue measurement line to move the complete guide. Drag either green endpoint to reshape
+                        it. When placing screws, the cyan pencil line, both endpoints, and crossings with other
                         measurements are exact snap targets.
                       </p>
                     </InfoHint>
@@ -4584,24 +4642,30 @@ export function WallDetailEditorBody({ openedAt }) {
             onToggle={() => toggleSection('takeoff')}
             innerRef={sectionRef('takeoff')}
           >
-            <div className={styles.metrics}>
-              <Metric label="Panels" value={currentTakeoff.panelCount} note="unoptimized stock count" />
-              <Metric
+            <div className={styles.readoutList}>
+              <ReadoutRow label="Panels" value={currentTakeoff.panelCount} note="unoptimized stock count" />
+              <ReadoutRow
                 label="Shadow reveal"
                 value={`${face.layout.horizontalGap} / ${face.layout.verticalGap} mm`}
                 note="vertical / horizontal"
               />
-              <Metric
+              <ReadoutRow
                 label="Panel landing / side"
                 value={`${verticalJointLanding.toFixed(1)} / ${horizontalJointLanding.toFixed(1)} mm`}
                 note={`(${supportWidth} mm support − reveal) ÷ 2 · vertical / horizontal joint`}
               />
-              <Metric label="Installed area" value={`${(currentTakeoff.installedAreaMm2 / 1_000_000).toFixed(2)} m²`} />
-              <Metric label="Fasteners" value={currentTakeoff.fastenerCount} />
-              <Metric label="Joint length" value={`${(currentTakeoff.jointLengthMm / 1000).toFixed(2)} m`} />
-              <Metric label="Frame members" value={detail.takeoff.framingMemberCount} />
-              <Metric label="Frame length" value={`${(detail.takeoff.framingLinearLengthMm / 1000).toFixed(2)} m`} />
-              <Metric
+              <ReadoutRow
+                label="Installed area"
+                value={`${(currentTakeoff.installedAreaMm2 / 1_000_000).toFixed(2)} m²`}
+              />
+              <ReadoutRow label="Fasteners" value={currentTakeoff.fastenerCount} />
+              <ReadoutRow label="Joint length" value={`${(currentTakeoff.jointLengthMm / 1000).toFixed(2)} m`} />
+              <ReadoutRow label="Frame members" value={detail.takeoff.framingMemberCount} />
+              <ReadoutRow
+                label="Frame length"
+                value={`${(detail.takeoff.framingLinearLengthMm / 1000).toFixed(2)} m`}
+              />
+              <ReadoutRow
                 label="Dimensions"
                 value={dimensions.length}
                 note={`${dimensions.filter((dimension) => dimension.source === 'custom').length} user`}
@@ -4753,7 +4817,8 @@ export function WallDetailEditorBody({ openedAt }) {
               )}
             </div>
             <p className={styles.inlineHelp}>
-              When the checks are clear, issue the wall with Export drawing SVG or Export takeoff CSV in the top bar.
+              When the checks are clear, issue the wall from Export in the top bar — the drawing as SVG or the takeoff
+              as CSV.
             </p>
           </CollapsibleSection>
         </aside>

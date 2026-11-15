@@ -1486,7 +1486,43 @@ export function getTrussInstanceTag(trussSystem, index = 0) {
   return `${normalizeTrussLabelPrefix(trussSystem?.labelPrefix)}${index + 1}`;
 }
 
+/*
+ * System geometry, keyed on the truss system object and held weakly.
+ *
+ * The takeoff, the truss schedule, the end closures, the roof attachment sync,
+ * the roof edge kit and the 3D preview all ask for the same system's geometry,
+ * on every edit — and it is the costliest thing any of them do: every copy of
+ * every instance re-profiled, purlins laid out, the system transform applied.
+ * A wall painted on another floor used to build it several times over
+ * (docs/paint-edit-performance.md §1.2).
+ *
+ * What it reads: the truss system object and everything under it, and the
+ * default truss-type catalogue (`resolveTrussType` / `buildTrussProfile` with
+ * no catalogue, which is built from constants). Nothing else — no project, no
+ * floor, no module state. Truss systems are never mutated in place (every path
+ * through `updateTrussSystems` and the syncs builds a new object, see
+ * projectStateHelpers.js), and `syncProjectTrussSystems` hands back the same
+ * object when nothing about the system changed, so the same object always
+ * means the same geometry. A drag preview's throwaway system just misses and
+ * is let go with it.
+ *
+ * The result is shared between every caller: treat it as read-only, as all of
+ * them already do (trussGeometry.test.js runs them against a frozen one).
+ */
+const systemGeometryCache = new WeakMap();
+
 export function buildTrussSystemGeometry(trussSystem) {
+  if (!trussSystem || typeof trussSystem !== 'object') return computeTrussSystemGeometry(trussSystem);
+  let geometry = systemGeometryCache.get(trussSystem);
+  if (!geometry) {
+    geometry = computeTrussSystemGeometry(trussSystem);
+    systemGeometryCache.set(trussSystem, geometry);
+  }
+  return geometry;
+}
+
+/** `buildTrussSystemGeometry` without the memo — for tests that compare the two. */
+export function computeTrussSystemGeometry(trussSystem) {
   const baseElevation = trussSystem?.baseElevation || 0;
   const endFrames = resolveEndFrameCopies(trussSystem);
   const rawInstances = (trussSystem?.trussInstances || []).map((instance, index) =>

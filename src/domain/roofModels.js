@@ -18,6 +18,7 @@ import { polygonArea } from '@/geometry/polygon';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { deriveCustomRoofTopology } from '@/roof/customRoofTopology';
+import { reuseIfEqual } from './structuralSharing';
 import {
   getAttachedTrussSystem,
   getRoofAttachmentElevation,
@@ -731,7 +732,12 @@ export function syncRoofSystemAttachment(project, roofSystem) {
 export function syncProjectRoofSystem(project) {
   if (!project) return project;
 
-  const syncedRoofSystem = project.roofSystem ? syncRoofSystemAttachment(project, project.roofSystem) : null;
+  // An unchanged roof keeps its identity (structuralSharing.js), so the
+  // preview's roof layer and everything else keyed on it survive an edit that
+  // did not touch it.
+  const syncedRoofSystem = project.roofSystem
+    ? reuseIfEqual(project.roofSystem, syncRoofSystemAttachment(project, project.roofSystem))
+    : null;
 
   return {
     ...project,

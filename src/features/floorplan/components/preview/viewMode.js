@@ -113,6 +113,9 @@ export const MATERIAL_TIERS = Object.freeze({
   wallFastener: 'structure',
   wallFastenerContrast: 'structure',
   wallFastenerConstruction: 'structure',
+  // Tonal heads (`wallFastenerTonal:<face key>`) are structure too, but are
+  // keyed by their face's colour, so they state it on the material
+  // (`materials.js` TONAL_FASTENER_TIER) and `tierOf` reads it from there.
   ceilingFraming: 'structure',
   ceilingFramingTimber: 'structure',
   ceilingHanger: 'structure',

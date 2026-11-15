@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect } from 'react';
+import { memo, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useEditorState, useToolSettings } from '@/features/floorplan/context/FloorplanContext';
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
@@ -76,6 +76,50 @@ const toolItems = [
   { tool: TOOLS.FILLET, label: 'Fillet', shortcut: 'G', Icon: FilletIcon },
 ];
 
+/*
+ * The Save button's "unsaved" dot breathes for as long as the project is dirty —
+ * from the first edit of a session to the next save — so the loop must cost the
+ * main thread nothing (docs/paint-edit-performance.md §2.1).
+ *
+ * It is a Web Animation rather than a CSS `animation` on purpose. Both run on
+ * the compositor when they move only opacity or transform, but a CSS
+ * animation also fires `animationiteration` at the end of every cycle, and
+ * Chrome wakes the main thread for a burst of about seven frames each time to
+ * deliver it — listener or not. A Web Animation has no iteration events, so
+ * once started the dot is the compositor's alone. The dot itself (and its
+ * static glow) is the stylesheet's `[data-dirty='true']::after`.
+ *
+ * Opacity only, no scale. Idle, either is free; but every main frame that runs
+ * anyway — a properties-panel scroll is one per wheel tick — also re-styles the
+ * animated dot, and an animated transform makes each of those frames re-walk
+ * the property trees as well: measured, it took a dirty-project panel scroll
+ * from ~80 to ~125 ms of main-frame time per 2.5 s, where opacity alone costs
+ * ~100. So the dot breathes by fading, a little deeper than it used to.
+ */
+const SAVE_DOT_BREATHE = [{ opacity: 1 }, { opacity: 0.45, offset: 0.5 }, { opacity: 1 }];
+
+function useSaveDotBreathing(buttonRef, isDirty) {
+  useEffect(() => {
+    const button = buttonRef.current;
+    if (!isDirty || typeof button?.animate !== 'function') return undefined;
+    // Reduced motion: the dot stays, still.
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined;
+    let animation = null;
+    try {
+      animation = button.animate(SAVE_DOT_BREATHE, {
+        duration: 2000,
+        easing: 'ease-in-out',
+        iterations: Infinity,
+        pseudoElement: '::after',
+      });
+    } catch {
+      // A browser without pseudo-element targets keeps the still dot.
+      return undefined;
+    }
+    return () => animation.cancel();
+  }, [buttonRef, isDirty]);
+}
+
 function Toolbar({
   onNew,
   onSave,
@@ -104,6 +148,8 @@ function Toolbar({
   // toolbar has nothing to say about a preview position.
   const { fixtureType: armedFixtureType } = useToolSettings();
   const { project, isDirty, canUndo, canRedo, dispatch } = useProject();
+  const saveButtonRef = useRef(null);
+  useSaveDotBreathing(saveButtonRef, isDirty);
   const { canCopySelection, canPaste, copySelection, cutSelection, beginPaste } = usePlanClipboardController();
   const isPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'floor';
   const isRoofPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'roof';
@@ -311,7 +357,13 @@ function Toolbar({
           </button>
         </Tooltip>
         <Tooltip label="Save" shortcut="Ctrl+S">
-          <button className={styles.saveBtn} onClick={onSave} data-dirty={isDirty} aria-label="Save">
+          <button
+            ref={saveButtonRef}
+            className={styles.saveBtn}
+            onClick={onSave}
+            data-dirty={isDirty}
+            aria-label="Save"
+          >
             <SaveIcon className={styles.icon} />
           </button>
         </Tooltip>

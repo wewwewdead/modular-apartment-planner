@@ -269,7 +269,7 @@ it('draws a typed rectangle from a snapped click and finishes with the entities'
   fireEvent.keyDown(screen.getByLabelText('Sketch x'), { key: 'Escape' });
   expect(screen.queryByLabelText('Sketch x')).toBeNull();
   fireEvent.keyDown(window, { key: 'Escape' });
-  expect(onFinish).toHaveBeenCalledWith([{ id: 'e1', type: 'rect', a: [0, 0], b: [120, 65] }]);
+  expect(onFinish).toHaveBeenCalledWith([{ id: 'e1', type: 'rect', a: [0, 0], b: [120, 65] }], []);
 });
 
 it('snaps to measure mark points on the plane and shows them as diamonds', () => {
@@ -287,4 +287,164 @@ it('snaps to measure mark points on the plane and shows them as diamonds', () =>
   const [x, y] = screenOf([300, 200]);
   pointer(canvas, 'pointermove', x + 2, y - 1);
   expect(screen.getByRole('status').textContent).toMatch(/X 300 · Y 200 mm · mark/);
+});
+
+// Sketch dimensions SD-1 (docs/sketch-studio-sketch-dimensions.md §5.1): a
+// 600 × 300 plate outline with a Ø80 hole, drawn on the XY plane.
+const plate = [
+  { id: 'e1', type: 'rect', a: [100, 100], b: [700, 400] },
+  { id: 'e2', type: 'circle', c: [300, 250], r: 40 },
+];
+function DimensionHarness({ onFinish, viewport, entities = plate, dimensions = [] }) {
+  const session = {
+    key: 'd',
+    frame: planeFrame('XY'),
+    name: 'Sketch 1',
+    support: { type: 'plane', plane: 'XY', offset: 0 },
+    boundary: [],
+    entities,
+    dimensions,
+    span: 1200,
+    gridBounds: [
+      [-700, -950],
+      [1700, 1450],
+    ],
+  };
+  return (
+    <div className="cad-model-view">
+      <CadViewport ref={viewport} model={model} snapshot={snapshot} ready focusTarget={focus} sketchMode="draw" />
+      <CadSketcher
+        viewport={viewport}
+        session={session}
+        snap={1}
+        onSnapChange={() => {}}
+        onFinish={onFinish}
+        onCancel={() => {}}
+        onLookAt={() => {}}
+      />
+    </div>
+  );
+}
+// Screen position of a plane point (the plane faces the camera: an affine map).
+const screenMap = (viewport) => {
+  const frame = planeFrame('XY');
+  const p0 = viewport.current.planePoint(0, 0, frame);
+  const px = viewport.current.planePoint(1, 0, frame);
+  const py = viewport.current.planePoint(0, 1, frame);
+  return ([u, v]) => [(u - p0[0]) / (px[0] - p0[0]), (v - p0[1]) / (py[1] - p0[1])];
+};
+const clickAt = (canvas, [x, y]) => {
+  pointer(canvas, 'pointermove', x, y);
+  pointer(canvas, 'pointerdown', x, y);
+  pointer(canvas, 'pointerup', x, y);
+};
+const probe = () => document.querySelector('.cad-viewport').cadSketchDimensions();
+const readout = () => screen.queryByLabelText('Dimension readout');
+const statusText = () => screen.getByRole('status').textContent;
+
+it('dimensions a hole centre to an edge in three clicks and finishes with it', () => {
+  const onFinish = vi.fn();
+  const viewport = createRef();
+  render(<DimensionHarness onFinish={onFinish} viewport={viewport} />);
+  const canvas = document.querySelector('canvas');
+  const at = screenMap(viewport);
+  const button = screen.getByRole('button', { name: 'Dimension' });
+  button.focus();
+  fireEvent.click(button);
+  expect(button.getAttribute('aria-pressed')).toBe('true');
+  // The button gives the focus up: Space / Enter cannot re-press it.
+  expect(document.activeElement).not.toBe(button);
+  expect(screen.queryByLabelText('Sketch x')).toBeNull();
+  expect(statusText()).toContain('Click a point, or a line, circle or arc to dimension it.');
+  // The hole centre, then the body of the plate's left side: read square to it.
+  clickAt(canvas, at([300, 250]));
+  expect(statusText()).toContain('Click the second point · an edge reads square to it');
+  pointer(canvas, 'pointermove', ...at([100, 330]));
+  expect(readout().textContent).toBe('200 mm · ΔX -200 · ΔY 0');
+  expect(readout().querySelector('input')).toBeNull();
+  expect(named('sketch-preview')).toHaveLength(1);
+  clickAt(canvas, at([100, 330]));
+  // Where it goes: beside the span, so horizontal.
+  pointer(canvas, 'pointermove', ...at([200, 150]));
+  expect(readout().textContent).toBe('Horizontal 200 mmclick to keep · Esc drops it');
+  expect(probe()).toMatchObject([{ id: 'd1', text: '200', value: 200, preview: true }]);
+  clickAt(canvas, at([200, 150]));
+  expect(named('sketch-dimension')).toHaveLength(1);
+  const [line] = named('sketch-dimension');
+  expect(line.userData.dimensionId).toBe('d1');
+  expect(line.material.color.getHexString()).toBe('8a3fc6');
+  expect(line.material.depthTest).toBe(false);
+  const [label] = probe();
+  expect(label).toMatchObject({ id: 'd1', text: '200', value: 200, hidden: false, selected: false, preview: false });
+  // The label sits on the middle of its dimension line.
+  const [lx, ly] = at([200, 150]);
+  expect(label.x).toBeCloseTo(lx, 0);
+  expect(label.y).toBeCloseTo(ly, 0);
+  const chips = screen.getByLabelText('Sketch dimensions').querySelectorAll('.cad-sketch-dim-label');
+  expect([...chips].map((c) => c.textContent)).toEqual(['200']);
+  expect(statusText()).toContain('2 items · closed profile · 1 dimension');
+  expect(screen.getByRole('button', { name: 'Dimension' }).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(screen.getByRole('button', { name: 'Finish sketch' }));
+  expect(onFinish).toHaveBeenCalledWith(plate, [
+    { id: 'd1', type: 'linear', from: [300, 250], to: [100, 250], orientation: 'horizontal', offset: -100 },
+  ]);
+});
+
+it('only measures when Esc comes before the place click, and D toggles the tool', () => {
+  const viewport = createRef();
+  render(<DimensionHarness onFinish={vi.fn()} viewport={viewport} />);
+  const canvas = document.querySelector('canvas');
+  const at = screenMap(viewport);
+  const dimension = () => screen.getByRole('button', { name: 'Dimension' });
+  fireEvent.keyDown(window, { key: 'd' });
+  expect(dimension().getAttribute('aria-pressed')).toBe('true');
+  // Two opposite corners: the diagonal is read, Esc keeps nothing.
+  clickAt(canvas, at([100, 100]));
+  clickAt(canvas, at([700, 400]));
+  pointer(canvas, 'pointermove', ...at([900, 600]));
+  expect(readout().textContent).toMatch(/^Aligned 670.82 mm/);
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(probe()).toEqual([]);
+  expect(named('sketch-dimension')).toHaveLength(0);
+  expect(dimension().getAttribute('aria-pressed')).toBe('true');
+  expect(statusText()).toMatch(/2 items · closed profile$/);
+  fireEvent.keyDown(window, { key: 'D' });
+  expect(dimension().getAttribute('aria-pressed')).toBe('false');
+  // A drawing tool's field keeps its D.
+  fireEvent.click(screen.getByRole('button', { name: 'Line' }));
+  fireEvent.keyDown(screen.getByLabelText('Sketch x'), { key: 'd' });
+  expect(screen.getByRole('button', { name: 'Line' }).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.keyDown(window, { key: 'd', ctrlKey: true });
+  expect(dimension().getAttribute('aria-pressed')).toBe('false');
+});
+
+it('selects a dimension by its label and deletes it', () => {
+  const kept = { id: 'd3', type: 'linear', from: [100, 400], to: [700, 400], orientation: 'horizontal', offset: 60 };
+  const viewport = createRef();
+  render(<DimensionHarness onFinish={vi.fn()} viewport={viewport} dimensions={[kept]} />);
+  const canvas = document.querySelector('canvas');
+  expect(probe()).toMatchObject([{ id: 'd3', text: '600' }]);
+  expect(statusText()).toContain('2 items · closed profile · 1 dimension');
+  const [{ x, y }] = probe();
+  clickAt(canvas, [x + 3, y]);
+  expect(screen.getByRole('note').textContent).toBe('Horizontal 600 mm · Delete removes it');
+  expect(probe()[0].selected).toBe(true);
+  expect(named('sketch-dimension')[0].material.color.getHexString()).toBe('e2541c');
+  fireEvent.keyDown(window, { key: 'Delete' });
+  expect(probe()).toEqual([]);
+  expect(screen.queryByRole('note')).toBeNull();
+});
+
+it('does not finish dimensions with no drawing', () => {
+  const onFinish = vi.fn();
+  const viewport = createRef();
+  const lone = { id: 'd1', type: 'linear', from: [0, 0], to: [100, 0], orientation: 'horizontal', offset: 20 };
+  render(<DimensionHarness onFinish={onFinish} viewport={viewport} entities={[]} dimensions={[lone]} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Finish sketch' }));
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(onFinish).not.toHaveBeenCalled();
+  expect(statusText()).toContain(
+    'Dimensions are kept with a drawing: draw the outline first, or Cancel sketch to leave.',
+  );
+  expect(screen.getByRole('toolbar', { name: 'Sketch tools' })).toBeTruthy();
 });

@@ -4,6 +4,8 @@ import { mapPlacement } from './placement.js';
 import { resolveCutPlacement, resolveRow } from './cutPlacement.js';
 import { hardwareGeometry } from './hardwareGeometry.js';
 import { angleSectionProfile } from './stockSections.js';
+import { blankHoles, foldSheet, roundTangents } from './sheetMetal.js';
+import { dieOf, punchOf } from './shopCatalog.js';
 import {
   normalizeModel,
   resolveParameters,
@@ -80,7 +82,9 @@ export function createKernelSession(input) {
     metrics = new Map(),
     visiting = new Set(),
     placed = new Map(),
-    placements = new Map();
+    placements = new Map(),
+    // Sheet-metal parts: partId → { shape: the flat blank solid, fold } (planarProfiles).
+    blanks = new Map();
   const dispose = () => {
     for (const shape of [...owned].reverse()) {
       try {
@@ -279,6 +283,149 @@ export function createKernelSession(input) {
     }
   };
 
+  // A sheet-metal blank folded by its bends (docs/sketch-studio-fab-shop.md
+  // §6): the exact flat extrusion, cut at every bend zone into rigid pieces,
+  // each piece posed by the bends between it and the root, one revolved sector
+  // per zone interval on its fixed side's pose, all fused. sheetMetal.js
+  // decides the topology and poses; this only replays them on exact solids.
+  const sheetMetal = (f, partId) => {
+    const s = model.sketches.find((item) => item.id === f.sketchId);
+    if (!s) throw new Error('Choose a closed blank sketch first.');
+    if ((s.plane || 'XY') !== 'XY' || s.normal || v(s.origin || [0, 0, 0]).some((x) => Math.abs(x) > 1e-9))
+      throw new Error('A sheet-metal blank must be sketched on the XY plane at the origin.');
+    const fold = foldSheet(f, s.profile, params);
+    const t = fold.thickness;
+    const flat = own(own(drawing(s.profile).sketchOnPlane('XY')).extrude(t));
+    blanks.set(partId, { shape: flat, fold });
+    const warnings = [...fold.warnings];
+    const sheet = () => ({
+      flat: fold.flat,
+      bends: fold.bends.map((b) => ({
+        id: b.id,
+        index: b.index,
+        a: b.a,
+        b: b.b,
+        angle: b.angle,
+        direction: b.direction,
+        radius: b.radius,
+        kFactor: b.kFactor,
+        allowance: b.allowance,
+        setback: b.setback,
+        deduction: b.deduction,
+        legs: b.legs,
+        length: b.length,
+        intervals: b.intervals,
+        die: b.die,
+        punch: b.punch,
+      })),
+      warnings,
+    });
+    if (!fold.bends.length) return { shape: flat, metrics: sheet() };
+    // Rigid pieces: the flat cut at every zone (overshooting 0.01 mm at the
+    // interval ends, full thickness ± 1).
+    const boxes = fold.bends.flatMap((bend) =>
+      bend.intervals.map(([s0, s1]) => {
+        const length = s1 - s0 + 0.02;
+        const start = [bend.a[0] + bend.u[0] * (s0 - 0.01), bend.a[1] + bend.u[1] * (s0 - 0.01), -1];
+        const plane = own(new cad.Plane(start, [bend.u[0], bend.u[1], 0], [0, 0, 1]));
+        return own(
+          own(
+            cad
+              .drawRectangle(length, bend.allowance)
+              .translate(length / 2, 0)
+              .sketchOnPlane(plane),
+          ).extrude(t + 2),
+        );
+      }),
+    );
+    // One cut with every zone (strips never overlap: foldSheet refuses that).
+    const cut = own(flat.cut(boxes.length === 1 ? boxes[0] : own(cad.makeCompound(boxes))));
+    const solids = [...cad.iterTopo(cut.wrapped, 'solid')].map((solid) => {
+      const shape = own(cad.cast(cad.downcast(solid)));
+      const properties = own(cad.measureShapeVolumeProperties(shape));
+      return { shape, centre: properties.centerOfMass, area: properties.volume / t };
+    });
+    const pieces = solids.filter((solid) => solid.area > 1e-3);
+    if (pieces.length !== fold.pieces.length)
+      throw new Error(
+        `Internal sheet-metal error: the zones cut ${pieces.length} pieces, the fold expects ${fold.pieces.length}.`,
+      );
+    const bendById = new Map(fold.bends.map((b) => [b.id, b]));
+    // Flat → folded: the bends on the path, the one farthest from the root first.
+    const posed = (shape, path) => {
+      let result = shape;
+      for (const id of [...path].reverse()) {
+        const { translate, origin, axis, angle } = bendById.get(id).transform;
+        result = own(own(result.translate(translate)).rotate(angle, origin, axis));
+      }
+      return result;
+    };
+    const taken = new Set();
+    const parts = fold.pieces.map((piece) => {
+      let best = null,
+        distance = Infinity;
+      for (const solid of pieces) {
+        if (taken.has(solid)) continue;
+        const d = Math.hypot(solid.centre[0] - piece.centroid[0], solid.centre[1] - piece.centroid[1]);
+        if (d < distance) [best, distance] = [solid, d];
+      }
+      if (
+        !best ||
+        distance > Math.max(0.5, Math.sqrt(piece.area) * 0.01) ||
+        Math.abs(best.area - piece.area) > piece.area * 0.02 + 1
+      )
+        throw new Error(`Internal sheet-metal error: no exact solid matches flat ${piece.id}.`);
+      taken.add(best);
+      return posed(best.shape, piece.path);
+    });
+    const fixedPath = new Map(fold.pieces.map((piece) => [piece.id, piece.path]));
+    for (const bend of fold.bends) {
+      const h = bend.allowance / 2;
+      const foot = [bend.a[0] - bend.n[0] * h, bend.a[1] - bend.n[1] * h, 0];
+      // x along u, y = (−n) × u = +Z: the zone's cross-section at v = −BA/2.
+      const plane = own(new cad.Plane(foot, [bend.u[0], bend.u[1], 0], [-bend.n[0], -bend.n[1], 0]));
+      const { origin, angle } = bend.transform;
+      const axis = angle > 0 ? [bend.u[0], bend.u[1], 0] : [-bend.u[0], -bend.u[1], 0];
+      for (const [s0, s1] of bend.intervals) {
+        const face = own(
+          cad
+            .drawRectangle(s1 - s0, t)
+            .translate((s0 + s1) / 2, t / 2)
+            .sketchOnPlane(plane),
+        );
+        parts.push(posed(own(face.revolve(axis, { origin, angle: Math.abs(angle) })), fixedPath.get(bend.fixedPiece)));
+      }
+    }
+    let shape;
+    try {
+      // One general fuse of every piece and sector (12 pairwise fuses of a
+      // 6-bend part cost ~100 ms); they meet on shared faces, which the glue
+      // option resolves fast.
+      const oc = cad.getOC();
+      const builder = own(new oc.BRepAlgoAPI_Fuse());
+      const first = own(new oc.NCollection_List_TopoDS_Shape()),
+        rest = own(new oc.NCollection_List_TopoDS_Shape());
+      first.Append(parts[0].wrapped);
+      for (const part of parts.slice(1)) rest.Append(part.wrapped);
+      builder.SetArguments(first);
+      builder.SetTools(rest);
+      builder.SetGlue(oc.BOPAlgo_GlueEnum.BOPAlgo_GlueShift);
+      builder.Build();
+      if (builder.HasErrors()) throw new Error('fuse failed');
+      builder.SimplifyResult(true, true, 0.001);
+      shape = own(cad.cast(builder.Shape()));
+      if (!cad.isShape3D(shape)) throw new Error('fuse produced no solid');
+    } catch {
+      shape = own(cad.makeCompound(parts).asShape3D());
+      warnings.push({
+        code: 'not-fused',
+        bendId: null,
+        message: 'The pieces could not be fused into one solid; they are kept as a compound.',
+      });
+    }
+    return { shape, metrics: sheet() };
+  };
+
   const build = (partId) => {
     if (shapes.has(partId)) return shapes.get(partId);
     if (visiting.has(partId)) throw new Error(`Circular part dependency: ${partId}`);
@@ -306,6 +453,25 @@ export function createKernelSession(input) {
             const result = member(f);
             next = result.shape;
             featureMetrics[f.id] = result.metrics;
+            break;
+          }
+          case 'sheetmetal': {
+            // The blank is the part (§4.1): later features machine the folded solid.
+            if (shape) throw new Error('A sheet-metal blank must be the first feature of its part.');
+            const result = sheetMetal(f, partId);
+            next = result.shape;
+            // The blank's round cut-outs (shop floor §5.3): fastener seats in
+            // the folded frame, each through the sheet's thickness.
+            const holes = blankHoles(
+              blanks.get(partId).fold,
+              model.sketches.find((s) => s.id === f.sketchId)?.profile,
+              params,
+            );
+            featureMetrics[f.id] = {
+              sheet: result.metrics,
+              holes,
+              exits: holes.map(() => blanks.get(partId).fold.thickness),
+            };
             break;
           }
           case 'extrude': {
@@ -479,7 +645,9 @@ export function createKernelSession(input) {
         }
         if (
           shape &&
-          ['hardware', 'box', 'cylinder', 'member', 'extrude', 'revolve', 'sweep', 'loft'].includes(f.type)
+          ['hardware', 'box', 'cylinder', 'member', 'sheetmetal', 'extrude', 'revolve', 'sweep', 'loft'].includes(
+            f.type,
+          )
         ) {
           const operation = f.operation || 'add';
           const method = { add: 'fuse', cut: 'cut', intersect: 'intersect' }[operation];
@@ -554,7 +722,7 @@ export function createKernelSession(input) {
           const getAxis = (inst, featureId, holeIndex = 0, side = null) => {
             const definition = model.parts.find((p) => p.id === inst.partId);
             const feature = definition.features.find((f) => f.id === featureId && !f.suppressed);
-            if (!feature || !['hardware', 'cylinder', 'hole', 'member'].includes(feature.type))
+            if (!feature || !['hardware', 'cylinder', 'hole', 'member', 'sheetmetal'].includes(feature.type))
               throw new Error(`Broken cylindrical axis reference: ${featureId}`);
             if (
               definition.features
@@ -566,19 +734,34 @@ export function createKernelSession(input) {
               );
             const resolvedCut = metrics.get(inst.partId)?.[feature.id]?.cut;
             const rowCentre = metrics.get(inst.partId)?.[feature.id]?.row?.centres?.[holeIndex];
-            let origin =
-              feature.type === 'member'
+            // A laser-cut hole of a sheet-metal blank (shop floor §5.3): its
+            // seat on the top face, into the sheet; holeIndex is its place in
+            // the blank's cut-outs.
+            const blankHole =
+              feature.type === 'sheetmetal'
+                ? metrics.get(inst.partId)?.[feature.id]?.holes?.find((h) => h.index === holeIndex)
+                : null;
+            if (feature.type === 'sheetmetal' && !blankHole)
+              throw new Error(
+                `Cut-out ${holeIndex + 1} of ${definition.name} is not a round hole clear of the bends: the hardware has nothing to seat in.`,
+              );
+            let origin = blankHole
+              ? [...blankHole.centre]
+              : feature.type === 'member'
                 ? v(feature.start)
                 : rowCentre || resolvedCut?.position || v(feature.position || [0, 0, 0]);
-            let direction =
-              feature.type === 'member'
+            let direction = blankHole
+              ? [...blankHole.direction]
+              : feature.type === 'member'
                 ? v(feature.end).map((x, i) => x - origin[i])
                 : resolvedCut?.direction ||
                   v(feature.direction || (feature.type === 'hardware' ? [0, 0, -1] : [0, 0, 1]));
             const length = Math.hypot(...direction);
             if (side === 'far') {
-              if (feature.type !== 'hole') throw new Error(`Only a hole has a far side to seat on: ${featureId}`);
-              const t = metrics.get(inst.partId)?.[feature.id]?.exits?.[holeIndex];
+              if (feature.type !== 'hole' && !blankHole)
+                throw new Error(`Only a hole has a far side to seat on: ${featureId}`);
+              const metric = metrics.get(inst.partId)?.[feature.id];
+              const t = blankHole ? metric?.exits?.[metric.holes.indexOf(blankHole)] : metric?.exits?.[holeIndex];
               if (t == null) {
                 const hardware = model.parts.find((p) => p.id === instance.partId)?.name || 'the hardware';
                 const hole = feature.row ? `Hole ${holeIndex + 1} of the row` : 'The hole';
@@ -669,6 +852,76 @@ export function createKernelSession(input) {
   };
   const assemblyShape = () =>
     own(cad.makeCompound([...placed.values()].map((shape) => own(shape.clone()))).asShape3D());
+  // A sheet-metal part's flat blank seen from its top face (+Z toward the
+  // viewer) in the sketch's own X, Y: the XY camera (svg y = −Y, so +Y is up;
+  // the drawing 'top' camera looks with Y down and would mirror it).
+  // `drawn` maps a flat point into the drawing frame of `visible`.
+  const flatProjection = (partId) => {
+    const blank = blanks.get(partId);
+    if (!blank) return null;
+    const projected = exactProjection(blank.shape, own(cad.lookFromPlane('XY')), own);
+    const [bx, by] = projected.basis;
+    const drawn = (p) => [p[0] * bx[0] + p[1] * bx[1], p[0] * by[0] + p[1] * by[1]];
+    return { ...blank, projected, drawn };
+  };
+  // The drawing view kind 'flat' (docs/sketch-studio-fab-shop.md §9 SM-4):
+  // the blank's outline and cut-outs, every bend-zone interval's bend line
+  // with its "UP 90° R1.6" label, and the bend table in the order made.
+  const flatView = (sheet, config) => {
+    const flat = sheet.partId ? flatProjection(sheet.partId) : null;
+    if (!flat)
+      throw new Error(
+        "The flat view draws a sheet-metal part's blank: choose a sheet-metal part as this sheet's Drawing subject.",
+      );
+    const { fold, projected, drawn } = flat;
+    const viewBox = config.crop ? config.crop.map(n) : projected.viewBox;
+    if (config.crop && (viewBox.length !== 4 || viewBox[2] <= 0 || viewBox[3] <= 0))
+      throw new Error('Detail crop must be [x, y, width, height] in drawing millimetres.');
+    const along = (b, s, v = 0) =>
+      drawn(
+        v
+          ? [b.a[0] + b.u[0] * s + b.n[0] * v, b.a[1] + b.u[1] * s + b.n[1] * v]
+          : [b.a[0] + b.u[0] * s, b.a[1] + b.u[1] * s],
+      );
+    return {
+      ...projected,
+      // A flat plate seen square on: its bottom edges lie under its top edges.
+      hidden: [],
+      view: 'flat',
+      name: config.name,
+      viewBox,
+      hatch: [],
+      detail: Boolean(config.crop),
+      scale: config.scale,
+      bendLines: fold.bends.flatMap((b) => [
+        ...b.intervals.map(([s0, s1]) => ({
+          a: along(b, s0),
+          b: along(b, s1),
+          bend: b.index + 1,
+          direction: b.direction,
+          label: b.label,
+        })),
+        // A round bend (docs/sketch-studio-round-bend.md §7): its zone's two tangent lines, unlabelled.
+        ...roundTangents(b).map(([s0, s1, v]) => ({
+          a: along(b, s0, v),
+          b: along(b, s1, v),
+          bend: b.index + 1,
+          direction: b.direction,
+          tangent: true,
+        })),
+      ]),
+      bendTable: fold.bends.map((b) => ({
+        bend: b.index + 1,
+        angle: b.angle,
+        direction: b.direction,
+        radius: b.radius,
+        allowance: b.allowance,
+        deduction: b.deduction,
+        tooling: `${punchOf(b.punch).name} / ${dieOf(b.die).name}`,
+        ...(b.steps ? { steps: b.steps } : {}),
+      })),
+    };
+  };
   return {
     model,
     params,
@@ -820,6 +1073,7 @@ export function createKernelSession(input) {
           views: sheet.views.map((entry) => {
             const config = typeof entry === 'string' ? { name: entry, view: entry } : entry;
             const view = config.view || config.name;
+            if (view === 'flat') return flatView(sheet, config);
             const viewShape =
               view === 'exploded'
                 ? own(
@@ -877,10 +1131,54 @@ export function createKernelSession(input) {
       };
     },
     planarProfiles() {
-      // Only constant-section XY extrusions and vertical cuts are valid flat profiles.
+      // Only constant-section XY extrusions and vertical cuts are valid flat
+      // profiles. A sheet-metal part is cut flat by construction: its blank,
+      // with a bend line per zone interval, whatever is machined after bending.
       return model.parts.flatMap((part) => {
         const features = part.features.filter((f) => !f.suppressed),
           first = features[0];
+        // A bought-in item (shop floor §5.4) is not cut: no profile, never nested.
+        if (part.purchased) return [];
+        if (first?.type === 'sheetmetal') {
+          // Not the drawing 'top' camera: its y axis is −Y, so the DXF (which
+          // writes −svg y) came out as (X, −Y) and cut a bent blank's mirror
+          // image. The XY camera (y = +Y) gives svg (X, −Y): DXF = the blank
+          // sketch's own (X, Y), and the profile SVG shows +Y up.
+          const { fold, projected, drawn: toDrawing } = flatProjection(part.id);
+          // Bend lines in the drawing frame of `visible` (the projection basis).
+          const drawn = (s, b) => toDrawing([b.a[0] + b.u[0] * s, b.a[1] + b.u[1] * s]);
+          // Etched marks (SM-4, feature.marks): only when the blank has any, so
+          // a profile without them stays as it was.
+          const marks = (first.marks || []).filter((m) => Array.isArray(m?.a) && Array.isArray(m?.b));
+          return [
+            {
+              partId: part.id,
+              thickness: fold.thickness,
+              ...projected,
+              bendLines: fold.bends.flatMap((b) => [
+                ...b.intervals.map(([s0, s1]) => ({
+                  a: drawn(s0, b),
+                  b: drawn(s1, b),
+                  angle: b.angle,
+                  direction: b.direction,
+                  radius: b.radius,
+                })),
+                // A round bend's two tangent lines (docs/sketch-studio-round-bend.md §7), on the BEND layer too.
+                ...roundTangents(b).map(([s0, s1, v]) => ({
+                  a: toDrawing([b.a[0] + b.u[0] * s0 + b.n[0] * v, b.a[1] + b.u[1] * s0 + b.n[1] * v]),
+                  b: toDrawing([b.a[0] + b.u[0] * s1 + b.n[0] * v, b.a[1] + b.u[1] * s1 + b.n[1] * v]),
+                  angle: b.angle,
+                  direction: b.direction,
+                  radius: b.radius,
+                  tangent: true,
+                })),
+              ]),
+              ...(marks.length
+                ? { etchLines: marks.map((m) => ({ a: toDrawing(m.a.map(n)), b: toDrawing(m.b.map(n)) })) }
+                : {}),
+            },
+          ];
+        }
         const sketchDef = model.sketches.find((s) => s.id === first?.sketchId);
         const planar = first?.type === 'box' || (first?.type === 'extrude' && (sketchDef?.plane || 'XY') === 'XY');
         const thickness = first?.type === 'box' ? n(first.height) : first?.type === 'extrude' ? n(first.length) : null;

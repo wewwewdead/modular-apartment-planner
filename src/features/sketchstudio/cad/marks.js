@@ -12,7 +12,7 @@ export { MARK_ALONG };
 // Screen tolerances (px): snap radius, the depth slack behind a surface, and
 // the shortest edge whose midpoint snaps (tessellated arcs are noise).
 export const SNAP_PX = 8;
-export const OCCLUSION_PX = 16;
+const OCCLUSION_PX = 16;
 export const MIDPOINT_MIN_PX = 24;
 
 const AXIS = { X: 0, Y: 1, Z: 2 };

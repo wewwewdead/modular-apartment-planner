@@ -931,6 +931,289 @@ Marks are placement guides:
   on that point, dropped square onto the clicked face, without hole-snap
   rounding.
 
+### Dimensions on a sketch (SD-1)
+
+Inside the sketcher, **Dimension** (the last sketch tool, or D) measures the
+drawing and can leave the result on it (docs/sketch-studio-sketch-dimensions.md).
+Click two points, or one line, rectangle side, circle or arc, then click where
+the dimension goes. A second click on the body of a straight edge (a line, a
+rectangle side, a model edge in the plane) reads square to that edge: the
+hole-to-edge distance. Placing the line beside the span gives a horizontal
+dimension, beside its height a vertical one, anywhere else an aligned one (the
+drawing sheets' rule); a circle gives Ø, an arc R. The box by the cursor reads
+the value before the last click, so Esc there only measures; Esc steps back one
+click at a time. Click a dimension's line or label (no tool on) to select it;
+Delete removes it. Deleting an entity removes the dimensions that hung on it.
+
+Dimensions are reference only: they are kept with the sketch
+(`sketch.dimensions`, absent when there are none), come back on Edit sketch,
+follow a split shop outline to the sketch they belong to, and never change the
+profile, the part, the drawings or the shop. They show only while the sketch is
+open.
+
+## Sheet metal (Shop tab)
+
+The **Shop** tab, between Assemble and Drawings, makes parts the way a sheet
+metal shop does (docs/sketch-studio-fab-shop.md): the flat blank is the part,
+and bends fold it. Nothing is ever unfolded from a 3D shape; if the blank was
+cut the wrong size, the flange comes out the wrong length, as on the machine.
+
+**Cut from sheet** opens its panel. The blank outline is a rectangle W × H,
+a closed sketch of the model (an XY sketch at the origin is used as it is;
+a sketch on another plane is copied flat), or the closed profiles of the 2D
+drawing: an outline strictly inside another becomes its cut-out, an outline
+inside a cut-out is not cut and is reported. Choose the sheet stock (SPCC
+cold-rolled steel, SECC galvanised steel, SUS304 stainless, A5052 or A6061
+aluminium) and a standard thickness, or Custom for any other. The panel
+reads the blank size, the laser cut length (outline plus every cut-out) and
+the pierces (one per loop). **Cut from sheet** places the new part with its
+blank centred on the ground under the view centre and opens its feature;
+the part's material is the stock's name.
+
+The sheet-metal feature (feature 1 of the part) holds the stock, the
+thickness (a number or =expression) and the K-factor (automatic from the
+inside radius over the thickness and the stock's hardness, or typed), and the
+bends in the order they are made. Each bend row has its angle (0 is flat, 90
+a right angle; the bend angle, not the included angle), **Up** (the flange
+rises toward the blank's top face) or **Down**, and the inside radius: from
+the tooling (the default die for the thickness, V ≥ 6 t up to 2.5 mm, and the
+88° punch: r = max(punch tip, stock fraction × V), never below 0.63 t), or
+typed. Engraved under it: the bend allowance (the flat width that becomes the
+arc), the bend deduction and both outside leg lengths (to the mould line of
+the next parallel bend when the leg ends at one). **Move up**, **Move down**
+and **Remove** reorder or drop a bend; the order never changes the shape.
+
+**Add bend** (Shop → Add bend focuses it) runs a punch line parallel to the
+blank's **Left**, **Right**, **Front** or **Rear** edge at distance D, or
+through two points. The **Flange, outside** field and D drive each other
+(D = flange − outside setback + allowance / 2). The new bend is folded with
+the others before it is offered: a line that misses the blank, crosses
+another bend's zone, does not separate the sheet (material beside the punch
+line still connected: run it edge to edge or cut a relief), closes a loop
+with other bends, or leaves no material beyond its zone is refused with the
+reason, and so is an angle or value typed into a bend row that the fold
+cannot make. Warnings stay readable without refusing: a cut-out within
+2.5 t + r of the bend line (it will distort), a leg shorter than the die needs
+to sit on both shoulders, a radius below the stock's minimum, a sharp bend,
+and an outline that crosses the bend zone at an angle. Holes, pockets and
+cuts added after the sheet-metal feature machine the folded part.
+
+**Unfold** (in the view toolbar while a sheet-metal part with bends is
+selected, or Shop → Unfold) animates every bend to flat in about 0.6 s and
+shows each bend line with its label, for example "UP 90° R1.6"; **Fold** folds
+it back. It is a view only: it is not saved, the move gizmo is off while it
+shows, and another selection or any tool folds it back at once. A bare
+sheet-metal part is drawn in its stock's colour.
+
+The cutting list gives a sheet-metal part's blank size, thickness, stock,
+bend count, cut length and pierces; the CSV gains those columns at the end
+(a list without sheet metal keeps the columns it had). The workshop ZIP
+writes the flat blank to cutting/ as its DXF, with the bend lines on a BEND
+layer, and as an SVG with dashed bend lines. **Example: pump bracket** builds
+the pump bracket channel (166 long, 52.5 outside, 8 mm flanges, A5052
+t 1.5) from a flat blank with its openings and mounting holes and two 90°
+bends; its 8 mm flanges read short for the default V10 die.
+
+Welds, paint finishes and prints are kept with the model (they never cause a
+solid rebuild: changing only them keeps the built solids); a finish already
+colours its part. Their stations are described under "Weld, paint and print"
+below.
+
+### The press brake
+
+Shop → **Press brake** puts the selected sheet-metal part on a generic press
+brake, named by its capacity (50 t × 2 m, 80 t × 2.5 m or 100 t × 3 m; the
+choice is saved with the model). Every other part hides and the sheet lies
+on the die. The camera is the operator's: standing in front of the machine,
+looking toward the backgauge and down about 25°, a little round toward the
+bed's right end so the end of the punch (its profile) and of the die (its V)
+show beside the part. It frames the part and the tooling round it, not the
+whole bed, and comes back to that view after each hit; while the station is
+open **Fit** returns to it and the standard views (Top, Front…) frame the
+station from their side. Orbit, pan and zoom stay free, and leaving the brake
+puts your own camera back. The die is drawn as long as the part plus 40 mm
+each end (a sectional die, so its end face shows; the collision check still
+uses a die along the whole bed, which only the part can touch). The punch line
+of the pending hit is marked orange on the sheet. A part
+that is already welded, painted or printed is refused (shop order is cut →
+bend → weld → paint → print); one button removes those records and opens the
+brake.
+
+Set up each hit the way an operator does:
+
+1. On the **Flat blank** card over the view, click a straight outline edge:
+   that edge goes against the backgauge fingers. Or choose **Two points** and
+   click the two ends of the punch line (corners and edge midpoints snap), or
+   type them.
+2. Set **Backgauge L** (the distance from the punch line to the gauge edge;
+   type it, or drag the green punch line on the card), the **Bend angle**,
+   **Flip sheet** for a bend that goes down (the machine always bends up, so
+   the sheet is turned over), the **Punch** and the **Die** (Automatic picks the
+   die for the thickness; the panel says when the thickness is beyond the
+   catalogue).
+3. Press **Bend**, Enter or Space (the pedal). The ram comes down, both wings
+   rise about the punch line, the ram goes back (about 1.2 s at the machine's
+   speeds), and the bend is saved as one ordinary edit (Undo takes it back).
+   The station stays open for the next hit.
+
+The **Side view** card (top left, over the flat blank) is the controller's
+section of the hit, seen from the bed's right end with the backgauge to the
+right: the punch, the die, the bottom of the ram and the backgauge finger at
+L from the catalogue sections at true proportion, and the sheet's cross-section
+through the bend with its true thickness and inside radius, resting on the die
+shoulders. The rest of the part (the flanges earlier hits made) is cut at the
+same plane — through the middle of the bend, or where a collision is. A wing
+too long for the card is cut with a break mark, so the tooling keeps its size;
+a finger beyond the card is pointed to at its edge. It moves with the stroke,
+frame by frame, reading out the angle (of the target), the punch tip's height
+above the die top and what the ram is doing; at rest it shows the angle made,
+and a collision turns the tool that is hit red and names it with the angle.
+
+The panel's engraved readouts show the inside radius, bend allowance and
+deduction, both outside legs, the backgauge reading (or "no straight gauge"
+when the gauge edge is on a face another bend separates from the punch
+line), the ram depth, the springback and the angle the machine overbends to,
+and the force against the press and the tooling as a bar. It also shows the
+folded size of the part so far.
+
+A hit the machine cannot make is refused, with the remedy: more force than
+the press gives (a wider die or a bigger press), a bend longer than the bed,
+a flange shorter than the die needs to rest on both shoulders (a smaller die,
+named, or a larger blank), an angle beyond the die (180° − its V angle: use
+the acute 30° tooling; when not even the smallest die carries the flange, the
+message says how far from the punch line the blank must reach and which die
+to use), a punch blunter than its die, more force than the
+tooling is rated for, and a backgauge reading outside its 5–600 mm reach.
+Before the pedal the stroke is also checked for collisions — the approach,
+the bend in small steps and the return — against the punch (set up to the
+bend's length, as a shop does for a box), the ram, the die, the bed and the
+part itself. A collision is drawn red, with the part posed at the angle it
+happens, and the pedal is refused with advice: bend earlier, turn the sheet
+around or flip it, or use the gooseneck punch.
+
+**Sequence** lists the hits made, in order, each checked as it would be made
+then. **Before** and **After** show the part around one hit, **Re-run** plays
+it again (view only), **Earlier** and **Later** reorder (refused when the new
+order makes a step fail that did not before), **Remove** drops it. Esc clears
+the pick (or a Before/After view); Esc again, or **Leave press brake**, leaves.
+The backgauge reading is never stored: a bend keeps only its line, angle,
+direction, radius and the punch and die that made it.
+
+The status bar names the press and says whether the exact solid is current:
+after a hit the part's solid rebuilds behind the station ("Rebuilding
+solids…") until it reads "Model current". Choosing another press brake is
+saved with the model without rebuilding anything.
+
+### Weld, paint and print
+
+After the brake come the finishing stations, in shop order: **Weld**, **Paint**
+and **Print** (Shop tab). Each one takes over the view's clicks while it is
+open (the parts tree, the move gizmo and the other tools wait), and none of
+them rebuilds a solid: welds, paint and prints are records on the parts,
+saved with the model, drawn in every view and listed in the cutting list.
+Esc steps back one pick and then leaves; so does each station's Leave button.
+
+**Weld.** Click an edge of a part (it lights orange as you point at it), then
+the edge or face it touches: on another part, or on the same folded part to
+close a box corner. The panel shows the seam the two picks make — its length,
+the gap between them against what the process can bridge (TIG max(0.2,
+0.1 t), MIG min(0.5 t, 1) on the thinner sheet), the sheet, the joint — and
+the weld: **Fillet**, **Butt**, **Tack** or **Spot**, TIG or MIG, the size
+(the fillet leg starts at the thinner sheet's thickness) and for tacks and
+spots the pitch. Fillet and butt seams read their weld time (length / travel
+speed / duty cycle); tacks their count; spots their count, the nugget
+(5 √t) and the inset of two nuggets from the sheet edge and the seam ends, with
+a pitch below 10 t refused. A gap too wide is refused with the remedy (close
+it, or MIG when that bridges it). **Weld** saves the seam, its ends kept on
+each part so it follows them, and puts the parts in one group, a
+_Weldment_, so they select and move as one; welding a third part to it keeps
+one weldment. Removing a weld (in the panel's list) keeps the group; Ungroup
+in the Assemble tab splits it. A part that is already painted or printed is
+refused (shop order: weld before paint), with one button that strips its
+paint and prints. A welded part also cannot go back on the press brake.
+
+The bead is drawn on the parts: a fillet as a rippled triangular bead in the
+corner between the two faces, a butt seam (or a seam with no corner) as a
+round bead, tacks as short beads at the pitch, spots as flat discs on the top
+sheet. It hides with its parts, in the unfold view and on the press brake,
+and takes the paint when the weldment is painted.
+
+**Paint.** Click the part to paint (or open the booth with a part or group
+selected); a part that is welded to others offers **Paint the whole
+weldment**. Choose a RAL colour from the swatches (the hex values are screen
+approximations of the printed RAL cards) or a custom colour and its name,
+powder or wet paint, the gloss and the film thickness. The engraved readouts
+give the painted area (every face of the part's solid), the powder to spray
+(coverage = 1000 / (1.5 × µm) × 0.6 m²/kg) and the cure (200 °C part
+temperature for 10 min); a film outside 50 – 125 µm and open holes under
+1 mm (likely to fill) are noted. **Paint** writes one finish per part;
+**Strip paint** removes it. Printing comes after paint, so painting or
+stripping a part with prints asks first, in the panel, and removes them.
+The selected part still shows blue; the booth outlines what it paints instead,
+so the colour shows.
+
+**Print.** Set the artwork — text (font, height, ink) or an uploaded image,
+which is fitted to at most 1024 px and 512 KB and kept in the model — its
+width, rotation and method (silk-screen, UV flatbed or pad print), then click
+a flat face to place it there. Silk-screen and UV flatbed refuse a curved
+face; pad printing takes one. The print is then the one being edited: drag it
+on its face, change its fields, or click another face to move it there; **New
+print** starts the next one. The panel warns when the artwork overhangs its
+face, comes within 6.35 mm of the face edge, reaches over a bend zone of a
+sheet-metal part, or is silk-screen text under 9 pt, and notes a print on a
+bare (unpainted) part as a bare-metal marking.
+
+The cutting list and the CSV (and the workshop ZIP's CSV) list the welds
+(seam length, weld time or count), finishes (area, powder) and prints after
+the parts, only when the model has any. STEP and STL carry none of them.
+
+### Laser, job sheet and the finished product
+
+The last steps of the shop (docs/sketch-studio-fab-shop.md §9 SM-4) are
+described for the shop floor in **docs/sheet-metal-shop-guide.md**: draw →
+cut → bend → weld → paint → print → job sheet, what each readout means, and
+the limits. In short:
+
+The Shop tab runs in process order: Cut from sheet, **Laser**, Add bend,
+Press brake, Unfold, Weld, Paint, Print, **Job sheet**, then Example: pump
+bracket and **Example: control box**.
+
+**Laser** (with a sheet-metal part selected) covers the view with the laser
+bed: the chosen stock sheet (1219 × 2438, 1250 × 2500 or 1500 × 3000 mm,
+saved with the model) at true scale with the blank nested on it in the
+sketch's own X and Y, and the quantity's copies in rows, 3 mm apart and 10 mm
+clear of the sheet edge. The panel reads the cut length, the pierces and their
+time, the 2 kW fiber's cutting speed for the stock and thickness, the kerf,
+the cut time per blank and for the quantity, the sheet use and the narrowest
+web; a cut-out under t is flagged, under 0.5 t refused, a web under 0.5 t
+flagged and a blank larger than the sheet refused, each with its remedy.
+**Cut** runs the head along the path — a pierce, then the contour, every
+cut-out first and the outline last — with the machine's clock; the animation
+lasts 6 – 15 s and the panel says by how much it is slowed or sped up. Stop or
+Esc stops it; Esc again or Leave laser leaves. **Etch bend lines** writes the
+bends' punch lines as etched marks on the blank (shown on the bed, on the
+press brake's flat-blank card and in the flat DXF on layer ETCH; the folded
+part does not change). A cut changes nothing in the model.
+
+**Job sheet** lists each product (a top-level group or a lone part) with its
+route Cut → Bend → Weld → Paint → Print, a done / part done / not yet marker
+per step, what was done at each step, the quantities and the estimated times
+per step and in total (a batch quantity multiplies them), and downloads it as
+CSV. Bend handling (20 s per hit) and printing (60 s per print) are stated
+estimates; the other times come from the stations' readouts.
+
+Drawings → **Flat pattern sheet** draws the selected sheet-metal part's flat
+blank: its outline and cut-outs, each bend line with its label, the overall
+blank size and the bend table (order, angle, direction, radius, allowance,
+deduction, tooling). The view kind **flat** is offered on any sheet whose
+subject is a sheet-metal part, and fits, prints and exports like any view.
+
+**Example: control box** is a powder-coated SPCC enclosure made through the
+stations: a body folded from one blank with corner reliefs, four bends,
+mounting holes and a cable entry, a lid folded down on two edges, the body's
+corners fillet-welded, RAL 7035 paint, and a printed label and logo on the
+lid; its job sheet shows all five steps done.
+
 ## Persistence and recovery
 
 Document v4 adds a model alongside existing entities, layers, materials and
@@ -981,6 +1264,31 @@ Licenses and source/build links are in public/cad-notices/NOTICE.txt.
   detail sheet's "4 ×" note in the workshop ZIP, then the live fields: \_Holes
   in row* 6 typed without Enter in Shape, and _Spacing (mm)_ 60 typed without
   Enter in the tree editor, undone in one step.
+- Run node scripts/verify-fab-shop-sm1.mjs (CAD_VERIFY_URL=http://localhost:5180/sketch)
+  for Shop → Cut from sheet (100 × 60, 1.5 SPCC), two bends added by edge
+  distance and outside flange, the folded size read from Properties against
+  the bend deduction, Unfold with its bend labels, Fold, and a reload that
+  finds the part intact.
+- Run node scripts/verify-fab-shop-sm2.mjs (CAD_VERIFY_URL=http://localhost:5180/sketch)
+  for the press brake: the operator's camera, the side view at rest, its angle
+  readout following the stroke to the target, two hits by the button and the
+  pedal key, a short-flange refusal, a collision drawn red in 3D and on the side
+  view, leaving and reloading.
+- Run node scripts/verify-fab-shop-sm3.mjs (CAD_VERIFY_URL=http://localhost:5180/sketch)
+  for weld, paint and print: an L laid on a plate welded along its foot (seam
+  length, gap, the weldment moving as one, no kernel rebuild), the press brake
+  refusing the welded part, the weldment powder-coated RAL 9005 (area, powder,
+  the time to the painted frame), a silk-screen print dragged off its face
+  (the overhang warning), welding the painted parts refused, two image prints
+  with the model size and commit costs, and a reload that keeps it all.
+- Run node scripts/verify-fab-shop-sm4.mjs (CAD_VERIFY_URL=http://localhost:5180/sketch)
+  for the whole route from an empty workspace: an outline with a hole drawn in
+  the sketcher, Cut from sheet, the laser's readouts and its cut (the hole
+  before the outline, the clock on the readout), two press brake hits, Etch
+  bend lines (the solid unchanged), a plate welded on, the weldment painted, a
+  print, the job sheet with all five steps and times, the flat pattern sheet's
+  bend labels and table, a reload, and Example: control box (built, painted,
+  printed, its job sheet complete, its body on the laser and its flat sheet).
 - Run node scripts/verify-sketch-cad-offline.mjs against the production preview
   on port 5181, after a build. It uses a hidden Electron window and a separate
   test profile; it does not touch the user's desktop profile.
@@ -991,6 +1299,6 @@ The kernel tests execute real WASM; reliability tests cover conflicts,
 references, migrations, history, worker supersession, timeouts, units,
 nominal/allowance separation and drawing/model agreement.
 
-Sheet-metal unfolding, bend development, machine-specific G-code, motion
-simulation and production weld validation
-are not included.
+Machine-specific G-code, controller-accurate press brake motion (the press
+brake station is a schematic simulation) and production weld validation are
+not included.

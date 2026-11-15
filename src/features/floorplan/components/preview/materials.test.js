@@ -28,8 +28,11 @@ import {
   paletteMaterialFor,
   pruneWallFinishMaterials,
   syncGhostMaterials,
+  TONAL_FASTENER_SHADE,
+  tonalFastenerMaterialKeys,
   wallFinishMaterialKeys,
 } from './materials';
+import { tierOf } from './viewMode';
 
 /** Relative luminance in linear light — how much of the light a surface sends back. */
 function reflectance(material) {
@@ -628,6 +631,105 @@ describe('plank siding materials (spec §6.1)', () => {
     ]) {
       expect(material.userData.detailFamily?.coursePitch ?? 0, material.userData.paletteKey).toBe(0);
     }
+    disposeMaterialPalette(live);
+  });
+});
+
+describe('tonal screw heads (docs/wall-fastener-visibility.md §2.2)', () => {
+  const STOCK_FC = 'wallFastenerTonal:wallFiberCement';
+  const PAINTED_FC = 'wallFastenerTonal:wallFinish:paint:fc:E0701F:satin';
+  const SIDING = 'wallFastenerTonal:wallFinish:timber:siding:6B4226:satin:h140j6';
+
+  it('is its own material, not the board it sits in, and is built once per face key', () => {
+    const live = createMaterialPalette({ look: PALETTE_LOOKS.CLASSIC });
+    const head = paletteMaterialFor(live, STOCK_FC);
+    expect(head).toBeInstanceOf(THREE.MeshStandardMaterial);
+    expect(head).not.toBe(live.wallFiberCement);
+    expect(paletteMaterialFor(live, STOCK_FC)).toBe(head);
+    expect(live[STOCK_FC]).toBe(head);
+    expect(tonalFastenerMaterialKeys(live)).toEqual([STOCK_FC]);
+    // A face key the palette cannot build gives no head either.
+    expect(paletteMaterialFor(live, 'wallFastenerTonal:noSuchKey')).toBeUndefined();
+    expect(paletteMaterialFor(live, 'wallFastenerTonal:')).toBeUndefined();
+    disposeMaterialPalette(live);
+  });
+
+  it('is the same hue as its face, visibly darker, on every face it can sit in', () => {
+    const live = createMaterialPalette({ look: PALETTE_LOOKS.CLASSIC });
+    for (const faceKey of [
+      'wallFiberCement',
+      'wallPlywood',
+      'wallRainscreen',
+      'wall',
+      'wallFinish:paint:fc:E0701F:satin',
+      'wallFinish:paint:ply:2F3338:matte',
+      'wallFinish:timber:siding:6B4226:satin:h140j6',
+    ]) {
+      const face = paletteMaterialFor(live, faceKey);
+      const head = paletteMaterialFor(live, `wallFastenerTonal:${faceKey}`);
+      const expected = face.color.clone().multiplyScalar(TONAL_FASTENER_SHADE);
+      expect(head.color.getHex(), faceKey).toBe(expected.getHex());
+      const faceHsl = face.color.getHSL({});
+      const headHsl = head.color.getHSL({});
+      expect(headHsl.h, faceKey).toBeCloseTo(faceHsl.h, 2);
+      expect(reflectance(head), faceKey).toBeLessThan(reflectance(face) * 0.6);
+      expect(head.roughness, faceKey).toBe(face.roughness);
+    }
+    disposeMaterialPalette(live);
+  });
+
+  it('follows the face finish: a new colour is a new key and a new shade', () => {
+    const live = createMaterialPalette({ look: PALETTE_LOOKS.CLASSIC });
+    const orange = paletteMaterialFor(live, PAINTED_FC);
+    const charcoal = paletteMaterialFor(live, 'wallFastenerTonal:wallFinish:paint:fc:2F3338:satin');
+    expect(charcoal).not.toBe(orange);
+    expect(orange.color.getHex()).toBe(new THREE.Color('#E0701F').multiplyScalar(TONAL_FASTENER_SHADE).getHex());
+    disposeMaterialPalette(live);
+  });
+
+  it('batches and ghosts like a screw: shared, opaque, palette-owned, structure tier, one program family', () => {
+    const live = createMaterialPalette({ look: PALETTE_LOOKS.CLASSIC });
+    const head = paletteMaterialFor(live, PAINTED_FC);
+    expect(head.userData).toMatchObject({ paletteKey: PAINTED_FC, tier: 'structure', ownedByPalette: true });
+    expect(head.userData.ownedByPreviewObject).toBeUndefined();
+    expect(head.transparent).toBe(false);
+    expect(tierOf(head)).toBe(tierOf(live.wallFastener));
+    expect(tierOf(ghostMaterialFor(live, head, { tier: tierOf(head) }))).toBe('structure');
+    expect(head.customProgramCacheKey()).toBe(live.wall.customProgramCacheKey());
+    // Smooth paint over steel: no board relief, and no siding grooves.
+    expect(head.userData.detailFamily).toEqual(DETAIL_FAMILIES.smooth);
+    expect(paletteMaterialFor(live, SIDING).userData.detailFamily.coursePitch ?? 0).toBe(0);
+    disposeMaterialPalette(live);
+  });
+
+  it('follows the render style, and is disposed with the palette, never with an object', () => {
+    const live = createMaterialPalette();
+    applyRenderStyleToPalette(live, renderStyleConfig(RENDER_STYLES.SHADED));
+    const head = paletteMaterialFor(live, STOCK_FC);
+    expect(head.userData.detailScale).toBe(0);
+    applyRenderStyleToPalette(live, renderStyleConfig(RENDER_STYLES.REALISTIC));
+    expect(head.userData.detailScale).toBe(1);
+    let disposed = 0;
+    head.addEventListener('dispose', () => {
+      disposed += 1;
+    });
+    disposeMaterialPalette(live);
+    expect(disposed).toBe(1);
+  });
+
+  it('is pruned with the finishes, only when nothing draws it', () => {
+    const live = createMaterialPalette();
+    const keys = Array.from(
+      { length: 4 },
+      (_, index) => `wallFastenerTonal:wallFinish:paint:fc:${(0x200000 + index).toString(16).toUpperCase()}:matte`,
+    );
+    const heads = keys.map((key) => paletteMaterialFor(live, key));
+    // Each head built its finish on the way: eight on-demand materials.
+    expect(wallFinishMaterialKeys(live)).toHaveLength(4);
+    const live1 = new Set([keys[1], keys[1].slice('wallFastenerTonal:'.length)]);
+    expect(pruneWallFinishMaterials(live, live1, 4)).toBe(6);
+    expect(tonalFastenerMaterialKeys(live)).toEqual([keys[1]]);
+    expect(live[keys[1]]).toBe(heads[1]);
     disposeMaterialPalette(live);
   });
 });

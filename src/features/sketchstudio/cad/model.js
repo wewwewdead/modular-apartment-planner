@@ -11,6 +11,68 @@ export const DEFAULT_FABRICATION = Object.freeze({
   sheetWidth: 2440,
   sheetHeight: 1220,
 });
+// The shop's machines (docs/sketch-studio-fab-shop.md §4.2): keys of the
+// press brake, laser and sheet size the stations use.
+export const DEFAULT_SHOP = Object.freeze({ machine: 'brake-50-2000', laser: 'fiber-2kw', sheet: '1219x2438' });
+// Top-level keys the kernel never reads (§4.3): changing only these keeps the
+// built solids (useCadModel skips the rebuild). `fabrication` (kerf, stock and
+// sheet sizes, the shop's machines) is read only on the main thread, from the
+// current model (cut list, workshop ZIP, the press brake): the kernel, the
+// sketch solver and the projection never see it.
+export const KERNEL_INERT_KEYS = Object.freeze(['finishes', 'prints', 'fabrication']);
+// The records kernelPayload leaves on the main thread.
+const SHOP_RECORD_KEYS = Object.freeze(['finishes', 'prints']);
+/**
+ * `a` and `b` differ, if at all, only in kernel-inert keys (every other
+ * top-level key is ===). A group edit counts as inert too: the kernel never
+ * reads `groups` or an instance's `groupId` (groups.js). So
+ * `groups` may differ, and `instances` may be a new list when it has the same
+ * length and every record is === or was rewritten with only its `groupId`
+ * changed (at least one such record: a plain copy of the list still rebuilds).
+ */
+export function sameKernelInput(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    if (KERNEL_INERT_KEYS.includes(key) || a[key] === b[key]) continue;
+    if (key === 'groups') continue;
+    if (key === 'instances' && onlyGroupsMoved(a.instances, b.instances)) continue;
+    return false;
+  }
+  return true;
+}
+// Two instance lists that differ only in which group some records name.
+function onlyGroupsMoved(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  let moved = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] === b[i]) continue;
+    if (!a[i] || !b[i] || typeof a[i] !== 'object' || typeof b[i] !== 'object') return false;
+    const keys = new Set([...Object.keys(a[i]), ...Object.keys(b[i])]);
+    for (const key of keys) if (key !== 'groupId' && a[i][key] !== b[i][key]) return false;
+    moved++;
+  }
+  return moved > 0;
+}
+/**
+ * What a kernel worker is sent for a build: the model without the shop's
+ * records (finishes, prints), which it never reads. A
+ * print's image is a data URL of up to PRINT_IMAGE_LIMIT characters; without
+ * this every rebuild would structured-clone it to the worker (and to the
+ * solver). Returns the same object when there are none.
+ */
+export function kernelPayload(model) {
+  if (!model || typeof model !== 'object') return model;
+  if (!SHOP_RECORD_KEYS.some((key) => model[key]?.length)) return model;
+  const { finishes: _finishes, prints: _prints, ...rest } = model;
+  return rest;
+}
+export const FINISH_KINDS = Object.freeze(['powder', 'wet']);
+export const FINISH_GLOSS = Object.freeze(['matte', 'satin', 'gloss', 'texture']);
+export const PRINT_METHODS = Object.freeze(['silk', 'uv', 'pad']);
+export const PRINT_KINDS = Object.freeze(['text', 'image']);
+export const PRINT_IMAGE_LIMIT = 512 * 1024;
 
 export function emptyModel() {
   return {
@@ -26,6 +88,11 @@ export function emptyModel() {
     // parentId } records; an instance names its group in `groupId`. An editing
     // aid only: the kernel, drawings and cut list never read either key.
     groups: [],
+    // The fabrication shop's records (docs/sketch-studio-fab-shop.md §4.2):
+    // one finish per instance, prints. Display and reports only; the kernel
+    // never reads them (KERNEL_INERT_KEYS).
+    finishes: [],
+    prints: [],
     sheets: [
       {
         id: 'assembly-sheet',
@@ -42,7 +109,28 @@ export function emptyModel() {
         annotations: [],
       },
     ],
-    fabrication: { ...DEFAULT_FABRICATION },
+    fabrication: { ...DEFAULT_FABRICATION, shop: { ...DEFAULT_SHOP } },
+  };
+}
+
+// The model's fabrication settings with every default present. The same
+// object comes back when nothing is missing, so a commit that did not touch
+// them keeps `fabrication` === (the kernel-inert rebuild rule compares keys).
+function normalizeFabrication(value) {
+  const shop = value?.shop;
+  if (
+    value &&
+    typeof value === 'object' &&
+    Object.keys(DEFAULT_FABRICATION).every((key) => key in value) &&
+    shop &&
+    typeof shop === 'object' &&
+    Object.keys(DEFAULT_SHOP).every((key) => key in shop)
+  )
+    return value;
+  return {
+    ...DEFAULT_FABRICATION,
+    ...value,
+    shop: { ...DEFAULT_SHOP, ...(shop && typeof shop === 'object' ? shop : {}) },
   };
 }
 
@@ -56,14 +144,68 @@ const markAnchor = (anchor) =>
   (anchor.instanceId === null || typeof anchor.instanceId === 'string') &&
   finite3(anchor.local);
 
+// A sketch's reference dimensions (docs/sketch-studio-sketch-dimensions.md
+// §3.1), sketch-plane mm: each with an id unique in its sketch, one of the two
+// types, finite numbers in every coordinate and a valid orientation / mode.
+const finite2 = (value) => Array.isArray(value) && value.length === 2 && value.every(Number.isFinite);
+const sketchDimension = (d) =>
+  Boolean(d) &&
+  typeof d === 'object' &&
+  typeof d.id === 'string' &&
+  d.id !== '' &&
+  (d.type === 'linear'
+    ? finite2(d.from) &&
+      finite2(d.to) &&
+      ['horizontal', 'vertical', 'aligned'].includes(d.orientation) &&
+      Number.isFinite(d.offset)
+    : d.type === 'radial' &&
+      ['diameter', 'radius'].includes(d.mode) &&
+      finite2(d.center) &&
+      Number.isFinite(d.radius) &&
+      d.radius > 0 &&
+      finite2(d.at));
+const validSketchDimensions = (list) =>
+  Array.isArray(list) && list.every(sketchDimension) && new Set(list.map((d) => d.id)).size === list.length;
+
+// The shop's Weld and Assembly stations were removed (docs/sketch-studio-
+// shop-trim.md §4.2) and a file saved before that still opens: its seams
+// (`welds`) and assembly steps (`assembly`) are left out unread, so a malformed
+// one cannot refuse the file, and a group's `weldment` flag goes (the group
+// stays an ordinary group, its name and members kept). Nothing else changes.
+function withoutShopStations(value) {
+  const { welds: _welds, assembly: _assembly, ...rest } = value;
+  if (!Array.isArray(rest.groups) || !rest.groups.some((g) => g && typeof g === 'object' && 'weldment' in g))
+    return rest;
+  return {
+    ...rest,
+    groups: rest.groups.map((g) => {
+      if (!g || typeof g !== 'object' || !('weldment' in g)) return g;
+      const { weldment: _weldment, ...group } = g;
+      return group;
+    }),
+  };
+}
+
 // CAD lives beside legacy entities. No old profile is implicitly made into a solid.
 export function normalizeModel(value) {
   if (value == null) return emptyModel();
   if (typeof value !== 'object' || Array.isArray(value) || value.version !== CAD_VERSION)
     throw new Error('Unsupported solid-model schema.');
   const defaults = emptyModel();
-  const result = { ...defaults, ...value, fabrication: { ...DEFAULT_FABRICATION, ...value.fabrication } };
-  for (const key of ['parameters', 'sketches', 'parts', 'instances', 'connections', 'sheets', 'marks', 'groups']) {
+  const source = withoutShopStations(value);
+  const result = { ...defaults, ...source, fabrication: normalizeFabrication(source.fabrication) };
+  for (const key of [
+    'parameters',
+    'sketches',
+    'parts',
+    'instances',
+    'connections',
+    'sheets',
+    'marks',
+    'groups',
+    'finishes',
+    'prints',
+  ]) {
     if (!Array.isArray(result[key])) throw new Error(`Model ${key} must be a list.`);
     const ids = new Set();
     for (const item of result[key]) {
@@ -86,6 +228,9 @@ export function normalizeModel(value) {
       (sketch.primitives != null && !Array.isArray(sketch.primitives))
     )
       throw new Error(`Invalid part sketch: ${sketch.id}`);
+  for (const sketch of result.sketches)
+    if (sketch.dimensions != null && !validSketchDimensions(sketch.dimensions))
+      throw new Error(`Invalid sketch dimension: ${sketch.id}`);
   for (const instance of result.instances) {
     if (
       typeof instance.partId !== 'string' ||
@@ -100,6 +245,7 @@ export function normalizeModel(value) {
   for (const mark of result.marks)
     if (!markAnchor(mark.from) || !markAnchor(mark.to) || !MARK_ALONG.includes(mark.along) || !finite3(mark.offset))
       throw new Error(`Invalid mark: ${mark.id}`);
+  validateShopRecords(result);
   if (!result.sheets.length) throw new Error('Keep at least one drawing sheet.');
   for (const sheet of result.sheets)
     if (
@@ -111,6 +257,62 @@ export function normalizeModel(value) {
     )
       throw new Error(`Invalid drawing sheet: ${sheet.id}`);
   return result;
+}
+
+// §4.2 record shapes. A row naming an instance that no longer exists is not
+// an error (like a mark, it is simply not drawn); removeInstance drops them.
+const optionalFinite = (value) => value == null || Number.isFinite(value);
+const optionalString = (value) => value == null || typeof value === 'string';
+function validateShopRecords(model) {
+  for (const part of model.parts)
+    for (const f of part.features)
+      if (
+        f.type === 'sheetmetal' &&
+        (!Array.isArray(f.bends) ||
+          f.bends.some((b) => !b?.id) ||
+          new Set(f.bends.map((b) => b.id)).size !== f.bends.length ||
+          (f.marks != null && !Array.isArray(f.marks)))
+      )
+        throw new Error(`Invalid sheet-metal feature: ${part.id} / ${f.id}`);
+  // A bought-in item (docs/sketch-studio-shop-floor.md §5.4): its colour and reference.
+  for (const part of model.parts)
+    if (
+      part.purchased != null &&
+      (typeof part.purchased !== 'object' ||
+        !/^#[0-9a-fA-F]{6}$/.test(part.purchased.colour || '') ||
+        !optionalString(part.purchased.reference))
+    )
+      throw new Error(`Invalid bought-in item: ${part.id}`);
+  const finished = new Set();
+  for (const finish of model.finishes) {
+    if (
+      typeof finish.instanceId !== 'string' ||
+      !FINISH_KINDS.includes(finish.kind) ||
+      !/^#[0-9a-fA-F]{6}$/.test(finish.colour || '') ||
+      (finish.gloss != null && !FINISH_GLOSS.includes(finish.gloss)) ||
+      !optionalFinite(finish.thickness) ||
+      !optionalString(finish.name)
+    )
+      throw new Error(`Invalid finish: ${finish.id}`);
+    if (finished.has(finish.instanceId)) throw new Error(`Instance ${finish.instanceId} has more than one finish.`);
+    finished.add(finish.instanceId);
+  }
+  for (const print of model.prints)
+    if (
+      typeof print.instanceId !== 'string' ||
+      ![print.origin, print.x, print.normal].every(finite3) ||
+      !(Number.isFinite(print.width) && print.width > 0 && Number.isFinite(print.height) && print.height > 0) ||
+      !optionalFinite(print.rotation) ||
+      !PRINT_METHODS.includes(print.method) ||
+      !PRINT_KINDS.includes(print.kind) ||
+      (print.kind === 'text' && typeof print.text !== 'string') ||
+      (print.kind === 'image' &&
+        (typeof print.image !== 'string' || !print.image.startsWith('data:') || print.image.length > PRINT_IMAGE_LIMIT))
+    )
+      throw new Error(`Invalid print: ${print.id}`);
+  const shop = model.fabrication.shop;
+  if (!shop || typeof shop !== 'object' || !Object.keys(DEFAULT_SHOP).every((key) => typeof shop[key] === 'string'))
+    throw new Error('Invalid shop settings: machine, laser and sheet must be names.');
 }
 
 // Older saves can retain connections after an instance was deleted. Recover
@@ -231,6 +433,9 @@ export function removeInstance(model, id) {
     instances: model.instances.filter((instance) => instance.id !== id),
     connections: model.connections.filter((connection) => connection.from !== id && connection.to !== id),
     marks: (model.marks || []).filter((mark) => mark.from?.instanceId !== id && mark.to?.instanceId !== id),
+    // A finish or a print names its one part.
+    ...(model.finishes ? { finishes: model.finishes.filter((f) => f.instanceId !== id) } : {}),
+    ...(model.prints ? { prints: model.prints.filter((p) => p.instanceId !== id) } : {}),
     sheets: model.sheets.map((sheet) => ({
       ...sheet,
       ...(sheet.instanceIds ? { instanceIds: sheet.instanceIds.filter((instanceId) => instanceId !== id) } : {}),
@@ -305,13 +510,18 @@ const viewKind = (entry) => (typeof entry === 'string' ? entry : entry?.view || 
 export const isExplodedSheet = (sheet) =>
   Array.isArray(sheet.views) && sheet.views.length > 0 && sheet.views.every((v) => viewKind(v) === 'exploded');
 
-// The first plain sheet (no section, not exploded) drawing this subject:
-// { partId }, { instanceIds } (as a set) or {} (the whole assembly).
+// A sheet-metal flat-pattern sheet (SM-4): every view is the flat blank.
+export const isFlatSheet = (sheet) =>
+  Array.isArray(sheet.views) && sheet.views.length > 0 && sheet.views.every((v) => viewKind(v) === 'flat');
+
+// The first plain sheet (no section, not exploded, not a flat pattern)
+// drawing this subject: { partId }, { instanceIds } (as a set) or {} (the
+// whole assembly).
 export function findSheetFor(model, subject = {}) {
   const wanted = subject.partId ? null : new Set(subject.instanceIds || []);
   return (
     model.sheets.find((sheet) => {
-      if (sheet.section || isExplodedSheet(sheet)) return false;
+      if (sheet.section || isExplodedSheet(sheet) || isFlatSheet(sheet)) return false;
       if (subject.partId) return sheet.partId === subject.partId;
       if (sheet.partId) return false;
       const ids = new Set(sheet.instanceIds || []);

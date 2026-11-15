@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createFloor, createSlab, createWall } from '@/domain/models';
@@ -456,14 +456,10 @@ describe('WallProperties finishes (docs/wall-cladding-finishes.md §5.7)', () =>
     // A blur after the close is not a second end.
     act(() => picker.dispatchEvent(new FocusEvent('blur')));
 
-    expect(actions.map((action) => action.type)).toEqual([
-      'BEGIN_DRAG_GESTURE',
-      'WALL_UPDATE',
-      'WALL_UPDATE',
-      'WALL_UPDATE',
-      'END_DRAG_GESTURE',
-    ]);
-    expect(actions[3].wall.assembly.exterior.finish.colour.hex).toBe('#334455');
+    // Three colours inside one frame are one commit (PP-1 §2.4): the latest,
+    // flushed by the close before the gesture ends.
+    expect(actions.map((action) => action.type)).toEqual(['BEGIN_DRAG_GESTURE', 'WALL_UPDATE', 'END_DRAG_GESTURE']);
+    expect(actions[1].wall.assembly.exterior.finish.colour.hex).toBe('#334455');
 
     // The next pick is a gesture of its own; a blur ends it too.
     act(() => {
@@ -474,11 +470,102 @@ describe('WallProperties finishes (docs/wall-cladding-finishes.md §5.7)', () =>
       picker.focus();
       picker.blur();
     });
-    expect(actions.slice(5).map((action) => action.type)).toEqual([
+    expect(actions.slice(3).map((action) => action.type)).toEqual([
       'BEGIN_DRAG_GESTURE',
       'WALL_UPDATE',
       'END_DRAG_GESTURE',
     ]);
+  });
+
+  describe('a long picker drag (docs/paint-edit-performance.md §2.4)', () => {
+    afterEach(() => vi.useRealTimers());
+
+    const drag = (picker, count, stepMs) => {
+      const sent = [];
+      for (let index = 0; index < count; index += 1) {
+        const value = `#${(0x102030 + index * 0x010203).toString(16).padStart(6, '0').toUpperCase()}`;
+        sent.push(value);
+        act(() => {
+          setNativeValue(picker, value.toLowerCase());
+          picker.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        act(() => vi.advanceTimersByTime(stepMs));
+      }
+      return sent;
+    };
+
+    it('commits at a bounded rate, inside the gesture, ending on the last colour', () => {
+      vi.useFakeTimers({
+        toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'],
+      });
+      const { actions } = mount({ assembly: paintedExterior(createWallAssembly('chb', {}, 200)) });
+      const picker = container.querySelector('input[aria-label="Outside colour picker"]');
+      // 40 colours at 40 a second: the pointer rate of a brisk drag.
+      const sent = drag(picker, 40, 25);
+      act(() => picker.dispatchEvent(new Event('change', { bubbles: true })));
+
+      const types = actions.map((action) => action.type);
+      expect(types[0]).toBe('BEGIN_DRAG_GESTURE');
+      expect(types.at(-1)).toBe('END_DRAG_GESTURE');
+      expect(types.filter((type) => type === 'BEGIN_DRAG_GESTURE')).toHaveLength(1);
+      const updates = actions.filter((action) => action.type === 'WALL_UPDATE');
+      // One second of dragging: about fifteen commits, never one per colour.
+      expect(updates.length).toBeGreaterThanOrEqual(10);
+      expect(updates.length).toBeLessThanOrEqual(17);
+      expect(updates.at(-1).wall.assembly.exterior.finish.colour.hex).toBe(sent.at(-1));
+      // The last commit lands before the gesture closes.
+      expect(types.at(-2)).toBe('WALL_UPDATE');
+    });
+
+    it('sends a trailing commit with no close at all, and nothing after it', () => {
+      vi.useFakeTimers({
+        toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'],
+      });
+      const { actions } = mount({ assembly: paintedExterior(createWallAssembly('chb', {}, 200)) });
+      const picker = container.querySelector('input[aria-label="Outside colour picker"]');
+      const sent = drag(picker, 6, 5);
+      act(() => vi.advanceTimersByTime(500));
+      const updates = actions.filter((action) => action.type === 'WALL_UPDATE');
+      expect(updates.at(-1).wall.assembly.exterior.finish.colour.hex).toBe(sent.at(-1));
+      const settled = actions.length;
+      act(() => vi.advanceTimersByTime(500));
+      expect(actions).toHaveLength(settled);
+    });
+
+    it('keeps the picker and the hex text on the pointer before the commit lands', () => {
+      vi.useFakeTimers({
+        toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'],
+      });
+      const { actions } = mount({ assembly: paintedExterior(createWallAssembly('chb', {}, 200)) });
+      const field = container.querySelector('[data-colour-field="wall-finish-exterior-colour"]');
+      const picker = field.querySelector('input[aria-label="Outside colour picker"]');
+      const hex = field.querySelector('input[aria-label="Outside colour hex"]');
+      act(() => {
+        setNativeValue(picker, '#abcdef');
+        picker.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(actions.filter((action) => action.type === 'WALL_UPDATE')).toHaveLength(0);
+      expect(picker.value).toBe('#abcdef');
+      expect(hex.value).toBe('#ABCDEF');
+    });
+
+    it('lets a swatch supersede a picker colour still waiting', () => {
+      vi.useFakeTimers({
+        toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'],
+      });
+      const { actions } = mount({ assembly: paintedExterior(createWallAssembly('chb', {}, 200)) });
+      const field = container.querySelector('[data-colour-field="wall-finish-exterior-colour"]');
+      const picker = field.querySelector('input[aria-label="Outside colour picker"]');
+      act(() => {
+        setNativeValue(picker, '#abcdef');
+        picker.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      act(() => field.querySelector('[data-swatch="Slate Blue"]').click());
+      act(() => vi.advanceTimersByTime(500));
+      const updates = actions.filter((action) => action.type === 'WALL_UPDATE');
+      expect(updates).toHaveLength(1);
+      expect(updates[0].wall.assembly.exterior.finish.colour.hex).toBe('#6F8597');
+    });
   });
 
   it('applies the face finish by scope, and offers the stack only to a wall that has one', () => {

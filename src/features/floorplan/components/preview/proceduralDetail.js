@@ -400,17 +400,39 @@ export function applyProceduralDetail(material, familyName) {
  * sharing the one program every detailed material compiles.
  *
  * `Material.clone` copies neither the compile hook nor the cache key (both live
- * on the instance), so a plain clone compiled a program of its own — and its
- * JSON copy of `userData` carried the source's live uniforms object as dead
- * data, which made `applyProceduralDetail` think it was already patched.
+ * on the instance), so a plain clone compiled a program of its own.
+ *
+ * Nor does the clone see the source's live uniforms. three's `Material.copy`
+ * copies `userData` as `JSON.parse(JSON.stringify(...))`, and once the source
+ * has compiled, `userData.detailUniforms` is the shader's whole uniform table —
+ * textures, colours, matrices. Every new finish colour (and every ghost twin
+ * and selection tint) serialised all of that, warned "Unable to serialize
+ * Texture" for each map, and then threw the result away, since a copy of
+ * uniforms is dead data that only made `applyProceduralDetail` think the clone
+ * was already patched (docs/paint-edit-performance.md §2.2). So the source is
+ * handed to `clone` for that one synchronous call with a `userData` that lacks
+ * the uniforms; everything else in it is small plain data and still gets the
+ * deep copy it always did, so the clone's `userData` is its own object exactly
+ * as before. The source gets its own `userData` object straight back.
  */
 export function cloneWithProceduralDetail(material) {
-  const clone = material.clone();
-  const family = material.userData?.detailFamily;
+  const sourceUserData = material.userData;
+  let clone;
+  if (sourceUserData && 'detailUniforms' in sourceUserData) {
+    const { detailUniforms: _liveUniforms, ...portable } = sourceUserData;
+    material.userData = portable;
+    try {
+      clone = material.clone();
+    } finally {
+      material.userData = sourceUserData;
+    }
+  } else {
+    clone = material.clone();
+  }
+  const family = sourceUserData?.detailFamily;
   if (!family) return clone;
-  delete clone.userData.detailUniforms;
   clone.userData.detailFamily = { ...family };
-  clone.userData.detailScale = material.userData.detailScale ?? 1;
+  clone.userData.detailScale = sourceUserData.detailScale ?? 1;
   installDetailHook(clone);
   return clone;
 }

@@ -136,6 +136,65 @@ export function createOverlayMaterials() {
  * @param {Function} deps.pickedFace  (hit) → face info (CadViewport.pickedFace).
  * @param {Function} deps.placeBox (node) → position a readout by the cursor.
  */
+/**
+ * The hole opening a pointer picks (Phase M): within its rim plus SNAP_PX on
+ * screen, its face looking at the camera, nothing standing in front of it;
+ * of two openings that overlap on screen the one nearest the camera wins
+ * (Phase Q), of openings apart on screen the one nearest the pointer.
+ * `holes`: holeCentres candidates ({ point, normal, radius, instanceId, … });
+ * `hit`: the mesh hit under the pointer (or null) and `face` its pickedFace;
+ * `shown(instanceId)`: whether that part is on show and pickable. Used by
+ * Hardware's Place stage. Returns { h, onFace, face } or null.
+ */
+function nearestOpening({ holes, pointer, camera, projectPx, mmPx, hit = null, face = null, shown }) {
+  camera.updateMatrixWorld();
+  const eye = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
+  const forward = camera.getWorldDirection(new THREE.Vector3());
+  const depthOf = (p) => (p[0] - eye.x) * forward.x + (p[1] - eye.y) * forward.y + (p[2] - eye.z) * forward.z;
+  const hitPoint = hit ? hit.point.toArray() : null;
+  let best = null;
+  for (const h of holes) {
+    if (!(h.radius > 0)) continue;
+    if (!shown(h.instanceId)) continue;
+    // Facing the camera (an orthographic view looks along `forward`).
+    const toEye = camera.isOrthographicCamera
+      ? [-forward.x, -forward.y, -forward.z]
+      : [eye.x - h.point[0], eye.y - h.point[1], eye.z - h.point[2]];
+    if (h.normal.reduce((sum, v, i) => sum + v * toEye[i], 0) <= 0) continue;
+    const depth = depthOf(h.point);
+    if (depth <= 0) continue;
+    const [x, y] = projectPx(h.point);
+    const distance = Math.hypot(x - pointer[0], y - pointer[1]);
+    const rim = h.radius / mmPx(h.point);
+    if (distance > rim + SNAP_PX) continue;
+    if (best) {
+      const overlap = Math.hypot(x - best.x, y - best.y) < rim + best.rim;
+      const nearer =
+        overlap && Math.abs(depth - best.depth) > OPENING_DEPTH_TIE ? depth < best.depth : distance < best.distance;
+      if (!nearer) continue;
+    }
+    // Something in front: a hit on another part, or on this part off the
+    // hole's face plane and nearer the camera than the hole's rim.
+    if (hit) {
+      const own = hit.object.userData.instanceId === h.instanceId;
+      const inPlane =
+        face?.planar &&
+        Math.abs(h.point.reduce((sum, v, i) => sum + (v - hitPoint[i]) * face.normal[i], 0)) <= HOLE_CENTRE_PLANE;
+      if (!(own && (inPlane || !face?.planar)) && depthOf(hitPoint) < depth - h.radius - 1) continue;
+    }
+    best = {
+      h,
+      distance,
+      depth,
+      x,
+      y,
+      rim,
+      onFace: Boolean(hit && face?.planar && face.instanceId === h.instanceId),
+    };
+  }
+  return best ? { h: best.h, onFace: best.onFace, face } : null;
+}
+
 export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pickedFace, placeBox }) {
   const overlayMaterials = createOverlayMaterials();
   const segmentsObject = (segments, color, name, opacity = 0.95, order = 44) =>
@@ -492,56 +551,20 @@ export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pic
   // info, or null.
   const holeOpeningAt = (event, hit) => {
     if (view?.tool !== 'hardware' || view.stage !== 'place' || !view.holeCentres?.length) return null;
-    const pointer = pointerOf(event);
-    ctx.camera.updateMatrixWorld();
-    const eye = new THREE.Vector3().setFromMatrixPosition(ctx.camera.matrixWorld);
-    const forward = ctx.camera.getWorldDirection(new THREE.Vector3());
-    const depthOf = (p) => (p[0] - eye.x) * forward.x + (p[1] - eye.y) * forward.y + (p[2] - eye.z) * forward.z;
-    const face = hit ? faceOf(hit) : null;
-    const hitPoint = hit ? hit.point.toArray() : null;
-    let best = null;
-    for (const h of view.holeCentres) {
-      if (!(h.radius > 0)) continue;
-      const group = ctx.group.children.find((g) => g.userData.instanceId === h.instanceId);
-      if (!group?.visible || (view.pickInstanceId && h.instanceId !== view.pickInstanceId)) continue;
-      // Facing the camera (an orthographic view looks along `forward`).
-      const toEye = ctx.camera.isOrthographicCamera
-        ? [-forward.x, -forward.y, -forward.z]
-        : [eye.x - h.point[0], eye.y - h.point[1], eye.z - h.point[2]];
-      if (h.normal.reduce((sum, v, i) => sum + v * toEye[i], 0) <= 0) continue;
-      const depth = depthOf(h.point);
-      if (depth <= 0) continue;
-      const [x, y] = projectPx(h.point);
-      const distance = Math.hypot(x - pointer[0], y - pointer[1]);
-      const rim = h.radius / mmPx(h.point);
-      if (distance > rim + SNAP_PX) continue;
-      if (best) {
-        const overlap = Math.hypot(x - best.x, y - best.y) < rim + best.rim;
-        const nearer =
-          overlap && Math.abs(depth - best.depth) > OPENING_DEPTH_TIE ? depth < best.depth : distance < best.distance;
-        if (!nearer) continue;
-      }
-      // Something in front: a hit on another part, or on this part off the
-      // hole's face plane and nearer the camera than the hole's rim.
-      if (hit) {
-        const own = hit.object.userData.instanceId === h.instanceId;
-        const inPlane =
-          face?.planar &&
-          Math.abs(h.point.reduce((sum, v, i) => sum + (v - hitPoint[i]) * face.normal[i], 0)) <= HOLE_CENTRE_PLANE;
-        if (!(own && (inPlane || !face?.planar)) && depthOf(hitPoint) < depth - h.radius - 1) continue;
-      }
-      best = {
-        h,
-        distance,
-        depth,
-        x,
-        y,
-        rim,
-        onFace: Boolean(hit && face?.planar && face.instanceId === h.instanceId),
-      };
-    }
+    const best = nearestOpening({
+      holes: view.holeCentres,
+      pointer: pointerOf(event),
+      camera: ctx.camera,
+      projectPx,
+      mmPx,
+      hit,
+      face: hit ? faceOf(hit) : null,
+      shown: (id) =>
+        Boolean(ctx.group.children.find((g) => g.userData.instanceId === id)?.visible) &&
+        (!view.pickInstanceId || id === view.pickInstanceId),
+    });
     if (!best) return null;
-    const { h, onFace } = best;
+    const { h, onFace, face } = best;
     return {
       kind: 'face',
       planar: true,

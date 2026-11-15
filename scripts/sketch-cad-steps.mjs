@@ -1,6 +1,7 @@
 /* global localStorage, document */
 // Shared Playwright steps for the in-viewport sketcher (Phase A flow), used by
-// verify-assemble-and-draw.mjs.
+// verify-assemble-and-draw.mjs, and for the Shop tab's route (shop floor
+// SF-1), used by the verify-fab-shop-* and verify-shop-floor-* scripts.
 import { expect } from '@playwright/test';
 
 export function cadSteps(page) {
@@ -72,6 +73,29 @@ export function cadSteps(page) {
     }
   };
   const view = (name) => page.getByLabel('Standard view').selectOption(name);
+  // The Shop tab's ribbon is its route (docs/sketch-studio-shop-floor.md §4.1):
+  // a station by its name (Draw, Cut, Bend, Paint, Print), the other
+  // Shop commands from its More menu.
+  const route = page.getByRole('navigation', { name: 'Shop route' });
+  const shopTab = async () => {
+    const tab = page.getByRole('navigation', { name: 'Modeling ribbon' }).getByRole('button', { name: 'Shop', exact: true });
+    if ((await tab.getAttribute('aria-pressed')) !== 'true') await tab.click();
+    await route.waitFor();
+  };
+  const shopStation = async (name) => {
+    await shopTab();
+    await route.getByRole('button', { name, exact: true }).click();
+  };
+  const shopMore = async (name) => {
+    await shopTab();
+    await route.getByRole('button', { name: 'More', exact: true }).click();
+    await page.getByRole('group', { name: 'More shop commands' }).getByRole('button', { name, exact: true }).click();
+  };
+  // The left pane's parts tree (on the Shop tab it opens on the job board, §4.2).
+  const showTree = async () => {
+    const tree = page.getByRole('group', { name: 'Left pane' }).getByRole('button', { name: 'Tree', exact: true });
+    if ((await tree.count()) && (await tree.getAttribute('aria-pressed')) !== 'true') await tree.click();
+  };
   // Paced drag (TransformControls needs real intermediate moves).
   const drag = async (from, to, steps = 8) => {
     await page.mouse.move(from[0], from[1]);
@@ -131,6 +155,10 @@ export function cadSteps(page) {
     applyOperation,
     setPosition,
     view,
+    route,
+    shopStation,
+    shopMore,
+    showTree,
     drag,
     boardFromPlane,
     holeThroughFace,

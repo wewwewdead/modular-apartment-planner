@@ -17,7 +17,7 @@ import {
   resolveWallAssembly,
   wallAssemblyCoreDepth,
 } from '@/domain/wallAssemblies';
-import { MASONRY_FINISH_COAT, wallFinishMaterialKey } from '@/domain/wallFinishes';
+import { MASONRY_FINISH_COAT, wallFastenerTonalMaterialKey, wallFinishMaterialKey } from '@/domain/wallFinishes';
 import { accentAtPoint, resolveWallAccents, splitRectByAccents } from '@/domain/wallAccents';
 import {
   FASTENER_APPEARANCE_MODES,
@@ -272,8 +272,13 @@ function isRainscreenLayer(layer) {
 }
 
 function fastenerMaterialKey(appearance, layer, system) {
-  // A tonal screw head is painted with the face it sits in.
-  if (appearance === FASTENER_APPEARANCE_MODES.TONAL) return layerMaterialKey(layer, system);
+  // A tonal screw head is painted with the face it sits in — a shade darker,
+  // the dimple a painted-over screw still makes. Not the face's own material:
+  // that drew the head pixel for pixel as the board around it
+  // (docs/wall-fastener-visibility.md §2.2).
+  if (appearance === FASTENER_APPEARANCE_MODES.TONAL) {
+    return wallFastenerTonalMaterialKey(layerMaterialKey(layer, system));
+  }
   if (appearance === FASTENER_APPEARANCE_MODES.CONTRAST) return 'wallFastenerContrast';
   if (appearance === FASTENER_APPEARANCE_MODES.CONSTRUCTION) return 'wallFastenerConstruction';
   return 'wallFastener';

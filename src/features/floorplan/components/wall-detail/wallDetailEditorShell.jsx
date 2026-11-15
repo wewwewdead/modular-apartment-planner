@@ -14,13 +14,14 @@ import DetailEditorShell from './DetailEditorShell';
 const WALL_SHELL_LEFT_SECTIONS = Object.freeze([
   { id: 'face', step: 1, title: 'Wall face' },
   { id: 'assembly', step: 2, title: 'Complete wall assembly' },
-  { id: 'panels', step: 3, title: 'Panels' },
+  { id: 'panels', step: 3, title: 'Panel layout' },
+  { id: 'accents', optional: true, title: 'Accent panels' },
   { id: 'framing', step: 4, title: 'Framing' },
   { id: 'fasteners', step: 5, title: 'Fasteners' },
   { id: 'dimensions', step: 6, title: 'Construction dimensions' },
 ]);
 const WALL_SHELL_RIGHT_SECTIONS = Object.freeze([
-  { id: 'selection', title: 'Selection' },
+  { id: 'selection', title: 'Selection', static: true },
   { id: 'takeoff', title: 'Exact takeoff' },
   { id: 'schedule', title: 'Dimension schedule' },
   { id: 'asBuilt', title: 'Site / as-built comparison' },
@@ -44,6 +45,23 @@ export function readFocusModePreference() {
   }
 }
 
+/**
+ * "Wall i7": the wall as people name it — the same naming the 3D pane's inspect
+ * card uses (previewInspection titleForObject), never the raw id.
+ */
+export function wallDisplayName(wall) {
+  if (wall?.name) return wall.name;
+  const tail = String(wall?.id || '')
+    .split('_')
+    .pop();
+  return tail ? `Wall ${tail}` : 'Wall';
+}
+
+/** "Inside face" / "Outside face". */
+export function wallFaceName(side) {
+  return side === WALL_DETAIL_SIDES.EXTERIOR ? 'Outside face' : 'Inside face';
+}
+
 /** The floor and wall an open wall editor is on, or nulls. Two lookups. */
 export function resolveWallShellTarget(project, wallDetailEditor) {
   const floor = project.floors.find((entry) => entry.id === wallDetailEditor?.floorId) || null;
@@ -59,9 +77,9 @@ export function WallEditorOpeningShell({ wallDetailEditor, floor, wall, editorDi
   return (
     <DetailEditorShell
       dialogLabel="Wall assembly detail editor"
-      eyebrow="Construction-detail workspace"
-      title="Wall-local assembly editor"
-      subtitle={wall.id}
+      // The size line waits for the derived frame: a beam-fitted wall's drawn
+      // height is not its stored one, and the shell only says what it knows.
+      title={`${wallDisplayName(wall)} · ${wallFaceName(side)}`}
       closeTitle="Close the wall detail editor and return to the floorplan"
       onClose={() => editorDispatch({ type: 'CLOSE_WALL_DETAIL_EDITOR' })}
       leftLabel="Wall detailing steps"

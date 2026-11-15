@@ -2211,6 +2211,18 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       leaveViewPreset();
       requestRender();
     },
+    /**
+     * The face a wall editor is working on (`previewCameraMath.resolveFacing`),
+     * or null. The first fit and Reset View then look at that face; a change
+     * while a world is up turns the camera round only if it is behind the
+     * wall (docs/wall-fastener-visibility.md §2.1). A pane that never calls
+     * this — the model's own, the ceiling editor's — fits as it always did.
+     */
+    setFacing(facing) {
+      inspectNavigation.setFacing(facing);
+      if (!worldRoot || navigationMode !== 'inspect') return;
+      if (inspectNavigation.turnToFacing()) requestRender();
+    },
     /** One of the perspective direction presets (`previewConfig.PRESETS`). */
     setProjectionPreset(presetName) {
       presetDirection = null;

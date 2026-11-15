@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FINISH_ROUGHNESS, SHEET_STOCK } from './shopCatalog.js';
 
 /**
  * See-through view modes for the 3D workstation viewport: Solid, X-ray and
@@ -95,6 +96,24 @@ export function bodyColorKey(part, selected) {
   return /wood|ply|oak|pine/i.test(part?.material || '') ? 'wood' : 'metal';
 }
 
+export const BODY_ROUGHNESS = 0.55;
+/**
+ * A part's body colour and roughness (docs/sketch-studio-fab-shop.md §7):
+ * the selection blue wins; then the instance's paint finish (gloss →
+ * roughness); then a bought-in item's own colour (shop floor §5.4); then a
+ * bare sheet-metal part's stock colour; then wood / metal.
+ */
+export function bodyLook(part, selected, finish = null) {
+  if (selected) return { color: BODY_COLORS.selected, roughness: BODY_ROUGHNESS };
+  if (finish?.colour) return { color: finish.colour, roughness: FINISH_ROUGHNESS[finish.gloss] ?? BODY_ROUGHNESS };
+  // A bought-in item (docs/sketch-studio-shop-floor.md §5.4) wears its own colour.
+  if (part?.purchased?.colour) return { color: part.purchased.colour, roughness: BODY_ROUGHNESS };
+  const base = (part?.features || []).find((f) => !f?.suppressed);
+  const stock = base?.type === 'sheetmetal' ? SHEET_STOCK[base.stock] : null;
+  if (stock) return { color: stock.colour, roughness: 0.4 };
+  return { color: BODY_COLORS[bodyColorKey(part, false)], roughness: BODY_ROUGHNESS };
+}
+
 /**
  * What the viewport applies to one part's body and edges.
  *
@@ -157,12 +176,14 @@ export function createMaterialCache() {
     return material;
   };
   return {
-    body(color, opacity = 1, { depthWrite = opacity === 1 } = {}) {
+    // `roughness` other than the default keys its own material (a paint finish).
+    body(color, opacity = 1, { depthWrite = opacity === 1, roughness = BODY_ROUGHNESS } = {}) {
       const hex = new THREE.Color(color).getHexString();
-      return keep(`body|${hex}|${opacity}|${depthWrite ? 1 : 0}`, () => {
+      const rough = roughness === BODY_ROUGHNESS ? '' : `|r${roughness}`;
+      return keep(`body|${hex}|${opacity}|${depthWrite ? 1 : 0}${rough}`, () => {
         const material = new THREE.MeshStandardMaterial({
           color,
-          roughness: 0.55,
+          roughness,
           metalness: 0.15,
           side: THREE.DoubleSide,
           transparent: opacity < 1,
@@ -186,6 +207,8 @@ export function createMaterialCache() {
       clippingPlanes = planes;
       for (const material of materials.values()) material.clippingPlanes = planes;
     },
+    // The section planes in force (the shop layer's print decals clip by them too).
+    clipping: () => clippingPlanes,
     size: () => materials.size,
     dispose() {
       for (const material of materials.values()) material.dispose();

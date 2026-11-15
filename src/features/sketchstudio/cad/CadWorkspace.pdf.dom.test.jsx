@@ -13,6 +13,9 @@ import CadWorkspace from './CadWorkspace.jsx';
 import { createPart, emptyModel, normalizeModel } from './model.js';
 import { sheetsPdf } from './sheetPdf.js';
 import { download } from './download.js';
+// The whole workspace renders in each test: under the full suite’s parallel load
+// its long tests outrun the default 5 s (SF-1 audit), so the file allows 15 s.
+vi.setConfig({ testTimeout: 15000 });
 
 // What happened, in order: the picker, kernel requests, the file's writes.
 const log = vi.hoisted(() => []);

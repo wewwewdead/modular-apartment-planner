@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { describeMachine } from './machine.js';
 import { projectOpenMachine } from '@/features/floorplan/hooks/projectOpenMachine';
 import { sketchPersistenceMachine } from '@/features/sketchstudio/hooks/sketchPersistenceMachine';
-import { MATE, PDF_RUN } from '@/features/sketchstudio/cad/toolSession';
+import { BRAKE, FILM, LASER, MATE, PAINT, PDF_RUN, PRINT } from '@/features/sketchstudio/cad/toolSession';
 
 /*
   docs/state-machines.md is the page people and agents read to learn which
@@ -17,7 +17,7 @@ import { MATE, PDF_RUN } from '@/features/sketchstudio/cad/toolSession';
   Declaring a new machine: add it to MACHINES, give it a `### \`id\`` section
   on the page, and paste the lines this test asks for.
 */
-const MACHINES = [projectOpenMachine, sketchPersistenceMachine, MATE, PDF_RUN];
+const MACHINES = [projectOpenMachine, sketchPersistenceMachine, MATE, PDF_RUN, BRAKE, PAINT, PRINT, LASER, FILM];
 
 const registry = readFileSync(fileURLToPath(new URL('../../docs/state-machines.md', import.meta.url)), 'utf8');
 

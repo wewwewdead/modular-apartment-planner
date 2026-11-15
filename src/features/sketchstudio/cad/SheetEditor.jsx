@@ -7,6 +7,7 @@ import { sheetHasPartsList } from './partsList.js';
 import MaterialSelect from './MaterialSelect.jsx';
 import SheetScaleControl from './SheetScaleControl.jsx';
 import { nodeName, treeRows } from './groups.js';
+import { sheetMetalFeature } from './sheetMetal.js';
 
 const directions = ['front', 'top', 'right', 'isometric', 'rear', 'bottom', 'left'];
 // The Drawing subject choice that draws a list of instances (sheet.instanceIds).
@@ -66,6 +67,8 @@ export default function SheetEditor({
     return count === 1 ? '' : ` · row of ${count}`;
   };
   const manual = (sheet.annotations || []).filter(isManualDimension);
+  // The flat-pattern view (SM-4) is offered only for a sheet-metal part.
+  const flatOffered = Boolean(sheetMetalFeature(model.parts.find((p) => p.id === sheet.partId)));
   // A new subject: this sheet's annotations go (Undo restores them).
   const changeSubject = (patch) => {
     onChange({ ...sheet, partId: undefined, instanceIds: undefined, ...patch, annotations: [] });
@@ -257,7 +260,11 @@ export default function SheetEditor({
                   value={config.view || config.name}
                   onChange={(e) => changeView({ ...config, view: e.target.value, name: e.target.value })}
                 >
-                  {[...directions, 'exploded'].map((d) => (
+                  {[
+                    ...directions,
+                    'exploded',
+                    ...(flatOffered || (config.view || config.name) === 'flat' ? ['flat'] : []),
+                  ].map((d) => (
                     <option key={d}>{d}</option>
                   ))}
                 </select>

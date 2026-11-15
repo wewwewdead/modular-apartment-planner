@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
@@ -13,8 +13,22 @@ import {
   worldToLocalTurn,
   worldTurn,
 } from './rotateDial.js';
-import { faceFrame, faceOutline, segmentsInPlane, toPlane } from './sketchPlane.js';
+import { faceFrame, faceOutline, segmentsInPlane, toPlane, uprightAxes } from './sketchPlane.js';
 import { createPlacementLayer } from './placementLayer.js';
+import { STATION_VIEW, createShopLayer } from './shopLayer.js';
+import {
+  COMMIT_DEGREES,
+  axisTravel,
+  brakeHint,
+  dragChip,
+  fingerL,
+  fingerReadout as fingerReadoutWords,
+  gripChip as brakeGripChip,
+  gripDrag as brakeGripDrag,
+  reachChip,
+  typedL,
+} from './brakeHands.js';
+import BrakeSideView from './BrakeSideView.jsx';
 import {
   CURVED_HINT,
   LABEL_CORNER,
@@ -33,6 +47,7 @@ import { gizmoAxes, snapBoxDelta, snapThreshold } from './boxSnap.js';
 import {
   SNAP_PX,
   anchorWorld,
+  displayedInstanceMatrix,
   formatMm,
   markGeometry,
   markOffset,
@@ -43,6 +58,7 @@ import {
 } from './marks.js';
 import { attachmentRoot } from './groups.js';
 import {
+  AXIS_COLORS,
   rotationReadout,
   snapLabel,
   translationReadout,
@@ -60,7 +76,7 @@ import {
   EDGE_RENDER_ORDER,
   VIEW_MODE_COPY,
   bodyAppearance,
-  bodyColorKey,
+  bodyLook,
   createMaterialCache,
   isHardwarePart,
   isSeeThrough,
@@ -122,12 +138,58 @@ export default function CadViewport({
   onPlacementDrag,
   onPlacementCancelDrag,
   onPlacementFinish,
+  // Sheet metal (docs/sketch-studio-fab-shop.md §7): { instanceId, fold, flat }
+  // while the selected sheet-metal part is unfolded or folding back, else null.
+  sheetView = null,
+  // The press brake station (§9 SM-2, brakeStation.js stationView) or null;
+  // onBrakeStrokeEnd(token) when a stroke the station started has run.
+  brakeView = null,
+  onBrakeStrokeEnd,
+  // Hands on the sheet (docs/sketch-studio-brake-hands-on.md HO-1): null, or
+  // { shown (the station is being set up), lined (a punch line is picked),
+  // flip, turn (each act's outcome, brakeHands.js brakeOutcome, or null), ms }
+  // from the workspace; onBrakeGrip('flip' | 'turn') when a handle is
+  // clicked or dragged past 90°: the act, exactly as the panel makes it.
+  brakeGrip = null,
+  onBrakeGrip,
+  // A handle approached whose outcome is not worked out yet (a heavy part, §5.4): the workspace works it out now.
+  onBrakeGripWant,
+  // HO-2 (§6): onBrakeEdge(index) an edge of the sheet clicked (the flat-blank
+  // card's onPickEdge); onBrakeFingers({ start } | { distance } | { end } |
+  // { cancel }) the backgauge fingers dragged (each new L at most once a
+  // frame, through the card's own onDistance path; cancel puts the line back
+  // as it was); onBrakeFocus('distance' | 'punch' | 'die') the fingers or a
+  // blade clicked: the panel's field or picker.
+  onBrakeEdge,
+  onBrakeFingers,
+  onBrakeFocus,
+  // The paint and print stations (§9 SM-3): null, or { station, stage, pick
+  // ('part' | 'face' | null), hint, targets (instance ids outlined: what the
+  // booth paints), printId }. While set, viewport clicks go to
+  // onShopPick(info) instead of the selection, and a print can be dragged on
+  // its face (onShopPrintMove(id, local origin)).
+  shopPick = null,
+  onShopPick,
+  onShopPrintMove,
+  // The replay's mask (shopLayer.js setHidden): the instance ids not made yet
+  // at its point of the film, or null.
+  filmHidden = null,
+  // The replay (docs/sketch-studio-shop-floor.md §8): null, or { key, ids (the
+  // product's instances), brake (it has press brake hits) } while it plays: the product is framed as it starts
+  // and the camera (the press brake's saved one too) put back as it ends.
+  film = null,
+  // Draw's outlines (shopRoute.js shopOutlineView: [{ id, ready, chosen,
+  // rings }]) while the Draw station is open, else null.
+  shopOutlines = null,
 }) {
   const host = useRef(null),
     hudRef = useRef(null),
+    gripChipRef = useRef(null),
     measureHudRef = useRef(null),
     placementHudRef = useRef(null),
     labelsRef = useRef(null),
+    sketchDimLabelsRef = useRef(null),
+    shopLabelsRef = useRef(null),
     planeLabelsRef = useRef(null),
     sceneRef = useRef(null),
     selectionCallback = useRef(onSelect),
@@ -162,13 +224,17 @@ export default function CadViewport({
         return box.isEmpty() ? null : [box.min.toArray(), box.max.toArray()];
       },
       getCanvas: () => sceneRef.current?.renderer.domElement || null,
-      // A gizmo drag is in progress (keyboard shortcuts wait for it to end).
+      // A gizmo drag is in progress (keyboard shortcuts wait for it to end);
+      // a press on the press brake's grip counts (its Esc is the drag's).
       isDragging: () =>
         Boolean(
           sceneRef.current?.drag ||
           sceneRef.current?.transform.dragging ||
-          sceneRef.current?.placementLayer?.isDragging(),
+          sceneRef.current?.placementLayer?.isDragging() ||
+          sceneRef.current?.gripPressed?.(),
         ),
+      // Hands on the sheet (§5.5): a toolbar button hovered or focused lights its handle; null puts it out.
+      lightBrakeHand: (kind) => sceneRef.current?.lightGrip?.(kind || null),
       // World point the gizmo turns about: the bounding-box centre, or a
       // picked point (Rotate about: Picked point).
       getPivot: () => {
@@ -208,6 +274,7 @@ export default function CadViewport({
         const ctx = sceneRef.current;
         if (!ctx) return;
         drawSketchOverlay(ctx.sketchLayer, overlay);
+        ctx.syncSketchDimLabels?.();
         ctx.render();
       },
       // Measure: the first picked point (world) while the second is awaited.
@@ -253,6 +320,28 @@ export default function CadViewport({
   useEffect(() => {
     markCallbacks.current = { onMeasure, onSelectMark };
   }, [onMeasure, onSelectMark]);
+  const strokeCallback = useRef(onBrakeStrokeEnd);
+  useEffect(() => {
+    strokeCallback.current = onBrakeStrokeEnd;
+  }, [onBrakeStrokeEnd]);
+  const gripCallback = useRef({ onBrakeGrip, onBrakeGripWant, onBrakeEdge, onBrakeFingers, onBrakeFocus });
+  useEffect(() => {
+    gripCallback.current = { onBrakeGrip, onBrakeGripWant, onBrakeEdge, onBrakeFingers, onBrakeFocus };
+  }, [onBrakeGrip, onBrakeGripWant, onBrakeEdge, onBrakeFingers, onBrakeFocus]);
+  const shopCallbacks = useRef({});
+  useEffect(() => {
+    shopCallbacks.current = { onShopPick, onShopPrintMove };
+  }, [onShopPick, onShopPrintMove]);
+  // The press brake's poses for the side view (BrakeSideView): the shop layer
+  // hands each one here and the card rewrites itself — never a React render
+  // per stroke frame. The last pose goes to a listener as it subscribes.
+  const stationPoses = useRef({ last: null, listeners: new Set() });
+  const subscribeStation = useCallback((listener) => {
+    const poses = stationPoses.current;
+    poses.listeners.add(listener);
+    listener(poses.last);
+    return () => poses.listeners.delete(listener);
+  }, []);
   const [error, setError] = useState(null);
   const placing = Boolean(placement);
   const shownViewMode = resolveViewMode(viewMode);
@@ -327,6 +416,11 @@ export default function CadViewport({
     const pickLayer = new THREE.Group();
     pickLayer.name = 'sketch-pick';
     scene.add(pickLayer);
+    // Draw's outlines on the ground (docs/sketch-studio-outline-edit-sheet-nest.md
+    // §3.5): their own layer, never in `group`, so no raycast sees them.
+    const outlineLayer = new THREE.Group();
+    outlineLayer.name = 'shop-outlines';
+    scene.add(outlineLayer);
     scene.add(new THREE.HemisphereLight(0xffffff, 0x6e7989, 2.8));
     const light = new THREE.DirectionalLight(0xffffff, 3);
     light.position.set(300, -400, 800);
@@ -354,6 +448,8 @@ export default function CadViewport({
       measureLayer,
       planeLayer,
       pickLayer,
+      outlineLayer,
+      shopOutlineCount: 0,
       planes: { visible: false, size: 0, offset: 0, tiles: {}, hovered: null, key: '' },
       drawnMarks: [],
       rotateSnap: 15,
@@ -389,6 +485,8 @@ export default function CadViewport({
       programs: renderer.info?.programs?.length ?? 0,
       materials: ctx.materials.size(),
       lastRenderMs: ctx.lastRenderMs,
+      // Draw's outlines on show in the view (§3.5 of the outline-edit spec).
+      shopOutlines: ctx.shopOutlineCount,
       bodies: group.children.map((g) => {
         const [mesh, edges] = g.children;
         const box = new THREE.Box3().setFromObject(g);
@@ -453,12 +551,81 @@ export default function CadViewport({
         label.style.top = `${y}px`;
       });
     };
+    // Sketch dimension labels (docs/sketch-studio-sketch-dimensions.md §3.4):
+    // the sketcher hands each dimension as plain data through setSketchOverlay
+    // ({ id, segments, labelAt, text, value, selected, preview }, sketch-plane
+    // mm). The chips are rebuilt only when the id list changes, their text set
+    // in place, and placed every frame like the mark labels. They let clicks
+    // through: selecting is the sketcher's own hit test.
+    const sketchDimensions = () => sketchLayer.userData.overlay?.dimensions || [];
+    const sketchSpot = ([u, v], rect) =>
+      canvasSpot(new THREE.Vector3(u, v, 0).applyMatrix4(sketchLayer.matrix).toArray(), rect);
+    ctx.syncSketchDimLabels = () => {
+      const container = sketchDimLabelsRef.current;
+      if (!container) return;
+      const dimensions = sketchDimensions();
+      if (
+        container.children.length !== dimensions.length ||
+        dimensions.some((d, i) => container.children[i].dataset.dimensionId !== d.id)
+      )
+        container.replaceChildren(
+          ...dimensions.map((d) => {
+            const label = document.createElement('span');
+            label.className = 'cad-sketch-dim-label';
+            label.dataset.dimensionId = d.id;
+            return label;
+          }),
+        );
+      dimensions.forEach((d, i) => {
+        const label = container.children[i];
+        if (label.textContent !== d.text) label.textContent = d.text;
+        label.classList.toggle('is-selected', Boolean(d.selected));
+        label.classList.toggle('is-preview', Boolean(d.preview));
+      });
+    };
+    const placeSketchDimLabels = () => {
+      const container = sketchDimLabelsRef.current;
+      const dimensions = sketchDimensions();
+      if (!container || !dimensions.length) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      ctx.camera.updateMatrixWorld();
+      dimensions.forEach((d, i) => {
+        const label = container.children[i];
+        if (!label) return;
+        const [x, y, hidden] = sketchSpot(d.labelAt, rect);
+        label.hidden = hidden;
+        label.style.left = `${x}px`;
+        label.style.top = `${y}px`;
+      });
+    };
+    // Browser checks: each sketch dimension's label (client px) and state.
+    element.cadSketchDimensions = () => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      ctx.camera.updateMatrixWorld();
+      return sketchDimensions().map((d) => {
+        const [x, y, hidden] = sketchSpot(d.labelAt, rect);
+        return {
+          id: d.id,
+          text: d.text,
+          value: d.value,
+          x: rect.left + x,
+          y: rect.top + y,
+          hidden,
+          selected: Boolean(d.selected),
+          preview: Boolean(d.preview),
+        };
+      });
+    };
     const render = () => {
       const start = performance.now();
+      // The press brake's grip keeps its size on screen and its place on the sheet.
+      ctx.shopLayer?.layoutGrip();
       renderer.render(scene, ctx.camera);
       ctx.lastRenderMs = performance.now() - start;
       placeLabels();
+      placeSketchDimLabels();
       ctx.placePlaneLabels?.();
+      ctx.shopLayer?.placeLabels();
     };
     ctx.render = render;
     controls.addEventListener('change', render);
@@ -473,16 +640,18 @@ export default function CadViewport({
     let typed = '';
     // Below-right of the cursor, flipped to the left / above it near the
     // right / bottom edge so the readout never leaves the viewport.
-    const placeBox = (node) => {
+    // `size`: { width, height, w, h } measured already (a readout rewritten every
+    // move keeps its size: no layout forced per move), else read now.
+    const placeBox = (node, size = null) => {
       if (!node || !ctx.pointer) return;
       const [px, py] = ctx.pointer;
       let x = px + HUD_OFFSET,
         y = py + HUD_OFFSET;
-      const width = element.clientWidth,
-        height = element.clientHeight;
+      const width = size ? size.width : element.clientWidth,
+        height = size ? size.height : element.clientHeight;
       if (width && height) {
-        const w = node.offsetWidth,
-          h = node.offsetHeight;
+        const w = size ? size.w : node.offsetWidth,
+          h = size ? size.h : node.offsetHeight;
         if (x + w > width - HUD_MARGIN) x = px - HUD_OFFSET - w;
         if (y + h > height - HUD_MARGIN) y = py - HUD_OFFSET - h;
         x = Math.max(HUD_MARGIN, Math.min(x, width - HUD_MARGIN - w));
@@ -587,6 +756,8 @@ export default function CadViewport({
         line.material.color.set(mark.id === ctx.selectedMarkId ? MARK_SELECTED_COLOR : MARK_COLOR);
       });
       syncLabels();
+      // Prints ride the poses just shown too (a drag included).
+      ctx.shopLayer?.syncPoses();
     };
     ctx.updateMarks = updateMarks;
     // Measure tool: the snapped point under the pointer, a marker there, and
@@ -1029,8 +1200,9 @@ export default function CadViewport({
     const trackAlt = (event) => {
       const changed = ctx.altDown !== event.altKey;
       ctx.altDown = event.altKey;
-      if (event.key === 'Alt' && drag) event.preventDefault(); // keep the menu bar out of a drag
+      if (event.key === 'Alt' && (drag || ctx.gripPressed?.())) event.preventDefault(); // keep the menu bar out of a drag
       if (changed && drag?.dial) applyDial(drag.dial.refresh(dialOptions()));
+      if (changed) ctx.gripAlt?.();
     };
     const releaseAlt = () => {
       ctx.altDown = false;
@@ -1039,8 +1211,15 @@ export default function CadViewport({
     window.addEventListener('blur', releaseAlt);
     const keyDown = (event) => {
       trackAlt(event);
+      // A press brake handle in the hand: Esc puts the sheet back, digits + Enter set the angle.
+      if (ctx.gripKey?.(event)) return;
       // A placement handle drag: Esc cancels it, digits + Enter set a value.
       if (ctx.placementLayer?.key(event)) return;
+      // A print dragged on its face: Esc puts it back.
+      if (event.key === 'Escape' && ctx.cancelPrintDrag?.()) {
+        event.preventDefault();
+        return;
+      }
       if (event.key === 'Escape' && ctx.holeMode) {
         event.preventDefault();
         cancelHoleDrag();
@@ -1386,6 +1565,723 @@ export default function CadViewport({
     });
     ctx.placementLayer = placementLayer;
     element.cadPlacement = () => placementLayer.state();
+    // The fabrication shop's preview, machines and records (shopLayer.js).
+    const shopLayer = createShopLayer({
+      ctx,
+      labels: shopLabelsRef.current,
+      // A hit made puts the operator's view back on the part (a re-run is view only).
+      onStrokeEnd: (token, run) => {
+        if (run?.commit) frameStation(ctx, STATION_VIEW, ctx.camera.isPerspectiveCamera);
+        strokeCallback.current?.(token);
+      },
+      onStationPose: (pose) => {
+        const poses = stationPoses.current;
+        poses.last = pose;
+        for (const listener of poses.listeners) listener(pose);
+      },
+    });
+    ctx.shopLayer = shopLayer;
+    // Browser checks: the press brake station (null when closed: its
+    // machine, tooling, the bend in the die, its angle, the punch tip, the
+    // stroke and a collision shown), the unfold state and its bend labels,
+    // and the shop records on show.
+    element.cadShop = () => ({
+      station: null,
+      ...shopLayer.state(),
+      prints: ctx.shopModel?.prints || [],
+      // The paint or print station's pick (SM-3): what is under the cursor.
+      pick: ctx.shopPick
+        ? {
+            station: ctx.shopPick.station,
+            stage: ctx.shopPick.stage,
+            hover: ctx.shopHover?.kind || null,
+            dragging: Boolean(printDrag),
+          }
+        : null,
+    });
+    // ------------------------------------------------ the paint and print stations (SM-3)
+    // Picks on the displayed kernel meshes: the face under the cursor
+    // (pickedFace: the triangle and its coplanar neighbours), or the part. The
+    // hovered face's outline lives in its own layer, outside `group`.
+    const shopHoverLayer = new THREE.Group();
+    shopHoverLayer.name = 'shop-hover';
+    scene.add(shopHoverLayer);
+    const modelHit = (caster) =>
+      caster.intersectObjects(group.children, true).find((h) => h.object.isMesh && h.object.parent.visible) || null;
+    // World → the part's own frame through its displayed pose.
+    const toPartFrame = (g, point, direction = null) => {
+      g.updateMatrix();
+      const inverse = displayedInstanceMatrix(g.matrix, g.userData.placement).invert();
+      return direction
+        ? new THREE.Vector3(...direction).transformDirection(inverse).toArray()
+        : new THREE.Vector3(...point).applyMatrix4(inverse).toArray();
+    };
+    const faceTarget = (hit) => {
+      const info = pickedFace(hit);
+      const g = hit.object.parent;
+      const x = uprightAxes(info.normal).x;
+      return {
+        kind: 'face',
+        instanceId: info.instanceId,
+        point: info.point,
+        normal: info.normal,
+        planar: info.planar,
+        outline: info.outlineWorld || [],
+        x,
+        local: {
+          point: toPartFrame(g, info.point),
+          normal: toPartFrame(g, null, info.normal),
+          x: toPartFrame(g, null, x),
+        },
+      };
+    };
+    // What a click would pick for the open station.
+    const shopTarget = (event) => {
+      const pick = ctx.shopPick?.pick;
+      if (!pick) return null;
+      const hit = modelHit(rayAt(event));
+      if (pick === 'part') return hit ? { kind: 'part', instanceId: hit.object.userData.instanceId } : null;
+      return hit ? faceTarget(hit) : null;
+    };
+    // Browser checks: what a click at a client point would pick for the open station.
+    element.cadShopTarget = (clientX, clientY) => {
+      const target = shopTarget({ clientX, clientY });
+      return target ? { kind: target.kind, instanceId: target.instanceId } : null;
+    };
+    // A flat face's outline (its segments, world), drawn over the parts.
+    const outlineLine = (segments) => {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(segments.flat(2), 3));
+      const line = new THREE.LineSegments(
+        geometry,
+        new THREE.LineBasicMaterial({ color: SHOP_FACE_COLOR, depthTest: false, transparent: true }),
+      );
+      line.name = 'shop-hover-face';
+      line.renderOrder = 38;
+      line.frustumCulled = false;
+      return line;
+    };
+    const showShopHover = (target) => {
+      ctx.shopHover = target;
+      clearLayer(shopHoverLayer);
+      if (target?.kind === 'face' && target.planar && target.outline.length)
+        shopHoverLayer.add(outlineLine(target.outline));
+      showHoverHint(
+        target?.kind === 'face' && !target.planar && ctx.shopPick?.pick === 'face'
+          ? 'Curved face: pad printing only'
+          : target?.kind === 'face'
+            ? 'Face'
+            : target?.kind === 'part'
+              ? partName(ctx.model?.instances.find((i) => i.id === target.instanceId)?.partId) || 'Part'
+              : '',
+      );
+      renderer.domElement.style.cursor = target ? 'pointer' : '';
+      render();
+    };
+    ctx.drawShopPick = () => {
+      if (!ctx.shopPick?.pick) {
+        clearLayer(shopHoverLayer);
+        ctx.shopHover = null;
+        if (!ctx.shopPick) showHoverHint('');
+      }
+      render();
+    };
+    let shopFrame = 0,
+      shopPointer = null;
+    const runShopHover = () => {
+      shopFrame = 0;
+      const pointer = shopPointer;
+      shopPointer = null;
+      if (!pointer || !ctx.shopPick?.pick || printDrag) return;
+      showShopHover(shopTarget(pointer));
+    };
+    const shopMove = (event) => {
+      if (event.buttons || !ctx.shopPick?.pick) return;
+      shopPointer = { clientX: event.clientX, clientY: event.clientY };
+      if (!shopFrame) shopFrame = requestAnimationFrame(runShopHover);
+    };
+    const shopClick = (event) => {
+      const target = shopTarget(event);
+      showShopHover(target);
+      if (target) shopCallbacks.current.onShopPick?.(target);
+    };
+    renderer.domElement.addEventListener('pointermove', shopMove);
+    // Off the canvas nothing is under the cursor.
+    const shopLeave = () => {
+      if (shopFrame) cancelAnimationFrame(shopFrame);
+      shopFrame = 0;
+      shopPointer = null;
+      if (ctx.shopHover) showShopHover(null);
+    };
+    renderer.domElement.addEventListener('pointerleave', shopLeave);
+    // A print dragged on its face (the print station): capture phase, so the
+    // press never reaches OrbitControls; a press without travel selects it.
+    let printDrag = null;
+    const printDown = (event) => {
+      if (ctx.shopPick?.station !== 'print' || event.button !== 0) return;
+      const caster = rayAt(event);
+      const picked = shopLayer.pickPrint(caster);
+      const frame = picked && shopLayer.printWorld(picked.id);
+      if (!frame) return;
+      event.stopImmediatePropagation();
+      const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(
+        new THREE.Vector3(...frame.normal),
+        new THREE.Vector3(...frame.origin),
+      );
+      const on = caster.ray.intersectPlane(plane, new THREE.Vector3()) || new THREE.Vector3(...frame.origin);
+      printDrag = {
+        id: picked.id,
+        plane,
+        offset: new THREE.Vector3(...frame.origin).sub(on),
+        start: [event.clientX, event.clientY],
+        origin: frame.origin,
+        moved: false,
+      };
+      controls.enabled = false;
+      renderer.domElement.setPointerCapture?.(event.pointerId);
+    };
+    const printMove = (event) => {
+      if (!printDrag) return;
+      event.stopImmediatePropagation();
+      if (Math.hypot(event.clientX - printDrag.start[0], event.clientY - printDrag.start[1]) > CLICK_PX)
+        printDrag.moved = true;
+      if (!printDrag.moved) return;
+      const on = rayAt(event).ray.intersectPlane(printDrag.plane, new THREE.Vector3());
+      if (!on) return;
+      printDrag.origin = on.add(printDrag.offset).toArray();
+      shopLayer.previewPrint(printDrag.id, printDrag.origin);
+      render();
+    };
+    const endPrintDrag = (event, cancelled = false) => {
+      const drag = printDrag;
+      printDrag = null;
+      controls.enabled = true;
+      if (event?.pointerId != null && renderer.domElement.hasPointerCapture?.(event.pointerId))
+        renderer.domElement.releasePointerCapture(event.pointerId);
+      if (cancelled || !drag.moved) {
+        shopLayer.resetPrint(drag.id);
+        render();
+        if (!cancelled) shopCallbacks.current.onShopPick?.({ kind: 'print', printId: drag.id });
+        return;
+      }
+      const print = ctx.shopModel?.prints?.find((p) => p.id === drag.id);
+      const g = print && group.children.find((c) => c.userData.instanceId === print.instanceId);
+      if (!g) {
+        shopLayer.resetPrint(drag.id);
+        render();
+        return;
+      }
+      shopCallbacks.current.onShopPrintMove?.(drag.id, toPartFrame(g, drag.origin));
+    };
+    const printUp = (event) => {
+      if (!printDrag) return;
+      event.stopImmediatePropagation();
+      endPrintDrag(event);
+    };
+    const printCancel = () => {
+      if (!printDrag) return false;
+      endPrintDrag(null, true);
+      return true;
+    };
+    ctx.cancelPrintDrag = printCancel;
+    renderer.domElement.addEventListener('pointerdown', printDown, true);
+    renderer.domElement.addEventListener('pointermove', printMove, true);
+    renderer.domElement.addEventListener('pointerup', printUp, true);
+    renderer.domElement.addEventListener('pointercancel', printCancel);
+    window.addEventListener('blur', printCancel);
+    // ------------------------------------------------ the press brake's grip (hands on the sheet, HO-1)
+    // Flip sheet and Turn sheet around as handles on the sheet (shopLayer.js,
+    // brakeGrip.js), after the print drag's pattern: a capture-phase press
+    // keeps the press from OrbitControls; a press without travel (CLICK_PX)
+    // acts; past it the sheet follows the dial (rotateDial.js startDial, the
+    // rings' rule) along the turn the act makes, and a release at 90° or more
+    // makes the act (onBrakeGrip), under it the sheet eases back. Esc, a
+    // right press, a lost pointer or the window losing focus put it back.
+    const gripChip = gripChipRef.current;
+    if (gripChip) gripChip.hidden = true;
+    // HO-2 (§6): after the grip, the rest of the set-up in reach (the
+    // shop layer's handPick, brakeHands.js HAND_ORDER): `reachHover` what the
+    // pointer is over (the fingers, a blade or the machine, an edge), and
+    // `fingerPress` the backgauge fingers in the hand. The fingers take their
+    // press as a handle does (a drag sets L, a click opens the L field); a
+    // blade or an edge acts on the click (pointerUp's brakeClick), so a drag
+    // that starts on the machine still orbits.
+    let gripPress = null,
+      gripHover = null,
+      gripFocus = null,
+      reachHover = null,
+      fingerPress = null;
+    ctx.gripPressed = () => Boolean(gripPress || fingerPress);
+    const canvasPoint = (event) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      return [event.clientX - rect.left, event.clientY - rect.top];
+    };
+    // `tone`: the second line's class ('is-ok' | 'is-stop' by `ok`, or 'is-typed': quiet).
+    const writeChip = (title, outcome = null, ok = false, tone = null) => {
+      if (!gripChip) return;
+      const [head, line] = gripChip.children;
+      head.textContent = title;
+      line.textContent = outcome || '';
+      line.hidden = !outcome;
+      line.className = `cad-grip-chip-outcome ${tone || (ok ? 'is-ok' : 'is-stop')}`;
+      gripChip.hidden = false;
+    };
+    const hideChip = () => {
+      if (gripChip) gripChip.hidden = true;
+    };
+    // By the handle (its right, or its left near the view's right edge), kept in the view.
+    const chipByHandle = (kind) => {
+      const spot = ctx.shopLayer.gripSpot(kind);
+      if (!gripChip || !spot) return hideChip();
+      const outcome = ctx.shopLayer.gripOutcome(kind);
+      const words = brakeGripChip(kind, outcome);
+      writeChip(words.title, words.outcome, Boolean(outcome?.ok));
+      const width = element.clientWidth,
+        height = element.clientHeight;
+      const w = gripChip.offsetWidth,
+        h = gripChip.offsetHeight;
+      let x = spot.x + spot.radius + 10,
+        y = spot.y - h / 2;
+      if (width && x + w > width - HUD_MARGIN) x = spot.x - spot.radius - 10 - w;
+      if (width && height) {
+        x = Math.max(HUD_MARGIN, Math.min(x, width - HUD_MARGIN - w));
+        y = Math.max(HUD_MARGIN, Math.min(y, height - HUD_MARGIN - h));
+      }
+      gripChip.style.left = `${x}px`;
+      gripChip.style.top = `${y}px`;
+    };
+    // A handle approached: its outcome, when the workspace has not worked it out yet.
+    const wantGrip = (kind) => {
+      if (kind && !ctx.shopLayer.gripOutcome(kind)) gripCallback.current.onBrakeGripWant?.(kind);
+    };
+    // The chip of a thing in reach (HO-2): by the cursor, in the words the workspace's offer gives.
+    const chipByPointer = (target) => {
+      const grip = ctx.brakeGrip;
+      const words = reachChip(target, {
+        fingers: grip?.fingers || null,
+        edges: grip?.edges || [],
+        picked: grip?.edge ?? null,
+      });
+      if (!words?.title) return hideChip();
+      writeChip(words.title, words.line, false, 'is-typed');
+      placeBox(gripChip);
+    };
+    // A handle and the fingers are grabbed; a blade and an edge are clicked; the rest only name themselves.
+    const reachCursor = (target) =>
+      target?.kind === 'fingers'
+        ? target.offered
+          ? 'grab'
+          : ''
+        : ['blade', 'edge'].includes(target?.kind)
+          ? 'pointer'
+          : '';
+    // Only the station's own cursors are put back: another tool's stays.
+    const setCursor = (cursor) => {
+      if (cursor || ['grab', 'pointer'].includes(renderer.domElement.style.cursor))
+        renderer.domElement.style.cursor = cursor;
+    };
+    // The handle lit: the toolbar's (hovered or focused) first, else the
+    // pointer's; with no handle lit, the thing in reach under the pointer.
+    const showGripHot = () => {
+      if (gripPress) return;
+      if (fingerPress) return fingerReadout();
+      const kind = ctx.shopLayer.gripLight(gripFocus || gripHover);
+      wantGrip(kind);
+      // A lit handle puts out whatever else was lit.
+      const reach = ctx.shopLayer.reachLight(kind ? null : reachHover);
+      setCursor(gripHover && kind === gripHover ? 'grab' : reachCursor(reach));
+      if (kind) chipByHandle(kind);
+      else if (reach) chipByPointer(reach);
+      else hideChip();
+    };
+    ctx.lightGrip = (kind) => {
+      gripFocus = kind;
+      showGripHot();
+    };
+    let gripFrame = 0,
+      gripPointer = null;
+    const sameTarget = (a, b) =>
+      (a?.kind ?? null) === (b?.kind ?? null) &&
+      a?.index === b?.index &&
+      a?.blade === b?.blade &&
+      a?.part === b?.part &&
+      Boolean(a?.offered) === Boolean(b?.offered);
+    const runGripHover = () => {
+      gripFrame = 0;
+      const pointer = gripPointer;
+      gripPointer = null;
+      if (!pointer || gripPress || fingerPress || !ctx.shopLayer.stationOpen()) return;
+      // In order (HO-2 §6.3): a handle, the fingers, a blade or the machine (a ray, cast only if needed), an edge.
+      const target = ctx.shopLayer.handPick(pointer.at, () => rayAt(pointer.client));
+      const kind = target?.kind === 'grip' ? target.handle : null;
+      const reach = target && target.kind !== 'grip' ? target : null;
+      if (kind === gripHover && sameTarget(reach, reachHover) && (kind || reach || !gripFocus)) {
+        // The same thing: a chip by the cursor follows it.
+        if (reach && !kind && !gripFocus && gripChip && !gripChip.hidden) placeBox(gripChip);
+        return;
+      }
+      gripHover = kind;
+      reachHover = reach;
+      showGripHot();
+    };
+    const gripHoverMove = (event) => {
+      if (event.buttons || gripPress || fingerPress || !ctx.shopLayer.stationOpen()) return;
+      gripPointer = { at: canvasPoint(event), client: { clientX: event.clientX, clientY: event.clientY } };
+      if (!gripFrame) gripFrame = requestAnimationFrame(runGripHover);
+    };
+    const gripLeave = () => {
+      if (gripFrame) cancelAnimationFrame(gripFrame);
+      gripFrame = 0;
+      gripPointer = null;
+      if ((!gripHover && !reachHover) || gripPress || fingerPress) return;
+      gripHover = reachHover = null;
+      showGripHot();
+    };
+    // The readout by the cursor while a handle is in the hand.
+    const gripReadout = () => {
+      if (!gripPress?.dial) return;
+      writeChip(dragChip(gripPress.kind, gripPress.degrees));
+      const typed = gripPress.typed;
+      const line = gripChip?.children[1];
+      if (line) {
+        line.textContent = typed ? `${typed} ° · Enter applies · Esc cancels` : 'Type an angle · Enter applies';
+        line.hidden = false;
+        line.className = 'cad-grip-chip-outcome is-typed';
+      }
+      placeBox(gripChip);
+    };
+    const applyGrip = (result) => {
+      gripPress.degrees = result.snapped;
+      ctx.shopLayer.gripTo(brakeGripDrag({ travel: Infinity, degrees: result.snapped }).progress);
+      gripReadout();
+    };
+    ctx.gripAlt = () => {
+      if (gripPress?.dial) applyGrip(gripPress.dial.refresh({ snap: ctx.rotateSnap, free: Boolean(ctx.altDown) }));
+      // The fingers in the hand: L again in the steps Alt now asks for.
+      ctx.fingerAlt?.();
+    };
+    const gripDown = (event) => {
+      if (!ctx.shopLayer.stationOpen()) return;
+      // A right press mid-drag puts the fingers back (HO-2).
+      if (fingerPress) {
+        event.stopImmediatePropagation();
+        if (event.button !== 0) endFinger(event, { cancel: true });
+        return;
+      }
+      // A right press mid-drag puts the sheet back.
+      if (gripPress) {
+        if (event.button !== 0) {
+          event.stopImmediatePropagation();
+          endGrip(event, true);
+        }
+        return;
+      }
+      if (event.button !== 0) return;
+      const point = canvasPoint(event);
+      const target = ctx.shopLayer.handPick(point, () => rayAt(event));
+      // The fingers where they are a handle (HO-2 §6.2); a blade or an edge waits for the click.
+      if (target?.kind === 'fingers' && target.offered) return fingerDown(event, point);
+      const kind = target?.kind === 'grip' ? target.handle : null;
+      if (!kind) return;
+      event.stopImmediatePropagation();
+      trackPointer(event);
+      gripPress = { kind, start: point, dial: null, degrees: 0, typed: '', clickOnly: false };
+      wantGrip(kind);
+      controls.enabled = false;
+      renderer.domElement.setPointerCapture?.(event.pointerId);
+      renderer.domElement.style.cursor = 'grabbing';
+    };
+    const gripMove = (event) => {
+      if (fingerPress) return fingerMove(event);
+      if (!gripPress) return;
+      event.stopImmediatePropagation();
+      trackPointer(event);
+      const point = canvasPoint(event);
+      ctx.altDown = event.altKey;
+      if (!gripPress.dial) {
+        if (gripPress.clickOnly || Math.hypot(point[0] - gripPress.start[0], point[1] - gripPress.start[1]) <= CLICK_PX)
+          return;
+        const start = ctx.shopLayer.gripStart(gripPress.kind);
+        // The act's turn is not known yet (§5.4): the press acts as a click.
+        if (!start) {
+          gripPress.clickOnly = true;
+          return;
+        }
+        ctx.camera.updateMatrixWorld();
+        hideChip();
+        gripPress.dial = startDial({
+          pivot: start.pivot,
+          pointer: gripPress.start,
+          axis: start.axis,
+          eye: eyeAt(new THREE.Vector3(...start.pivot)),
+          radius: start.radius,
+          project: projectPx,
+        });
+      }
+      applyGrip(gripPress.dial.update(point, { snap: ctx.rotateSnap, free: Boolean(ctx.altDown) }));
+    };
+    // Let go: a click acts, a drag past 90° acts (the sheet carries on from
+    // where it is), under it or cancelled the sheet goes back.
+    const endGrip = (event, cancelled = false, degrees = null) => {
+      const press = gripPress;
+      if (!press) return;
+      gripPress = null;
+      controls.enabled = true;
+      if (event?.pointerId != null && renderer.domElement.hasPointerCapture?.(event.pointerId))
+        renderer.domElement.releasePointerCapture(event.pointerId);
+      renderer.domElement.style.cursor = '';
+      gripHover = null;
+      hideChip();
+      if (!press.dial) {
+        if (!cancelled) gripCallback.current.onBrakeGrip?.(press.kind);
+        else ctx.shopLayer.gripLight(gripFocus);
+        return;
+      }
+      const swept = degrees ?? press.degrees;
+      const commit = !cancelled && Math.abs(swept) >= COMMIT_DEGREES;
+      if (commit && degrees != null) ctx.shopLayer.gripTo(brakeGripDrag({ travel: Infinity, degrees }).progress);
+      if (ctx.shopLayer.gripRelease(commit)) gripCallback.current.onBrakeGrip?.(press.kind);
+    };
+    const gripUp = (event) => {
+      if (fingerPress) {
+        event.stopImmediatePropagation();
+        endFinger(event);
+        return;
+      }
+      if (!gripPress) return;
+      event.stopImmediatePropagation();
+      endGrip(event);
+    };
+    const gripCancel = () => {
+      endFinger(null, { cancel: true });
+      endGrip(null, true);
+    };
+    // ------------------------------------------------ the backgauge fingers in the hand (HO-2 §6.2)
+    // Pressed: a press without travel is a click (the panel's L field takes
+    // focus); past CLICK_PX the drag is on. L is measured along the machine's
+    // Y where the pointer's ray meets the horizontal plane through the
+    // fingers (or, that plane seen edge on, along +Y as drawn), from the L the
+    // drag started from: whole mm, a tenth with Alt, never below 0
+    // (brakeHands.js fingerL). Each new L goes to the workspace at most once a
+    // frame, at once when none went this frame (onBrakeFingers({ distance }):
+    // the card's own onDistance path), so the sheet rides with the fingers as
+    // the station poses it. Digits + Enter set L exactly; Esc, a right press,
+    // a lost pointer or the window losing focus put the line back as it was.
+    let fingerFrame = 0;
+    const planeAt = (client, z) => {
+      const ray = rayAt(client).ray;
+      // Seen edge on, the plane's crossing runs away: the drawn axis serves instead.
+      if (Math.abs(ray.direction.z) < 0.2) return null;
+      return ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 0, 1), -z), new THREE.Vector3());
+    };
+    const fingerDown = (event, point) => {
+      const start = ctx.shopLayer.fingerStart();
+      const from = Number(ctx.brakeGrip?.fingers?.L);
+      if (!start || !Number.isFinite(from)) return;
+      event.stopImmediatePropagation();
+      trackPointer(event);
+      fingerPress = {
+        start: point,
+        client: { clientX: event.clientX, clientY: event.clientY },
+        plane: start.z,
+        axis: start.axis,
+        origin: null,
+        from,
+        L: from,
+        sent: from,
+        dragging: false,
+        typed: '',
+        positions: 0,
+      };
+      controls.enabled = false;
+      renderer.domElement.setPointerCapture?.(event.pointerId);
+      renderer.domElement.style.cursor = 'grabbing';
+    };
+    const sendL = (press = fingerPress) => {
+      if (!press?.dragging || press.L === press.sent) return;
+      press.sent = press.L;
+      press.positions += 1;
+      gripCallback.current.onBrakeFingers?.({ distance: press.L });
+    };
+    const queueL = () => {
+      if (fingerFrame) return;
+      sendL();
+      fingerFrame = requestAnimationFrame(() => {
+        fingerFrame = 0;
+        if (fingerPress && fingerPress.L !== fingerPress.sent) queueL();
+      });
+    };
+    // The readout by the cursor: L and the flange the station reads for it (the panel's own figure).
+    const fingerReadout = () => {
+      const press = fingerPress;
+      if (!press?.dragging) return;
+      const offer = ctx.brakeGrip?.fingers;
+      const flange = offer?.L != null && Math.abs(offer.L - press.L) < 1e-9 ? offer.flange : null;
+      const words = fingerReadoutWords(press.L, flange);
+      writeChip(
+        words,
+        press.typed ? `${press.typed} mm · Enter applies · Esc cancels` : 'Type L · Enter applies',
+        false,
+        'is-typed',
+      );
+      // Measured when its text grows or shrinks (the flange arriving, a digit more, typing), never
+      // per move: a size kept from the first words let a longer readout run off the view's right edge.
+      const lines = `${words.length}:${press.typed.length}`;
+      if (gripChip && (!press.box || press.box.lines !== lines))
+        press.box = {
+          lines,
+          width: element.clientWidth,
+          height: element.clientHeight,
+          w: gripChip.offsetWidth + 12,
+          h: gripChip.offsetHeight,
+        };
+      placeBox(gripChip, press.box);
+    };
+    const fingerMove = (event) => {
+      const press = fingerPress;
+      event.stopImmediatePropagation();
+      trackPointer(event);
+      const point = canvasPoint(event);
+      ctx.altDown = event.altKey;
+      if (!press.dragging) {
+        if (Math.hypot(point[0] - press.start[0], point[1] - press.start[1]) <= CLICK_PX) return;
+        press.dragging = true;
+        press.origin = planeAt(press.client, press.plane);
+        ctx.shopLayer.fingerHold(true);
+        gripCallback.current.onBrakeFingers?.({ start: true });
+      }
+      press.at = { point, client: { clientX: event.clientX, clientY: event.clientY } };
+      fingerTo();
+    };
+    // L where the pointer is now (and again when Alt is pressed or let go).
+    const fingerTo = () => {
+      const press = fingerPress;
+      if (!press?.dragging || !press.at) return;
+      const on = press.origin && planeAt(press.at.client, press.plane);
+      const travel = on
+        ? on.y - press.origin.y
+        : axisTravel([press.at.point[0] - press.start[0], press.at.point[1] - press.start[1]], press.axis);
+      press.L = fingerL(press.from, travel, { free: Boolean(ctx.altDown) });
+      queueL();
+      fingerReadout();
+    };
+    // Let go: a click opens the field; a drag's last L goes; `cancel` puts the line back; `typed` sets L exactly.
+    const endFinger = (event, { cancel = false, typed = null } = {}) => {
+      const press = fingerPress;
+      if (!press) return;
+      fingerPress = null;
+      controls.enabled = true;
+      if (event?.pointerId != null && renderer.domElement.hasPointerCapture?.(event.pointerId))
+        renderer.domElement.releasePointerCapture(event.pointerId);
+      renderer.domElement.style.cursor = '';
+      reachHover = null;
+      hideChip();
+      ctx.shopLayer.fingerHold(false);
+      if (!press.dragging) {
+        if (!cancel) gripCallback.current.onBrakeFocus?.('distance');
+        return;
+      }
+      if (cancel) {
+        gripCallback.current.onBrakeFingers?.({ cancel: true });
+        return;
+      }
+      if (typed != null) press.L = typed;
+      sendL(press);
+      gripCallback.current.onBrakeFingers?.({ end: true });
+      ctx.lastFingerDrag = { positions: press.positions, from: press.from, to: press.L };
+    };
+    ctx.fingerAlt = () => fingerTo();
+    // The station no longer being set up (a stroke, a scrub, the replay, closed): the fingers are let go, the line put back.
+    ctx.dropFingers = () => endFinger(null, { cancel: true });
+    // Esc puts the sheet back (and leaves the line picked: the brake's own Esc
+    // waits, isDragging); digits + Enter set the angle exactly, as the rings do.
+    ctx.gripKey = (event) => {
+      // The fingers in the hand (HO-2): Esc puts the line back, digits + Enter set L exactly.
+      if (fingerPress) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          endFinger(null, { cancel: true });
+          return true;
+        }
+        if (!fingerPress.dragging || event.ctrlKey || event.metaKey || event.altKey) return true;
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          const value = typedL(fingerPress.typed);
+          if (value != null) endFinger(null, { typed: value });
+          return true;
+        }
+        const next = typeKey(fingerPress.typed, event.key);
+        if (next != null) {
+          event.preventDefault();
+          fingerPress.typed = next;
+          fingerReadout();
+        }
+        return true;
+      }
+      if (!gripPress) return false;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        gripCancel();
+        return true;
+      }
+      if (!gripPress.dial || event.ctrlKey || event.metaKey || event.altKey) return true;
+      if (event.key === 'Enter') {
+        const value = Number(gripPress.typed);
+        event.preventDefault();
+        if (gripPress.typed && Number.isFinite(value)) endGrip(null, false, value);
+        return true;
+      }
+      const next = typeKey(gripPress.typed, event.key);
+      if (next != null) {
+        event.preventDefault();
+        gripPress.typed = next;
+        gripReadout();
+      }
+      return true;
+    };
+    renderer.domElement.addEventListener('pointerdown', gripDown, true);
+    renderer.domElement.addEventListener('pointermove', gripMove, true);
+    renderer.domElement.addEventListener('pointerup', gripUp, true);
+    renderer.domElement.addEventListener('pointermove', gripHoverMove);
+    renderer.domElement.addEventListener('pointerleave', gripLeave);
+    renderer.domElement.addEventListener('pointercancel', gripCancel);
+    window.addEventListener('blur', gripCancel);
+    // The station changed under the pointer (a new pose, the station closed): the chip waits for the next move.
+    ctx.refreshGrip = () => showGripHot();
+    ctx.resetGripHover = () => {
+      gripHover = null;
+      // The fingers in the hand keep their readout through the poses their drag makes.
+      if (fingerPress) return;
+      reachHover = null;
+      if (!gripPress) {
+        ctx.shopLayer.gripLight(gripFocus);
+        ctx.shopLayer.reachLight(null);
+        hideChip();
+        setCursor('');
+      }
+    };
+    // A click at the station (pointerUp, no travel) on what is in reach (HO-2):
+    // an edge goes to the backgauge (the card's onPickEdge), a blade opens its
+    // picker; the fingers and the grip take their own presses, the machine's
+    // other parts only name themselves.
+    ctx.brakeClick = (event) => {
+      const target = ctx.shopLayer.handPick(canvasPoint(event), () => rayAt(event));
+      if (target?.kind === 'edge') gripCallback.current.onBrakeEdge?.(target.index);
+      else if (target?.kind === 'blade') gripCallback.current.onBrakeFocus?.(target.blade);
+    };
+    // Browser checks: what a press at a client point would reach, and where the blades can be pressed.
+    element.cadBrakeHand = (clientX, clientY) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      return ctx.shopLayer.handPick([clientX - rect.left, clientY - rect.top], () => rayAt({ clientX, clientY }));
+    };
+    element.cadBrakeSpots = () => ctx.shopLayer.bladeSpots();
+    // Browser checks: where the camera stands and looks (world mm), and its projection.
+    element.cadCamera = () => ({
+      position: ctx.camera.position.toArray(),
+      target: ctx.controls.target.toArray(),
+      perspective: Boolean(ctx.camera.isPerspectiveCamera),
+      span: ctx.span,
+    });
     // Browser checks: the Move holes handles (one per hole, one per centre of a row).
     element.cadHoleHandles = () =>
       holeHandles.children.map((h) => ({
@@ -1419,7 +2315,7 @@ export default function CadViewport({
     // clicks before it have already selected the group.
     const selectDouble = (event) => {
       if (!ctx.selectClick || event.button !== 0) return;
-      if (ctx.placing || ctx.sketchMode || ctx.holeMode || ctx.measureMode) return;
+      if (ctx.placing || ctx.sketchMode || ctx.holeMode || ctx.measureMode || ctx.shopPick) return;
       if (ctx.pivotPick && ctx.transformMode === 'rotate' && ctx.movingId) return;
       const hit = rayAt(event)
         .intersectObjects(group.children, true)
@@ -1522,6 +2418,16 @@ export default function CadViewport({
       }
       // Placing an operation: clicks place or pick, never select.
       if (ctx.placementLayer.click(event)) return;
+      // The press brake owns the viewport: its picks are its own (an edge of the sheet, a blade; HO-2) and the flat map's.
+      if (ctx.shopLayer.stationOpen()) {
+        ctx.brakeClick?.(event);
+        return;
+      }
+      // The paint and print stations pick on the parts, never select.
+      if (ctx.shopPick) {
+        if (ctx.shopPick.pick) shopClick(event);
+        return;
+      }
       const rect = element.getBoundingClientRect(),
         pointer = new THREE.Vector2(
           ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -1586,8 +2492,9 @@ export default function CadViewport({
       if (ringClick) return;
       ctx.selectClick = true;
       // Shift / Ctrl / Cmd+click adds or removes the part's group or the
-      // part (the workspace resolves groups, §3.3).
-      const id = hit?.object.userData.instanceId || null;
+      // part (the workspace resolves groups, §3.3). An unfolded sheet-metal
+      // part is its preview (outside the group): a click on it keeps it.
+      const id = hit?.object.userData.instanceId || ctx.shopLayer.pick(ray) || null;
       if (event.shiftKey || event.ctrlKey || event.metaKey) selectionCallback.current(id, { toggle: true });
       else selectionCallback.current(id);
     };
@@ -1642,13 +2549,37 @@ export default function CadViewport({
       delete element.cadGizmo;
       delete element.cadMarks;
       delete element.cadPlacement;
+      delete element.cadShop;
+      delete element.cadShopTarget;
+      delete element.cadBrakeHand;
+      delete element.cadBrakeSpots;
+      delete element.cadCamera;
       delete element.cadHoleHandles;
       delete element.cadPlanes;
       if (hoverFrame) cancelAnimationFrame(hoverFrame);
+      if (shopFrame) cancelAnimationFrame(shopFrame);
+      renderer.domElement.removeEventListener('pointermove', shopMove);
+      renderer.domElement.removeEventListener('pointerleave', shopLeave);
+      renderer.domElement.removeEventListener('pointerdown', printDown, true);
+      renderer.domElement.removeEventListener('pointermove', printMove, true);
+      renderer.domElement.removeEventListener('pointerup', printUp, true);
+      renderer.domElement.removeEventListener('pointercancel', printCancel);
+      window.removeEventListener('blur', printCancel);
+      if (gripFrame) cancelAnimationFrame(gripFrame);
+      if (fingerFrame) cancelAnimationFrame(fingerFrame);
+      renderer.domElement.removeEventListener('pointerdown', gripDown, true);
+      renderer.domElement.removeEventListener('pointermove', gripMove, true);
+      renderer.domElement.removeEventListener('pointerup', gripUp, true);
+      renderer.domElement.removeEventListener('pointermove', gripHoverMove);
+      renderer.domElement.removeEventListener('pointerleave', gripLeave);
+      renderer.domElement.removeEventListener('pointercancel', gripCancel);
+      window.removeEventListener('blur', gripCancel);
+      clearLayer(shopHoverLayer);
       renderer.domElement.removeEventListener('pointermove', planeMove);
       renderer.domElement.removeEventListener('pointerleave', planeLeave);
       clearLayer(planeLayer);
       clearLayer(pickLayer);
+      clearLayer(outlineLayer);
       planeLabels?.replaceChildren();
       renderer.domElement.removeEventListener('pointerdown', placementDown, true);
       renderer.domElement.removeEventListener('pointermove', placementMove, true);
@@ -1658,6 +2589,7 @@ export default function CadViewport({
       renderer.domElement.removeEventListener('pointercancel', placementCancel);
       window.removeEventListener('blur', placementCancel);
       placementLayer.dispose();
+      shopLayer.dispose();
       renderer.domElement.removeEventListener('pointermove', trackPointer);
       renderer.domElement.removeEventListener('pointermove', measureMove);
       clearLayer(markLayer);
@@ -1797,11 +2729,23 @@ export default function CadViewport({
     ctx.materials.setClippingPlanes(plane ? [plane] : []);
     const selected = new Set(selectedKey ? selectedKey.split('|') : []);
     const meshed = new Map((snapshot?.instances || []).map((item) => [item.id, item.placement]));
+    // Isolate shows the selection: one part or every part of a group. The
+    // shop layer asks too when its preview hands a part back.
+    const shown = (group) => {
+      const instance = model.instances.find((i) => i.id === group.userData.instanceId);
+      return instance?.visible !== false && (!isolated || selected.has(group.userData.instanceId));
+    };
+    ctx.groupShown = shown;
+    // The shop layer draws this model's records (the effects below run after this one).
+    ctx.shopModel = model;
+    const finishes = new Map((model.finishes || []).map((f) => [f.instanceId, f]));
+    // What the paint booth will paint: outlined, so its colour still shows (§7: selection wins).
+    const shopTargets = new Set(shopPick?.targets || []);
     ctx.group.children.forEach((group, index) => {
       const instance = model.instances.find((i) => i.id === group.userData.instanceId);
       const part = model.parts.find((p) => p.id === group.userData.partId);
-      // Isolate shows the selection: one part or every part of a group.
-      group.visible = instance?.visible !== false && (!isolated || selected.has(group.userData.instanceId));
+      // A sheet-metal part unfolded in the shop layer: its preview stands in.
+      group.visible = shown(group) && !ctx.shopLayer.hides(group.userData.instanceId);
       // The model commits before the worker rebuilds, so show the committed
       // placement at once by moving the old mesh by (new pose) · (meshed pose)⁻¹;
       // an attached part rides its attachment root's delta (marks.pendingDelta).
@@ -1824,13 +2768,16 @@ export default function CadViewport({
       // is a swap between cached materials, never a flag flipped in place.
       const look = bodyAppearance({ mode, selected: selectedLook, hardware: isHardwarePart(part), support, dim });
       const [mesh, edges] = group.children;
-      mesh.material = ctx.materials.body(BODY_COLORS[bodyColorKey(part, selectedLook)], look.opacity, {
-        depthWrite: look.depthWrite,
-      });
+      // Colour (docs/sketch-studio-fab-shop.md §7): selection, then the paint
+      // finish (gloss → roughness), then bare sheet stock, then wood / metal.
+      const { color, roughness } = bodyLook(part, selectedLook, finishes.get(group.userData.instanceId));
+      group.userData.look = { color, roughness };
+      mesh.material = ctx.materials.body(color, look.opacity, { depthWrite: look.depthWrite, roughness });
       mesh.renderOrder = look.renderOrder;
+      const target = shopTargets.has(group.userData.instanceId);
       edges.material = ctx.materials.edge(
-        look.edgeColorKey === 'selected' ? BODY_COLORS.selected : EDGE_COLOR,
-        look.edgeOpacity,
+        look.edgeColorKey === 'selected' || target ? BODY_COLORS.selected : EDGE_COLOR,
+        target ? 1 : look.edgeOpacity,
       );
       edges.renderOrder = EDGE_RENDER_ORDER;
     });
@@ -1851,8 +2798,128 @@ export default function CadViewport({
     }
     // Marks ride on the poses just shown.
     ctx.updateMarks();
+    ctx.shopLayer.sync();
     ctx.render();
-  }, [snapshot, model, selectedKey, isolated, exploded, section, sketchMode, sketchSupportId, placing, viewMode]);
+  }, [
+    snapshot,
+    model,
+    selectedKey,
+    isolated,
+    exploded,
+    section,
+    sketchMode,
+    sketchSupportId,
+    placing,
+    viewMode,
+    shopPick,
+  ]);
+  // The shop layer's sheet-metal preview, after the poses above (it stands in
+  // for one of those groups).
+  useEffect(() => {
+    const ctx = sceneRef.current;
+    if (!ctx) return;
+    ctx.shopModel = model;
+    ctx.shopLayer.setView(sheetView);
+  }, [sheetView, snapshot, model, selectedKey, isolated, exploded, viewMode]);
+  // The replay (§8), before the press brake below (which frames each of the
+  // film's hits and puts its own saved camera back after them): as it starts
+  // the camera, the brake's saved camera and its key are kept and the
+  // product is framed from the isometric side; as it ends every one of them
+  // is put back, so an open press brake comes back on the camera it had.
+  const filmKey = film?.key || null;
+  useEffect(() => {
+    const ctx = sceneRef.current;
+    if (!ctx || filmKey === (ctx.filmKey || null)) return;
+    if (filmKey) {
+      ctx.filmSaved ||= {
+        camera: ctx.camera,
+        target: ctx.controls.target.clone(),
+        span: ctx.span,
+        savedCamera: ctx.savedCamera || null,
+        brakeKey: ctx.brakeKey || null,
+        brakeOpenedView: ctx.brakeOpenedView,
+      };
+      ctx.savedCamera = null;
+      ctx.brakeKey = null;
+      frameGroups(ctx, new Set(film.ids), perspective);
+      // Its hits will show the press brake: its shader programs are linked ahead (shopLayer.js).
+      if (film.brake) ctx.shopLayer.prepareStation();
+    } else if (ctx.filmSaved) {
+      const saved = ctx.filmSaved;
+      ctx.filmSaved = null;
+      applyCamera(ctx, saved.camera, saved.target, saved.span);
+      ctx.savedCamera = saved.savedCamera;
+      ctx.brakeKey = saved.brakeKey;
+      ctx.brakeOpenedView = saved.brakeOpenedView;
+    }
+    ctx.filmKey = filmKey;
+    // A new film frames once; its ids are the product's as it starts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filmKey]);
+  // The press brake station, after the poses above (it hides every part).
+  // Opening it frames the part in the machine from the operator's side (each
+  // hit made frames it again, see onStrokeEnd); leaving puts the camera back
+  // where it was.
+  useEffect(() => {
+    const ctx = sceneRef.current;
+    if (!ctx) return;
+    ctx.shopLayer.setStation(brakeView);
+    const key = brakeView?.key || null;
+    if (key === (ctx.brakeKey || null)) return;
+    if (key && !ctx.brakeKey) {
+      ctx.savedCamera = { camera: ctx.camera, target: ctx.controls.target.clone(), span: ctx.span };
+      // The standard view in force as the station opens: Fit keeps the operator's view until another is chosen.
+      ctx.brakeOpenedView = view;
+    }
+    if (key) frameStation(ctx, STATION_VIEW, perspective);
+    else if (ctx.savedCamera) {
+      const { camera, target, span } = ctx.savedCamera;
+      ctx.savedCamera = null;
+      applyCamera(ctx, camera, target, span);
+    }
+    ctx.brakeKey = key;
+    // A new station frames once; poses and model edits never move the camera.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brakeView, snapshot, model, selectedKey, isolated, exploded, viewMode]);
+  // Hands on the sheet (HO-1): whether the grip shows and both acts'
+  // outcomes, after the station above. A new pose drops the chip until the
+  // pointer moves again (the handle may stand elsewhere now).
+  useEffect(() => {
+    sceneRef.current?.resetGripHover?.();
+  }, [brakeView]);
+  useEffect(() => {
+    const ctx = sceneRef.current;
+    if (!ctx) return;
+    ctx.shopLayer.setGrip(brakeView ? brakeGrip : null);
+    if (!(brakeView && brakeGrip?.shown)) ctx.dropFingers?.();
+    // The words of the things in reach (HO-2): the fingers' offer, the edges, the edge at the backgauge.
+    ctx.brakeGrip = brakeView ? brakeGrip : null;
+    // An outcome arriving while a handle is lit: its chip says it now.
+    ctx.refreshGrip?.();
+  }, [brakeGrip, brakeView]);
+  // The shop's records (SM-3): print decals on the parts as shown, after the
+  // poses, the unfold view and the station above (each hides parts).
+  useEffect(() => {
+    const ctx = sceneRef.current;
+    if (!ctx) return;
+    ctx.shopLayer.setRecords(model);
+    ctx.render();
+  }, [snapshot, model, selectedKey, isolated, exploded, viewMode, section, sheetView, brakeView]);
+  // The open station's pick: what clicks pick.
+  useEffect(() => {
+    const ctx = sceneRef.current;
+    if (!ctx) return;
+    ctx.shopPick = shopPick;
+    if (!shopPick) ctx.cancelPrintDrag?.();
+    ctx.drawShopPick();
+  }, [shopPick]);
+  // The replay's mask, after the poses above (the pose effect asks
+  // shopLayer.hides, so a re-pose keeps the mask).
+  useEffect(() => {
+    const ctx = sceneRef.current;
+    if (!ctx) return;
+    ctx.shopLayer.setHidden(filmHidden);
+  }, [filmHidden, snapshot, model, selectedKey, isolated, exploded, viewMode]);
   useEffect(() => {
     const ctx = sceneRef.current;
     if (!ctx) return;
@@ -1873,6 +2940,17 @@ export default function CadViewport({
   useEffect(() => {
     sceneRef.current?.clearPlaneHover();
   }, [snapshot]);
+  // Draw's outlines (docs/sketch-studio-outline-edit-sheet-nest.md §3.5):
+  // rebuilt only when the workspace hands a new list (it builds one per
+  // outline set and chosen row, and null on every other panel); one render,
+  // no camera move, nothing per frame.
+  useEffect(() => {
+    const ctx = sceneRef.current;
+    if (!ctx) return;
+    drawShopOutlines(ctx.outlineLayer, shopOutlines);
+    ctx.shopOutlineCount = shopOutlines?.length || 0;
+    ctx.render();
+  }, [shopOutlines]);
   useEffect(() => {
     const ctx = sceneRef.current;
     if (!ctx) return;
@@ -1992,17 +3070,30 @@ export default function CadViewport({
     // The one-time fit belongs to a model opened with parts: an empty model's
     // camera is already framed, so a part added in this session never moves it.
     if (!hasInstances) ctx.hasFitted = true;
-    if (!ready) return;
+    // The press brake frames its own scene, whatever the kernel is doing.
+    const station = ctx.shopLayer.stationOpen();
+    if (!ready && !station) return;
     const viewChanged = ctx.lastView !== view || ctx.lastPerspective !== perspective || ctx.lastFitKey !== fitKey;
     // The one-time fit frames committed geometry only, never an operation
     // preview: a first preview on an empty model must not move the camera.
     const committedGeometry = !previewShown && Boolean(snapshot?.instances.length);
-    const firstGeometry = !ctx.hasFitted && committedGeometry;
+    const firstGeometry = !station && !ctx.hasFitted && committedGeometry;
     if (!viewChanged && !firstGeometry) return;
     ctx.lastView = view;
     ctx.lastPerspective = perspective;
     ctx.lastFitKey = fitKey;
     ctx.hasFitted ||= committedGeometry;
+    // The press brake hides every part: Fit and the standard views frame the
+    // station (the part and the tooling round it) instead, Fit from the
+    // operator's side until another standard view is chosen.
+    if (station) {
+      frameStation(
+        ctx,
+        view === ctx.brakeOpenedView ? STATION_VIEW : STANDARD_VIEWS[view] || STANDARD_VIEWS.isometric,
+        perspective,
+      );
+      return;
+    }
     const bounds = new THREE.Box3().setFromObject(ctx.group),
       center = new THREE.Vector3(),
       size = new THREE.Vector3();
@@ -2018,16 +3109,7 @@ export default function CadViewport({
     const next = perspective
       ? new THREE.PerspectiveCamera(40, 1, 0.1, 1e7)
       : new THREE.OrthographicCamera(-span, span, span, -span, 0.1, 1e7);
-    const directions = {
-      top: [0, 0, 1],
-      bottom: [0, 0, -1],
-      front: [0, -1, 0],
-      rear: [0, 1, 0],
-      left: [-1, 0, 0],
-      right: [1, 0, 0],
-      isometric: [1, -1, 0.8],
-    };
-    const dir = new THREE.Vector3(...(directions[view] || directions.isometric)).normalize();
+    const dir = new THREE.Vector3(...(STANDARD_VIEWS[view] || STANDARD_VIEWS.isometric)).normalize();
     next.up.set(0, Math.abs(dir.z) > 0.999 ? 1 : 0, Math.abs(dir.z) > 0.999 ? 0 : 1);
     next.position.copy(center).addScaledVector(dir, span * 1.7);
     next.lookAt(center);
@@ -2056,10 +3138,18 @@ export default function CadViewport({
   return (
     <div ref={host} className="cad-viewport" aria-label="Solid model viewport" data-view-mode={shownViewMode}>
       <div ref={hudRef} className="cad-gizmo-hud" aria-label="Gizmo readout" />
+      {/* The press brake's grip chip (hands on the sheet §5.2): the toolbar's Sheet buttons say the same to a screen reader. */}
+      <div ref={gripChipRef} className="cad-grip-chip" aria-hidden="true">
+        <div className="cad-grip-chip-title" />
+        <div className="cad-grip-chip-outcome" />
+      </div>
       <div ref={measureHudRef} className="cad-measure-hud" aria-label="Measure readout" />
       <div ref={placementHudRef} className="cad-placement-hud" aria-label="Placement readout" />
       <div ref={labelsRef} className="cad-mark-labels" aria-label="Dimension marks" />
+      <div ref={sketchDimLabelsRef} className="cad-sketch-dim-labels" aria-label="Sketch dimensions" />
+      <div ref={shopLabelsRef} className="cad-shop-labels" aria-label="Bend lines" />
       <div ref={planeLabelsRef} className="cad-plane-labels" aria-label="Origin planes" />
+      {brakeView && <BrakeSideView subscribe={subscribeStation} />}
       {error && <p role="alert">3D display unavailable: {error}</p>}
       <div className="cad-viewport-hint">
         {isSeeThrough(shownViewMode) && <div className="cad-view-mode-hint">{VIEW_MODE_COPY[shownViewMode].hint}</div>}
@@ -2073,6 +3163,12 @@ export default function CadViewport({
         )}
         {placement?.hint && <div className="cad-placement-hint">{placement.hint}</div>}
         {sketchMode === 'pick' && <div className="cad-pick-hint">{pickHint || hoverHint || PICK_HINT}</div>}
+        {shopPick?.hint && (
+          <div className="cad-pick-hint">
+            {shopPick.hint}
+            {hoverHint ? ` · ${hoverHint}` : ''}
+          </div>
+        )}
         {!sketchMode && planesVisible && !measureMode && !placement && (
           <div className="cad-pick-hint">{hoverHint || REST_HINT}</div>
         )}
@@ -2099,15 +3195,115 @@ export default function CadViewport({
             : ''}
         {measureMode
           ? 'Drag background to orbit · Right drag to pan · Scroll to zoom'
-          : !sketchMode &&
-            (placement
-              ? 'Drag background to orbit · Right drag to pan · Scroll to zoom'
-              : 'Drag background to orbit · Right drag to pan · Scroll to zoom · Click a part to select')}
+          : brakeView
+            ? // The press brake (hands on the sheet §5.5): the station's own line, then the view's.
+              `${brakeGrip ? `${brakeHint(brakeGrip.lined, brakeGrip.mode)} · ` : ''}Drag background to orbit · Right drag to pan · Scroll to zoom`
+            : !sketchMode &&
+              (placement || shopPick
+                ? 'Drag background to orbit · Right drag to pan · Scroll to zoom'
+                : 'Drag background to orbit · Right drag to pan · Scroll to zoom · Click a part to select')}
         {moveHint && <div>{moveHint}</div>}
       </div>
     </div>
   );
 }
+
+// The standard views: from the target toward the camera.
+const STANDARD_VIEWS = Object.freeze({
+  top: [0, 0, 1],
+  bottom: [0, 0, -1],
+  front: [0, -1, 0],
+  rear: [0, 1, 0],
+  left: [-1, 0, 0],
+  right: [1, 0, 0],
+  isometric: [1, -1, 0.8],
+});
+// Put a camera in charge: OrbitControls, the gizmo and the frustum follow it.
+function applyCamera(ctx, camera, target, span) {
+  ctx.camera = camera;
+  ctx.transform.camera = camera;
+  ctx.controls.object = camera;
+  ctx.controls.target.copy(target);
+  ctx.span = span;
+  ctx.controls.update();
+  ctx.resize();
+}
+// Frame the kernel groups of `ids` (a product the replay plays, §8) from the
+// isometric side in a fresh camera, as Fit frames the whole model.
+function frameGroups(ctx, ids, perspective) {
+  const bounds = new THREE.Box3();
+  for (const group of ctx.group.children) if (ids.has(group.userData.instanceId)) bounds.expandByObject(group);
+  if (bounds.isEmpty()) return;
+  const center = bounds.getCenter(new THREE.Vector3()),
+    size = bounds.getSize(new THREE.Vector3());
+  const span = Math.max(size.x, size.y, size.z, 100) * 1.6;
+  const camera = perspective
+    ? new THREE.PerspectiveCamera(40, 1, 0.1, 1e7)
+    : new THREE.OrthographicCamera(-span, span, span, -span, 0.1, 1e7);
+  const dir = new THREE.Vector3(...STANDARD_VIEWS.isometric).normalize();
+  camera.up.set(0, 0, 1);
+  camera.position.copy(center).addScaledVector(dir, span * 1.7);
+  camera.lookAt(center);
+  applyCamera(ctx, camera, center, span);
+}
+// Frame the press brake station (shopLayer.stationFocus: the part and the
+// tooling round it) from `direction` (toward the camera), in a fresh camera of
+// the projection asked for. Orbit, pan and zoom stay free afterwards.
+function frameStation(ctx, direction, perspective) {
+  const focus = ctx.shopLayer.stationFocus();
+  if (!focus) return;
+  const dir = new THREE.Vector3(...direction).normalize();
+  const up = new THREE.Vector3(0, Math.abs(dir.z) > 0.999 ? 1 : 0, Math.abs(dir.z) > 0.999 ? 0 : 1);
+  // The box's extent across the view (the screen's right and up), so the
+  // frame is as tight as the view direction allows, centred on the box as seen.
+  const right = new THREE.Vector3().crossVectors(up, dir).normalize();
+  const upright = new THREE.Vector3().crossVectors(dir, right);
+  const [min, max] = focus.box;
+  const centre = new THREE.Vector3(...focus.centre);
+  let x0 = Infinity,
+    x1 = -Infinity,
+    y0 = Infinity,
+    y1 = -Infinity;
+  for (const x of [min[0], max[0]])
+    for (const y of [min[1], max[1]])
+      for (const z of [min[2], max[2]]) {
+        const p = new THREE.Vector3(x, y, z).sub(centre);
+        const a = p.dot(right),
+          b = p.dot(upright);
+        [x0, x1, y0, y1] = [Math.min(x0, a), Math.max(x1, a), Math.min(y0, b), Math.max(y1, b)];
+      }
+  centre.addScaledVector(right, (x0 + x1) / 2).addScaledVector(upright, (y0 + y1) / 2);
+  // The station's cards (the side view, the flat blank) stand in a column on
+  // the left: the machine is framed in the rest of the view, so the target
+  // moves left by half the column (the orbit turns about it, as after a pan).
+  const canvas = ctx.renderer.domElement;
+  const width = canvas.clientWidth || 1,
+    height = canvas.clientHeight || 1;
+  const bounds = canvas.getBoundingClientRect();
+  const cards = canvas.closest('.cad-model-view')?.querySelectorAll('.cad-brake-side, .cad-brake-map') || [];
+  let reserve = 0;
+  for (const card of cards) {
+    const rect = card.getBoundingClientRect();
+    if (rect.width && rect.left - bounds.left < width / 2) reserve = Math.max(reserve, rect.right - bounds.left + 8);
+  }
+  reserve = Math.min(reserve, width * 0.45);
+  const free = width - reserve;
+  const span = Math.max(y1 - y0, ((x1 - x0) * height) / free, 100) * STATION_MARGIN;
+  centre.addScaledVector(right, -((reserve / 2) * span) / height);
+  const camera = perspective
+    ? new THREE.PerspectiveCamera(40, 1, 0.1, 1e7)
+    : new THREE.OrthographicCamera(-span, span, span, -span, 0.1, 1e7);
+  camera.up.copy(up);
+  const depth = new THREE.Vector3(...max).sub(new THREE.Vector3(...min)).length();
+  camera.position.copy(centre).addScaledVector(dir, perspective ? span * 1.4 + depth / 2 : Math.max(span * 1.7, depth));
+  camera.lookAt(centre);
+  applyCamera(ctx, camera, centre, span);
+  ctx.render();
+}
+// Room round the station's frame (the cards over the viewport sit at its sides).
+const STATION_MARGIN = 1.35;
+// The paint and print stations' picks: the outline of the flat face under the cursor.
+const SHOP_FACE_COLOR = '#1c7ed6';
 
 // Move gizmo size (the rotate rings use RING_SIZE: a larger dial is easier
 // to grab and finer to turn).
@@ -2120,8 +3316,6 @@ const PIVOT_SNAP_PX = 8;
 // Pointer travel (px) below which a press and release is a click, not a drag.
 const CLICK_PX = 4;
 const AXIS_UNITS = { X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };
-// The toolbar/HUD axis colours (cad.css .cad-axis-x/y/z).
-const AXIS_COLORS = { X: '#c62f2f', Y: '#2f8f2f', Z: '#2f5fc6' };
 // Sector resolution: one triangle per 5° of sweep.
 const SECTOR_SEGMENTS = 72;
 // Dimension marks: purple, orange when selected (SKETCH_COLORS.selected).
@@ -2416,6 +3610,54 @@ function lineObject(points, color, opacity = 1, segments = false, order = 30) {
   return line;
 }
 
+// Draw's outlines (§3.5 of docs/sketch-studio-outline-edit-sheet-nest.md):
+// the shop's accent for those ready to cut, its warning colour for the rest
+// (cad.css --shop-accent, --shop-warn). WebGL draws every line one pixel wide,
+// so the chosen outline is the heavier one by being opaque (the others are
+// faded) and, when it is a blank, by a light fill of its face.
+const OUTLINE_COLORS = { ready: '#287fb3', problem: '#a8620b' };
+function drawShopOutlines(layer, outlines) {
+  clearLayer(layer);
+  for (const outline of outlines || []) {
+    const color = outline.ready ? OUTLINE_COLORS.ready : OUTLINE_COLORS.problem;
+    for (const ring of outline.rings) {
+      const points = ring.closed ? [...ring.points, ring.points[0]] : ring.points;
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(
+          points.flatMap(([x, y]) => [x, y, 0]),
+          3,
+        ),
+      );
+      const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: outline.chosen ? 1 : 0.6 });
+      const line = new THREE.Line(geometry, material);
+      line.name = 'shop-outline';
+      line.userData.sketchId = outline.id;
+      line.renderOrder = 26;
+      layer.add(line);
+    }
+    if (outline.chosen && outline.ready && outline.rings.length) {
+      const [outer, ...holes] = outline.rings.map((r) => r.points.map(([x, y]) => new THREE.Vector2(x, y)));
+      const shape = new THREE.Shape(outer);
+      shape.holes = holes.map((h) => new THREE.Path(h));
+      const fill = new THREE.Mesh(
+        new THREE.ShapeGeometry(shape),
+        new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.14,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        }),
+      );
+      fill.name = 'shop-outline-fill';
+      fill.renderOrder = 25;
+      layer.add(fill);
+    }
+  }
+}
+
 // Rebuild the sketch overlay: grid, plane axes, snappable model edges, the
 // drawn entities, the rubber-band preview and the snap marker.
 function drawSketchOverlay(layer, overlay) {
@@ -2487,6 +3729,21 @@ function drawSketchOverlay(layer, overlay) {
   for (const entity of overlay.preview || []) {
     const line = lineObject(entityPolyline(entity), SKETCH_COLORS.preview, 0.9, false, 32);
     line.name = 'sketch-preview';
+    layer.add(line);
+  }
+  // Reference dimensions (docs/sketch-studio-sketch-dimensions.md §3.4): drawn
+  // as handed over (segments in plane mm), in the mark colours, above the
+  // entities; the one waiting for its place click faded.
+  for (const dimension of overlay.dimensions || []) {
+    const line = lineObject(
+      dimension.segments.flat(),
+      dimension.selected ? MARK_SELECTED_COLOR : MARK_COLOR,
+      dimension.preview ? 0.6 : 1,
+      true,
+      32,
+    );
+    line.name = 'sketch-dimension';
+    line.userData.dimensionId = dimension.id;
     layer.add(line);
   }
   // Measure mark points projected onto the plane: small purple diamonds.

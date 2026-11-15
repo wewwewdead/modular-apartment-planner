@@ -258,22 +258,71 @@ export function deriveRoofStateFromTrussSystem(trussSystem, catalog, sourceSyste
   };
 }
 
+/*
+ * The part of an attachment that is the truss system's alone, keyed on the
+ * system object and held weakly.
+ *
+ * `syncProjectStructures` re-attaches the roof on every edit, and what it
+ * re-derives here — the roof state and outline the trusses imply, and the
+ * datum the roof sits on — is a function of the attached truss system and the
+ * truss-type catalogue only. So it is memoised on the system's identity, which
+ * `syncProjectTrussSystems` keeps whenever the system did not change (see
+ * structuralSharing.js), and only for the default catalogue (`catalog`
+ * undefined — the sync's own call); a caller passing a catalogue of its own
+ * always gets a fresh answer. The roof's own input, its overhang, is applied
+ * per call below; the datum it moves is remembered for the last overhang only.
+ *
+ * The derived state and outline are shared between calls: every reader copies
+ * them (`resolveAttachedRoofOverrides` clones points and pitch) and none
+ * writes into them.
+ */
+const trussAttachmentBySystem = new WeakMap();
+
+function computeTrussAttachment(trussSystem, catalog) {
+  const systemGeometry = buildTrussSystemGeometry(trussSystem);
+  const derivedRoofState = deriveRoofStateFromTrussSystem(trussSystem, catalog, systemGeometry);
+  const derivedBoundaryPolygon = derivedRoofState
+    ? deriveRoofBoundaryFromTrussSystem(trussSystem, systemGeometry, derivedRoofState.roofType)
+    : null;
+  return {
+    derivedRoofState,
+    derivedBoundaryPolygon,
+    datumReadsRoofOverhang: Boolean(derivedRoofState) && trussSystemDatumReadsRoofOverhang(trussSystem, catalog),
+    lastElevation: null,
+  };
+}
+
+function resolveTrussAttachment(trussSystem, catalog) {
+  if (catalog !== undefined) return computeTrussAttachment(trussSystem, catalog);
+  let attachment = trussAttachmentBySystem.get(trussSystem);
+  if (!attachment) {
+    attachment = computeTrussAttachment(trussSystem);
+    trussAttachmentBySystem.set(trussSystem, attachment);
+  }
+  return attachment;
+}
+
 export function resolveRoofAttachmentContext(project, roofSystem = null, catalog) {
   const attachedTrussSystem = getAttachedTrussSystem(project, roofSystem);
   if (attachedTrussSystem) {
-    const systemGeometry = buildTrussSystemGeometry(attachedTrussSystem);
-    const derivedRoofState = deriveRoofStateFromTrussSystem(attachedTrussSystem, catalog, systemGeometry);
-    const derivedBoundaryPolygon = derivedRoofState
-      ? deriveRoofBoundaryFromTrussSystem(attachedTrussSystem, systemGeometry, derivedRoofState.roofType)
-      : null;
+    const attachment = resolveTrussAttachment(attachedTrussSystem, catalog);
+    const { derivedRoofState, derivedBoundaryPolygon } = attachment;
     // RT-3.1: a hip datum sits at the ROOF outline edge (see
     // getTrussRoofAttachmentElevation), so it reads the roof's applied overhang.
-    const roofOverhang =
-      derivedRoofState && trussSystemDatumReadsRoofOverhang(attachedTrussSystem, catalog)
-        ? resolveAppliedRoofOverhang({ ...roofSystem, roofType: 'hip' }, derivedBoundaryPolygon)
-        : 0;
+    const roofOverhang = attachment.datumReadsRoofOverhang
+      ? resolveAppliedRoofOverhang({ ...roofSystem, roofType: 'hip' }, derivedBoundaryPolygon)
+      : 0;
+    // The datum reads the truss system and this overhang (and never a
+    // catalogue: see getTrussRoofAttachmentElevation), so the last answer
+    // stands while both do.
+    if (attachment.lastElevation?.roofOverhang !== roofOverhang) {
+      attachment.lastElevation = {
+        roofOverhang,
+        value: getTrussRoofAttachmentElevation(attachedTrussSystem, { roofOverhang }),
+      };
+    }
     return {
-      attachmentElevation: getTrussRoofAttachmentElevation(attachedTrussSystem, { roofOverhang }),
+      attachmentElevation: attachment.lastElevation.value,
       attachedTrussSystem,
       derivedRoofState,
       derivedBoundaryPolygon,

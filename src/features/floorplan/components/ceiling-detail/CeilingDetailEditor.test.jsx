@@ -64,18 +64,26 @@ describe('CeilingDetailEditor', () => {
   it('renders the reflected-ceiling-plan workspace and every workflow section', () => {
     const html = renderToStaticMarkup(<CeilingDetailEditor />);
 
-    expect(html).toContain('Ceiling assembly editor — reflected ceiling plan');
-    expect(html).toContain('Living room ceiling');
+    // The header names the ceiling the way people do; the old two-line title is gone.
+    expect(html).toContain('>Living room ceiling</h1>');
+    expect(html).not.toContain('Ceiling assembly editor — reflected ceiling plan');
+    expect(html).toContain('Back to plan');
+    expect(html).toContain('6000 × 4000 mm');
     expect(html).toContain('Face and boards');
     expect(html).toContain('Structure');
     expect(html).toContain('Suspension');
     expect(html).toContain('Openings');
     expect(html).toContain('Screws');
     expect(html).toContain('Takeoff');
-    expect(html).toContain('RCP');
-    expect(html).toContain('Split');
-    expect(html).toContain('Live 3D');
+    // The view switch is one segmented control: Plan · Split · 3D.
+    expect(html).toContain('aria-label="Workspace view"');
+    expect(html).toContain('Show the reflected ceiling plan only');
+    expect(html).toContain('Show the reflected ceiling plan above the live 3D preview');
+    expect(html).toContain('Show the live 3D preview only');
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Split<\/button>/);
+    // What the 3D pane does lives in the "?" note; the pane carries no badge.
     expect(html).toContain('Updates after every committed board, member, screw, opening, or suspension edit');
+    expect(html).not.toContain('Live ceiling preview');
   });
 
   it('exposes every canvas tool as an icon button with a keyboard shortcut', () => {
@@ -90,7 +98,9 @@ describe('CeilingDetailEditor', () => {
     expect(html).toContain('Draw furring channel — click for the full width, or drag its span (S)');
     expect(html).toContain('Draw carrier — click for the full depth, or drag its span (C)');
     expect(html).toContain('Draw opening — drag out a hatch, downlight, or diffuser cut-out (O)');
-    expect(html).toContain('Esc cancels, then returns to Select');
+    // Shortcuts live in the "?" note beside the zoom controls.
+    expect(html).toContain('Cancels, then returns to Select');
+    expect(html).toContain('Pans the plan; the wheel zooms');
   });
 
   it('renders the canvas chrome: mm rulers, the real snap grid, and undo/redo controls', () => {
@@ -104,7 +114,7 @@ describe('CeilingDetailEditor', () => {
     expect(html).toContain('Fit the whole ceiling in view (0)');
   });
 
-  it('states the plan-aligned RCP convention on the status line and never mirrors U', () => {
+  it('states the plan-aligned RCP convention in the drawing notes and never mirrors U', () => {
     const html = renderToStaticMarkup(<CeilingDetailEditor />);
 
     expect(html).toContain('U 0 → 6000 mm');
@@ -149,6 +159,13 @@ describe('CeilingDetailEditor', () => {
     expect(html).toContain('aria-controls="wall-detail-ceiling-screws"');
     expect(html).toContain('aria-controls="wall-detail-ceiling-takeoff"');
     expect(html).toContain('aria-expanded="false"');
+    // The collapsed headers are the workflow map: no pill strip above them, and
+    // every step but the last ends with a Next to the one after it.
+    expect(html).not.toContain('aria-label="Wall detailing workflow"');
+    ['Structure', 'Suspension', 'Openings', 'Lighting', 'Screws', 'Dimensions', 'Takeoff'].forEach((title) =>
+      expect(html).toContain(`Next: ${title}`),
+    );
+    expect((html.match(/Next: /g) || []).length).toBe(7);
   });
 
   it('carries the professional-review disclaimer for the selected product profile', () => {

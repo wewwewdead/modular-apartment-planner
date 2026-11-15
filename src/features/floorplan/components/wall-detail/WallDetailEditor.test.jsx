@@ -38,22 +38,30 @@ describe('WallDetailEditor', () => {
 
   it('renders the wall-local workspace, exact takeoff, validation, exports, and as-built controls', () => {
     const html = renderToStaticMarkup(<WallDetailEditor />);
+    const wall = mocks.project.floors[0].walls[0];
 
-    expect(html).toContain('Wall-local assembly editor');
+    // The header names the wall the way people do, with the face — never the raw id.
+    expect(html).toContain(`Wall ${wall.id.split('_').pop()} · Inside face`);
+    expect(html).not.toContain(`>${wall.id}<`);
+    expect(html).toContain('Back to plan');
     expect(html).toContain('Complete wall assembly');
     expect(html).toContain('Panel layout');
     expect(html).toContain('Select / move');
     expect(html).toContain('Pan');
-    expect(html).toContain('Fit wall');
-    expect(html).toContain('Split');
-    expect(html).toContain('Live 3D');
+    expect(html).toContain('Fit the whole wall in view (0)');
+    // The view switch is one segmented control: Elevation · Split · 3D.
+    expect(html).toContain('aria-label="Workspace view"');
+    expect(html).toContain('Show the elevation drawing above the live 3D preview');
+    expect(html).toContain('Show the live 3D preview only');
     expect(html).toContain('Updates after every committed panel, frame, screw, gap, or assembly edit');
     expect(html).toContain('Draw panel');
     expect(html).toContain('Trace cut panel');
     expect(html).toContain('Express joint — open shadow reveal');
     expect(html).toContain('Vertical reveal');
     expect(html).toContain('Shadow reveal');
-    expect(html).toContain('Hold Space + drag to pan');
+    // Shortcuts live in the "?" note beside the zoom controls.
+    expect(html).toContain('Space + drag');
+    expect(html).toContain('Pans the drawing; the wheel zooms');
     expect(html).toContain('Panel landing / side');
     expect(html).toContain('(50 mm support − reveal) ÷ 2');
     expect(html).toContain('Aesthetic shadow line');
@@ -80,13 +88,18 @@ describe('WallDetailEditor', () => {
     expect(html).toContain('Click two exact points to measure, or drag; hold Shift');
     expect(html).toContain('Aim for the green snap target');
     expect(html).toContain('drag either green endpoint');
-    expect(html).toContain('drag the amber line to move the whole guide');
+    expect(html).toContain('drag the blue line to move the whole guide');
     expect(html).toContain('Place Screw snaps continuously to user measurements and their crossings');
     expect(html).toContain('Measure precision: 0.01 mm');
     expect(html).toContain('Overall width and height');
     expect(html).toContain('Dimension schedule');
     expect(html).toContain('Exact takeoff');
-    expect(html).toContain('Export drawing SVG');
+    // Export is one menu: the drawing and the takeoff.
+    expect(html).toContain('aria-haspopup="menu"');
+    expect(html).toContain('Drawing SVG');
+    expect(html).toContain('Download the scaled elevation drawing as SVG');
+    expect(html).toContain('Takeoff CSV');
+    expect(html).toContain('Download the material takeoff as CSV');
     expect(html).toContain('Site / as-built comparison');
     expect(html).toContain('Coordination checks');
   });
@@ -98,11 +111,17 @@ describe('WallDetailEditor', () => {
     expect(html).toContain('Detail this wall in six steps');
     expect(html).toContain('Got it');
 
-    // Numbered workflow strip covering every step through checking and export.
-    expect(html).toContain('aria-label="Wall detailing workflow"');
-    expect(html).toContain('Workflow');
-    expect(html).toContain('Boards');
-    expect(html).toContain('Screws');
+    // The collapsed step headers are the workflow map (the pill strip is gone):
+    // every numbered step, the optional one in its place, and a Next on each
+    // open step leading to the following required one.
+    expect(html).not.toContain('aria-label="Wall detailing workflow"');
+    ['Wall face', 'Complete wall assembly', 'Panel layout', 'Framing', 'Fasteners', 'Construction dimensions'].forEach(
+      (title) => expect(html).toContain(title),
+    );
+    expect(html).toMatch(/Accent panels<span[^>]*>Optional<\/span>/);
+    expect(html).toContain('Next: Complete wall assembly');
+    expect(html).toContain('Next: Framing');
+    expect(html).not.toContain('Next: Accent panels');
 
     // Each panel section is an accordion header with a controlled body.
     expect(html).toContain('aria-controls="wall-detail-face"');
@@ -129,9 +148,10 @@ describe('WallDetailEditor', () => {
     expect(html).toContain('Select / move — click to pick anything, drag to move it, Ctrl-drag to copy it (V)');
     expect(html).toContain('Trace cut panel — click each corner, then close the outline (T)');
     expect(html).toContain('Draw measurement — click two exact points, or drag; Shift locks level/plumb (M)');
-    expect(html).toContain('Esc cancels, then returns to Select');
+    expect(html).toContain('Cancels, then returns to Select');
     // The copy shortcut is only discoverable if the canvas says it exists.
-    expect(html).toContain('Ctrl + drag copies a piece');
+    expect(html).toContain('Ctrl + drag');
+    expect(html).toContain('Copies the piece you drag');
     expect(html).toContain('hold Ctrl while dragging to copy it');
   });
 
@@ -223,8 +243,11 @@ describe('WallDetailEditor', () => {
 
     const html = renderToStaticMarkup(<WallDetailEditor />);
 
-    expect(html).toContain('Editing outside face · Fiber cement');
-    expect(html).toContain('Outside · Fiber cement');
+    // Step 1 says it once: the face switch shows the outside face pressed, and
+    // the step's summary names that face and its board.
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Outside face<\/button>/);
+    expect(html).toContain('<small>Outside face · Fiber cement</small>');
+    expect(html).not.toContain('Editing outside face');
     expect(html).toContain('value="fiber_cement" selected=""');
   });
 });

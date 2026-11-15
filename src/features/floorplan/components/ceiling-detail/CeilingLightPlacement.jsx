@@ -14,9 +14,7 @@ import { describeLightRun } from './lightRun';
  * why none of this lives inside the memoised plan layers.
  */
 
-export const LIGHT_GUIDE_COLOR = '#ffb85c';
-
-/** How the Light tool is driven, in the status bar and in the tool's own strip. */
+/** How the Light tool is driven: the context bar's hint while the tool is armed. */
 export const LIGHT_TOOL_HINT =
   'Click to place · drag for a row (↑/↓ count) · hold Shift for a grid (←/→ columns, ↑/↓ rows)';
 
@@ -98,7 +96,7 @@ export function CeilingLightGhost({ fixtureType, point, aim = null, unitPx }) {
   return (
     <g
       data-light-ghost={fixtureType}
-      className={styles.drawPreview}
+      className={`${styles.drawPreview} ${styles.lightGhost}`}
       fill="none"
       stroke={FIXTURE_SYMBOL_COLOR}
       strokeWidth="1.25"
@@ -111,7 +109,7 @@ export function CeilingLightGhost({ fixtureType, point, aim = null, unitPx }) {
   );
 }
 
-/** One dashed line across the whole ceiling per alignment the light locked to. */
+/** One dashed line across the whole ceiling per alignment the light locked to (preview colour, `.lightGuide`). */
 export function CeilingLightGuides({ guides, length, depth }) {
   if (!guides?.length) return null;
   return (
@@ -121,11 +119,11 @@ export function CeilingLightGuides({ guides, length, depth }) {
           <line
             key={`u:${guide.value}`}
             data-light-guide="u"
+            className={styles.lightGuide}
             x1={guide.value}
             y1={0}
             x2={guide.value}
             y2={depth}
-            stroke={LIGHT_GUIDE_COLOR}
             strokeWidth="1"
             strokeDasharray="6 4"
             vectorEffect="non-scaling-stroke"
@@ -134,11 +132,11 @@ export function CeilingLightGuides({ guides, length, depth }) {
           <line
             key={`v:${guide.value}`}
             data-light-guide="v"
+            className={styles.lightGuide}
             x1={0}
             y1={guide.value}
             x2={length}
             y2={guide.value}
-            stroke={LIGHT_GUIDE_COLOR}
             strokeWidth="1"
             strokeDasharray="6 4"
             vectorEffect="non-scaling-stroke"
@@ -150,30 +148,27 @@ export function CeilingLightGuides({ guides, length, depth }) {
 }
 
 /**
- * The Light tool's own options, in the canvas toolbar beside Snap while the
- * tool is armed: the type the next click places (the same state as the
- * Lighting section's picker, so the two always agree) and how to drive it.
+ * The Light tool's own option, in the context bar beside the tool chip while the
+ * tool is armed: the type the next click places (the same state as the Lighting
+ * section's picker, so the two always agree). How to drive the tool is the
+ * bar's hint, which follows it.
  */
 export function LightToolOptions({ value, onChange }) {
   return (
-    <div className={styles.toolGroup} data-tool-options="add_light">
-      <span>Light</span>
-      <label className={styles.snapControl}>
-        <span>New light type</span>
-        <select
-          value={value}
-          title="The luminaire the next click places"
-          onChange={(event) => onChange(event.target.value)}
-        >
-          {FIXTURE_TYPES.map((entry) => (
-            <option key={entry.id} value={entry.id}>
-              {entry.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <span className={styles.snapControl}>{LIGHT_TOOL_HINT}</span>
-    </div>
+    <label className={styles.contextOption} data-tool-options="add_light">
+      <select
+        value={value}
+        aria-label="New light type"
+        title="The luminaire the next click places"
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {FIXTURE_TYPES.map((entry) => (
+          <option key={entry.id} value={entry.id}>
+            {entry.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -188,8 +183,8 @@ export function CeilingLightRunGhost({ run, start, fixtureType, unitPx, length, 
   const { points, grid, end, isRun } = run;
   const b = end?.point || start;
   const outline = {
-    fill: 'none',
-    stroke: LIGHT_GUIDE_COLOR,
+    className: styles.lightRunOutline,
+    'data-preview': 'light-run',
     strokeWidth: '1.25',
     strokeDasharray: '8 5',
     vectorEffect: 'non-scaling-stroke',

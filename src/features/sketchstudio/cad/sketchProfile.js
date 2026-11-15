@@ -247,10 +247,11 @@ function loopProfile(loop) {
   return chainPath(loop.chain, true);
 }
 
-// Convert drawn entities to one kernel profile: the outer outline with any
-// loops directly inside it as `holes`. Returns problems for anything the
-// kernel cannot extrude, rather than guessing.
-export function entitiesToProfile(entities = []) {
+// The closed loops of drawn entities (rectangles, circles, line / arc chains
+// that close), each with its polygon, area and the loops it lies inside, plus
+// the open chains and the problems found joining them. Construction entities
+// take no part.
+function profileLoops(entities) {
   const drawn = entities.filter((e) => !e.construction);
   const problems = [];
   const loops = [];
@@ -272,10 +273,6 @@ export function entitiesToProfile(entities = []) {
     if (chain.closed) loops.push({ kind: 'chain', chain });
     else open.push(chain);
   }
-  if (open.length)
-    problems.push(
-      `${open.length} open outline${open.length > 1 ? 's' : ''}: connect the ends (snap to the start point) to close the profile.`,
-    );
   for (const loop of loops) {
     loop.polygon =
       loop.kind === 'chain' ? chainPolygon(loop.chain) : entityPolyline(loop.entity, loop.kind === 'circle' ? 96 : 4);
@@ -283,6 +280,40 @@ export function entitiesToProfile(entities = []) {
   }
   for (const loop of loops) loop.parents = loops.filter((other) => other !== loop && inside(loop, other));
   const outers = loops.filter((l) => !l.parents.length).sort((a, b) => b.area - a.area);
+  return { drawn, loops, outers, open, problems, branching: grouped.problems.length > 0 };
+}
+const loopEntities = (loop) => (loop.kind === 'chain' ? loop.chain.segments.map((s) => s.entity) : [loop.entity]);
+
+/**
+ * Drawn entities grouped by outer loop (docs/sketch-studio-outline-edit-sheet-nest.md
+ * §3.4): each group holds an outer loop's own entities and those of the loops
+ * directly inside it (its cut-outs), largest outline first, every entity in
+ * the order it was drawn. Entities in no closed outer loop (open chains,
+ * construction lines, a loop inside a cut-out) stay with the first group. One
+ * outer loop or none: `[entities]`, unchanged.
+ */
+export function splitOutlines(entities = []) {
+  const { loops, outers } = profileLoops(entities);
+  if (outers.length < 2) return [entities];
+  const owner = new Map();
+  outers.forEach((outer, index) => {
+    for (const loop of [outer, ...loops.filter((l) => l.parents.length === 1 && l.parents[0] === outer)])
+      for (const entity of loopEntities(loop)) owner.set(entity, index);
+  });
+  const groups = outers.map(() => []);
+  for (const entity of entities) groups[owner.get(entity) ?? 0].push(entity);
+  return groups;
+}
+
+// Convert drawn entities to one kernel profile: the outer outline with any
+// loops directly inside it as `holes`. Returns problems for anything the
+// kernel cannot extrude, rather than guessing.
+export function entitiesToProfile(entities = []) {
+  const { drawn, loops, outers, open, problems, branching } = profileLoops(entities);
+  if (open.length)
+    problems.push(
+      `${open.length} open outline${open.length > 1 ? 's' : ''}: connect the ends (snap to the start point) to close the profile.`,
+    );
   if (!outers.length) {
     if (!open.length) return { profile: null, problems: drawn.length ? problems : ['Draw a closed outline first.'] };
     // Keep unfinished work as an open path (a valid sweep path, not extrudable).
@@ -300,7 +331,7 @@ export function entitiesToProfile(entities = []) {
   const profile = loopProfile(outer);
   if (holes.length) profile.holes = holes.map(loopProfile);
   // Branching lines make the outline ambiguous, so nothing is extruded.
-  return { profile, closed: !grouped.problems.length, problems, loops: loops.length, holes: holes.length };
+  return { profile, closed: !branching, problems, loops: loops.length, holes: holes.length };
 }
 
 // Rebuild editable entities from a stored profile, so sketches made with the

@@ -189,3 +189,153 @@ describe('kernel boot reporting', () => {
     expect(result.current.kernelAwake).toBe(false);
   });
 });
+describe('kernel-inert edits (docs/sketch-studio-fab-shop.md §4.3)', () => {
+  it('keeps the snapshot for a finish-only change and request() still answers; a geometry change rebuilds', async () => {
+    const requests = [];
+    class WorkerMock {
+      postMessage(data) {
+        requests.push(data);
+        queueMicrotask(() =>
+          this.onmessage({
+            data: {
+              ...data,
+              result: data.type === 'build' ? { parts: [], instances: [], built: requests.length } : ['sheet'],
+            },
+          }),
+        );
+      }
+      terminate() {}
+    }
+    vi.stubGlobal('Worker', WorkerMock);
+    const model = emptyModel();
+    const { result, rerender } = renderHook(({ model }) => useCadModel(model), { initialProps: { model } });
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    const snapshot = result.current.snapshot,
+      revision = result.current.revision;
+    expect(requests.map((r) => r.type)).toEqual(['build']);
+
+    // Painting a part: no rebuild, ready on the very render that shows it.
+    const painted = {
+      ...model,
+      finishes: [
+        {
+          id: 'f',
+          instanceId: 'i',
+          kind: 'powder',
+          name: 'RAL 9005',
+          colour: '#0a0a0a',
+          gloss: 'gloss',
+          thickness: 70,
+        },
+      ],
+    };
+    rerender({ model: painted });
+    expect(result.current.ready).toBe(true);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    });
+    expect(requests.map((r) => r.type)).toEqual(['build']);
+    expect(result.current.status).toBe('ready');
+    expect(result.current.source).toBe(painted);
+    expect(result.current.snapshot).toBe(snapshot);
+    expect(result.current.revision).toBe(revision);
+    let answer;
+    await act(async () => {
+      answer = await result.current.request('drawings');
+    });
+    expect(answer).toEqual(['sheet']);
+    expect(requests.at(-1)).toMatchObject({ type: 'drawings', revision });
+
+    // Another press brake (the fabrication settings): no rebuild either.
+    const reshopped = {
+      ...painted,
+      fabrication: { ...painted.fabrication, shop: { ...painted.fabrication.shop, machine: 'brake-80-2500' } },
+    };
+    rerender({ model: reshopped });
+    expect(result.current.ready).toBe(true);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    });
+    expect(requests.filter((r) => r.type === 'build')).toHaveLength(1);
+    expect(result.current.source).toBe(reshopped);
+    expect(result.current.snapshot).toBe(snapshot);
+
+    // A real edit rebuilds as before.
+    rerender({ model: { ...reshopped, parts: [] } });
+    expect(result.current.ready).toBe(false);
+    await waitFor(() => expect(requests.filter((r) => r.type === 'build')).toHaveLength(2));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.revision).toBeGreaterThan(revision);
+  });
+  it('SM-3: a group of parts and a print never rebuild; a rebuild is sent no print images', async () => {
+    const requests = [];
+    class WorkerMock {
+      postMessage(data) {
+        requests.push(data);
+        queueMicrotask(() =>
+          this.onmessage({ data: { ...data, result: data.type === 'build' ? { parts: [], instances: [] } : [] } }),
+        );
+      }
+      terminate() {}
+    }
+    vi.stubGlobal('Worker', WorkerMock);
+    const model = {
+      ...emptyModel(),
+      parts: [{ id: 'p', name: 'Plate', features: [{ id: 'f', type: 'box', width: 1, depth: 1, height: 1 }] }],
+      instances: [
+        { id: 'a', partId: 'p', position: [0, 0, 0], rotation: [0, 0, 0] },
+        { id: 'b', partId: 'p', position: [5, 0, 0], rotation: [0, 0, 0] },
+      ],
+    };
+    const { result, rerender } = renderHook(({ model }) => useCadModel(model), { initialProps: { model } });
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    const snapshot = result.current.snapshot;
+    // Both parts put in one group (instances rewritten with a groupId).
+    const grouped = {
+      ...model,
+      groups: [{ id: 'g', name: 'Group 1', parentId: null }],
+      instances: model.instances.map((i) => ({ ...i, groupId: 'g' })),
+    };
+    rerender({ model: grouped });
+    expect(result.current.ready).toBe(true);
+    const image = `data:image/png;base64,${'Q'.repeat(300000)}`;
+    const printed = {
+      ...grouped,
+      prints: [
+        {
+          id: 't',
+          instanceId: 'a',
+          origin: [0, 0, 1],
+          x: [1, 0, 0],
+          normal: [0, 0, 1],
+          width: 10,
+          height: 10,
+          rotation: 0,
+          method: 'uv',
+          kind: 'image',
+          image,
+          colour: '#000000',
+        },
+      ],
+    };
+    rerender({ model: printed });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    });
+    expect(requests.filter((r) => r.type === 'build')).toHaveLength(1);
+    expect(result.current.snapshot).toBe(snapshot);
+    expect(result.current.source).toBe(printed);
+    // Moving a part rebuilds, and the build carries no image (nor finishes, prints).
+    rerender({
+      model: {
+        ...printed,
+        instances: printed.instances.map((i) => (i.id === 'b' ? { ...i, position: [6, 0, 0] } : i)),
+      },
+    });
+    await waitFor(() => expect(requests.filter((r) => r.type === 'build')).toHaveLength(2));
+    const sent = requests.filter((r) => r.type === 'build').at(-1).payload;
+    expect(sent.prints).toBeUndefined();
+    expect(sent.groups).toEqual(grouped.groups);
+    expect(JSON.stringify(sent)).not.toContain('QQQQ');
+  });
+});

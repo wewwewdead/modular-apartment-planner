@@ -130,7 +130,8 @@ describe('assembly editors mount shell-first', () => {
     const { container, getByText } = render(<WallDetailEditor mountShellFirst />);
 
     expect(container.querySelector('[data-editor-phase="opening"]')).toBeTruthy();
-    expect(getByText('Wall-local assembly editor')).toBeTruthy();
+    // The shell names the wall the way the editor will: never the raw id.
+    expect(getByText(`Wall ${wall.id.split('_').pop()} · Inside face`)).toBeTruthy();
     expect(container.querySelector('[data-preview-pane="wall"]')).toBeTruthy();
     // The elevation rectangle and the door cut out of it: two closed runs.
     const outline = container.querySelector('[data-editor-canvas="opening"] svg path').getAttribute('d');

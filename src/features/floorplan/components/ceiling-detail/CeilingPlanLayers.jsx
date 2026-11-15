@@ -76,12 +76,13 @@ const FIXTURE_SYMBOLS = Object.freeze({
  * saying what kind of light is there.
  */
 const FIXTURE_MIN_SYMBOL_PX = 7;
-export const FIXTURE_SYMBOL_COLOR = '#ffd48a';
-// The one orange every selected piece on this plan wears. The stylesheet holds
-// it as --assembly-selected-line, which a presentation attribute cannot read,
-// and these symbols carry their stroke as an attribute so the whole group can
-// set it once.
-const FIXTURE_SELECTED_COLOR = '#ffb45c';
+/*
+ * A symbol strokes, and a pendant's lamp dot fills, in `currentColor`: the
+ * group sets it once from the stylesheet (`.fixtureSymbol`, gold; the selection
+ * orange when picked; `.lightGhost`, the preview colour), so no colour lives
+ * here and a presentation attribute never has to read a custom property.
+ */
+export const FIXTURE_SYMBOL_COLOR = 'currentColor';
 
 function svgNumber(value) {
   return Math.round(value * 100) / 100;
@@ -360,11 +361,10 @@ export const CeilingHangerLayer = memo(function CeilingHangerLayer({ hangers, un
       {hangers.map((hanger) => (
         <circle
           key={hanger.id}
+          className={styles.hangerMark}
           cx={hanger.u}
           cy={hanger.v}
           r={4 * unitPx}
-          fill="none"
-          stroke="#8fd0f0"
           strokeWidth="1.25"
           vectorEffect="non-scaling-stroke"
         >
@@ -444,12 +444,11 @@ export const CeilingFixtureLayer = memo(function CeilingFixtureLayer({
     <g data-ceiling-layer="fixtures">
       {fixtures.map((fixture) => {
         const selected = selectedId === fixture.id;
-        const color = selected ? FIXTURE_SELECTED_COLOR : FIXTURE_SYMBOL_COLOR;
         const { halfU, halfV } = fixtureSymbolExtent(getFixtureType(fixture.fixtureType), unitPx);
         return (
           <g
             key={fixture.id}
-            className={styles.fastenerGraphic}
+            className={`${styles.fastenerGraphic} ${styles.fixtureSymbol}`}
             data-fixture-id={fixture.id}
             data-selected={selected ? 'true' : 'false'}
             // The light under a move is drawn by the editor's ghost at its new
@@ -457,7 +456,7 @@ export const CeilingFixtureLayer = memo(function CeilingFixtureLayer({
             // it is leaving readable without two full symbols competing.
             opacity={hiddenId === fixture.id ? 0.35 : undefined}
             fill="none"
-            stroke={color}
+            stroke={FIXTURE_SYMBOL_COLOR}
             strokeWidth="1.25"
             // The symbol is outlines only, so without this a press in the middle
             // of a can fell through its empty interior onto the board below and
@@ -480,7 +479,7 @@ export const CeilingFixtureLayer = memo(function CeilingFixtureLayer({
                 vectorEffect="non-scaling-stroke"
               />
             ) : null}
-            {fixtureSymbolNodes(fixture, unitPx, color)}
+            {fixtureSymbolNodes(fixture, unitPx, FIXTURE_SYMBOL_COLOR)}
           </g>
         );
       })}

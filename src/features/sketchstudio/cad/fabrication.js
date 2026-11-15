@@ -1,5 +1,7 @@
 import { memberMetrics, numeric, resolveParameters, positive } from './model.js';
 import { hardwareNote, threadNote } from './hardware.js';
+import { foldSheet } from './sheetMetal.js';
+import { SHEET_STOCK } from './shopCatalog.js';
 
 // A hole row's drilling note counts its holes (Phase K): "4 × M6 …".
 const rowPrefix = (feature, parameters) => {
@@ -26,6 +28,8 @@ export function buildCutList(model, snapshot) {
       // A later extrusion, Boolean or pattern can change length, section or
       // number of bodies. Never schedule the original member as the final cut.
       const member = modifiedEnds ? null : sourceMember;
+      // A sheet-metal part is cut flat (docs/sketch-studio-fab-shop.md §9 SM-1 item 7).
+      const sheet = f?.type === 'sheetmetal' ? sheetRow(model, f, parameters) : null;
       return {
         partId: part.id,
         name: part.name,
@@ -38,6 +42,8 @@ export function buildCutList(model, snapshot) {
         sourceMember: modifiedEnds ? sourceMember : null,
         modifiedEnds,
         note: [
+          // A bought-in item (shop floor §5.4) is bought, not cut: no profile, never nested.
+          part.purchased ? `Bought in${part.purchased.reference ? `: ${part.purchased.reference}` : ''}` : '',
           f?.type === 'hardware' ? hardwareNote(f) : '',
           ...features
             .filter((f) => f.holeSpec)
@@ -53,8 +59,31 @@ export function buildCutList(model, snapshot) {
           .join('; '),
         section: sourceMember ? JSON.stringify(sourceMember.section) : '',
         blankLength: member ? member.longPoint + numeric(model.fabrication.allowance, parameters) : null,
+        ...(sheet ? { sheet } : {}),
       };
     });
+}
+
+// The flat blank a sheet-metal part is cut from: size, thickness, stock,
+// bends, laser path. Null when the blank cannot be folded (the kernel then
+// failed too, so there is no current geometry to list anyway).
+function sheetRow(model, feature, parameters) {
+  const profile = model.sketches.find((s) => s.id === feature.sketchId)?.profile;
+  try {
+    const fold = foldSheet(feature, profile, parameters);
+    return {
+      width: fold.flat.width,
+      height: fold.flat.height,
+      thickness: fold.thickness,
+      stock: fold.stock,
+      stockName: SHEET_STOCK[fold.stock].name,
+      bends: fold.bends.length,
+      cutLength: fold.flat.cutLength,
+      pierces: fold.flat.pierces,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function planLinearStock(rows, fabrication) {
@@ -167,7 +196,72 @@ export const csv = (rows) =>
     )
     .join('\r\n');
 
-export function cutListCsv(rows) {
+// Columns a sheet-metal row adds at the end; a list without one keeps the
+// columns it always had.
+const SHEET_COLUMNS = [
+  'Blank width mm',
+  'Blank height mm',
+  'Sheet thickness mm',
+  'Sheet stock',
+  'Bend count',
+  'Cut length mm',
+];
+// The shop's records (shopRecords.js shopRecordRows) follow the parts as
+// trailing rows after a blank line, one header for both kinds; without any
+// (null, or no rows) the list is exactly what it always was.
+const SHOP_COLUMNS = [
+  'Shop record',
+  'ID',
+  'Parts',
+  'Kind',
+  'Process / method',
+  'Finish',
+  'Colour',
+  'Gloss',
+  'Film µm',
+  'Painted area m2',
+  'Powder kg',
+  'Artwork',
+  'Artwork width mm',
+  'Artwork height mm',
+];
+function shopCsvRows(shop) {
+  if (!shop || !(shop.finishes.length || shop.prints.length)) return [];
+  const row = (values) => SHOP_COLUMNS.map((column) => values[column] ?? '');
+  return [
+    [''],
+    SHOP_COLUMNS,
+    ...shop.finishes.map((f) =>
+      row({
+        'Shop record': 'Finish',
+        ID: f.id,
+        Parts: f.parts,
+        Kind: f.kind,
+        Finish: f.name,
+        Colour: f.colour,
+        Gloss: f.gloss,
+        'Film µm': f.thickness,
+        'Painted area m2': f.area,
+        'Powder kg': f.mass,
+      }),
+    ),
+    ...shop.prints.map((p) =>
+      row({
+        'Shop record': 'Print',
+        ID: p.id,
+        Parts: p.parts,
+        Kind: p.kind,
+        'Process / method': p.method,
+        Colour: p.colour,
+        Artwork: p.artwork,
+        'Artwork width mm': p.width,
+        'Artwork height mm': p.height,
+      }),
+    ),
+  ];
+}
+export function cutListCsv(rows, shop = null) {
+  const sheets = rows.some((r) => r.sheet);
   return csv([
     [
       'Part ID',
@@ -188,6 +282,7 @@ export function cutListCsv(rows) {
       'Height mm',
       'Grain',
       'Notes',
+      ...(sheets ? SHEET_COLUMNS : []),
     ],
     ...rows.map((r) => [
       r.partId,
@@ -206,6 +301,10 @@ export function cutListCsv(rows) {
       ...r.dimensions,
       r.grain,
       r.note,
+      ...(sheets
+        ? [r.sheet?.width, r.sheet?.height, r.sheet?.thickness, r.sheet?.stockName, r.sheet?.bends, r.sheet?.cutLength]
+        : []),
     ]),
+    ...shopCsvRows(shop),
   ]);
 }

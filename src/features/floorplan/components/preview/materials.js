@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { parseWallFinishMaterialKey } from '@/domain/wallFinishes';
+import { parseWallFastenerTonalMaterialKey, parseWallFinishMaterialKey } from '@/domain/wallFinishes';
 import { SIDING_BOARD_LENGTH } from '@/domain/wallSiding';
 import {
   applyCoursePattern,
@@ -54,6 +54,8 @@ const DETAIL_ASSIGNMENTS = {
   wallFastener: 'metal',
   wallFastenerContrast: 'metal',
   wallFastenerConstruction: 'smooth',
+  // A tonal head (`wallFastenerTonal:<face key>`) is built on demand from the
+  // face it sits in, so it has no row here; it wears TONAL_FASTENER_DETAIL.
   ceilingBoard: 'plaster',
   ceilingBoardPlywood: 'timber',
   ceilingFraming: 'metal',
@@ -116,6 +118,15 @@ const DETAIL_ASSIGNMENTS = {
   plantLeafDeep: 'fabric',
   plantPot: 'smooth',
 };
+
+/**
+ * A tonal screw head's detail family and see-through tier, whatever face it is
+ * painted with (`buildTonalFastenerMaterial`): smooth paint, and the tier the
+ * stock screws have in `viewMode.js` (`wallFastener: 'structure'`) — a screw
+ * stays solid in X-ray, it is part of what an X-ray is for.
+ */
+const TONAL_FASTENER_DETAIL = 'smooth';
+const TONAL_FASTENER_TIER = 'structure';
 
 /** Dielectric: paint, plaster, timber, ceramic, fabric, concrete. */
 function surface(parameters) {
@@ -784,13 +795,21 @@ function buildWallFinishMaterial(materialPalette, parsed, key) {
  * key (`wallFinish:<kind>:<substrate>:<HEX6>:<sheen>`) the palette has not seen
  * yet is built on the spot and kept under that key, so the second face in the
  * same colour gets the same instance — and the batcher, which buckets on
- * identity, draws them in one call. Any other unknown key answers `undefined`,
- * as indexing always did.
+ * identity, draws them in one call. A tonal screw-head key
+ * (`wallFastenerTonal:<face key>`) is built the same way, from its face's
+ * material. Any other unknown key answers `undefined`, as indexing always did.
  */
 export function paletteMaterialFor(materialPalette, key) {
   if (!materialPalette) return undefined;
   const existing = materialPalette[key];
   if (existing) return existing;
+  const faceKey = parseWallFastenerTonalMaterialKey(key);
+  if (faceKey) {
+    const tonal = buildTonalFastenerMaterial(materialPalette, faceKey, key);
+    if (!tonal) return undefined;
+    materialPalette[key] = tonal;
+    return tonal;
+  }
   const parsed = parseWallFinishMaterialKey(key);
   if (!parsed) return undefined;
   const material = buildWallFinishMaterial(materialPalette, parsed, key);
@@ -799,9 +818,62 @@ export function paletteMaterialFor(materialPalette, key) {
   return material;
 }
 
+// ── Tonal screw heads (docs/wall-fastener-visibility.md §2.2) ────────────────
+
+/**
+ * How much darker a tonal head is than the face it sits in, as a factor on the
+ * face's linear colour — about 0.73 in sRGB terms. Enough that a head reads in
+ * the Realistic style, which draws no outlines, as the shadowed dimple a
+ * painted-over screw makes; little enough that "quiet" still means quiet next
+ * to the metal and contrast expressions.
+ */
+export const TONAL_FASTENER_SHADE = 0.5;
+
+/**
+ * Build the head for a face drawn in `faceKey` (stock or finish): a
+ * `cloneWithProceduralDetail` of the face's own material, so it stays in the
+ * detailed palette's one program family and keeps the face's roughness, side
+ * and the render style's relief strength, then darkened and smoothed — a
+ * painted screw head is a film over steel, not a piece of board, and a siding
+ * face's course grooves have no business on an 8 mm disc.
+ *
+ * Owned by the palette and shared per face key, so every head on every face of
+ * that look is one instanced draw (`previewBatching`); opaque because its face
+ * is. Its tier is the stock screws' — structure, solid in X-ray — stated on the
+ * material because no table can list keys made of colour strings.
+ *
+ * Nothing recolours a face's material in place: a finish colour is part of its
+ * key (`wallFinishMaterialKey`), and so of this key, so a recoloured face asks
+ * for a new head and the old one is pruned with its finish.
+ */
+function buildTonalFastenerMaterial(materialPalette, faceKey, key) {
+  const source = paletteMaterialFor(materialPalette, faceKey);
+  if (!source?.isMaterial || !source.color?.isColor) return null;
+  const material = cloneWithProceduralDetail(source);
+  material.name = key;
+  material.color.copy(source.color).multiplyScalar(TONAL_FASTENER_SHADE);
+  applyProceduralDetail(material, TONAL_FASTENER_DETAIL);
+  material.userData = {
+    ...material.userData,
+    paletteKey: key,
+    tier: TONAL_FASTENER_TIER,
+    ownedByPalette: true,
+  };
+  delete material.userData.ownedByPreviewObject;
+  delete material.userData.baseOpacity;
+  delete material.userData.ghostTwin;
+  delete material.userData.selectionClone;
+  return material;
+}
+
 /** Every wall-finish key the palette holds a material for. */
 export function wallFinishMaterialKeys(materialPalette) {
   return Object.keys(materialPalette || {}).filter((key) => key.startsWith(WALL_FINISH_KEY_PREFIX));
+}
+
+/** Every tonal screw-head key the palette holds a material for. */
+export function tonalFastenerMaterialKeys(materialPalette) {
+  return Object.keys(materialPalette || {}).filter((key) => parseWallFastenerTonalMaterialKey(key));
 }
 
 /**
@@ -818,7 +890,9 @@ export function wallFinishMaterialKeys(materialPalette) {
  * Returns how many were removed.
  */
 export function pruneWallFinishMaterials(materialPalette, liveKeys, cap = 48) {
-  const keys = wallFinishMaterialKeys(materialPalette);
+  // A finish's tonal screw heads are made one per finish key too, so they go
+  // the same way — counted with them, and only when nothing draws them.
+  const keys = [...wallFinishMaterialKeys(materialPalette), ...tonalFastenerMaterialKeys(materialPalette)];
   if (keys.length <= cap) return 0;
   const live = liveKeys instanceof Set ? liveKeys : new Set(liveKeys || []);
   let removed = 0;

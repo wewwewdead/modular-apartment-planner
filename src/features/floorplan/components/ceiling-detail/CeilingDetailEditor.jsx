@@ -91,22 +91,25 @@ import {
   AdvancedGroup,
   CollapsibleSection,
   EmptyState,
+  IconButton,
   InfoHint,
-  Metric,
   NumberField,
+  Popover,
+  ReadoutRow,
+  SegmentedControl,
   SelectField,
-  StepStrip,
   TextField,
   Toggle,
   ToolButton,
   ToolGlyph,
   ToolbarButton,
+  isPopoverOpen,
 } from '@/features/floorplan/components/wall-detail/WallDetailUiKit';
 import styles from '@/features/floorplan/components/wall-detail/WallDetailEditor.module.css';
 import { ceilingSilhouette } from '@/features/floorplan/components/preview/loadingSilhouettes';
 import { useShellFirst } from '@/features/floorplan/components/wall-detail/useShellFirst';
 import { LOADING_COPY, PanePlaceholder } from '@/ui/loading';
-import { CeilingEditorOpeningShell, lastLayoutCounts } from './ceilingDetailEditorShell';
+import { CeilingEditorOpeningShell, ceilingDisplayName, lastLayoutCounts } from './ceilingDetailEditorShell';
 import { createCeilingDetailPreviewProject } from './ceilingDetailPreviewProject';
 import { useDeferredCoordination } from './useDeferredCoordination';
 import { CeilingPlanUnderlay, CeilingPlanUnderlayLabels } from './CeilingPlanUnderlay';
@@ -172,6 +175,7 @@ const CeilingLivePreview = memo(function CeilingLivePreview({
       selectionAccent="assembly"
       onAssemblyPick={onPick}
       paneKind="ceiling"
+      placeholderTone="paper"
       loadingLabel={LOADING_COPY.livePreview}
       compilingLabel={LOADING_COPY.compilingCeiling}
       silhouette={silhouette}
@@ -290,10 +294,9 @@ const TOOL_DEFINITIONS = Object.freeze([
   },
   {
     tool: CANVAS_TOOLS.ADD_LIGHT,
-    // The kit's glyph set is fixed and holds no luminaire; the screw glyph is a
-    // ringed circle, which is at least the shape an RCP draws a downlight as.
-    // The label and the L badge are what tell the two buttons apart.
-    icon: 'screw',
+    // Its own glyph, not the screw's: at laptop widths the toolbar drops the
+    // names and the icons have to tell Light and Screw apart on their own.
+    icon: 'light',
     label: 'Light',
     shortcut: 'L',
     title: 'Place light — click to set a downlight, pendant, or troffer (L)',
@@ -333,21 +336,32 @@ const TOOL_SHORTCUTS = Object.freeze(
   TOOL_DEFINITIONS.reduce((map, definition) => ({ ...map, [definition.shortcut.toLowerCase()]: definition }), {}),
 );
 
-/** Left-panel workflow, in the order a real ceiling gets detailed. */
+/**
+ * Left-panel workflow, in the order a real ceiling gets detailed. The collapsed
+ * section headers are the map of the job (number, title, live summary); one
+ * step is open at a time and each ends with "Next: …" (docs/assembly-editor-ui.md §2.3).
+ */
 const WORKFLOW_STEPS = Object.freeze([
-  { id: 'face', short: 'Boards', title: 'Face and boards', hint: 'Board product, size, and how the grid is laid out' },
-  { id: 'structure', short: 'Structure', title: 'Structure', hint: 'Furring channels and carriers behind the boards' },
-  { id: 'suspension', short: 'Drop', title: 'Suspension', hint: 'How far the ceiling hangs below its attachment' },
-  { id: 'openings', short: 'Openings', title: 'Openings', hint: 'Access hatches, downlights, and diffusers' },
-  { id: 'lighting', short: 'Lights', title: 'Lighting', hint: 'Luminaires, lamps, and what they put out' },
-  { id: 'screws', short: 'Screws', title: 'Screws', hint: 'Fixing spacing and clearances' },
-  {
-    id: 'dimensions',
-    short: 'Sizes',
-    title: 'Dimensions',
-    hint: 'Measurements the installer sets the ceiling out from',
-  },
-  { id: 'takeoff', short: 'Takeoff', title: 'Takeoff', hint: 'Board, framing, hanger, screw, and lighting quantities' },
+  { id: 'face', title: 'Face and boards' },
+  { id: 'structure', title: 'Structure' },
+  { id: 'suspension', title: 'Suspension' },
+  { id: 'openings', title: 'Openings' },
+  { id: 'lighting', title: 'Lighting' },
+  { id: 'screws', title: 'Screws' },
+  { id: 'dimensions', title: 'Dimensions' },
+  { id: 'takeoff', title: 'Takeoff' },
+]);
+
+/** The step "Next" leads to from `id`, or null after the last. */
+function nextWorkflowStep(id) {
+  const index = WORKFLOW_STEPS.findIndex((step) => step.id === id);
+  return index >= 0 ? WORKFLOW_STEPS[index + 1] || null : null;
+}
+
+const WORKSPACE_VIEW_OPTIONS = Object.freeze([
+  { value: WORKSPACE_VIEWS.RCP, label: 'Plan', title: 'Show the reflected ceiling plan only' },
+  { value: WORKSPACE_VIEWS.SPLIT, label: 'Split', title: 'Show the reflected ceiling plan above the live 3D preview' },
+  { value: WORKSPACE_VIEWS.THREE_D, label: '3D', title: 'Show the live 3D preview only' },
 ]);
 
 const LAYER_LABELS = Object.freeze({
@@ -641,19 +655,16 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
   // layer, so a move re-renders the editor body and none of the plan.
   const [lightHover, setLightHover] = useState(null);
   const [workspaceView, setWorkspaceView] = useState(WORKSPACE_VIEWS.SPLIT);
+  // The left panel is an exclusive accordion: one workflow step open at a time
+  // (bodies stay mounted and `hidden`). The right panel's sections are
+  // independent; Selection is always open and has no entry here.
+  const [openStep, setOpenStep] = useState('face');
   const [openSections, setOpenSections] = useState({
-    face: true,
-    structure: false,
-    suspension: false,
-    openings: false,
-    lighting: false,
-    screws: false,
-    dimensions: false,
-    takeoff: true,
-    selection: true,
     summary: true,
     elevations: true,
   });
+  // Set by "Next": the step to bring into view once it has opened.
+  const pendingStepScrollRef = useRef(null);
   const sectionNodes = useRef({});
   const sectionRefSetters = useRef({});
   const shortcutHandlerRef = useRef(null);
@@ -718,10 +729,21 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
     return () => window.removeEventListener('keydown', onShortcutKeyDown, true);
   }, []);
 
+  // "Next" opens the following step; once it has rendered open, scroll its
+  // header to the top of the panel so the body is what the eye lands on.
+  useEffect(() => {
+    const id = pendingStepScrollRef.current;
+    if (!id || id !== openStep) return;
+    pendingStepScrollRef.current = null;
+    sectionNodes.current[id]?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [openStep]);
+
   useEffect(() => {
     if (!panelTrace) return undefined;
     const cancelTrace = (event) => {
       if (event.key !== 'Escape') return;
+      // An open popover takes Escape for itself (WallDetailUiKit Popover).
+      if (isPopoverOpen()) return;
       // Escape in a field throws away what was typed there, and nothing else.
       const target = event.target;
       if (target?.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target?.tagName)) return;
@@ -875,6 +897,8 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
   }
 
   const toggleSection = (id) => setOpenSections((value) => ({ ...value, [id]: !value[id] }));
+  // Opening a step closes the one that was open; clicking the open step closes it.
+  const toggleStep = (id) => setOpenStep((current) => (current === id ? null : id));
   const sectionRef = (id) => {
     if (!sectionRefSetters.current[id]) {
       sectionRefSetters.current[id] = (node) => {
@@ -884,8 +908,20 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
     return sectionRefSetters.current[id];
   };
   const focusStep = (id) => {
-    setOpenSections((value) => ({ ...value, [id]: true }));
-    sectionNodes.current[id]?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    pendingStepScrollRef.current = id;
+    setOpenStep(id);
+  };
+  /** The props that make a left-panel section one step of the exclusive accordion. */
+  const stepProps = (id) => {
+    const next = nextWorkflowStep(id);
+    return {
+      // The body ids (`wall-detail-ceiling-…`) are the ones the panel always had.
+      id: `ceiling-${id}`,
+      open: openStep === id,
+      onToggle: () => toggleStep(id),
+      innerRef: sectionRef(id),
+      next: next ? { label: next.title, onClick: () => focusStep(next.id) } : null,
+    };
   };
 
   // Deferred: no coordination model reads a ceiling's assembly, and the pass
@@ -1763,8 +1799,21 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
   // A derived dimension can be picked and read but never deleted, so what the
   // aside has to show is not the same question as what Delete can remove.
   const selectionHasCard = Boolean(selectionIsDeletable || selectedDimension);
+  // What the context bar and the Selection header say about the pick: its kind,
+  // and its size where it has one, so the drawing can be read without the aside.
+  const selectionSize = selectedPanel
+    ? `${formatMm(selectedPanel.width)} × ${formatMm(selectedPanel.height)} mm`
+    : selectedMember
+      ? `${formatMm(selectedMember.u1 - selectedMember.u0)} × ${formatMm(selectedMember.v1 - selectedMember.v0)} mm`
+      : selectedOpening
+        ? `${formatMm(selectedOpening.width)} × ${formatMm(selectedOpening.height)} mm`
+        : selectedFixture
+          ? getFixtureType(selectedFixture.fixtureType).label
+          : selectedDimension
+            ? selectedDimension.label
+            : null;
   const selectionSummary = selection
-    ? `${SELECTION_LABELS[selection.type] || selection.type} selected`
+    ? `${SELECTION_LABELS[selection.type] || selection.type} selected${selectionSize ? ` · ${selectionSize}` : ''}`
     : 'Nothing selected';
   const takeoff = detail.takeoff;
   const elevations = detail.elevations;
@@ -2025,6 +2074,9 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
       return;
     }
     if (event.key === 'Escape') {
+      // An open popover owns Escape (it closes, and nothing else happens);
+      // a closed one never sees it.
+      if (isPopoverOpen()) return;
       // The panel-trace effect owns Escape while a trace is open; never swallow it here.
       if (panelTrace) return;
       if (gesture || lightPressRef.current) {
@@ -2095,9 +2147,9 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
    */
   const renderBoardMaterialBreakdown = () =>
     takeoff.materials.length > 1 ? (
-      <div className={styles.metrics}>
+      <div className={styles.readoutList}>
         {takeoff.materials.map((entry) => (
-          <Metric
+          <ReadoutRow
             key={entry.material}
             label={boardMaterialLabel(entry.material)}
             value={`${entry.panelCount} board${entry.panelCount === 1 ? '' : 's'}`}
@@ -2212,12 +2264,18 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
           onChange={(castShadow) => updateFixture(fixture.id, { castShadow })}
           label="Cast shadows"
         />
-        <ToolbarButton danger onClick={() => removeFixture(fixture.id)}>
-          Delete light
-        </ToolbarButton>
+        <div className={styles.buttonRow}>
+          <ToolbarButton danger onClick={() => removeFixture(fixture.id)}>
+            Delete light
+          </ToolbarButton>
+        </div>
       </>
     );
   };
+
+  const closeEditor = () => editorDispatch({ type: 'CLOSE_CEILING_DETAIL_EDITOR' });
+  const snappedLabel = activeDimensionSnap ? `Snapped to ${describeReference(activeDimensionSnap)}` : null;
+  const hiddenLayerCount = Object.values(layerVisibility).filter((visible) => !visible).length;
 
   const renderToolButton = (toolId, overrides = {}) => {
     const definition = TOOL_BY_ID[toolId];
@@ -2237,44 +2295,57 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
   return (
     <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="Ceiling assembly detail editor">
       <header className={styles.header}>
-        <div className={styles.headerIdentity}>
-          <span className={styles.eyebrow}>Reflected ceiling plan workspace</span>
-          <h1>Ceiling assembly editor — reflected ceiling plan</h1>
-          <p>
-            {ceiling.name || 'Ceiling'} · {detail.length.toFixed(0)} × {detail.depth.toFixed(0)} mm ·{' '}
-            {profile.manufacturer} {profile.product}
-          </p>
+        <div className={styles.headerLead}>
+          <button
+            type="button"
+            className={styles.backButton}
+            title="Close the ceiling detail editor and return to the floorplan"
+            onClick={closeEditor}
+          >
+            <ToolGlyph name="back" />
+            <span>Back to plan</span>
+          </button>
+          <span className={styles.headerDivider} aria-hidden="true" />
+          <div className={styles.headerIdentity}>
+            <h1>{ceilingDisplayName(ceiling)}</h1>
+            <span className={styles.headerMeta} title={`${profile.manufacturer} ${profile.product}`}>
+              {detail.length.toFixed(0)} × {detail.depth.toFixed(0)} mm · {boardMaterialLabel(profile.boardMaterial)} ·{' '}
+              {formatMm(face.boardThickness)} mm
+            </span>
+          </div>
         </div>
         <div className={styles.headerActions}>
-          <ToolbarButton
-            title="Close the ceiling detail editor and return to the floorplan"
-            onClick={() => editorDispatch({ type: 'CLOSE_CEILING_DETAIL_EDITOR' })}
-          >
+          <ToolbarButton title="Close the ceiling detail editor and return to the floorplan" onClick={closeEditor}>
             Close
+            <ToolGlyph name="close" />
           </ToolbarButton>
         </div>
       </header>
 
       <div className={styles.body} data-focus="false">
         <aside id="ceiling-detail-left-panel" className={styles.leftPanel} aria-label="Ceiling detailing steps">
-          <StepStrip steps={WORKFLOW_STEPS} isOpen={(id) => Boolean(openSections[id])} onSelect={focusStep} />
-
           <CollapsibleSection
-            id="ceiling-face"
+            {...stepProps('face')}
             step={1}
             title="Face and boards"
-            summary={`${panels.length} board${panels.length === 1 ? '' : 's'} · ${
-              face.layout.mode === CEILING_PANEL_LAYOUT_MODES.CUSTOM ? 'custom' : 'generated grid'
-            }`}
-            open={openSections.face}
-            onToggle={() => toggleSection('face')}
-            innerRef={sectionRef('face')}
+            summary={
+              face.enabled
+                ? `${panels.length} board${panels.length === 1 ? '' : 's'} · ${
+                    face.layout.mode === CEILING_PANEL_LAYOUT_MODES.CUSTOM ? 'custom' : 'generated grid'
+                  }`
+                : 'Not boarded'
+            }
           >
+            {/*
+              The step that opens first, so it carries what a ceiling is boarded
+              with and nothing more: the rarely touched settings (joint gaps, the
+              grid origin, the code profile and its review note) fold behind
+              Advanced, and the whole step fits the panel without scrolling.
+            */}
             <div className={styles.toolRow} aria-label="Board drawing tools">
               {renderToolButton(CANVAS_TOOLS.DRAW_PANEL)}
               {renderToolButton(CANVAS_TOOLS.TRACE_PANEL)}
             </div>
-            <Toggle checked={face.enabled} onChange={(enabled) => updateFace({ enabled })} label="Board this ceiling" />
             <InfoHint label="How the board layout works">
               <p className={styles.inlineHelp}>
                 A generated grid tiles the whole ceiling from the origin. The moment you draw or trace a board, the grid
@@ -2290,17 +2361,6 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
               {CEILING_PRODUCT_PROFILES.map((entry) => (
                 <option key={entry.id} value={entry.id}>
                   {entry.manufacturer} — {entry.product} ({entry.region})
-                </option>
-              ))}
-            </SelectField>
-            <SelectField
-              label="Jurisdiction"
-              value={configuration.jurisdictionProfileId}
-              onChange={(jurisdictionProfileId) => updateDetailing({ jurisdictionProfileId })}
-            >
-              {CEILING_JURISDICTION_PROFILES.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.label}
                 </option>
               ))}
             </SelectField>
@@ -2330,19 +2390,38 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
               <option value="vertical">Long side along V (north/south)</option>
               <option value="horizontal">Long side along U (east/west)</option>
             </SelectField>
-            <NumberField
-              label="Gap along U"
-              value={face.layout.horizontalGap}
-              min={0}
-              onChange={(horizontalGap) => updateLayout({ horizontalGap })}
-            />
-            <NumberField
-              label="Gap along V"
-              value={face.layout.verticalGap}
-              min={0}
-              onChange={(verticalGap) => updateLayout({ verticalGap })}
-            />
-            <AdvancedGroup label="Grid origin">
+            <div className={styles.layoutRow}>
+              <span>
+                Layout{' '}
+                <strong>
+                  {face.layout.mode === CEILING_PANEL_LAYOUT_MODES.CUSTOM ? 'Custom boards' : 'Generated grid'}
+                </strong>
+              </span>
+              <ToolbarButton
+                title="Regenerate grid — discard custom boards and rebuild the generated grid"
+                onClick={regeneratePanelGrid}
+              >
+                Regenerate
+              </ToolbarButton>
+            </div>
+            <AdvancedGroup label="Gaps, grid origin, and code profile">
+              <Toggle
+                checked={face.enabled}
+                onChange={(enabled) => updateFace({ enabled })}
+                label="Board this ceiling"
+              />
+              <NumberField
+                label="Gap along U"
+                value={face.layout.horizontalGap}
+                min={0}
+                onChange={(horizontalGap) => updateLayout({ horizontalGap })}
+              />
+              <NumberField
+                label="Gap along V"
+                value={face.layout.verticalGap}
+                min={0}
+                onChange={(verticalGap) => updateLayout({ verticalGap })}
+              />
               <NumberField
                 label="Origin U"
                 value={face.layout.originU}
@@ -2353,36 +2432,33 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
                 value={face.layout.originV}
                 onChange={(originV) => updateLayout({ originV })}
               />
+              <SelectField
+                label="Jurisdiction"
+                value={configuration.jurisdictionProfileId}
+                onChange={(jurisdictionProfileId) => updateDetailing({ jurisdictionProfileId })}
+              >
+                {CEILING_JURISDICTION_PROFILES.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.label}
+                  </option>
+                ))}
+              </SelectField>
+              <div className={styles.profileStatus} data-status={profile.status}>
+                <strong>{profile.status.replaceAll('_', ' ')}</strong>
+                <span>{profile.source.title}</span>
+                <small>{jurisdiction.label}</small>
+              </div>
+              <p className={styles.inlineHelp}>{reviewCopy}</p>
             </AdvancedGroup>
-            <div className={styles.assemblySummary}>
-              Layout mode{' '}
-              <strong>
-                {face.layout.mode === CEILING_PANEL_LAYOUT_MODES.CUSTOM ? 'Custom boards' : 'Generated grid'}
-              </strong>
-            </div>
-            <div className={styles.buttonRow}>
-              <ToolbarButton title="Discard custom boards and rebuild the generated grid" onClick={regeneratePanelGrid}>
-                Regenerate grid
-              </ToolbarButton>
-            </div>
-            <div className={styles.profileStatus} data-status={profile.status}>
-              <strong>{profile.status.replaceAll('_', ' ')}</strong>
-              <span>{profile.source.title}</span>
-              <small>{jurisdiction.label}</small>
-            </div>
-            <p className={styles.inlineHelp}>{reviewCopy}</p>
           </CollapsibleSection>
 
           <CollapsibleSection
-            id="ceiling-structure"
+            {...stepProps('structure')}
             step={2}
             title="Structure"
             summary={`${frameMembers.length} member${frameMembers.length === 1 ? '' : 's'} · ${
               configuration.framing.mode === CEILING_FRAMING_LAYOUT_MODES.CUSTOM ? 'custom' : 'automatic'
             } · ${configuration.framing.material === 'timber' ? 'timber' : 'steel'}`}
-            open={openSections.structure}
-            onToggle={() => toggleSection('structure')}
-            innerRef={sectionRef('structure')}
           >
             <div className={styles.toolRow} aria-label="Structure drawing tools">
               {renderToolButton(CANVAS_TOOLS.DRAW_FURRING)}
@@ -2447,15 +2523,7 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
             </p>
           </CollapsibleSection>
 
-          <CollapsibleSection
-            id="ceiling-suspension"
-            step={3}
-            title="Suspension"
-            summary={suspensionSummary}
-            open={openSections.suspension}
-            onToggle={() => toggleSection('suspension')}
-            innerRef={sectionRef('suspension')}
-          >
+          <CollapsibleSection {...stepProps('suspension')} step={3} title="Suspension" summary={suspensionSummary}>
             {beamMode || supportLevels.length ? (
               <SelectField label="Hangs from" value={attachmentValue} onChange={chooseAttachment}>
                 {supportLevels.map((level) => (
@@ -2547,18 +2615,18 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
               min={50}
               onChange={(hangerSpacing) => updateSuspension({ hangerSpacing })}
             />
-            <div className={styles.metrics}>
-              <Metric label="Attachment" value={`${formatMm(elevations.attachment)} mm`} note={attachmentLabel} />
-              <Metric
+            <div className={styles.readoutList}>
+              <ReadoutRow label="Attachment" value={`${formatMm(elevations.attachment)} mm`} note={attachmentLabel} />
+              <ReadoutRow
                 label="Board underside"
                 value={`${formatMm(elevations.boardUnderside)} mm`}
                 note="finished ceiling"
               />
-              <Metric
+              <ReadoutRow
                 label="Furring"
                 value={`${formatMm(elevations.furringBottom)} → ${formatMm(elevations.furringTop)} mm`}
               />
-              <Metric
+              <ReadoutRow
                 label="Carrier"
                 value={`${formatMm(elevations.carrierBottom)} → ${formatMm(elevations.carrierTop)} mm`}
               />
@@ -2566,13 +2634,10 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
           </CollapsibleSection>
 
           <CollapsibleSection
-            id="ceiling-openings"
+            {...stepProps('openings')}
             step={4}
             title="Openings"
             summary={`${openings.length} opening${openings.length === 1 ? '' : 's'}`}
-            open={openSections.openings}
-            onToggle={() => toggleSection('openings')}
-            innerRef={sectionRef('openings')}
           >
             <div className={styles.toolRow} aria-label="Opening tools">
               {renderToolButton(CANVAS_TOOLS.DRAW_OPENING)}
@@ -2589,7 +2654,11 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
             </p>
             {configuration.openings.length ? (
               configuration.openings.map((opening) => (
-                <div key={opening.id} className={styles.selectionCard}>
+                <div
+                  key={opening.id}
+                  className={styles.listCard}
+                  data-selected={selection?.type === 'opening' && selection.id === opening.id ? 'true' : undefined}
+                >
                   <SelectField
                     label="Type"
                     value={opening.type}
@@ -2627,15 +2696,7 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
             )}
           </CollapsibleSection>
 
-          <CollapsibleSection
-            id="ceiling-lighting"
-            step={5}
-            title="Lighting"
-            summary={lightingSummary}
-            open={openSections.lighting}
-            onToggle={() => toggleSection('lighting')}
-            innerRef={sectionRef('lighting')}
-          >
+          <CollapsibleSection {...stepProps('lighting')} step={5} title="Lighting" summary={lightingSummary}>
             <div className={styles.toolRow} aria-label="Lighting tools">
               {renderToolButton(CANVAS_TOOLS.ADD_LIGHT)}
             </div>
@@ -2652,7 +2713,11 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
             </p>
             {configuration.lighting.fixtures.length ? (
               configuration.lighting.fixtures.map((fixture) => (
-                <div key={fixture.id} className={styles.selectionCard}>
+                <div
+                  key={fixture.id}
+                  className={styles.listCard}
+                  data-selected={selection?.type === 'fixture' && selection.id === fixture.id ? 'true' : undefined}
+                >
                   {renderFixtureEditor(fixture)}
                 </div>
               ))
@@ -2665,15 +2730,12 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
           </CollapsibleSection>
 
           <CollapsibleSection
-            id="ceiling-screws"
+            {...stepProps('screws')}
             step={6}
             title="Screws"
             summary={`${fasteners.length} screw${fasteners.length === 1 ? '' : 's'} · ${
               face.fasteners.perimeterSpacing
             } mm perimeter`}
-            open={openSections.screws}
-            onToggle={() => toggleSection('screws')}
-            innerRef={sectionRef('screws')}
           >
             <div className={styles.toolRow} aria-label="Fastener tools">
               {renderToolButton(CANVAS_TOOLS.ADD_FASTENER)}
@@ -2709,15 +2771,12 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
           </CollapsibleSection>
 
           <CollapsibleSection
-            id="ceiling-dimensions"
+            {...stepProps('dimensions')}
             step={7}
             title="Dimensions"
             summary={`${dimensions.length} shown · ${
               dimensions.filter((dimension) => dimension.source === 'custom').length
             } yours`}
-            open={openSections.dimensions}
-            onToggle={() => toggleSection('dimensions')}
-            innerRef={sectionRef('dimensions')}
           >
             <div className={styles.toolRow} aria-label="Measuring tools">
               {renderToolButton(CANVAS_TOOLS.DRAW_DIMENSION)}
@@ -2767,42 +2826,41 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
           </CollapsibleSection>
 
           <CollapsibleSection
-            id="ceiling-takeoff"
+            {...stepProps('takeoff')}
             step={8}
             title="Takeoff"
             summary={`${takeoff.panelCount} boards · ${takeoff.fastenerCount} screws`}
-            open={openSections.takeoff}
-            onToggle={() => toggleSection('takeoff')}
-            innerRef={sectionRef('takeoff')}
           >
-            <div className={styles.metrics}>
-              <Metric label="Boards" value={takeoff.panelCount} note="unoptimized board count" />
-              <Metric label="Stock sheets" value={takeoff.stockSheetCount} note="full sheets before cutting" />
-              <Metric label="Installed area" value={`${(takeoff.installedAreaMm2 / 1_000_000).toFixed(2)} m²`} />
-              <Metric label="Screws" value={takeoff.fastenerCount} />
-              <Metric label="Furring" value={`${(takeoff.furringLinearMm / 1000).toFixed(2)} m`} />
-              <Metric label="Carrier" value={`${(takeoff.carrierLinearMm / 1000).toFixed(2)} m`} />
-              <Metric label="Wall angle" value={`${(takeoff.wallAngleLinearMm / 1000).toFixed(2)} m`} />
-              <Metric label="Trimmers" value={`${(takeoff.trimmerLinearMm / 1000).toFixed(2)} m`} />
-              <Metric label="Hangers" value={takeoff.hangerCount} />
+            <div className={styles.readoutList}>
+              <ReadoutRow label="Boards" value={takeoff.panelCount} note="unoptimized board count" />
+              <ReadoutRow label="Stock sheets" value={takeoff.stockSheetCount} note="full sheets before cutting" />
+              <ReadoutRow label="Installed area" value={`${(takeoff.installedAreaMm2 / 1_000_000).toFixed(2)} m²`} />
+              <ReadoutRow label="Screws" value={takeoff.fastenerCount} />
+              <ReadoutRow label="Furring" value={`${(takeoff.furringLinearMm / 1000).toFixed(2)} m`} />
+              <ReadoutRow label="Carrier" value={`${(takeoff.carrierLinearMm / 1000).toFixed(2)} m`} />
+              <ReadoutRow label="Wall angle" value={`${(takeoff.wallAngleLinearMm / 1000).toFixed(2)} m`} />
+              <ReadoutRow label="Trimmers" value={`${(takeoff.trimmerLinearMm / 1000).toFixed(2)} m`} />
+              <ReadoutRow label="Hangers" value={takeoff.hangerCount} />
             </div>
             {/* An unlit ceiling has no lighting order, so it says nothing rather
                 than three zeros. The split is by fixture and lamp together: the
                 same can with a BR30 and with a PAR38 are two line items. */}
             {takeoff.lighting.fixtureCount ? (
               <>
-                <div className={styles.metrics}>
-                  <Metric label="Light fixtures" value={takeoff.lighting.fixtureCount} />
-                  <Metric label="Connected load" value={`${formatMm(takeoff.lighting.totalWatts)} W`} />
-                  <Metric
+                <div className={styles.readoutList}>
+                  <ReadoutRow label="Light fixtures" value={takeoff.lighting.fixtureCount} />
+                  <ReadoutRow label="Connected load" value={`${formatMm(takeoff.lighting.totalWatts)} W`} />
+                  <ReadoutRow
                     label="Installed lumens"
                     value={`${Math.round(takeoff.lighting.totalLumens)} lm`}
                     note={lightingArea > 0 ? `≈${Math.round(takeoff.lighting.totalLumens / lightingArea)} lm/m²` : null}
                   />
                 </div>
-                <div className={styles.metrics}>
+                {/* One order line per fixture and lamp: names too long to share a
+                    line with their count, so each value sits under its label. */}
+                <div className={`${styles.readoutList} ${styles.readoutListStacked}`}>
                   {takeoff.lighting.byType.map((entry) => (
-                    <Metric
+                    <ReadoutRow
                       key={`${entry.fixtureType}:${entry.bulbType}`}
                       label={getFixtureType(entry.fixtureType).label}
                       value={`${entry.count} × ${getBulbType(entry.bulbType).label}`}
@@ -2826,7 +2884,7 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
         </aside>
 
         <main className={styles.workspace}>
-          <div className={styles.canvasToolbar}>
+          <div className={`${styles.toolbar} ${styles.toolbarCeiling}`}>
             <div className={styles.toolPalette} role="toolbar" aria-label="Drawing tools">
               {['navigate', 'board', 'frame', 'detail', 'measure'].map((group) => (
                 <div key={group} className={styles.toolCluster} title={TOOL_GROUP_LABELS[group]}>
@@ -2844,6 +2902,7 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
                   shortcut="Ctrl+Z"
                   title="Undo the last change (Ctrl+Z)"
                   toggle={false}
+                  iconOnly
                   disabled={!canUndo}
                   onClick={() => dispatch({ type: 'UNDO' })}
                 />
@@ -2853,11 +2912,10 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
                   shortcut="Ctrl+Y"
                   title="Redo the undone change (Ctrl+Y)"
                   toggle={false}
+                  iconOnly
                   disabled={!canRedo}
                   onClick={() => dispatch({ type: 'REDO' })}
                 />
-              </div>
-              <div className={styles.toolCluster}>
                 <ToolButton
                   icon="trash"
                   label="Delete"
@@ -2865,51 +2923,41 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
                   title="Delete selected — remove the selected board, member, screw, opening, or light (Delete)"
                   danger
                   toggle={false}
+                  iconOnly
                   disabled={!selectionIsDeletable}
                   onClick={deleteSelection}
                 />
               </div>
             </div>
-            <div className={styles.toolGroup}>
-              <span>View</span>
-              <ToolbarButton
-                active={workspaceView === WORKSPACE_VIEWS.RCP}
-                title="Show the reflected ceiling plan only"
-                onClick={() => setWorkspaceView(WORKSPACE_VIEWS.RCP)}
-              >
-                RCP
-              </ToolbarButton>
-              <ToolbarButton
-                active={workspaceView === WORKSPACE_VIEWS.SPLIT}
-                title="Show the reflected ceiling plan above the live 3D preview"
-                onClick={() => setWorkspaceView(WORKSPACE_VIEWS.SPLIT)}
-              >
-                Split
-              </ToolbarButton>
-              <ToolbarButton
-                active={workspaceView === WORKSPACE_VIEWS.THREE_D}
-                title="Show the live 3D preview only"
-                onClick={() => setWorkspaceView(WORKSPACE_VIEWS.THREE_D)}
-              >
-                Live 3D
-              </ToolbarButton>
-              <ToolbarButton
-                title="Zoom out"
-                aria-label="Zoom out"
-                onClick={() => zoomViewportAt((zoom) => zoom / 1.2)}
-              >
-                −
-              </ToolbarButton>
-              <span className={styles.zoomReadout}>{Math.round(viewport.zoom * 100)}%</span>
-              <ToolbarButton title="Zoom in" aria-label="Zoom in" onClick={() => zoomViewportAt((zoom) => zoom * 1.2)}>
-                +
-              </ToolbarButton>
-              <ToolbarButton title="Fit the whole ceiling in view (0)" onClick={fitCeilingInViewport}>
-                Fit ceiling
-              </ToolbarButton>
-            </div>
-            <div className={styles.toolGroup}>
-              <span>Snap</span>
+            <span className={styles.toolbarSpacer} />
+            <SegmentedControl
+              label="Workspace view"
+              options={WORKSPACE_VIEW_OPTIONS}
+              value={workspaceView}
+              onChange={setWorkspaceView}
+            />
+          </div>
+          <div
+            className={styles.contextBar}
+            data-snapped={snappedLabel ? 'true' : 'false'}
+            data-tool-option={canvasTool === CANVAS_TOOLS.ADD_LIGHT ? 'true' : undefined}
+          >
+            <span className={styles.contextLive} role="status">
+              <span className={styles.contextTool}>
+                <ToolGlyph name={activeToolDefinition.icon} />
+                <span>{activeToolDefinition.label}</span>
+              </span>
+              {canvasTool === CANVAS_TOOLS.ADD_LIGHT ? (
+                <LightToolOptions value={lightDraftType} onChange={setLightDraftType} />
+              ) : null}
+              {snappedLabel ? (
+                <span className={styles.contextSnap}>{snappedLabel}</span>
+              ) : (
+                <span className={styles.contextHint}>{TOOL_HINTS[canvasTool]}</span>
+              )}
+              <span className={styles.contextSelection}>{selectionSummary}</span>
+            </span>
+            <div className={styles.contextControls}>
               <Toggle checked={snapEnabled} onChange={setSnapEnabled} label="Snap" />
               <label className={styles.snapControl}>
                 <span>Grid</span>
@@ -2923,41 +2971,89 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
                   <option value={100}>100 mm</option>
                 </select>
               </label>
+              <Popover
+                label="Layers"
+                icon="layers"
+                title={
+                  hiddenLayerCount
+                    ? `Show or hide drawing layers — ${hiddenLayerCount} hidden`
+                    : 'Show or hide drawing layers'
+                }
+                panelLabel="Drawing layers"
+                indicator={hiddenLayerCount > 0}
+              >
+                <p className={styles.popoverTitle}>Show on the plan</p>
+                <div className={styles.layerList}>
+                  {Object.keys(layerVisibility).map((key) => (
+                    <Toggle
+                      key={key}
+                      checked={layerVisibility[key]}
+                      onChange={(checked) => setLayerVisibility((value) => ({ ...value, [key]: checked }))}
+                      label={LAYER_LABELS[key] || key}
+                    />
+                  ))}
+                </div>
+              </Popover>
+              <span className={styles.contextDivider} aria-hidden="true" />
+              <IconButton icon="minus" label="Zoom out" onClick={() => zoomViewportAt((zoom) => zoom / 1.2)} />
+              <span className={styles.zoomReadout}>{Math.round(viewport.zoom * 100)}%</span>
+              <IconButton icon="plus" label="Zoom in" onClick={() => zoomViewportAt((zoom) => zoom * 1.2)} />
+              <ToolbarButton title="Fit the whole ceiling in view (0)" onClick={fitCeilingInViewport}>
+                Fit
+              </ToolbarButton>
+              <span className={styles.contextDivider} aria-hidden="true" />
+              <Popover
+                icon="help"
+                caret={false}
+                title="Shortcuts and drawing notes"
+                ariaLabel="Shortcuts and drawing notes"
+                panelLabel="Shortcuts and drawing notes"
+                panelClassName={styles.helpPanel}
+              >
+                <div className={styles.popoverSection}>
+                  <p className={styles.popoverTitle}>Shortcuts</p>
+                  <dl className={styles.helpList}>
+                    <dt>Space + drag</dt>
+                    <dd>Pans the plan; the wheel zooms</dd>
+                    <dt>0</dt>
+                    <dd>Fits the ceiling in view</dd>
+                    <dt>Esc</dt>
+                    <dd>Cancels, then returns to Select</dd>
+                    <dt>Delete</dt>
+                    <dd>Removes the selected piece</dd>
+                    <dt>L, then drag</dt>
+                    <dd>A row of lights; ↑ / ↓ sets how many</dd>
+                    <dt>… with Shift</dt>
+                    <dd>A grid of lights; ← / → adds columns</dd>
+                  </dl>
+                </div>
+                <div className={styles.popoverSection}>
+                  <p className={styles.popoverTitle}>This drawing</p>
+                  <ul className={styles.helpNotes}>
+                    <li>
+                      {Math.abs(detail.rotation) > 1e-6
+                        ? `Origin: south-west corner · aligned to ceiling edges · ${Math.abs(
+                            (detail.rotation * 180) / Math.PI,
+                          ).toFixed(1)}° off plan north`
+                        : 'Origin: south-west corner · North up · matches floor plan'}
+                    </li>
+                    <li>
+                      U 0 → {detail.length.toFixed(0)} mm · V 0 → {detail.depth.toFixed(0)} mm
+                    </li>
+                    <li>
+                      {panels.length} boards · {frameMembers.length} members · {hangers.length} hangers ·{' '}
+                      {fasteners.length} screws · {openings.length} openings · {lightFixtures.length} lights
+                    </li>
+                    <li>Measure precision: {configuration.dimensions.precision} mm</li>
+                    <li>
+                      3D pane: Updates after every committed board, member, screw, opening, or suspension edit. With the
+                      Light tool armed, click a board there to place a light. Orbit: drag · pan: right drag · zoom:
+                      wheel.
+                    </li>
+                  </ul>
+                </div>
+              </Popover>
             </div>
-            {canvasTool === CANVAS_TOOLS.ADD_LIGHT ? (
-              <LightToolOptions value={lightDraftType} onChange={setLightDraftType} />
-            ) : null}
-            <div className={styles.toolGroup}>
-              <span>Layers</span>
-              {Object.keys(layerVisibility).map((key) => (
-                <Toggle
-                  key={key}
-                  checked={layerVisibility[key]}
-                  onChange={(checked) => setLayerVisibility((value) => ({ ...value, [key]: checked }))}
-                  label={LAYER_LABELS[key] || key}
-                />
-              ))}
-            </div>
-          </div>
-          <div className={styles.statusBar} data-snapped={activeDimensionSnap ? 'true' : 'false'}>
-            <span className={styles.statusLive} role="status">
-              <span className={styles.statusTool}>
-                <ToolGlyph name={activeToolDefinition.icon} />
-                <strong>{activeToolDefinition.label}</strong>
-                <kbd className={styles.kbd}>{activeToolDefinition.shortcut}</kbd>
-              </span>
-              <span className={styles.statusHint}>{TOOL_HINTS[canvasTool]}</span>
-              {activeDimensionSnap ? (
-                <span className={styles.statusSnap}>{`Snapped to ${describeReference(activeDimensionSnap)}`}</span>
-              ) : null}
-              <span className={styles.statusSelection}>{selectionSummary}</span>
-            </span>
-            <span
-              className={styles.statusShortcut}
-              title="Hold Space + drag to pan · scroll to zoom · 0 fits the ceiling · Esc cancels, then returns to Select"
-            >
-              Hold Space + drag to pan · scroll to zoom · 0 fits the ceiling · Esc cancels, then returns to Select
-            </span>
           </div>
           <div
             className={styles.workspaceViews}
@@ -3000,7 +3096,7 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
                       releaseCanvasRect();
                     }}
                   >
-                    <rect width={detail.length} height={detail.depth} fill="#202830" />
+                    <rect className={styles.canvasSheet} width={detail.length} height={detail.depth} />
                     <g data-mirrored="false" transform={`translate(0 ${detail.depth}) scale(1 -1)`}>
                       <CeilingGridLayer bounds={bounds} snapStep={snapStep} unitPx={unitPx} active={snapEnabled} />
                       <CeilingBoardLayer
@@ -3060,13 +3156,12 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
 
                       {gesturePreview && (gesturePreviewType === 'panel' || gesturePreviewType === 'opening') ? (
                         <rect
-                          className={styles.drawPreview}
+                          className={`${styles.drawPreview} ${styles.previewShape}`}
+                          data-preview={gesturePreviewType}
                           x={gesturePreview.u0}
                           y={gesturePreview.v0}
                           width={gesturePreview.u1 - gesturePreview.u0}
                           height={gesturePreview.v1 - gesturePreview.v0}
-                          fill="rgba(255, 184, 92, .28)"
-                          stroke="#ffb85c"
                           strokeWidth="1.25"
                           strokeDasharray="8 5"
                           vectorEffect="non-scaling-stroke"
@@ -3075,13 +3170,12 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
 
                       {gesturePreview && gesturePreviewType === 'framing' ? (
                         <rect
-                          className={styles.drawPreview}
+                          className={`${styles.drawPreview} ${styles.previewFrame}`}
+                          data-preview="framing"
                           x={gesturePreview.u0}
                           y={gesturePreview.v0}
                           width={gesturePreview.u1 - gesturePreview.u0}
                           height={gesturePreview.v1 - gesturePreview.v0}
-                          fill="rgba(82, 183, 232, .46)"
-                          stroke="#72d0f5"
                           strokeWidth="1.25"
                           strokeDasharray="8 5"
                           vectorEffect="non-scaling-stroke"
@@ -3117,12 +3211,11 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
 
                       {gesturePreview && gesturePreviewType === 'fastener' ? (
                         <circle
-                          className={styles.drawPreview}
+                          className={`${styles.drawPreview} ${styles.previewPoint}`}
+                          data-preview="fastener"
                           cx={gesturePreview.u}
                           cy={gesturePreview.v}
                           r={3 * unitPx}
-                          fill="#ffd166"
-                          stroke="#fff"
                           strokeWidth="1"
                           vectorEffect="non-scaling-stroke"
                         />
@@ -3132,8 +3225,9 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
                         <g className={styles.drawPreview}>
                           <polyline
                             points={panelTracePreview.map((point) => `${point.u},${point.v}`).join(' ')}
-                            fill={panelTracePreview.length >= 3 ? 'rgba(255, 184, 92, .2)' : 'none'}
-                            stroke="#ffb85c"
+                            className={styles.previewTrace}
+                            data-preview="trace"
+                            data-closed={panelTracePreview.length >= 3 ? 'true' : 'false'}
                             strokeWidth="1.25"
                             strokeDasharray="8 5"
                             vectorEffect="non-scaling-stroke"
@@ -3144,8 +3238,8 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
                               cx={point.u}
                               cy={point.v}
                               r={3.5 * unitPx}
-                              fill={index === 0 ? '#67c5a6' : '#ffb85c'}
-                              stroke="#fff"
+                              className={styles.previewPoint}
+                              data-first={index === 0 ? 'true' : 'false'}
                               strokeWidth="1"
                               vectorEffect="non-scaling-stroke"
                             />
@@ -3235,21 +3329,6 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
                     </div>
                   ) : null}
                 </div>
-                <div className={styles.dimensionBar}>
-                  <span>U 0 → {detail.length.toFixed(0)} mm</span>
-                  <span>V 0 → {detail.depth.toFixed(0)} mm</span>
-                  <span>
-                    {Math.abs(detail.rotation) > 1e-6
-                      ? `Origin: south-west corner · aligned to ceiling edges · ${Math.abs(
-                          (detail.rotation * 180) / Math.PI,
-                        ).toFixed(1)}° off plan north`
-                      : 'Origin: south-west corner · North up · matches floor plan'}
-                  </span>
-                  <span>
-                    {panels.length} boards · {frameMembers.length} members · {hangers.length} hangers ·{' '}
-                    {fasteners.length} screws · {openings.length} openings · {lightFixtures.length} lights
-                  </span>
-                </div>
               </div>
             ) : null}
             {workspaceView !== WORKSPACE_VIEWS.RCP && previewProject ? (
@@ -3258,19 +3337,14 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
                 aria-label="Live ceiling assembly 3D preview"
                 data-light-armed={canvasTool === CANVAS_TOOLS.ADD_LIGHT ? 'true' : undefined}
               >
-                <div className={styles.liveBadge}>
-                  <span>Live ceiling preview</span>
-                  <small>
-                    {canvasTool === CANVAS_TOOLS.ADD_LIGHT
-                      ? 'Light tool armed: click a board here to place a light'
-                      : 'Updates after every committed board, member, screw, opening, or suspension edit'}
-                  </small>
-                </div>
+                {canvasTool === CANVAS_TOOLS.ADD_LIGHT ? (
+                  <p className={styles.paneHint}>Light tool: click a board here to place a light</p>
+                ) : null}
                 <Suspense
                   fallback={
                     <PanePlaceholder
                       overlay
-                      tone="dark"
+                      tone="paper"
                       label={LOADING_COPY.livePreview}
                       silhouette={previewSilhouette}
                       since={openedAt}
@@ -3299,8 +3373,7 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
             id="ceiling-selection"
             title="Selection"
             summary={selectionSummary}
-            open={openSections.selection}
-            onToggle={() => toggleSection('selection')}
+            collapsible={false}
             innerRef={sectionRef('selection')}
           >
             {selectionHasCard ? null : (
@@ -3357,11 +3430,13 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
                     </option>
                   ))}
                 </SelectField>
-                <Metric
-                  label="Net area"
-                  value={`${(selectedPanel.netArea / 1_000_000).toFixed(3)} m²`}
-                  note="after boundary and opening cuts"
-                />
+                <div className={styles.readoutList}>
+                  <ReadoutRow
+                    label="Net area"
+                    value={`${(selectedPanel.netArea / 1_000_000).toFixed(3)} m²`}
+                    note="after boundary and opening cuts"
+                  />
+                </div>
                 <ToolbarButton danger onClick={deleteSelectedPanel}>
                   Delete board
                 </ToolbarButton>
@@ -3404,16 +3479,16 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
                 ) : (
                   <>
                     <p>This member is generated from the current spacing. Delete it to leave a gap in the layout.</p>
-                    <div className={styles.metrics}>
-                      <Metric
+                    <div className={styles.readoutList}>
+                      <ReadoutRow
                         label="U span"
                         value={`${formatMm(selectedMember.u0)} → ${formatMm(selectedMember.u1)} mm`}
                       />
-                      <Metric
+                      <ReadoutRow
                         label="V span"
                         value={`${formatMm(selectedMember.v0)} → ${formatMm(selectedMember.v1)} mm`}
                       />
-                      <Metric label="Depth" value={`${formatMm(selectedMember.depth)} mm`} />
+                      <ReadoutRow label="Depth" value={`${formatMm(selectedMember.depth)} mm`} />
                     </div>
                   </>
                 )}
@@ -3605,12 +3680,12 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
             onToggle={() => toggleSection('summary')}
             innerRef={sectionRef('summary')}
           >
-            <div className={styles.metrics}>
-              <Metric label="Boards" value={takeoff.panelCount} />
-              <Metric label="Stock sheets" value={takeoff.stockSheetCount} />
-              <Metric label="Installed area" value={`${(takeoff.installedAreaMm2 / 1_000_000).toFixed(2)} m²`} />
-              <Metric label="Screws" value={takeoff.fastenerCount} />
-              <Metric label="Hangers" value={takeoff.hangerCount} />
+            <div className={styles.readoutList}>
+              <ReadoutRow label="Boards" value={takeoff.panelCount} />
+              <ReadoutRow label="Stock sheets" value={takeoff.stockSheetCount} />
+              <ReadoutRow label="Installed area" value={`${(takeoff.installedAreaMm2 / 1_000_000).toFixed(2)} m²`} />
+              <ReadoutRow label="Screws" value={takeoff.fastenerCount} />
+              <ReadoutRow label="Hangers" value={takeoff.hangerCount} />
             </div>
             {renderBoardMaterialBreakdown()}
           </CollapsibleSection>
@@ -3623,12 +3698,12 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
             onToggle={() => toggleSection('elevations')}
             innerRef={sectionRef('elevations')}
           >
-            <div className={styles.metrics}>
-              <Metric label="Attachment" value={`${formatMm(elevations.attachment)} mm`} note={attachmentLabel} />
-              <Metric label="Board underside" value={`${formatMm(elevations.boardUnderside)} mm`} />
-              <Metric label="Board top" value={`${formatMm(elevations.boardTop)} mm`} />
-              <Metric label="Furring top" value={`${formatMm(elevations.furringTop)} mm`} />
-              <Metric label="Carrier top" value={`${formatMm(elevations.carrierTop)} mm`} />
+            <div className={styles.readoutList}>
+              <ReadoutRow label="Attachment" value={`${formatMm(elevations.attachment)} mm`} note={attachmentLabel} />
+              <ReadoutRow label="Board underside" value={`${formatMm(elevations.boardUnderside)} mm`} />
+              <ReadoutRow label="Board top" value={`${formatMm(elevations.boardTop)} mm`} />
+              <ReadoutRow label="Furring top" value={`${formatMm(elevations.furringTop)} mm`} />
+              <ReadoutRow label="Carrier top" value={`${formatMm(elevations.carrierTop)} mm`} />
             </div>
             <p className={styles.inlineHelp}>
               All elevations are measured from the project datum, the same one the floor elevations use.

@@ -1,5 +1,6 @@
 import { ValueField } from './CadEditors.jsx';
 import { describeEntity, describeProfile } from './sketchProfile.js';
+import { describeDimension } from './sketchDimensions.js';
 
 // What a sketch is and where it lies, with the way back into it.
 export function SketchSummary({ sketch, planeText, onEdit, editProblem, children }) {
@@ -17,6 +18,16 @@ export function SketchSummary({ sketch, planeText, onEdit, editProblem, children
           <ol className="cad-sketch-primitives">
             {sketch.entities.map((entity) => (
               <li key={entity.id}>{describeEntity(entity)}</li>
+            ))}
+          </ol>
+        </details>
+      )}
+      {sketch.dimensions?.length > 0 && (
+        <details open={sketch.dimensions.length <= 8}>
+          <summary>Dimensions · {sketch.dimensions.length}</summary>
+          <ol className="cad-sketch-primitives">
+            {sketch.dimensions.map((dimension) => (
+              <li key={dimension.id}>{describeDimension(dimension)}</li>
             ))}
           </ol>
         </details>

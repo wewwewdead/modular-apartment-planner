@@ -10,6 +10,9 @@ import { useImperativeHandle } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import CadWorkspace from './CadWorkspace.jsx';
 import { createPart, emptyModel } from './model.js';
+// The whole workspace renders in each test: under the full suite’s parallel load
+// its long tests outrun the default 5 s (SF-1 audit), so the file allows 15 s.
+vi.setConfig({ testTimeout: 15000 });
 
 const viewport = vi.hoisted(() => ({ props: null }));
 vi.mock('./useCadModel.js', () => ({

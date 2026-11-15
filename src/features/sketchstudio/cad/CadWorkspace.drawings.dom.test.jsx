@@ -10,6 +10,9 @@ import { MemoryRouter } from 'react-router-dom';
 import CadWorkspace from './CadWorkspace.jsx';
 import { createPart, emptyModel, normalizeModel } from './model.js';
 import { standardScales } from './sheetLayout.js';
+// The whole workspace renders in each test: under the full suite’s parallel load
+// its long tests outrun the default 5 s (SF-1 audit), so the file allows 15 s.
+vi.setConfig({ testTimeout: 15000 });
 
 // What the stand-in kernel projects every view as.
 // Phase S: a request projects only the sheets it names, and one naming a
@@ -174,6 +177,7 @@ it('a group → Drawing sheet: its members, its name, fit to page, views generat
   expect(within(pane()).getByRole('button', { name: 'Fit to page · 1:1' })).toBeTruthy();
 });
 
+// Long (2–2.5 s alone): under the full suite's load it outgrows the 5 s default.
 it('New engineering sheet titles several parts "N parts" and no selection after the document', async () => {
   const harness = setup();
   act(() => fireEvent.click(screen.getByRole('button', { name: 'Drawings' })));
@@ -196,7 +200,7 @@ it('New engineering sheet titles several parts "N parts" and no selection after 
   expect(harness.model().sheets.at(-1)).toMatchObject({ title: '2 parts', instanceIds: ['A', 'C'] });
   harness.rerender();
   await settle();
-});
+}, 15000);
 
 // A fixed 1:20 sheet whose 6000 × 2000 views need 300 × 100 mm of a 169 × 63.5 mm quarter.
 const big = {
@@ -281,7 +285,8 @@ it('a changed subject says so while the sheet regenerates by itself; Refresh dra
   await settle();
   expect(kernel.request).toHaveBeenCalledWith('drawings', { sheetIds: ['big'] });
   expect(pane().querySelector('.cad-sheet-preview svg')).toBeTruthy();
-});
+  // A long workspace test: under the full suite's load it outruns the default 5 s.
+}, 15000);
 
 // Phase S (docs/sketch-studio-sheet-manager.md §§4–7).
 const plain = (id, title, extra = {}) => ({
@@ -365,8 +370,8 @@ it('deleting the open sheet opens its neighbour, and the notice’s Undo brings 
   expect(harness.model().sheets.map((s) => s.id)).toEqual(['s1', 's3']);
   // The notice belonged to the undone delete.
   expect(screen.queryByText(/Deleted 1 sheet/)).toBeNull();
-});
-
+  // Load-sensitive like its siblings at :200 (≈ 3 s alone, over 5 s in the full suite).
+}, 15000);
 it('switching to an ungenerated sheet generates that sheet only, and the generated one stays', async () => {
   setup([plain('s1', 'One'), plain('s2', 'Two')]);
   act(() => fireEvent.click(screen.getByRole('button', { name: 'Split drawing' })));

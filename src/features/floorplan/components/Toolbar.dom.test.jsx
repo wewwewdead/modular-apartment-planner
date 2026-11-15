@@ -195,3 +195,59 @@ describe('Toolbar model target buttons', () => {
     expect(pressed('Sheets')).toBe('false');
   });
 });
+
+describe('Toolbar unsaved dot (docs/paint-edit-performance.md §2.1)', () => {
+  let animate;
+  let cancel;
+
+  beforeEach(() => {
+    cancel = vi.fn();
+    animate = vi.fn(() => ({ cancel }));
+    // jsdom has no Web Animations; the toolbar only needs `animate` to exist.
+    HTMLElement.prototype.animate = animate;
+  });
+
+  afterEach(() => {
+    delete HTMLElement.prototype.animate;
+    delete window.matchMedia;
+    projectState.isDirty = false;
+  });
+
+  const saveButton = (container) => container.querySelector('button[aria-label="Save"]');
+
+  it('breathes the dot with a compositor-only Web Animation while the project is dirty', () => {
+    projectState.isDirty = true;
+    const container = renderToolbar();
+
+    expect(saveButton(container).getAttribute('data-dirty')).toBe('true');
+    expect(animate).toHaveBeenCalledTimes(1);
+    const [keyframes, options] = animate.mock.calls[0];
+    // Opacity only: anything but opacity or transform would need the main
+    // thread, and a transform makes every other main frame dearer.
+    for (const frame of keyframes) {
+      expect(Object.keys(frame).filter((key) => key !== 'offset')).toEqual(['opacity']);
+    }
+    expect(options).toMatchObject({ iterations: Infinity, pseudoElement: '::after' });
+    expect(animate.mock.contexts[0]).toBe(saveButton(container));
+  });
+
+  it('starts nothing for a clean project, and stops on unmount', () => {
+    const container = renderToolbar();
+    expect(saveButton(container).getAttribute('data-dirty')).toBe('false');
+    expect(animate).not.toHaveBeenCalled();
+
+    cleanup();
+    projectState.isDirty = true;
+    renderToolbar();
+    expect(animate).toHaveBeenCalledTimes(1);
+    cleanup();
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the dot still under reduced motion', () => {
+    window.matchMedia = vi.fn((query) => ({ matches: query === '(prefers-reduced-motion: reduce)' }));
+    projectState.isDirty = true;
+    renderToolbar();
+    expect(animate).not.toHaveBeenCalled();
+  });
+});

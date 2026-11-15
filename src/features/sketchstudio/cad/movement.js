@@ -65,6 +65,21 @@ export function cleanRotation(quaternion) {
   return score(candidates[1]) < score(candidates[0]) ? candidates[1] : candidates[0];
 }
 
+// An instance's position and rotation from a rigid world matrix (a Matrix4,
+// or its 16 numbers column by column): instanceMatrix the other way, the
+// position to 1e-6 mm and the rotation clean. A part placed where another
+// part's layout stands it (a flanged panel's corner pieces) is posed by it.
+export function matrixPose(matrix) {
+  const m = Array.isArray(matrix) ? new Matrix4().fromArray(matrix) : matrix;
+  const position = new Vector3(),
+    quaternion = new Quaternion();
+  m.decompose(position, quaternion, new Vector3());
+  return {
+    position: position.toArray().map((v) => Math.round(v * 1e6) / 1e6 || 0),
+    rotation: cleanRotation(quaternion),
+  };
+}
+
 const turnQuaternion = (turn) => {
   const quaternion = Array.isArray(turn) ? new Quaternion(...turn) : turn.clone();
   if (quaternion.lengthSq() < 1e-12) throw new Error('Rotation cannot be zero.');

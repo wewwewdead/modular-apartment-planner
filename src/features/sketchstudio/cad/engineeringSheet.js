@@ -3,6 +3,7 @@ import { mapPlacement } from './placement.js';
 import { xml, annotationText, viewDataAttributes } from './drawings.js';
 import { circularCut } from './circularCuts.js';
 import { isDrawnAnnotation, manualDimensionsSvg } from './sheetAnnotations.js';
+import { bendLinesSvg, bendTableSvg } from './bendTable.js';
 import {
   balloonsSvg,
   partsListHeight,
@@ -183,11 +184,19 @@ export function engineeringSheetSvg(sheet, model, snapshot, page, pages, { allow
       body += dimension([x, y], [x, y + vh * s], x - 9, true, number(vh, sheet.units));
     }
     body += manualDimensionsSvg(sheet, kind, point, s, { units: sheet.units, format: (v) => number(v, sheet.units) });
+    // A flat view (SM-4): its bend lines with labels, and the bend table under it.
+    if (view.bendLines?.length) body += bendLinesSvg(view, point);
+    if (cell.table)
+      body += bendTableSvg(view.bendTable, cell.table.x, cell.table.y, cell.table.width, {
+        format: (v) => number(v, sheet.units),
+      });
     if (parts.length && kind === 'isometric' && !balloonsDone) {
       balloonsDone = true;
       body += balloonsSvg(parts, view, snapshot, point, { x: cx, y: cy, width: cellW, height: cellH });
     }
-    const holes = view.detail || sheet.section ? [] : sheetHoleFeatures(sheet, model, snapshot, view);
+    // A flat view has no drilled holes: holes after the bends are in the folded part, not the blank.
+    const holes =
+      view.detail || sheet.section || kind === 'flat' ? [] : sheetHoleFeatures(sheet, model, snapshot, view);
     if (sheet.centerlines !== false)
       holes.forEach((h) => {
         const [hx, hy] = point(h.point),

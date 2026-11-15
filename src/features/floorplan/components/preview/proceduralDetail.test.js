@@ -7,7 +7,7 @@
  * upgrade moves them, this fails instead of the render.
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import {
   DETAIL_FAMILIES,
@@ -258,5 +258,84 @@ describe('plank courses (docs/wall-cladding-finishes.md §6.1)', () => {
     expect(uniforms.uCourseRelief.value).toBe(0);
     // A clone (a ghost twin, a selection tint) carries the same boards.
     expect(compile(cloneWithProceduralDetail(siding)).uniforms.uCoursePitch.value).toBe(146);
+  });
+});
+
+describe('cloneWithProceduralDetail (docs/paint-edit-performance.md §2.2)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /**
+   * A compiled source: its `userData.detailUniforms` is the shader's uniform
+   * table, which in the app holds the material's maps and the scene's env map.
+   * A texture whose image is neither an element nor data is exactly the kind
+   * three's JSON path cannot serialise and warns about.
+   */
+  function compiledSource() {
+    const source = applyCoursePattern(applyProceduralDetail(new THREE.MeshStandardMaterial(), 'timber'), {
+      pitch: 146,
+      joint: 6,
+      axis: 0,
+      tone: 0.22,
+      length: 3600,
+      relief: 0.5,
+    });
+    const shader = compile(source);
+    shader.uniforms.map = { value: new THREE.Texture({ width: 4, height: 4 }) };
+    source.userData.paletteKey = 'wall';
+    source.userData.tier = 'skin';
+    source.userData.ownedByPalette = true;
+    return source;
+  }
+
+  it('never serialises the source’s live uniforms, and warns about no texture', () => {
+    const source = compiledSource();
+    const warn = vi.spyOn(console, 'warn');
+    const stringify = vi.spyOn(JSON, 'stringify');
+
+    cloneWithProceduralDetail(source);
+
+    expect(warn).not.toHaveBeenCalled();
+    for (const [value] of stringify.mock.calls) {
+      expect(value && typeof value === 'object' && 'detailUniforms' in value).toBe(false);
+    }
+  });
+
+  it('hands the source its own userData back, uniforms and all', () => {
+    const source = compiledSource();
+    const userData = source.userData;
+    const uniforms = userData.detailUniforms;
+
+    cloneWithProceduralDetail(source);
+
+    expect(source.userData).toBe(userData);
+    expect(source.userData.detailUniforms).toBe(uniforms);
+  });
+
+  it('gives the clone its own userData, equal to what the JSON copy used to leave', () => {
+    const source = compiledSource();
+    // What the old path ended on: a JSON round-trip of everything but the
+    // uniforms (which it deleted), then a fresh family and scale.
+    const { detailUniforms: _uniforms, ...rest } = source.userData;
+    const expected = JSON.parse(JSON.stringify(rest));
+
+    const clone = cloneWithProceduralDetail(source);
+
+    expect(clone.userData).not.toBe(source.userData);
+    expect(clone.userData).toEqual(expected);
+    expect(clone.userData.detailFamily).not.toBe(source.userData.detailFamily);
+    expect('detailUniforms' in clone.userData).toBe(false);
+    // Still patched, still in the shared program family, still its own boards.
+    expect(clone.customProgramCacheKey()).toBe(source.customProgramCacheKey());
+    expect(compile(clone).uniforms.uCoursePitch.value).toBe(146);
+  });
+
+  it('clones a material with no detail exactly as three does', () => {
+    const plain = new THREE.MeshStandardMaterial({ color: 0x336699 });
+    plain.userData.paletteKey = 'outline';
+    const clone = cloneWithProceduralDetail(plain);
+    expect(clone.userData).toEqual({ paletteKey: 'outline' });
+    expect(clone.userData).not.toBe(plain.userData);
+    expect(clone.color.getHex()).toBe(0x336699);
+    expect(clone.onBeforeCompile).toBe(plain.onBeforeCompile);
   });
 });

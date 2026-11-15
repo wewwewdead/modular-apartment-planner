@@ -178,6 +178,19 @@
   composes: btn;
 }
 
+/*
+ * The "unsaved" dot. It breathes for as long as the project is dirty — from
+ * the first edit of a session to the next save — so the loop must cost
+ * nothing per frame. It used to animate box-shadow, which only the main thread
+ * can paint: the whole style → paint → commit pipeline ran every frame,
+ * forever, and every edit or panel scroll competed with it
+ * (docs/paint-edit-performance.md §1.1). Now the glow is static and the
+ * breathing moves only opacity, on the dot's own layer, so the compositor runs
+ * it. The breathing is a Web Animation started by Toolbar.jsx
+ * (`useSaveDotBreathing`), not a CSS animation: see there for the
+ * `animationiteration` wake-ups that rules out, and for why it fades rather
+ * than scales. Reduced motion gets this still dot and no breathing.
+ */
 .saveBtn[data-dirty='true']::after {
   content: '';
   position: absolute;
@@ -187,20 +200,8 @@
   height: 6px;
   border-radius: 50%;
   background: var(--color-active-glow);
-  box-shadow: 0 0 6px rgba(45, 95, 142, 0.4);
-  animation: warmPulse 2s ease-in-out infinite;
-}
-
-@keyframes warmPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 6px rgba(45, 95, 142, 0.4);
-    opacity: 1;
-  }
-  50% {
-    box-shadow: 0 0 12px rgba(45, 95, 142, 0.6);
-    opacity: 0.6;
-  }
+  box-shadow: 0 0 9px rgba(45, 95, 142, 0.5);
+  will-change: opacity;
 }
 
 /* Segmented pill control for view modes */

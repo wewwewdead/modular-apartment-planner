@@ -305,6 +305,49 @@ export function holeCentres(ctx, skip = null) {
     const part = ctx.model.parts.find((p) => p.id === metrics.id);
     if (!part) continue;
     for (const [id, entry] of Object.entries(metrics.features || {})) {
+      // A sheet-metal blank's laser-cut holes (shop floor §5.3): attachable
+      // seats on the top face, the far opening on the bottom face.
+      if (entry?.holes?.length && id !== skip) {
+        const index = part.features.findIndex((f) => f.id === id);
+        const feature = part.features[index];
+        if (!feature || feature.suppressed || feature.type !== 'sheetmetal') continue;
+        const attachable = !part.features
+          .slice(index + 1)
+          .some((f) => !f.suppressed && REFERENCE_BREAKERS.includes(f.type));
+        for (const instance of ctx.snapshot.instances || []) {
+          if (instance.partId !== part.id || !instance.placement) continue;
+          entry.holes.forEach((row, k) => {
+            const unit = normalize(row.direction);
+            const drill = normalize(mapPlacement(row.direction, instance.placement, true));
+            const hole = {
+              instanceId: instance.id,
+              featureId: id,
+              index: row.index,
+              type: 'sheetmetal',
+              attachable,
+              radius: row.diameter / 2,
+            };
+            out.push({
+              ...hole,
+              side: 'entry',
+              point: mapPlacement(row.centre, instance.placement),
+              normal: neg(drill),
+            });
+            const exit = entry.exits?.[k];
+            if (typeof exit !== 'number') return;
+            out.push({
+              ...hole,
+              side: 'far',
+              point: mapPlacement(
+                row.centre.map((x, i) => x + unit[i] * exit),
+                instance.placement,
+              ),
+              normal: drill.map((v) => v || 0),
+            });
+          });
+        }
+        continue;
+      }
       if (!entry?.cut || id === skip) continue;
       const index = part.features.findIndex((f) => f.id === id);
       const feature = part.features[index];

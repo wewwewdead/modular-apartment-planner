@@ -12,6 +12,9 @@ import { MemoryRouter } from 'react-router-dom';
 import CadWorkspace from './CadWorkspace.jsx';
 import { createPart, emptyModel } from './model.js';
 import { LIVE_DEBOUNCE_MS } from './liveField.js';
+// The whole workspace renders in each test: under the full suite’s parallel load
+// its long tests outrun the default 5 s (SF-1 audit), so the file allows 15 s.
+vi.setConfig({ testTimeout: 15000 });
 
 // dropPoint: what the viewport reports as the ground under the view centre.
 const viewport = vi.hoisted(() => ({ props: null, dragging: false, dropPoint: [1250, -480, 0] }));
@@ -390,7 +393,8 @@ it('Hole opens in Place with no feature; a click stores coordinates; Apply adds 
   act(() => fireEvent.click(screen.getByRole('button', { name: 'Edit hole with preview' })));
   expect(viewport.props.placement).toMatchObject({ tool: 'hole', stage: 'shape' });
   expect(viewport.props.placement.handles.map((h) => h.id)).toEqual(['distance', 'slide', 'radius']);
-});
+  // A long workspace test: under the full suite's load it outruns the default 5 s.
+}, 15000);
 
 it('Pocket places a rectangle; its corner grip sets width and length', () => {
   setup();
@@ -819,6 +823,7 @@ const openHardware = () => {
 };
 const chosen = () => within(screen.getByRole('list', { name: 'Chosen holes' })).getAllByRole('listitem');
 
+// Long (2–2.5 s alone): under the full suite's load it outgrows the 5 s default.
 it('Hardware: clicks choose holes in Place, Enter seats one part in all, Remove rebuilds, Apply commits once', () => {
   const { setCadModel, model } = holesSetup();
   const before = model();
@@ -879,8 +884,9 @@ it('Hardware: clicks choose holes in Place, Enter seats one part in all, Remove 
   expect(viewport.props.fitKey).toBe(fitKey);
   expect(viewport.props.selectedId).toBe(instance.id);
   expect(instance.id).toBe(first);
-});
+}, 15000);
 
+// Long (2–2.5 s alone): under the full suite's load it outgrows the 5 s default.
 it('Hardware: three holes → one part with three instances and connections; Esc walks back then cancels', () => {
   const { setCadModel, model, rerender } = holesSetup();
   openHardware();
@@ -919,7 +925,7 @@ it('Hardware: three holes → one part with three instances and connections; Esc
   expect(viewport.props.selectedId).toBe('b1');
   expect(viewport.props.isolated).toBe(false);
   expect(setCadModel).toHaveBeenCalledOnce();
-});
+}, 15000);
 
 it('Attach to selected hole: a row opens Place with all its holes chosen', () => {
   const { setCadModel, model } = holesSetup();
@@ -939,7 +945,8 @@ it('Attach to selected hole: a row opens Place with all its holes chosen', () =>
   act(() => fireEvent.click(screen.getByRole('button', { name: 'Apply hardware' })));
   expect(setCadModel).toHaveBeenCalledOnce();
   expect(model().connections.map((c) => c.holeIndex)).toEqual([undefined, 1, 3]);
-});
+  // A long workspace test: under the full suite’s load it outruns the default 5 s.
+}, 15000);
 
 it('Attach to selected hole on a single hole still commits one part, instance and connection at once', () => {
   const { setCadModel, model } = holesSetup({ singleLast: true });

@@ -9,15 +9,32 @@
   padding: 4px 0;
 }
 
+/*
+ * The sheen is a pseudo-element that slides by transform. It used to slide by
+ * background-position, which repaints the block on the main thread every
+ * frame for as long as a skeleton is up; a transform runs on the compositor.
+ * The sheen is twice the block's width (the old 200 % background) and its
+ * centre travels from -50 % to 150 % of the block, as before.
+ */
 .block {
   --skeleton-base: rgba(30, 36, 51, 0.06);
   --skeleton-sheen: rgba(255, 255, 255, 0.55);
+  position: relative;
+  overflow: hidden;
   display: block;
   border-radius: var(--radius-xs);
   background-color: var(--skeleton-base);
+}
+
+.block::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 200%;
   background-image: linear-gradient(90deg, transparent 0%, var(--skeleton-sheen) 50%, transparent 100%);
-  background-size: 200% 100%;
-  background-repeat: no-repeat;
+  will-change: transform;
   animation: skeletonShimmer 1.6s var(--ease-in-out-soft) infinite;
 }
 
@@ -61,16 +78,16 @@
 
 @keyframes skeletonShimmer {
   from {
-    background-position: 150% 0;
+    transform: translateX(-75%);
   }
   to {
-    background-position: -50% 0;
+    transform: translateX(25%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .block {
+  .block::after {
+    content: none;
     animation: none;
-    background-image: none;
   }
 }

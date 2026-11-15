@@ -4,6 +4,7 @@ import { fixtureOutline } from '@/geometry/fixtureGeometry';
 import { polygonCentroid } from '@/geometry/polygon';
 import { getWallRenderData, resolveWallEndpoints } from '@/geometry/wallColumnGeometry';
 import { doorOutlineOnWall, windowOutlineOnWall } from '@/geometry/wallGeometry';
+import styles from '@/features/floorplan/components/wall-detail/WallDetailEditor.module.css';
 
 /**
  * The floor plan under the reflected ceiling plan: walls, columns, doors,
@@ -32,14 +33,12 @@ import { doorOutlineOnWall, windowOutlineOnWall } from '@/geometry/wallGeometry'
  * in drawing coordinates — text inside a mirrored group would come out mirrored.
  */
 
-const WALL_FILL = '#33414f';
-const DOOR_FILL = '#ffd48a';
-const WINDOW_FILL = '#8fd0f0';
-const ROOM_STROKE = '#8fa3b8';
-const FURNITURE_STROKE = '#5b6b7a';
-const LABEL_FILL = '#cfd8e3';
-const LABEL_HALO = '#11171d';
-
+/*
+ * Colours are the stylesheet's (`.planWall`, `.planRoom`, … on --ae-plan-*):
+ * washes and a dashed room line kept lighter than any board or framing edge, so
+ * on the light canvas the plan stays readable and never competes with the
+ * ceiling drawn over it.
+ */
 const LABEL_FONT_PX = 12.5;
 
 /** The SVG transform taking plan millimetres to this ceiling's UV. */
@@ -93,9 +92,7 @@ export const CeilingPlanUnderlay = memo(function CeilingPlanUnderlay({ floor, ax
           <polygon
             key={room.id}
             points={polygonPoints(room.points)}
-            fill="none"
-            stroke={ROOM_STROKE}
-            strokeOpacity={0.6}
+            className={styles.planRoom}
             strokeWidth={1}
             strokeDasharray="6 4"
             vectorEffect="non-scaling-stroke"
@@ -105,9 +102,7 @@ export const CeilingPlanUnderlay = memo(function CeilingPlanUnderlay({ floor, ax
         <polygon
           key={fixture.id}
           points={polygonPoints(fixtureOutline(fixture))}
-          fill="none"
-          stroke={FURNITURE_STROKE}
-          strokeOpacity={0.7}
+          className={styles.planFurniture}
           strokeWidth={1}
           vectorEffect="non-scaling-stroke"
         />
@@ -115,11 +110,11 @@ export const CeilingPlanUnderlay = memo(function CeilingPlanUnderlay({ floor, ax
       {[...wallsById.values()].map((wall) => {
         const outline = getWallRenderData(wall, columns).outline;
         return outline?.length ? (
-          <polygon key={wall.id} points={polygonPoints(outline)} fill={WALL_FILL} fillOpacity={0.55} />
+          <polygon key={wall.id} className={styles.planWall} points={polygonPoints(outline)} />
         ) : null;
       })}
       {columns.map((column) => (
-        <polygon key={column.id} points={polygonPoints(columnOutline(column))} fill={WALL_FILL} fillOpacity={0.55} />
+        <polygon key={column.id} className={styles.planWall} points={polygonPoints(columnOutline(column))} />
       ))}
       {(floor.doors || []).map((door) => {
         const wall = wallsById.get(door.wallId);
@@ -128,8 +123,7 @@ export const CeilingPlanUnderlay = memo(function CeilingPlanUnderlay({ floor, ax
             key={door.id}
             data-underlay-opening="door"
             points={polygonPoints(openingBar(wall, door, columns, doorOutlineOnWall))}
-            fill={DOOR_FILL}
-            fillOpacity={0.5}
+            className={styles.planDoor}
           />
         ) : null;
       })}
@@ -140,8 +134,7 @@ export const CeilingPlanUnderlay = memo(function CeilingPlanUnderlay({ floor, ax
             key={entry.id}
             data-underlay-opening="window"
             points={polygonPoints(openingBar(wall, entry, columns, windowOutlineOnWall))}
-            fill={WINDOW_FILL}
-            fillOpacity={0.5}
+            className={styles.planWindow}
           />
         ) : null;
       })}
@@ -151,8 +144,8 @@ export const CeilingPlanUnderlay = memo(function CeilingPlanUnderlay({ floor, ax
 
 /**
  * The room names, upright, in drawing coordinates (`x = u`, `y = depth − v`).
- * Sized like the dimension text and haloed in the canvas colour, so a name
- * stays legible over a pale board as well as over the dark ground.
+ * Sized like the dimension text and haloed in the canvas halo colour, so a
+ * name stays legible over a board, the framing and the plan's own washes.
  */
 export const CeilingPlanUnderlayLabels = memo(function CeilingPlanUnderlayLabels({
   floor,
@@ -187,8 +180,7 @@ export const CeilingPlanUnderlayLabels = memo(function CeilingPlanUnderlayLabels
           fontSize={fontSize}
           textAnchor="middle"
           dominantBaseline="middle"
-          fill={LABEL_FILL}
-          stroke={LABEL_HALO}
+          className={styles.planLabel}
           strokeWidth={3.5 * unitPx}
           strokeLinejoin="round"
           paintOrder="stroke"

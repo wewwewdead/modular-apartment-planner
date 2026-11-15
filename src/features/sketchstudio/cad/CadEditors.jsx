@@ -2,6 +2,7 @@ import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { numeric, resolveParameters, uid, vector } from './model.js';
 import { enableConstraints, addConstraint, CONSTRAINT_TYPES } from './constraints.js';
 import { HardwareFields } from './HardwarePanel.jsx';
+import { SheetMetalForm } from './ShopPanels.jsx';
 import { METRIC_THREADS, holePreset } from './hardware.js';
 import { CUT_SIDES, cutWidthDirection } from './cutPlacement.js';
 import { ANGLE_SIZES, angleRadiiAutomatic, angleRadiiFor, angleSizeOf } from './stockSections.js';
@@ -227,10 +228,26 @@ export function FeatureForm({
   referenceOptions = [],
   targetPartId,
   operationLabel = 'Operation',
+  // Sheet metal: bumped by Shop → Add bend so the form brings its Add bend section into view.
+  addBendFocus = 0,
+  // Sheet metal: Edit outline (docs/sketch-studio-outline-edit-sheet-nest.md §3.6) and what its last finish did.
+  onEditOutline = null,
+  editNotice = '',
 }) {
   // Parameter values, for an angle's automatic radii when a leg is an =expression.
   const { values } = useContext(ParameterContext);
   if (feature.type === 'hardware') return <HardwareFields feature={feature} onChange={onChange} />;
+  if (feature.type === 'sheetmetal')
+    return (
+      <SheetMetalForm
+        feature={feature}
+        model={model}
+        onChange={onChange}
+        addBendFocus={addBendFocus}
+        onEditOutline={onEditOutline}
+        editNotice={editNotice}
+      />
+    );
   if (['hole', 'pocket'].includes(feature.type))
     return (
       <CutFeatureForm

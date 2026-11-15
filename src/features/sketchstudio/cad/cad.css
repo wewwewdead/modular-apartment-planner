@@ -367,6 +367,12 @@
   position: relative;
   flex: 1;
   min-width: 0;
+  /* The press brake's flat-blank map chart, shorter on a short window, and
+     the room the map takes at the foot of the view (its chart, caption,
+     padding, the 40 px it stands off the bottom and an 8 px gap): the side
+     view above it never reaches into it (the SF-3 audit, 1366 × 768). */
+  --cad-brake-map-chart: clamp(140px, calc(100vh - 608px), 200px);
+  --cad-brake-map-room: calc(var(--cad-brake-map-chart) + 86px);
 }
 .cad-preview-badge {
   position: absolute;
@@ -776,11 +782,24 @@
   border-color: transparent;
   background: transparent;
 }
-.cad-sketch-toolbar {
+/* The sketch bar and, under it whatever its height, the selection note: the
+   bar wraps to a second row on a narrow view (SD-1's Dimension button wraps it
+   at 1600 px too), so the note follows it instead of a fixed top. */
+.cad-sketch-top {
   position: absolute;
   top: 10px;
   left: 10px;
   right: 130px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 2;
+}
+.cad-sketch-toolbar {
+  align-self: stretch;
+  pointer-events: auto;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -790,7 +809,6 @@
   border: 1px solid #c9d3dd;
   border-radius: 5px;
   font-size: 11px;
-  z-index: 2;
 }
 .cad-sketch-toolbar strong {
   margin-right: 6px;
@@ -829,6 +847,12 @@
 .cad-sketch-status .cad-sketch-message {
   color: #a33b12;
 }
+/* A refused finish (docs/sketch-studio-outline-edit-sheet-nest.md §3.6): the
+   same message fills .cad-error at the foot of the view, so the status line
+   stands clear of it. */
+.cad-sketch-status.has-refusal {
+  bottom: 60px;
+}
 .cad-sketch-hud {
   position: absolute;
   display: flex;
@@ -860,16 +884,24 @@
   flex-basis: 100%;
   color: #6a7b8b;
 }
+/* The Dimension tool's box (docs/sketch-studio-sketch-dimensions.md §3.4): a
+   readout in the mark purple, never in the way of the click it describes. */
+.cad-sketch-hud.is-readout {
+  pointer-events: none;
+  border-color: #8a3fc6;
+  gap: 2px 6px;
+}
+.cad-sketch-hud.is-readout strong {
+  color: #8a3fc6;
+  font-variant-numeric: tabular-nums;
+}
 .cad-sketch-selection {
-  position: absolute;
-  top: 58px;
-  left: 10px;
+  pointer-events: auto;
   padding: 4px 8px;
   background: #fff2ea;
   border: 1px solid #e2a07f;
   border-radius: 4px;
   font-size: 11px;
-  z-index: 2;
 }
 .cad-sketch-summary dl,
 .cad-feature-summary {
@@ -1111,6 +1143,43 @@
 .cad-measure-hud {
   border-color: #8a3fc6;
 }
+/* The press brake's grip chip (docs/sketch-studio-brake-hands-on.md §5.2):
+   the gizmo readout's look, by a handle on approach (its name and key, then
+   what the act would leave) or by the cursor while it is dragged. Its own
+   class: nothing animates, the shop tokens colour the outcome. */
+.cad-grip-chip {
+  position: absolute;
+  z-index: 6;
+  padding: 5px 8px;
+  background: #ffffff;
+  border: 1px solid var(--shop-accent, #287fb3);
+  border-radius: 5px;
+  box-shadow: 0 3px 10px #1b2b3a2e;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+  color: var(--shop-ink, #263444);
+}
+.cad-grip-chip[hidden],
+.cad-grip-chip [hidden] {
+  display: none;
+}
+.cad-grip-chip-title {
+  font-weight: 600;
+}
+.cad-grip-chip-outcome {
+  font-size: 11px;
+}
+.cad-grip-chip-outcome.is-ok {
+  color: var(--shop-done, #2e7d4f);
+}
+.cad-grip-chip-outcome.is-stop {
+  color: var(--shop-stop, #a24d35);
+}
+.cad-grip-chip-outcome.is-typed {
+  color: var(--shop-quiet, #5b6c7c);
+}
 /* Dimension mark labels over the 3D view (CadViewport.jsx, marks.js). */
 .cad-mark-labels {
   position: absolute;
@@ -1142,6 +1211,40 @@
   color: #e2541c;
 }
 .cad-workspace .cad-mark-label[hidden] {
+  display: none;
+}
+/* Sketch dimension labels (CadViewport.jsx, sketchDimensions.js): the mark
+   chip's look, but clicks go through to the canvas (the sketcher selects by
+   its own hit test), and under the sketch toolbar, status line and readout. */
+.cad-sketch-dim-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.cad-sketch-dim-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  font:
+    12px/1 system-ui,
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 5px;
+  background: #fff;
+  border: 1px solid #8a3fc6;
+  color: #8a3fc6;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.cad-sketch-dim-label.is-selected {
+  border-color: #e2541c;
+  color: #e2541c;
+}
+.cad-sketch-dim-label.is-preview {
+  opacity: 0.75;
+}
+.cad-sketch-dim-label[hidden] {
   display: none;
 }
 /* Origin plane labels over the 3D view (CadViewport.jsx, originPlanes.js):
@@ -1523,4 +1626,2446 @@
 .cad-pdf-warning {
   margin: 4px 0;
   color: #7a5200;
+}
+/* Fabrication shop (docs/sketch-studio-fab-shop.md): Cut from sheet, the
+   sheet-metal form and its bend table (ShopPanels.jsx), and the bend labels
+   over an unfolded part (shopLayer.js). */
+.cad-shop-panel .cad-segmented,
+.cad-sheet-metal .cad-segmented {
+  display: inline-flex;
+  border: 1px solid #c4d0da;
+  border-radius: 5px;
+  background: #f7f9fb;
+}
+.cad-shop-panel .cad-segmented button,
+.cad-sheet-metal .cad-segmented button {
+  padding: 4px 8px;
+  border-radius: 0;
+  font-size: 11px;
+}
+.cad-shop-panel .cad-segmented button[aria-pressed='true'],
+.cad-sheet-metal .cad-segmented button[aria-pressed='true'] {
+  background: #d7e8f5;
+  border-color: #246e9a;
+  color: #14558f;
+}
+.cad-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+  font-size: 11px;
+  color: #5b6c7c;
+}
+/* Flip sheet (brake flip tooling §5.1): one switch shown as two states side by
+   side, beside the angle; the angle field gives up width for it (a 260 px pane). */
+.cad-brake-angle {
+  align-items: flex-end;
+}
+.cad-brake-angle .cad-field {
+  flex: 1 1 56px;
+  min-width: 0;
+  margin-bottom: 0;
+}
+/* Bend on (tight bends §4.4): what the bend stands at and what this hit adds, under the angle. */
+.cad-brake-on-note {
+  display: block;
+  margin-top: 2px;
+  color: #5b6c7c;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.cad-flip {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  margin-bottom: 1px;
+  border: 1px solid #c4d0da;
+  border-radius: 5px;
+  background: #f7f9fb;
+  overflow: hidden;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.cad-flip input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+.cad-flip:focus-within {
+  outline: 2px solid #246e9a;
+  outline-offset: 1px;
+}
+.cad-flip-side {
+  padding: 5px 5px;
+  color: #5b6c7c;
+}
+.cad-flip-side + .cad-flip-side {
+  border-left: 1px solid #dbe3ea;
+}
+.cad-flip-side.is-on {
+  background: #d7e8f5;
+  color: #14558f;
+  font-weight: 600;
+}
+.cad-brake-turn {
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 4px 0;
+}
+.cad-brake-turn small {
+  color: #5b6c7c;
+  font-size: 11px;
+}
+.cad-map-pending.is-second {
+  stroke-dasharray: 2 3;
+  cursor: default;
+}
+.cad-bend-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-bottom: 1px solid #d6dfe6;
+  font-size: 12px;
+}
+.cad-bend-fields {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.cad-bend-fields .cad-field {
+  flex: 1;
+  margin: 6px 0;
+}
+.cad-bend-fields .cad-segmented {
+  margin-bottom: 6px;
+}
+.cad-bend-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 4px 0;
+  padding: 4px 6px;
+  background: #f3f6f8;
+  border-radius: 4px;
+  color: #3d4e5f;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.cad-shop-error {
+  color: #a24d35;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.cad-workspace .cad-danger-inline {
+  color: #a24d35;
+}
+.cad-add-bend {
+  margin-top: 12px;
+}
+.cad-shop-panel .cad-inline,
+.cad-sheet-metal .cad-inline {
+  align-items: flex-end;
+}
+.cad-sheet-metal .cad-inline .cad-segmented {
+  margin-bottom: 10px;
+}
+.cad-add-bend summary {
+  font-weight: 600;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.cad-shop-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.cad-workspace .cad-shop-label {
+  position: absolute;
+  transform: translate(-50%, -120%);
+  font:
+    11px/1 system-ui,
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 5px;
+  background: #fff;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.cad-workspace .cad-shop-label.is-up {
+  color: #c2410c;
+}
+.cad-workspace .cad-shop-label.is-down {
+  color: #1864ab;
+}
+.cad-workspace .cad-shop-label[hidden] {
+  display: none;
+}
+/* Press brake station (docs/sketch-studio-fab-shop.md §9 SM-2): the flat-blank
+   map over the viewport (FlatPatternMap.jsx) and the NC panel's engraved
+   readouts, tonnage bar and sequence (PressBrakePanel.jsx). */
+.cad-model-view > .cad-brake-map {
+  position: absolute;
+  left: 12px;
+  bottom: 40px;
+  z-index: 5;
+  width: min(320px, 34%);
+  margin: 0;
+  padding: 6px 8px 8px;
+  background: #ffffffeb;
+  border: 1px solid #c9d3dd;
+  border-radius: 6px;
+  box-shadow: 0 3px 12px #23344a1f;
+}
+.cad-brake-map figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #3d4e5f;
+  margin-bottom: 4px;
+}
+.cad-brake-map figcaption small {
+  font-weight: 400;
+  color: #6a7b8b;
+}
+.cad-brake-map svg {
+  display: block;
+  width: 100%;
+  height: var(--cad-brake-map-chart, 200px);
+  background: #f5f8fa;
+  border-radius: 4px;
+  cursor: crosshair;
+}
+/* The press brake's side view (BrakeSideView.jsx, SM-2b): the NC controller's
+   section of the hit, top left, over the flat-blank map (one column of cards;
+   the station's camera frames the machine in the rest of the view). Machine
+   millimetres in the SVG; every stroke keeps its pixel width. */
+.cad-viewport > .cad-brake-side {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  width: min(320px, 34%);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100% - 12px - var(--cad-brake-map-room, 286px));
+  margin: 0;
+  padding: 6px 8px 8px;
+  background: #ffffffeb;
+  border: 1px solid #c9d3dd;
+  border-radius: 6px;
+  box-shadow: 0 3px 12px #23344a1f;
+  pointer-events: none;
+}
+.cad-brake-side figcaption {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #3d4e5f;
+  margin-bottom: 4px;
+}
+.cad-brake-side figcaption small {
+  font-weight: 400;
+  color: #6a7b8b;
+  text-align: right;
+}
+/* Which side of the sheet is up (brake flip tooling §5.1): beside the title;
+   the tooling line goes under them when the card is too narrow for all three. */
+.cad-brake-side figcaption:has(.cad-side-up:not(:empty)) {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.cad-brake-side figcaption:has(.cad-side-up:not(:empty)) small {
+  margin-left: auto;
+}
+.cad-side-up {
+  flex: none;
+  margin-right: auto;
+  align-self: flex-start;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: #eef2f5;
+  color: #3d4e5f;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cad-side-up:empty {
+  display: none;
+}
+.cad-side-up.is-flipped {
+  background: #d7e8f5;
+  color: #14558f;
+}
+.cad-brake-side svg {
+  display: block;
+  flex: 0 1 auto;
+  min-height: 72px;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1.12;
+  max-height: max(140px, calc(100vh - 620px));
+  background: #f5f8fa;
+  border-radius: 4px;
+}
+.cad-brake-side [hidden] {
+  display: none;
+}
+.cad-side-tool,
+.cad-side-finger,
+.cad-side-sheet,
+.cad-side-break,
+.cad-side-axis,
+.cad-side-pointer path {
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+}
+.cad-side-tool {
+  stroke: #3e4e5f;
+  stroke-width: 1;
+}
+.cad-side-punch {
+  fill: #e6ebf0;
+}
+.cad-side-die {
+  fill: #c2ccd5;
+}
+.cad-side-ram {
+  fill: #9aabbd;
+}
+.cad-side-holder {
+  fill: #b3c1cf;
+}
+.cad-side-bed {
+  fill: #8798ab;
+}
+.cad-side-tool.is-hit,
+.cad-side-sheet.is-hit {
+  fill: #e03131;
+  stroke: #a51d1d;
+}
+.cad-side-finger {
+  fill: #e0a32a;
+  stroke: #7a5a12;
+  stroke-width: 1;
+}
+.cad-side-sheet {
+  fill: #33414f;
+  stroke: #1d2731;
+  stroke-width: 0.75;
+}
+.cad-side-context {
+  fill: none;
+  stroke: #33414f;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.cad-side-context.is-hit {
+  stroke: #e03131;
+}
+.cad-side-break {
+  fill: none;
+  stroke: #1d2731;
+  stroke-width: 1.5;
+}
+.cad-side-axis {
+  fill: none;
+  stroke: #d9480f;
+  stroke-width: 1;
+  stroke-dasharray: 8 3 2 3;
+  opacity: 0.7;
+}
+.cad-side-pointer path {
+  fill: #e0a32a;
+  stroke: #7a5a12;
+  stroke-width: 1;
+}
+.cad-side-pointer text {
+  fill: #6b4f0f;
+  font-family: system-ui, sans-serif;
+}
+.cad-side-readouts {
+  flex: none;
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 4px;
+  margin: 6px 0 0;
+}
+.cad-side-readouts > div {
+  padding: 2px 6px;
+  background: #eef2f5;
+  border: 1px solid #d4dce3;
+  border-radius: 4px;
+  min-width: 0;
+}
+.cad-side-readouts dt {
+  font-size: 10px;
+  color: #6a7b8b;
+}
+.cad-side-readouts dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #22303d;
+  font-variant-numeric: tabular-nums;
+}
+.cad-side-readouts dd small {
+  font-weight: 400;
+  color: #6a7b8b;
+}
+.cad-side-hit {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c92a2a;
+}
+.cad-map-blank {
+  fill: #dfe6ec;
+  stroke: #4b5d6e;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+.cad-map-bend,
+.cad-map-mark,
+.cad-map-pending {
+  vector-effect: non-scaling-stroke;
+}
+.cad-map-bend {
+  stroke-width: 1.5;
+  stroke-dasharray: 5 3;
+}
+.cad-map-mark {
+  stroke: #8a99a7;
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+/* A round bend's zone (docs/sketch-studio-round-bend.md §6): a light band, its tangent lines, its hit lines faint. */
+.cad-map-band {
+  fill: #d9480f;
+  fill-opacity: 0.08;
+  stroke: none;
+}
+.cad-map-tangent,
+.cad-map-hitline {
+  vector-effect: non-scaling-stroke;
+  stroke: #9a3412;
+}
+.cad-map-tangent {
+  stroke-width: 1;
+}
+.cad-map-hitline {
+  stroke-width: 0.6;
+  stroke-opacity: 0.35;
+}
+.cad-map-number text {
+  fill: #fff;
+  font:
+    600 1px system-ui,
+    sans-serif;
+  pointer-events: none;
+}
+.cad-map-edge {
+  cursor: pointer;
+}
+.cad-map-edge polygon {
+  fill: transparent;
+}
+.cad-map-edge line {
+  stroke: transparent;
+  stroke-width: 4;
+  vector-effect: non-scaling-stroke;
+}
+.cad-map-edge:hover line {
+  stroke: #246e9a88;
+}
+.cad-map-edge.is-picked line {
+  stroke: #2f9e44;
+}
+.cad-map-pending {
+  stroke: #2f9e44;
+  stroke-width: 2.5;
+  stroke-dasharray: 6 3;
+  cursor: ns-resize;
+}
+.cad-map-pending.is-refused {
+  stroke: #e03131;
+}
+.cad-map-mark.is-button {
+  cursor: pointer;
+}
+.cad-map-mark.is-button line {
+  stroke: #6b5b95;
+  stroke-width: 1.6;
+  stroke-dasharray: 4 2;
+  vector-effect: non-scaling-stroke;
+}
+/* A wide transparent stroke over a thin line: something to click. */
+.cad-map-mark.is-button .cad-map-hit,
+.cad-map-segment .cad-map-hit {
+  fill: transparent;
+  stroke: none;
+}
+.cad-map-mark.is-button:hover line,
+.cad-map-mark.is-button:focus-visible line {
+  stroke: var(--shop-accent, #287fb3);
+  stroke-width: 3;
+}
+.cad-map-segment {
+  cursor: pointer;
+}
+.cad-map-segment line {
+  stroke: #2b8a3e;
+  stroke-width: 4;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.cad-map-segment.is-skipped line {
+  stroke: #9aa6b2;
+  stroke-width: 2;
+  stroke-dasharray: 1 4;
+}
+.cad-map-segment:hover line {
+  stroke-width: 6;
+}
+.cad-brake-hint {
+  font-size: 13px;
+}
+.cad-map-reading {
+  fill: #2b8a3e;
+  font-family: system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.cad-map-point {
+  fill: #2f9e44;
+  stroke: #fff;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.cad-brake-readouts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: 8px 0;
+}
+.cad-brake-readout {
+  padding: 3px 6px;
+  background: #eef2f5;
+  border: 1px solid #d4dce3;
+  border-radius: 4px;
+  box-shadow: inset 0 1px 2px #23344a1f;
+  min-width: 0;
+}
+.cad-brake-readout dt {
+  font-size: 10px;
+  color: #6a7b8b;
+}
+.cad-brake-readout dd {
+  margin: 0;
+  font-size: 12px;
+  color: #263444;
+  font-variant-numeric: tabular-nums;
+}
+.cad-brake-readouts .cad-brake-readout:last-child {
+  grid-column: 1 / -1;
+}
+.cad-brake-readouts.is-single {
+  grid-template-columns: 1fr;
+  margin: 6px 0;
+}
+.cad-brake-bar {
+  height: 8px;
+  margin: 3px 0 2px;
+  background: #d9e1e7;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.cad-brake-bar span {
+  display: block;
+  height: 100%;
+  background: #2f9e44;
+}
+.cad-brake-bar.is-high span {
+  background: #e8a317;
+}
+.cad-brake-bar.is-over span {
+  background: #e03131;
+}
+.cad-brake-tonnage small {
+  font-size: 10px;
+  color: #5b6c7c;
+}
+.cad-brake-sequence {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+}
+.cad-brake-sequence li {
+  padding: 6px 0;
+  border-bottom: 1px solid #d6dfe6;
+  font-size: 12px;
+}
+.cad-brake-sequence li.is-current {
+  background: #eef5fb;
+}
+/* A step's buttons wrap: in one row they stood 84 px past the 260 px pane and
+   the whole panel scrolled sideways. */
+.cad-brake-sequence .cad-inline {
+  flex-wrap: wrap;
+}
+.cad-brake-step {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.cad-brake-step small {
+  color: #6a7b8b;
+}
+.cad-brake-check {
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: #d3f9d8;
+  color: #2b8a3e;
+  font-size: 10px;
+}
+.cad-brake-check.is-failing {
+  background: #ffe3e3;
+  color: #c92a2a;
+}
+.cad-brake .cad-mate-steps li.is-current {
+  font-weight: 600;
+}
+/* Paint and print stations (docs/sketch-studio-fab-shop.md §9 SM-3,
+   ShopStationPanels.jsx): the RAL swatches, the records lists and the paint
+   booth's confirmation. Readouts reuse the press brake's engraved boxes. */
+.cad-station .cad-mate-steps li.is-current {
+  font-weight: 600;
+}
+.cad-station .cad-segmented {
+  margin: 4px 6px 4px 0;
+}
+.cad-ral-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 4px;
+  margin: 8px 0;
+}
+.cad-workspace .cad-ral-swatch {
+  position: relative;
+  height: 30px;
+  padding: 0;
+  background: var(--swatch);
+  border: 1px solid #b7c3cd;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px #ffffff55;
+}
+.cad-workspace .cad-ral-swatch span {
+  position: absolute;
+  left: 2px;
+  bottom: 1px;
+  padding: 0 2px;
+  font-size: 9px;
+  line-height: 12px;
+  color: #263444;
+  background: #ffffffd9;
+  border-radius: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.cad-workspace .cad-ral-swatch[aria-pressed='true'] {
+  outline: 2px solid #14558f;
+  outline-offset: 1px;
+}
+.cad-station input[type='color'] {
+  width: 48px;
+  height: 28px;
+  padding: 1px 2px;
+}
+.cad-station-list {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+}
+.cad-station-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0;
+  border-bottom: 1px solid #d6dfe6;
+  font-size: 12px;
+}
+.cad-station-list li > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cad-station-list li.is-current {
+  background: #eef5fb;
+}
+.cad-station-confirm {
+  margin: 8px 0;
+  padding: 6px 8px;
+  background: #fff4e6;
+  border: 1px solid #f0c48a;
+  border-radius: 4px;
+}
+/* The laser bed (LaserStation.jsx, SM-4): the stock sheet at true scale over
+   the whole 3D view, a dark machine bed round it. Sheet millimetres in the
+   SVG (+Y up); every stroke keeps its pixel width. */
+.cad-model-view > .cad-laser-bed {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: #1d262e;
+  color: #e7edf2;
+}
+.cad-laser-bed svg {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: block;
+  background: repeating-linear-gradient(90deg, #26313b 0 2px, transparent 2px 46px), #1d262e;
+}
+.cad-laser-hud {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  display: grid;
+  gap: 2px;
+  padding: 6px 10px;
+  background: #0f161ccc;
+  border: 1px solid #3b4a57;
+  border-radius: 6px;
+  font-size: 12px;
+  pointer-events: none;
+}
+.cad-laser-hud strong {
+  font-size: 13px;
+  color: #ffd8a8;
+}
+.cad-laser-hud b {
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+.cad-laser-zoom {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  padding: 2px;
+  background: #0f161ccc;
+  border: 1px solid #3b4a57;
+  border-radius: 6px;
+}
+.cad-laser-zoom button {
+  color: #e7edf2;
+}
+.cad-laser-zoom button[aria-pressed='true'] {
+  background: #e7edf2;
+  color: #1d262e;
+}
+.cad-laser-sheet {
+  stroke: #e7edf2;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.cad-laser-label {
+  fill: #33414d;
+  font-family: system-ui, sans-serif;
+}
+.cad-laser-blank {
+  fill: #ffffff47;
+  stroke: none;
+}
+.cad-laser-path {
+  fill: none;
+  stroke: #4c6ef5;
+  stroke-width: 1;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+}
+.cad-laser-mark {
+  stroke: #0b3d6b;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 0.5 4;
+  vector-effect: non-scaling-stroke;
+}
+.cad-laser-cut {
+  fill: none;
+  stroke: #212529;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.cad-laser-bed[data-state='cutting'] .cad-laser-cut {
+  stroke: #e8590c;
+}
+.cad-laser-pierce {
+  fill: none;
+  stroke: #868e96;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.cad-laser-pierce.is-done {
+  fill: #e8590c;
+  stroke: #e8590c;
+}
+.cad-laser-glow {
+  fill: #ff922b55;
+  stroke: none;
+}
+.cad-laser-head.is-piercing .cad-laser-glow {
+  fill: #ffd43bcc;
+}
+.cad-laser-cross {
+  stroke: #ff6b00;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.cad-laser-spot {
+  fill: #fff3bf;
+}
+.cad-laser-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 6px 12px;
+  font-size: 11px;
+  background: #121a20;
+  border-top: 1px solid #33414d;
+}
+.cad-laser-legend span::before {
+  content: '';
+  display: inline-block;
+  width: 16px;
+  height: 0;
+  margin-right: 5px;
+  vertical-align: middle;
+  border-top: 2px solid currentColor;
+}
+.cad-laser-legend .is-path::before {
+  border-top: 2px dashed #5c7cfa;
+}
+.cad-laser-legend .is-cut::before {
+  border-top: 3px solid #e8590c;
+}
+.cad-laser-legend .is-pierce::before {
+  width: 7px;
+  height: 7px;
+  border: 0;
+  border-radius: 50%;
+  background: #e8590c;
+}
+.cad-laser-legend .is-mark::before {
+  border-top: 2px dotted #74c0fc;
+}
+/* SN-1 (docs/sketch-studio-outline-edit-sheet-nest.md §4.4): the shared sheet.
+   The other blanks sit under this cut's: cut metal (a darker plate with its
+   cut-outs open) or, in a replay, the programmed path only. This cut's lead
+   part's blanks are outlined. */
+.cad-laser-other {
+  fill: none;
+  stroke: #4c6ef5;
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+}
+.cad-laser-other.is-cut {
+  fill: #0f161c59;
+  stroke: #212529;
+  stroke-width: 1.5;
+  stroke-dasharray: none;
+}
+.cad-laser-blank.is-lead {
+  stroke: #ffd8a8;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.cad-laser-legend .is-other::before {
+  height: 8px;
+  border: 1.5px solid #212529;
+  background: #0f161c59;
+}
+.cad-laser-switches {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 60%;
+}
+.cad-laser-switches .cad-laser-zoom {
+  position: static;
+}
+/* This cut (§4.4): one row per part, the lead current. */
+.cad-laser-job {
+  list-style: none;
+  margin: 4px 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.cad-laser-job .cad-job-row {
+  width: 100%;
+}
+.cad-laser-copies {
+  font-weight: 600;
+  color: var(--shop-accent);
+}
+.cad-laser-room .cad-link {
+  padding: 0;
+}
+/* Cut from sheet on a batch (§4.8): each outline with its own Quantity. */
+.cad-batch-outlines .cad-quantity-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  width: 78px;
+  margin: 0;
+}
+.cad-quantity-times {
+  color: var(--shop-quiet);
+}
+.cad-batch-outlines .cad-quantity-field input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  min-height: 28px;
+}
+.cad-workspace .cad-draw .cad-cut-all {
+  margin-top: 6px;
+}
+/* The job sheet (JobSheetPanel.jsx, SM-4). */
+.cad-job-product {
+  margin: 10px 0;
+  padding: 8px;
+  border: 1px solid #d4dce3;
+  border-radius: 6px;
+  background: #fbfcfd;
+}
+.cad-job-product > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+.cad-job-status {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+.cad-job-status.is-done {
+  background: #d3f9d8;
+  color: #2b8a3e;
+}
+.cad-job-status.is-todo {
+  background: #fff3bf;
+  color: #8a6100;
+}
+.cad-job-steps {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+}
+.cad-job-steps > li {
+  padding: 5px 0;
+  border-bottom: 1px solid #e3e9ee;
+}
+.cad-job-step {
+  display: grid;
+  grid-template-columns: 16px 58px 1fr auto;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 12px;
+}
+.cad-job-mark {
+  font-weight: 700;
+}
+.cad-job-steps > li.is-done .cad-job-mark,
+.cad-job-steps > li.is-done .cad-job-state {
+  color: #2b8a3e;
+}
+.cad-job-steps > li.is-partial .cad-job-mark,
+.cad-job-steps > li.is-partial .cad-job-state {
+  color: #b35c00;
+}
+.cad-job-steps > li.is-todo .cad-job-mark,
+.cad-job-steps > li.is-todo .cad-job-state {
+  color: #868e96;
+}
+/* Not needed (shop floor §5.5): a step the product does not take. */
+.cad-job-steps > li.is-none .cad-job-mark,
+.cad-job-steps > li.is-none .cad-job-state {
+  color: #868e96;
+  font-style: italic;
+}
+.cad-job-time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: #3d4e5f;
+}
+.cad-job-items {
+  list-style: none;
+  margin: 2px 0 0 22px;
+  padding: 0;
+  font-size: 11px;
+}
+.cad-job-items li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 1px 0;
+}
+.cad-job-items li > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* The shop floor (docs/sketch-studio-shop-floor.md §4, ShopFloor.jsx): the
+   route bar on the Shop tab, the job board, the station shell with its
+   problem cards, results and Machine numbers, the gate and Draw. Every new
+   rule takes its colours from these tokens; marks carry shape as well as
+   colour (filled / half / hollow); nothing on the route bar animates. */
+.cad-workspace {
+  --shop-accent: #287fb3;
+  --shop-done: #2e7d4f;
+  --shop-todo: #8a98a6;
+  --shop-warn: #a8620b;
+  --shop-stop: #a24d35;
+  --shop-card: #ffffff;
+  --shop-ink: #263444;
+  --shop-quiet: #5b6c7c;
+}
+.cad-ribbon.is-route {
+  padding: 6px 12px;
+}
+.cad-route {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+  min-width: max-content;
+  width: 100%;
+}
+.cad-route-subject {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding-right: 12px;
+  border-right: 1px solid var(--cad-border);
+  /* Narrower on a 1366 px screen: the route, Replay and More stay on it with a
+     long "product · part" name and "End replay" showing (the name ellipsizes). */
+  max-width: clamp(110px, calc(100vw - 1230px), 190px);
+  min-width: 0;
+}
+.cad-route-subject small {
+  font-size: 11px;
+  color: var(--shop-quiet);
+}
+.cad-route-subject strong {
+  font-size: 13px;
+  color: var(--shop-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cad-route-stations {
+  display: flex;
+  align-items: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cad-route-stations > li {
+  display: flex;
+  align-items: center;
+}
+.cad-route-chevron {
+  padding: 0 2px;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--shop-todo);
+}
+.cad-ribbon .cad-route-station {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 4px 12px 4px 8px;
+  border: 1px solid transparent;
+  border-bottom-width: 3px;
+  border-radius: 6px 6px 3px 3px;
+  font-size: 13px;
+  color: var(--shop-ink);
+}
+.cad-ribbon .cad-route-station svg:not(.cad-route-mark) {
+  height: 20px;
+  width: 20px;
+  color: var(--shop-quiet);
+}
+.cad-route-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--shop-todo);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--shop-quiet);
+}
+.cad-route-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.25;
+}
+.cad-route-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.cad-route-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--shop-quiet);
+}
+.cad-ribbon .cad-route-station.is-next {
+  border-color: var(--shop-accent);
+  background: var(--shop-card);
+}
+.cad-route-station.is-next .cad-route-number {
+  border-color: var(--shop-accent);
+  background: var(--shop-accent);
+  color: #fff;
+}
+.cad-ribbon .cad-route-station[aria-current='step'] {
+  border-color: transparent;
+  border-bottom-color: var(--shop-accent);
+  background: color-mix(in srgb, var(--shop-accent) 10%, var(--shop-card));
+  color: #155d89;
+}
+.cad-route-station[aria-current='step'] .cad-route-number {
+  border-color: var(--shop-accent);
+  color: #155d89;
+}
+.cad-ribbon .cad-route-mark,
+.cad-route-mark {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  overflow: visible;
+}
+.cad-route-mark circle {
+  fill: none;
+  stroke: var(--shop-todo);
+  stroke-width: 1.5;
+}
+.cad-route-mark path {
+  fill: var(--shop-done);
+}
+.cad-route-mark.is-done circle {
+  fill: var(--shop-done);
+  stroke: var(--shop-done);
+}
+.cad-route-mark.is-partial circle {
+  stroke: var(--shop-done);
+}
+/* Not needed (§5.5): a dash, not a ring. */
+.cad-route-mark.is-none path {
+  fill: none;
+  stroke: var(--shop-todo);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+.cad-ribbon .cad-route-more {
+  flex-direction: row;
+  gap: 6px;
+  margin-left: auto;
+  min-height: 44px;
+  padding: 4px 14px;
+  font-size: 13px;
+  border: 1px solid #c4d0da;
+  background: var(--shop-card);
+}
+.cad-route-menu {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 230px;
+  padding: 4px;
+  background: var(--shop-card);
+  border: 1px solid #c4d0da;
+  border-radius: 6px;
+  box-shadow: 0 6px 20px #23344a2e;
+}
+.cad-ribbon .cad-route-menu button {
+  flex-direction: row;
+  gap: 10px;
+  justify-content: flex-start;
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+.cad-route-menu svg {
+  width: 18px;
+  height: 18px;
+  color: var(--shop-quiet);
+}
+/* The left pane's Job | Tree switch and the job board (§4.2). */
+.cad-panel-heading .cad-pane-switch {
+  display: inline-flex;
+  border: 1px solid #c4d0da;
+  border-radius: 5px;
+  background: var(--shop-card);
+  letter-spacing: normal;
+}
+.cad-workspace .cad-pane-switch button {
+  padding: 4px 14px;
+  border-radius: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--shop-quiet);
+}
+.cad-workspace .cad-pane-switch button[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--shop-accent) 14%, var(--shop-card));
+  color: #155d89;
+}
+.cad-job-board {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cad-job-empty {
+  margin: 4px 0 8px;
+  font-size: 13px;
+  color: var(--shop-ink);
+}
+.cad-job-card {
+  padding: 8px;
+  background: var(--shop-card);
+  border: 1px solid var(--cad-border);
+  border-radius: 6px;
+}
+.cad-job-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: var(--shop-ink);
+}
+.cad-job-card > header strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cad-job-pips {
+  display: inline-flex;
+  gap: 3px;
+  flex: none;
+}
+.cad-job-rows,
+.cad-gate-parts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cad-workspace .cad-job-row {
+  width: 100%;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px;
+  text-align: left;
+  white-space: normal;
+}
+.cad-workspace .cad-job-row.is-selected {
+  background: color-mix(in srgb, var(--shop-accent) 14%, var(--shop-card));
+  border-color: color-mix(in srgb, var(--shop-accent) 45%, var(--shop-card));
+}
+.cad-workspace .cad-job-row[aria-disabled='true'] {
+  cursor: default;
+}
+.cad-job-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.cad-job-row-text strong {
+  font-size: 12px;
+  color: var(--shop-ink);
+  overflow-wrap: anywhere;
+}
+.cad-job-row-text small {
+  font-size: 11px;
+  color: var(--shop-quiet);
+}
+.cad-job-row-route {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  margin-top: 2px;
+}
+.cad-job-next {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: #155d89;
+}
+.cad-workspace .cad-job-others {
+  margin-top: 4px;
+  font-size: 11px;
+}
+.cad-outline-thumb {
+  flex: none;
+  background: #f1f4f7;
+  border-radius: 4px;
+}
+.cad-outline-thumb path {
+  fill: #cfdbe5;
+  stroke: #5d7183;
+  stroke-width: 1;
+}
+/* An outline not ready to cut: its open lines, in the shop's warning colour. */
+.cad-outline-thumb path.is-open {
+  fill: none;
+  stroke: var(--shop-warn);
+  stroke-width: 1.5;
+}
+/* The station shell (§4.6). */
+.cad-shell-head {
+  margin-bottom: 6px;
+}
+.cad-shell-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0;
+}
+.cad-shell-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--shop-accent);
+  color: #fff;
+  font-size: 13px;
+}
+.cad-shell-subject {
+  margin: 0 0 4px 32px;
+  font-size: 12px;
+  color: var(--shop-quiet);
+  overflow-wrap: anywhere;
+}
+.cad-shop-lead {
+  margin: 6px 0 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--shop-ink);
+}
+.cad-shell .cad-mate-steps {
+  margin: 6px 0 10px;
+  padding-left: 20px;
+  list-style: decimal;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--shop-ink);
+}
+.cad-shell .cad-mate-steps li:not(.is-current) {
+  color: var(--shop-quiet);
+}
+.cad-shell .cad-part-size {
+  font-size: 12px;
+}
+.cad-shop-figure {
+  font-size: 13px;
+  color: var(--shop-ink);
+}
+.cad-workspace .cad-shop-primary {
+  width: 100%;
+  min-height: 40px;
+  margin: 10px 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.cad-shop-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 6px;
+  margin: 10px 0 4px;
+}
+.cad-shop-result {
+  min-width: 0;
+  padding: 6px 8px;
+  background: var(--shop-card);
+  border: 1px solid var(--cad-border);
+  border-radius: 6px;
+}
+.cad-shop-result dt {
+  font-size: 11px;
+  color: var(--shop-quiet);
+}
+.cad-shop-result dd {
+  margin: 1px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--shop-ink);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+/* The force bar spans the results row. */
+.cad-shop-result:has(.cad-brake-tonnage) {
+  grid-column: 1 / -1;
+}
+.cad-shop-result .cad-brake-tonnage small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--shop-quiet);
+}
+.cad-shop-notice {
+  font-size: 12px;
+  color: var(--shop-done);
+}
+.cad-shop-instruction {
+  padding: 8px 10px;
+  border: 1px dashed var(--shop-accent);
+  border-radius: 6px;
+  background: var(--shop-card);
+}
+.cad-shop-numbers,
+.cad-shop-tooling {
+  margin: 10px 0;
+  border-top: 1px solid var(--cad-border);
+}
+.cad-shop-numbers > summary,
+.cad-shop-tooling > summary {
+  padding: 8px 0 4px;
+  font-size: 12px;
+  color: var(--shop-ink);
+}
+.cad-shop-tooling > summary small {
+  display: block;
+  margin-left: 14px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--shop-quiet);
+}
+/* The press brake's Blades row and picker (docs/sketch-studio-brake-flip-tooling.md
+   §4.1): the punch (top) and the die (bottom) as silhouettes of the sections
+   the scene and the collision check use. */
+.cad-blades {
+  margin: 8px 0 2px;
+}
+.cad-blades-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.cad-workspace .cad-blade {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: center;
+  justify-content: stretch;
+  gap: 6px;
+  min-height: 52px;
+  padding: 5px 7px;
+  border: 1px solid var(--cad-border);
+  border-radius: 6px;
+  background: var(--shop-card);
+  text-align: left;
+  white-space: normal;
+}
+.cad-workspace .cad-blade:hover:not(:disabled) {
+  border-color: var(--shop-accent);
+}
+.cad-workspace .cad-blade[aria-expanded='true'] {
+  border-color: var(--shop-accent);
+  box-shadow: inset 0 0 0 1px var(--shop-accent);
+}
+.cad-blade .cad-blade-shape {
+  width: 26px;
+  height: 40px;
+}
+.cad-blade-shape path {
+  fill: #cfdbe5;
+  stroke: #5d7183;
+  stroke-width: 1;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.cad-blade-text,
+.cad-blade-card-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+.cad-blade-text small,
+.cad-blade-card-text small {
+  font-size: 11px;
+  color: var(--shop-quiet);
+  overflow-wrap: anywhere;
+}
+.cad-blade-text strong,
+.cad-blade-card-text strong {
+  font-size: 12px;
+  color: var(--shop-ink);
+  overflow-wrap: anywhere;
+}
+.cad-blade-reverse {
+  margin-top: 4px;
+  font-size: 12px;
+}
+/* A blade's length under its button (docs/sketch-studio-brake-tool-length.md
+   §3.4): the field, the note, then Fit to bend, each line of fixed height and
+   Fit to bend only hidden while fitted, so a note or the button appearing
+   never moves the row. */
+.cad-blade-column {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.cad-blade-length {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 24px 15px 20px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--shop-quiet);
+}
+.cad-blade-length-field {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.cad-workspace .cad-blade-length-field input {
+  flex: 0 0 60px;
+  width: 60px;
+  height: 22px;
+  padding: 0 2px 0 4px;
+  font-size: 11px;
+}
+.cad-blade-length-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cad-workspace .cad-blade-fit {
+  justify-self: start;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--cad-border);
+  border-radius: 4px;
+  background: var(--shop-card);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.cad-workspace .cad-blade-fit.is-idle {
+  visibility: hidden;
+}
+.cad-blade-picker {
+  margin: 6px 0 4px;
+  padding: 8px;
+  border: 1px solid var(--shop-accent);
+  border-radius: 6px;
+  background: #f8fafb;
+}
+.cad-blade-picker > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.cad-blade-picker h4 {
+  margin: 0;
+  font-size: 13px;
+}
+.cad-workspace .cad-blade-picker > header button {
+  min-height: 28px;
+  padding: 2px 10px;
+  border-color: #c4d0da;
+  background: var(--shop-card);
+  font-size: 12px;
+}
+.cad-blade-cards {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cad-workspace .cad-blade-card {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: start;
+  justify-content: stretch;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--cad-border);
+  border-radius: 6px;
+  background: var(--shop-card);
+  text-align: left;
+  white-space: normal;
+}
+.cad-workspace .cad-blade-card:hover {
+  border-color: var(--shop-accent);
+}
+.cad-workspace .cad-blade-card[aria-pressed='true'] {
+  border-color: var(--shop-accent);
+  background: color-mix(in srgb, var(--shop-accent) 7%, var(--shop-card));
+}
+.cad-blade-card .cad-blade-shape {
+  width: 52px;
+  height: 64px;
+}
+.cad-blade-in-use {
+  font-weight: 400;
+}
+.cad-blade-use {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--shop-ink);
+}
+.cad-blade-verdict {
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.cad-blade-verdict.is-ok {
+  color: var(--shop-done);
+}
+.cad-blade-verdict.is-refused {
+  color: var(--shop-stop);
+}
+.cad-workspace .cad-blade:focus-visible,
+.cad-workspace .cad-blade-card:focus-visible,
+.cad-shop-numbers > summary:focus-visible,
+.cad-shop-tooling > summary:focus-visible,
+.cad-draw-tile-head:focus-visible {
+  outline: 2px solid var(--shop-accent);
+  outline-offset: 1px;
+}
+.cad-problem {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--shop-stop);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--shop-stop) 8%, var(--shop-card));
+}
+.cad-problem.is-warning {
+  border-left-color: var(--shop-warn);
+  background: color-mix(in srgb, var(--shop-warn) 8%, var(--shop-card));
+}
+.cad-problem-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--shop-ink);
+}
+.cad-problem-text strong {
+  color: var(--shop-stop);
+}
+.cad-problem.is-warning .cad-problem-text strong {
+  color: var(--shop-warn);
+}
+.cad-workspace .cad-problem-fix {
+  margin-top: 6px;
+  min-height: 32px;
+  border-color: var(--shop-stop);
+  background: var(--shop-card);
+  color: var(--shop-stop);
+  font-weight: 600;
+  white-space: normal;
+  text-align: left;
+}
+/* The brake finds the way (docs/sketch-studio-tight-bends.md §5.2): an armed
+   try — where this hit goes in — until the pedal, Esc, Cancel or a new line;
+   the note a part-way commit leaves; a stored row's remedies. */
+.cad-brake-armed {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--shop-accent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--shop-accent) 8%, var(--shop-card));
+}
+.cad-brake-armed p {
+  flex: 1;
+  margin: 0;
+  color: var(--shop-ink);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.cad-brake-armed button {
+  flex: none;
+}
+.cad-brake-armed-done {
+  color: var(--shop-done);
+}
+.cad-brake-row-fix {
+  flex-wrap: wrap;
+}
+.cad-workspace .cad-brake-row-fix .cad-problem-fix {
+  margin-top: 2px;
+  min-height: 28px;
+}
+.cad-shell-foot {
+  position: sticky;
+  bottom: -10px;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas: 'back next' 'leave leave';
+  gap: 6px;
+  margin: 14px -10px -10px;
+  padding: 8px 10px 10px;
+  background: #f8fafb;
+  border-top: 1px solid var(--cad-border);
+}
+/* The station's primary button rides in the pinned footer, above Back / Next
+   (SF-1 audit: it must always be in view, at 1366 × 768 too). */
+.cad-shell-foot.has-primary {
+  grid-template-areas: 'primary primary' 'back next' 'leave leave';
+  box-shadow: 0 -6px 12px -8px #23344a40;
+}
+.cad-shell-primary {
+  grid-area: primary;
+  min-width: 0;
+}
+.cad-workspace .cad-shell-foot .cad-shop-primary {
+  margin: 0;
+  min-height: 40px;
+  font-size: 14px;
+  border-color: var(--shop-accent);
+}
+.cad-workspace .cad-shell-foot button {
+  min-height: 36px;
+  font-size: 12px;
+  border-color: #c4d0da;
+  background: var(--shop-card);
+}
+.cad-workspace .cad-shell-back {
+  grid-area: back;
+  justify-self: start;
+}
+.cad-workspace .cad-shell-next {
+  grid-area: next;
+  justify-self: end;
+}
+.cad-workspace .cad-shell-next.is-ready {
+  border-color: var(--shop-accent);
+  background: var(--shop-accent);
+  color: #fff;
+}
+.cad-workspace .cad-shell-leave {
+  grid-area: leave;
+  justify-self: stretch;
+}
+/* The bend queue (docs/sketch-studio-outline-edit-sheet-nest.md §7.2): under
+   the shell's head, compact — the panel below it is long and its Bend button
+   lives in the pinned footer. The list holds about five rows, then scrolls. */
+.cad-bend-queue {
+  margin: 0 0 8px;
+  padding: 6px;
+  border: 1px solid var(--cad-border);
+  border-radius: 6px;
+  background: #f8fafb;
+}
+.cad-bend-queue-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.cad-bend-queue-head h4 {
+  margin: 0;
+  font-size: 12px;
+  color: var(--shop-ink);
+}
+.cad-bend-queue-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--shop-quiet);
+  white-space: nowrap;
+}
+.cad-bend-queue-steps {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 5px 0;
+}
+.cad-workspace .cad-bend-queue-steps button {
+  min-height: 28px;
+  font-size: 12px;
+  justify-content: center;
+}
+.cad-workspace .cad-bend-queue-steps button.is-ready {
+  border-color: var(--shop-accent);
+  background: var(--shop-accent);
+  color: #fff;
+}
+.cad-bend-queue-rows {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  max-height: 196px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.cad-workspace .cad-bend-queue .cad-job-row {
+  align-items: center;
+  padding: 3px 6px;
+  background: var(--shop-card);
+}
+.cad-workspace .cad-bend-queue .cad-job-row.is-selected {
+  background: color-mix(in srgb, var(--shop-accent) 14%, var(--shop-card));
+}
+.cad-bend-queue .cad-job-row .cad-route-mark {
+  flex: none;
+  margin-left: auto;
+}
+.cad-bend-queue small.is-problem {
+  color: var(--shop-warn);
+}
+/* Sheets to buy on the job sheet (§7.5). */
+.cad-job-stock h4 {
+  margin: 12px 0 4px;
+}
+/* The gate and Draw (§4.3, §4.4). */
+.cad-gate-parts li + li {
+  margin-top: 4px;
+}
+.cad-gate-parts .cad-job-row {
+  border-color: var(--cad-border);
+  background: var(--shop-card);
+}
+.cad-draw-tiles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cad-draw-tile {
+  background: var(--shop-card);
+  border: 1px solid var(--cad-border);
+  border-radius: 6px;
+}
+.cad-draw-tile.is-open {
+  border-color: var(--shop-accent);
+}
+.cad-draw-tile > div {
+  padding: 0 12px 8px;
+}
+.cad-workspace .cad-draw-tile-head {
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  text-align: left;
+  white-space: normal;
+}
+.cad-draw-tile-head strong {
+  font-size: 13px;
+  color: var(--shop-ink);
+}
+.cad-draw-tile-head span {
+  font-size: 12px;
+  color: var(--shop-quiet);
+}
+.cad-draw-outlines {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+}
+.cad-draw-outlines li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-bottom: 1px solid var(--cad-border);
+}
+.cad-draw-outlines li.is-chosen {
+  background: color-mix(in srgb, var(--shop-accent) 10%, var(--shop-card));
+}
+.cad-draw-outlines li > span {
+  display: flex;
+  /* The name keeps 110 px: the buttons wrap under it before it is squeezed. */
+  flex: 1 1 110px;
+  flex-direction: column;
+  min-width: 0;
+}
+.cad-draw-outlines strong {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.cad-draw-outlines small {
+  font-size: 11px;
+  color: var(--shop-quiet);
+}
+.cad-workspace .cad-draw-outlines button {
+  min-height: 32px;
+  border-color: #c4d0da;
+  background: var(--shop-card);
+}
+/* Edit · Delete · Cut this (docs/sketch-studio-outline-edit-sheet-nest.md
+   §3.2): they wrap under the name before they squeeze it. */
+.cad-draw-outlines li {
+  flex-wrap: wrap;
+}
+.cad-draw-outlines .cad-draw-outline-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: auto;
+}
+.cad-workspace .cad-draw-outlines .cad-draw-outline-actions button {
+  min-height: 28px;
+  padding: 0 8px;
+}
+.cad-draw-outlines.is-not-ready small {
+  color: var(--shop-warn);
+}
+.cad-cut-outline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  background: var(--shop-card);
+  border: 1px solid var(--cad-border);
+  border-radius: 6px;
+}
+.cad-cut-outline > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.cad-cut-outline .cad-cut-outline-name {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.cad-workspace .cad-cut-outline .cad-cut-outline-edit {
+  min-height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.cad-cut-outline strong {
+  font-size: 13px;
+  color: var(--shop-ink);
+}
+.cad-cut-outline small {
+  font-size: 11px;
+  color: var(--shop-quiet);
+}
+/* Draw → Flanged panel (docs/sketch-studio-shop-floor.md §6.3): the form in
+   the right pane, its preview over the view (the finished face beside the
+   blank the laser cuts). Face millimetres in the SVGs; strokes keep their
+   pixel width. */
+.cad-panel-form h5 {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--shop-ink);
+  text-transform: none;
+}
+.cad-panel-lead {
+  font-size: 13px;
+}
+.cad-panel-row {
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.cad-panel-row .cad-field {
+  flex: 1 1 80px;
+  min-width: 0;
+}
+.cad-panel-list {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+}
+.cad-panel-list li {
+  padding: 4px 6px;
+  margin-bottom: 3px;
+  border: 1px solid var(--cad-border);
+  border-radius: 4px;
+  background: var(--shop-card);
+  font-size: 12px;
+}
+.cad-panel-list li.is-current {
+  border-color: var(--shop-accent);
+}
+.cad-panel-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px 6px;
+  margin-top: 2px;
+}
+.cad-panel-sub strong {
+  flex: 1 0 100%;
+  font-size: 12px;
+}
+.cad-panel-sub .cad-field {
+  flex: 1 1 52px;
+  min-width: 0;
+  font-size: 11px;
+}
+.cad-panel-sub .cad-field input {
+  width: 100%;
+  min-width: 0;
+}
+.cad-panel-endings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 4px;
+}
+.cad-workspace .cad-panel-alt {
+  min-height: 34px;
+  white-space: normal;
+}
+.cad-panel-form button:focus-visible,
+.cad-panel-edge:focus-visible {
+  outline: 2px solid var(--shop-accent);
+  outline-offset: 1px;
+}
+.cad-model-view > .cad-panel-preview {
+  position: absolute;
+  inset: 12px 12px 40px 12px;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0;
+  padding: 8px 10px 10px;
+  background: #fffffff2;
+  border: 1px solid #c9d3dd;
+  border-radius: 6px;
+  box-shadow: 0 3px 12px #23344a1f;
+  min-height: 0;
+}
+.cad-panel-view {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.cad-panel-view figcaption {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--shop-ink);
+  margin-bottom: 4px;
+}
+.cad-panel-view figcaption small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--shop-quiet);
+}
+.cad-panel-view svg {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  background: #f5f8fa;
+  border-radius: 4px;
+}
+.cad-panel-face {
+  fill: #e3eaf0;
+  stroke: #4b5d6e;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  cursor: crosshair;
+}
+.cad-panel-cut {
+  fill: #f5f8fa;
+  stroke: #4b5d6e;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.cad-panel-crease {
+  stroke-width: 1.6;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.cad-panel-crease.is-up {
+  stroke: #c2410c;
+}
+.cad-panel-crease.is-down {
+  stroke: #1864ab;
+}
+.cad-panel-view text {
+  fill: var(--shop-ink);
+  font-family: system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.cad-panel-edge {
+  cursor: pointer;
+}
+.cad-panel-edge line {
+  stroke: #8a99a7;
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+}
+.cad-panel-edge.is-flanged line {
+  stroke-width: 5;
+  stroke-dasharray: none;
+}
+.cad-panel-edge.is-current line {
+  filter: drop-shadow(0 0 2px #287fb3);
+}
+.cad-panel-edge .cad-panel-hit {
+  fill: transparent;
+  stroke: none;
+}
+.cad-panel-edge:hover line {
+  stroke: var(--shop-accent);
+}
+.cad-panel-blank {
+  fill: #dfe6ec;
+  stroke: #4b5d6e;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+.cad-panel-bend {
+  stroke-width: 1.6;
+  stroke-dasharray: 6 3;
+  vector-effect: non-scaling-stroke;
+}
+.cad-panel-number text {
+  fill: #fff;
+  font-weight: 700;
+}
+.cad-panel-empty {
+  margin: auto;
+  font-size: 13px;
+  color: var(--shop-quiet);
+}
+.cad-panel-verdict {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 13px;
+  color: var(--shop-ink);
+}
+.cad-panel-verdict strong {
+  color: var(--shop-done, #2b8a3e);
+}
+.cad-panel-verdict strong.is-refused {
+  color: var(--shop-stop, #c92a2a);
+}
+.cad-panel-edge text.is-flange {
+  font-weight: 600;
+}
+/* A round corner's corner piece (docs/sketch-studio-round-bend.md §13.3): its
+   legs and arc, as thick as a flange, in its own colour (a separate part). */
+.cad-panel-corner-piece {
+  fill: none;
+  stroke: #7048e8;
+  stroke-width: 5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.cad-panel-endings .cad-shop-primary {
+  white-space: normal;
+}
+/* Replay the build (docs/sketch-studio-shop-floor.md §8, ShopFilm.jsx): the
+   Replay button at the end of the route, the film's panel and its caption
+   over the view. Colours from the shop tokens; the progress bars are scaled
+   by the workspace's frame loop (transform only: no layout per frame). */
+.cad-ribbon .cad-route-replay {
+  flex-direction: row;
+  gap: 6px;
+  margin-left: auto;
+  min-height: 44px;
+  padding: 4px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--shop-accent);
+  background: var(--shop-card);
+  color: #155d89;
+}
+.cad-ribbon .cad-route-replay.is-playing {
+  background: var(--shop-accent);
+  color: #fff;
+}
+.cad-ribbon .cad-route-replay + .cad-route-more {
+  margin-left: 0;
+}
+.cad-ribbon .cad-route-replay svg.cad-route-replay-icon {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+.cad-ribbon .cad-route-replay:focus-visible,
+.cad-film button:focus-visible {
+  outline: 2px solid var(--shop-accent);
+  outline-offset: 1px;
+}
+.cad-film-now {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 8px 0 6px;
+  padding: 8px 10px;
+  background: var(--shop-card);
+  border: 1px solid var(--cad-border);
+  border-left: 3px solid var(--shop-accent);
+  border-radius: 6px;
+}
+.cad-film-now strong {
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--shop-ink);
+  overflow-wrap: anywhere;
+}
+.cad-film-now small {
+  font-size: 12px;
+  color: var(--shop-quiet);
+  overflow-wrap: anywhere;
+}
+.cad-film-station {
+  align-self: flex-start;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--shop-accent) 14%, var(--shop-card));
+  color: #155d89;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.cad-film-station.is-finished {
+  background: color-mix(in srgb, var(--shop-done) 16%, var(--shop-card));
+  color: var(--shop-done);
+}
+.cad-film-progress,
+.cad-film-caption-bar {
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #dfe6ec;
+}
+.cad-film-progress > span,
+.cad-film-caption-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--shop-accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+.cad-film-clock {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  color: var(--shop-quiet);
+  font-variant-numeric: tabular-nums;
+}
+.cad-film-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.cad-workspace .cad-film-controls button {
+  min-height: 36px;
+  min-width: 0;
+  font-size: 12px;
+  white-space: normal;
+}
+.cad-film-speed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 4px;
+  font-size: 12px;
+  color: var(--shop-ink);
+}
+.cad-film-speed .cad-segmented button {
+  min-width: 40px;
+}
+/* The film's controls stick to the top of the pane; the step list scrolls under them. */
+.cad-film-deck {
+  position: sticky;
+  top: -10px;
+  z-index: 2;
+  margin: 0 -10px;
+  padding: 2px 10px 6px;
+  background: #f8fafb;
+  border-bottom: 1px solid var(--cad-border);
+}
+.cad-film-steps {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.cad-film-group {
+  display: block;
+  margin: 8px 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--shop-quiet);
+}
+.cad-workspace .cad-film-steps button {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 6px;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 6px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+  white-space: normal;
+  color: var(--shop-ink);
+}
+.cad-workspace .cad-film-steps button:hover {
+  background: var(--shop-card);
+  border-color: var(--cad-border);
+}
+.cad-workspace .cad-film-steps button[aria-current='step'] {
+  background: color-mix(in srgb, var(--shop-accent) 14%, var(--shop-card));
+  border-color: color-mix(in srgb, var(--shop-accent) 45%, var(--shop-card));
+  font-weight: 600;
+}
+.cad-film-steps li.is-done .cad-film-step-title {
+  color: var(--shop-quiet);
+}
+.cad-film-step-n {
+  font-size: 11px;
+  color: var(--shop-quiet);
+  font-variant-numeric: tabular-nums;
+}
+.cad-film-step-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cad-film-steps small {
+  font-size: 11px;
+  color: var(--shop-quiet);
+  font-variant-numeric: tabular-nums;
+}
+/* The caption over the view: above the laser bed (z 6) and the brake's cards. */
+.cad-model-view > .cad-film-caption {
+  position: absolute;
+  left: 50%;
+  bottom: 44px;
+  z-index: 9;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 3px;
+  width: min(620px, calc(100% - 32px));
+  padding: 8px 12px 10px;
+  background: #0f161ce0;
+  border: 1px solid #3b4a57;
+  border-radius: 8px;
+  color: #e7edf2;
+  pointer-events: none;
+}
+.cad-film-caption strong {
+  font-size: 15px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.cad-film-caption small {
+  font-size: 12px;
+  color: #b8c4cf;
+  overflow-wrap: anywhere;
+}
+.cad-film-caption .cad-film-station {
+  justify-self: start;
+  background: #ffffff1f;
+  color: #ffd8a8;
+}
+.cad-film-caption-bar {
+  margin-top: 4px;
+  background: #ffffff26;
+}
+.cad-film-caption-bar > span {
+  background: #ffd8a8;
+}
+.cad-film-paused {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  color: #ffd8a8;
+}
+/* While the replay plays the view settings rest (they are inert): shown quieter. */
+.cad-view-toolbar[data-film],
+.cad-view-cube[data-film] {
+  opacity: 0.5;
+}
+/* The press brake on a part finished here (§8.1): a neutral card, not a problem. */
+.cad-shop-done {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--shop-done);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--shop-done) 8%, var(--shop-card));
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--shop-ink);
+}
+.cad-shop-done strong {
+  color: var(--shop-done);
+}
+.cad-shop-again {
+  margin-top: 12px;
+  padding-top: 4px;
+  border-top: 1px solid var(--cad-border);
+}
+.cad-workspace .cad-shop-secondary {
+  min-height: 32px;
+  white-space: normal;
+  text-align: left;
+  border-color: #c4d0da;
+  background: var(--shop-card);
+  color: var(--shop-ink);
 }

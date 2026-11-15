@@ -60,7 +60,8 @@ describe('wall editor loaded on demand', () => {
 
     const view = render(<WallDetailEditorLazy />);
     expect(view.container.querySelector('[data-editor-phase="opening"]')).toBeTruthy();
-    expect(view.getByText('Wall-local assembly editor')).toBeTruthy();
+    // The shell names the wall the way the editor will: never the raw id.
+    expect(view.getByText(`Wall ${wall.id.split('_').pop()} · Inside face`)).toBeTruthy();
     expect(view.queryByTestId('wall-editor-body')).toBeNull();
     fireEvent.click(view.getByText('Close'));
     expect(mocks.editorDispatch).toHaveBeenCalledWith({ type: 'CLOSE_WALL_DETAIL_EDITOR' });

@@ -3,12 +3,17 @@ import { snapPoint, snapTargets } from './sketchSnap.js';
 import {
   SKETCH_TOOLS,
   createSketchState,
+  dimensionReadout,
+  dimensionStep,
+  finishRefusal,
   liveValues,
+  pendingDimension,
   previewEntities,
   sketchFields,
   sketchReducer,
 } from './sketchTools.js';
 import { describeEntity, entitiesToProfile, entityPolyline, hitEntity } from './sketchProfile.js';
+import { describeDimension, dimensionGeometry, dimensionPoints, hitDimension } from './sketchDimensions.js';
 import ExpressionInput from './ExpressionInput.jsx';
 import NumericInput from '../components/NumericInput.jsx';
 import { evaluateEntry } from './parameters.js';
@@ -34,7 +39,30 @@ const HINTS = {
   'rect-center': ['Click the centre, or type X, Y.', 'Click a corner, or type the full width and height.'],
   circle: ['Click the centre, or type X, Y.', 'Click a point on the circle, or type the radius.'],
   arc: ['Click the start point.', 'Click the end point.', 'Click a point on the arc.'],
+  // By step (sketchTools.js dimensionStep): first, second, place, place a radial one.
+  dimension: [
+    'Click a point, or a line, circle or arc to dimension it.',
+    'Click the second point · an edge reads square to it · Shift locks horizontal or vertical · Esc clears the first point.',
+    'Move beside the span for horizontal or vertical, elsewhere for aligned · click to keep it · Esc drops it.',
+    'Click where the label goes · Esc drops it.',
+  ],
 };
+const dimensionHint = (state) => {
+  const step = dimensionStep(state);
+  if (step === 'place') return HINTS.dimension[state.pending.type === 'circle' ? 3 : 2];
+  return HINTS.dimension[step === 'second' ? 1 : 0];
+};
+// The place click follows the cursor rounded to the grid only: a dimension
+// line snapped onto an endpoint would sit on the drawing.
+const NO_TARGETS = { points: [], curves: [] };
+// Marker size (mm) for a scale of mm per pixel: about 4 px on screen.
+const MARKER_PX = 4;
+// Room (px) the Dimension readout needs right of / below the cursor (its
+// offset, its max-width, two lines of text) before it flips to the other side.
+const READOUT_ROOM = [18 + 260 + 8, 18 + 64];
+// What Look at frames besides the entities: each dimension's line ends,
+// extension ends and label point (ticks and gaps are a few pixels: left out).
+const framedPoints = (state) => state.dimensions.flatMap((d) => dimensionPoints(d, 0));
 const fieldLabel = (field) => `Sketch ${field.toLowerCase()}`;
 const format = (value) => (Number.isFinite(value) ? Number(value.toFixed(2)).toString() : '');
 // A light grid: roughly 30-60 lines across the view, never finer than the snap.
@@ -49,7 +77,7 @@ function gridStep(span, snap) {
 // canvas, draws through the viewport's overlay API and shows the HUD.
 export default function CadSketcher({ viewport, session, snap, onSnapChange, onFinish, onCancel, onLookAt }) {
   const [state, dispatch] = useReducer(sketchReducer, session, (s) =>
-    createSketchState(s.entities || [], s.parameters || {}),
+    createSketchState(s.entities || [], s.parameters || {}, s.dimensions || [], s.boundary || []),
   );
   const [hud, setHud] = useState(null);
   const fieldRefs = useRef([]);
@@ -88,21 +116,40 @@ export default function CadSketcher({ viewport, session, snap, onSnapChange, onF
       const mmPerPixel = near ? Math.hypot(near[0] - raw[0], near[1] - raw[1]) / 10 : 1;
       const { state: current, targets: currentTargets, snap: grid } = latest.current;
       const from = current.points.at(-1) || null;
+      const placing = current.tool === 'dimension' && dimensionStep(current) === 'place';
+      const tolerance = SNAP_PIXELS * mmPerPixel;
       const snapped = snapPoint(raw, {
-        targets: currentTargets,
+        targets: placing ? NO_TARGETS : currentTargets,
         grid,
-        tolerance: SNAP_PIXELS * mmPerPixel,
-        ortho: event.shiftKey,
+        tolerance,
+        ortho: event.shiftKey && !placing,
         from,
       });
       const rect = canvas.getBoundingClientRect();
-      return { ...snapped, raw, mmPerPixel, screen: [event.clientX - rect.left, event.clientY - rect.top] };
+      return {
+        ...snapped,
+        raw,
+        mmPerPixel,
+        tolerance,
+        shift: event.shiftKey,
+        screen: [event.clientX - rect.left, event.clientY - rect.top],
+        view: [rect.width, rect.height],
+      };
     };
+    // What the Dimension tool needs besides the snapped point (sketchTools.js dimensionClick).
+    const pointer = (type, located) => ({
+      type,
+      point: located.point,
+      kind: located.kind,
+      raw: located.raw,
+      tolerance: located.tolerance,
+      shift: located.shift,
+    });
     const move = (event) => {
       const located = locate(event);
       if (!located) return;
-      dispatch({ type: 'move', point: located.point, kind: located.kind });
-      setHud({ screen: located.screen, mmPerPixel: located.mmPerPixel });
+      dispatch(pointer('move', located));
+      setHud({ screen: located.screen, mmPerPixel: located.mmPerPixel, view: located.view });
     };
     const pointerDown = (event) => {
       down = event.button === 0 ? [event.clientX, event.clientY] : null;
@@ -115,12 +162,19 @@ export default function CadSketcher({ viewport, session, snap, onSnapChange, onF
       const located = locate(event);
       if (!located) return;
       const current = latest.current.state;
-      if (current.tool) dispatch({ type: 'click', point: located.point, kind: located.kind });
-      else
-        dispatch({
-          type: 'select',
-          id: hitEntity(current.entities, located.raw, SNAP_PIXELS * located.mmPerPixel),
-        });
+      if (current.tool) {
+        dispatch(pointer('click', located));
+        return;
+      }
+      // Dimensions first (their labels let clicks through to the canvas), then entities.
+      const dimensionId = hitDimension(
+        current.dimensions,
+        located.raw,
+        located.tolerance,
+        located.mmPerPixel * MARKER_PX,
+      );
+      if (dimensionId) dispatch({ type: 'select', dimensionId });
+      else dispatch({ type: 'select', id: hitEntity(current.entities, located.raw, located.tolerance) });
     };
     const doubleClick = () => {
       if (latest.current.state.tool === 'line') dispatch({ type: 'finish-chain' });
@@ -137,9 +191,16 @@ export default function CadSketcher({ viewport, session, snap, onSnapChange, onF
     };
   }, [viewport, frame]);
 
-  const finish = () => latest.current.onFinish(latest.current.state.entities);
+  // Dimensions with no drawing are not finished (never a silent loss): the sketcher stays and says why.
+  const finish = () => {
+    const current = latest.current.state;
+    const refusal = finishRefusal(current);
+    if (refusal) dispatch({ type: 'message', text: refusal });
+    else latest.current.onFinish(current.entities, current.dimensions);
+  };
   // Keys with focus outside the HUD: Esc drops the tool, then exits; Enter
-  // ends a polyline; Delete removes the selected entity.
+  // ends a polyline; Delete removes the selected entity or dimension; D
+  // toggles the Dimension tool.
   useEffect(() => {
     const keyDown = (event) => {
       if (event.target instanceof HTMLElement && event.target.closest('input, select, textarea')) return;
@@ -151,10 +212,19 @@ export default function CadSketcher({ viewport, session, snap, onSnapChange, onF
         event.preventDefault();
         dispatch({ type: 'enter' });
       } else if (event.key === 'Delete' || event.key === 'Backspace') {
-        if (latest.current.state.selectedId) {
+        if (latest.current.state.selectedId || latest.current.state.selectedDimensionId) {
           event.preventDefault();
           dispatch({ type: 'delete' });
         }
+      } else if (
+        event.key?.toLowerCase() === 'd' &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.repeat
+      ) {
+        event.preventDefault();
+        dispatch({ type: 'tool', tool: latest.current.state.tool === 'dimension' ? null : 'dimension' });
       }
     };
     window.addEventListener('keydown', keyDown);
@@ -167,7 +237,15 @@ export default function CadSketcher({ viewport, session, snap, onSnapChange, onF
     [-span, -span],
     [span, span],
   ];
+  const markerSize = (hud?.mmPerPixel || span / 500) * MARKER_PX;
   useEffect(() => {
+    // Each dimension as plain drawing data (the viewport stays dumb), then
+    // the one the place click would keep.
+    const drawn = (dimension) => {
+      const { segments, labelAt, text, value } = dimensionGeometry(dimension, markerSize);
+      return { id: dimension.id, segments, labelAt, text, value };
+    };
+    const placing = state.tool === 'dimension' ? pendingDimension(state)?.dimension : null;
     viewport.current?.setSketchOverlay({
       frame,
       gridBounds,
@@ -179,7 +257,15 @@ export default function CadSketcher({ viewport, session, snap, onSnapChange, onF
       preview,
       cursor: state.cursor,
       snapKind: state.snapKind,
-      markerSize: (hud?.mmPerPixel || span / 500) * 4,
+      markerSize,
+      dimensions: [
+        ...state.dimensions.map((d) => ({
+          ...drawn(d),
+          selected: d.id === state.selectedDimensionId,
+          preview: false,
+        })),
+        ...(placing ? [{ ...drawn(placing), selected: false, preview: true }] : []),
+      ],
     });
   });
   useEffect(() => () => viewport.current?.setSketchOverlay(null), [viewport]);
@@ -194,14 +280,23 @@ export default function CadSketcher({ viewport, session, snap, onSnapChange, onF
         ([u, v]) => u < visible[0][0] || v < visible[0][1] || u > visible[1][0] || v > visible[1][1],
       ),
     );
-    if (outside) latest.current.onLookAt?.(state.entities);
+    if (outside) latest.current.onLookAt?.(state.entities, framedPoints(latest.current.state));
   }, [state.entities, session.visible]);
   const fields = sketchFields(state);
   const live = liveValues(state);
   const step = Math.min(state.points.length, (HINTS[state.tool]?.length || 1) - 1);
-  // Keep typing going to the active HUD field while a tool is in use.
+  const hint = state.tool === 'dimension' ? dimensionHint(state) : state.tool ? HINTS[state.tool][step] : null;
+  const readout = dimensionReadout(state);
+  // Keep typing going to the active HUD field while a tool is in use. The
+  // Dimension tool has no field: its toolbar button gives the focus up, so
+  // Esc, D and Delete reach the sketcher and Space / Enter never re-press it.
   useEffect(() => {
     if (!state.tool) return;
+    if (state.tool === 'dimension') {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.closest('.cad-sketch-toolbar')) active.blur();
+      return;
+    }
     fieldRefs.current[state.field]?.focus({ preventScroll: true });
   }, [state.tool, state.points.length, state.entities.length, state.field]);
   const fieldKey = (event, index) => {
@@ -221,55 +316,86 @@ export default function CadSketcher({ viewport, session, snap, onSnapChange, onF
   const hudStyle = hud?.screen
     ? { left: Math.max(8, hud.screen[0] + 18), top: Math.max(56, hud.screen[1] + 18) }
     : { left: 16, top: 60 };
+  // The readout stands left of / above the cursor near the right / bottom
+  // edge: anchored by `left` there it would be squeezed against the edge.
+  const readoutStyle = (() => {
+    if (!hud?.screen || !hud.view?.[0]) return hudStyle;
+    const [x, y] = hud.screen,
+      [width, height] = hud.view;
+    return {
+      ...(x + READOUT_ROOM[0] > width ? { right: Math.max(8, width - x + 18) } : { left: hudStyle.left }),
+      ...(y + READOUT_ROOM[1] > height ? { bottom: Math.max(8, height - y + 18) } : { top: hudStyle.top }),
+    };
+  })();
   return (
     <>
-      <div className="cad-sketch-toolbar" role="toolbar" aria-label="Sketch tools">
-        <strong>{session.name}</strong>
-        {SKETCH_TOOLS.map(([tool, label]) => (
+      {/* The sketch bar, and under it whatever its height (it wraps on a narrow view) the selection note. */}
+      <div className="cad-sketch-top">
+        <div className="cad-sketch-toolbar" role="toolbar" aria-label="Sketch tools">
+          <strong>{session.name}</strong>
+          {SKETCH_TOOLS.map(([tool, label]) => (
+            <button
+              key={tool}
+              type="button"
+              aria-pressed={state.tool === tool}
+              onClick={() => dispatch({ type: 'tool', tool: state.tool === tool ? null : tool })}
+            >
+              {label}
+            </button>
+          ))}
           <button
-            key={tool}
             type="button"
-            aria-pressed={state.tool === tool}
-            onClick={() => dispatch({ type: 'tool', tool: state.tool === tool ? null : tool })}
+            disabled={!state.entities.length && !state.dimensions.length}
+            onClick={() => dispatch({ type: 'undo' })}
           >
-            {label}
+            Undo last
           </button>
-        ))}
-        <button type="button" disabled={!state.entities.length} onClick={() => dispatch({ type: 'undo' })}>
-          Undo last
-        </button>
-        <button type="button" disabled={!state.selectedId} onClick={() => dispatch({ type: 'delete' })}>
-          Delete selected
-        </button>
-        <label>
-          Snap (mm){' '}
-          <NumericInput
-            aria-label="Sketch snap (mm)"
-            min="0"
-            step="0.5"
-            value={snap}
-            onCommit={(v) => onSnapChange(Math.max(0, v))}
-            title="Grid snap; 0 for free placement. Points and edges still snap."
-          />
-        </label>
-        <button
-          type="button"
-          onClick={() => onLookAt(state.entities)}
-          title="View the sketch plane squarely and fit the sketch"
-        >
-          Look at
-        </button>
-        <button type="button" className="cad-primary" onClick={finish}>
-          Finish sketch
-        </button>
-        <button type="button" onClick={() => latest.current.onCancel()}>
-          Cancel sketch
-        </button>
+          <button
+            type="button"
+            disabled={!state.selectedId && !state.selectedDimensionId}
+            onClick={() => dispatch({ type: 'delete' })}
+          >
+            Delete selected
+          </button>
+          <label>
+            Snap (mm){' '}
+            <NumericInput
+              aria-label="Sketch snap (mm)"
+              min="0"
+              step="0.5"
+              value={snap}
+              onCommit={(v) => onSnapChange(Math.max(0, v))}
+              title="Grid snap; 0 for free placement. Points and edges still snap."
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => onLookAt(state.entities, framedPoints(state))}
+            title="View the sketch plane squarely and fit the sketch"
+          >
+            Look at
+          </button>
+          <button type="button" className="cad-primary" onClick={finish}>
+            Finish sketch
+          </button>
+          <button type="button" onClick={() => latest.current.onCancel()}>
+            Cancel sketch
+          </button>
+        </div>
+        {state.selectedId && (
+          <div className="cad-sketch-selection" role="note">
+            {describeEntity(state.entities.find((e) => e.id === state.selectedId) || {})} · Delete removes it
+          </div>
+        )}
+        {state.selectedDimensionId && (
+          <div className="cad-sketch-selection" role="note">
+            {describeDimension(state.dimensions.find((d) => d.id === state.selectedDimensionId))} · Delete removes it
+          </div>
+        )}
       </div>
-      <div className="cad-sketch-status" role="status">
-        <span>
-          {state.tool ? HINTS[state.tool][step] : 'Choose a tool · click a line to select it · Esc exits the sketch'}
-        </span>
+      {/* A refused finish also fills the workspace's error line at the foot of the view: the status sits above it. */}
+      <div className={`cad-sketch-status${session.refusal ? ' has-refusal' : ''}`} role="status">
+        <span>{hint || 'Choose a tool · click a line to select it · Esc exits the sketch'}</span>
         {state.cursor && (
           <span>
             X {format(state.cursor[0])} · Y {format(state.cursor[1])} mm
@@ -279,10 +405,25 @@ export default function CadSketcher({ viewport, session, snap, onSnapChange, onF
         <span>
           {state.entities.length} item{state.entities.length === 1 ? '' : 's'} ·{' '}
           {result.closed ? 'closed profile' : result.profile ? 'open outline' : 'no profile yet'}
+          {state.dimensions.length > 0 &&
+            ` · ${state.dimensions.length} dimension${state.dimensions.length === 1 ? '' : 's'}`}
         </span>
         {state.message && <span className="cad-sketch-message">{state.message}</span>}
+        {/* A finish the workspace refused (an outline a cut part no longer folds on), while the drawing is as it was. */}
+        {session.refusal && session.refusal.entities === state.entities && (
+          <span className="cad-sketch-message" aria-label="Sketch refused">
+            {session.refusal.message}
+          </span>
+        )}
       </div>
-      {state.tool && (
+      {/* The Dimension tool's box is a readout: no fields, clicks go through it. */}
+      {readout && (
+        <div className="cad-sketch-hud is-readout" aria-label="Dimension readout" style={readoutStyle}>
+          <strong>{readout.value}</strong>
+          {readout.note && <small>{readout.note}</small>}
+        </div>
+      )}
+      {state.tool && state.tool !== 'dimension' && (
         <div className="cad-sketch-hud" style={hudStyle}>
           {fields.map((field, index) => (
             <label key={field}>
@@ -303,11 +444,6 @@ export default function CadSketcher({ viewport, session, snap, onSnapChange, onF
             </label>
           ))}
           <small>Tab switches · Enter applies · Esc ends the tool</small>
-        </div>
-      )}
-      {state.selectedId && (
-        <div className="cad-sketch-selection" role="note">
-          {describeEntity(state.entities.find((e) => e.id === state.selectedId) || {})} · Delete removes it
         </div>
       )}
     </>

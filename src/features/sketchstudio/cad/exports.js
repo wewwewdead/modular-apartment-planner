@@ -3,10 +3,18 @@ import { svgPathProperties } from 'svg-path-properties';
 import { buildCutList, cutListCsv, planLinearStock, planSheets } from './fabrication.js';
 import { sheetSvg, profileSvg, xml } from './drawings.js';
 import { sheetDxf } from './sheetDxf.js';
+import { shopRecordRows } from './shopRecords.js';
 
 export { download } from './download.js';
 
-export function drawingDxf(paths) {
+// `bendLines` (a sheet-metal flat pattern, docs/sketch-studio-fab-shop.md §9
+// SM-1 item 7): one LINE per bend-zone interval on layer BEND, given in the
+// paths' drawing frame and written like the polylines (y turned back); a
+// round bend's two tangent lines (`tangent`, docs/sketch-studio-round-bend.md
+// §7) go out on BEND with its centre line.
+// `etchLines` (SM-4, the blank's etched marks): one LINE each on layer ETCH,
+// after the bend lines; none is written when there are none.
+export function drawingDxf(paths, { bendLines = [], etchLines = [] } = {}) {
   // Explicit polyline approximation; adaptive chord error is 0.02 mm.
   const lines = [
     '0',
@@ -64,6 +72,33 @@ export function drawingDxf(paths) {
       );
       points.forEach((pt) => lines.push('10', String(pt.x), '20', String(-pt.y)));
     }
+  for (const [layer, list] of [
+    ['BEND', bendLines],
+    ['ETCH', etchLines],
+  ])
+    for (const line of list)
+      lines.push(
+        '0',
+        'LINE',
+        '100',
+        'AcDbEntity',
+        '8',
+        layer,
+        '100',
+        'AcDbLine',
+        '10',
+        String(line.a[0]),
+        '20',
+        String(-line.a[1]),
+        '30',
+        '0',
+        '11',
+        String(line.b[0]),
+        '21',
+        String(-line.b[1]),
+        '31',
+        '0',
+      );
   lines.push('0', 'ENDSEC', '0', 'EOF');
   return lines.join('\n');
 }
@@ -118,7 +153,7 @@ export async function workshopZip(model, snapshot, exports, title) {
       2,
     ),
   );
-  zip.file('parts-and-cut-list.csv', cutListCsv(rows));
+  zip.file('parts-and-cut-list.csv', cutListCsv(rows, shopRecordRows(model, snapshot)));
   zip.file('linear-stock-layout.json', JSON.stringify(stock, null, 2));
   zip.file('sheet-stock-layout.json', JSON.stringify(sheets, null, 2));
   if (exports.assembly) zip.file('assembly.step', await exports.assembly.arrayBuffer());
@@ -143,7 +178,10 @@ export async function workshopZip(model, snapshot, exports, title) {
     zip.file('drawings/workshop.pdf', await (await vectorPdf(null, model, snapshot, { title, pages })).arrayBuffer());
   for (const profile of exports.profiles) {
     zip.file(`cutting/${safe(profile.partId)}.svg`, profileSvg(profile));
-    zip.file(`cutting/${safe(profile.partId)}.dxf`, drawingDxf(profile.visible));
+    zip.file(
+      `cutting/${safe(profile.partId)}.dxf`,
+      drawingDxf(profile.visible, { bendLines: profile.bendLines, etchLines: profile.etchLines }),
+    );
   }
   for (const sheet of sheets) {
     const paths = sheet.parts

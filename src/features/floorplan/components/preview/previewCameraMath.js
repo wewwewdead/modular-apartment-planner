@@ -69,9 +69,67 @@ export function perspectiveFitDistance(camera, box) {
   return Math.max(distanceByHeight, distanceByWidth, radius * 1.4) * 1.15;
 }
 
-export function fitCameraToBox(camera, controls, box, presetName = DEFAULT_PRESET_NAME) {
+/*
+ * The face an assembly editor is working on, as the pane sees it
+ * (docs/wall-fastener-visibility.md §2.1): a vertical plane through the wall's
+ * centre, and the horizontal outward normal of the face being edited, both in
+ * world terms (plan x, y is world x, z). `{ normalX, normalZ, pointX, pointZ }`.
+ */
+
+/**
+ * A facing from four numbers, or `null` when they do not make one — which is
+ * what every pane that is not a wall editor's passes, and what keeps those
+ * panes exactly as they were.
+ */
+export function resolveFacing(normalX, normalZ, pointX, pointZ) {
+  const values = [normalX, normalZ, pointX, pointZ];
+  if (!values.every((value) => typeof value === 'number' && Number.isFinite(value))) return null;
+  const length = Math.hypot(normalX, normalZ);
+  if (length < 1e-9) return null;
+  return { normalX: normalX / length, normalZ: normalZ / length, pointX, pointZ };
+}
+
+/** How far in front of the face's plane `point` (anything with x and z) is; negative is behind it. */
+export function facingSideOf(point, facing) {
+  return (point.x - facing.pointX) * facing.normalX + (point.z - facing.pointZ) * facing.normalZ;
+}
+
+/** `point` reflected across the facing's plane, as a new Vector3. Height is untouched. */
+export function mirrorAcrossFacing(point, facing) {
+  const twice = 2 * facingSideOf(point, facing);
+  return new THREE.Vector3(point.x - twice * facing.normalX, point.y, point.z - twice * facing.normalZ);
+}
+
+/**
+ * The direction a fit looks from: the preset's own when it already stands on
+ * the face's side, its mirror image across the wall's plane when it does not —
+ * the same three-quarter view, from in front of the face being edited. A
+ * direction, so only the normal matters, not where the plane is.
+ */
+export function directionFacing(direction, facing) {
+  const result = direction.clone();
+  if (!facing) return result;
+  const along = result.x * facing.normalX + result.z * facing.normalZ;
+  if (along >= 0) return result;
+  result.x -= 2 * along * facing.normalX;
+  result.z -= 2 * along * facing.normalZ;
+  return result;
+}
+
+/**
+ * Where a camera and its orbit target go to look at the face: both mirrored
+ * across the plane when the camera is behind it — same distance, same height,
+ * same zoom, now in front of the other face — or `null` when the camera is
+ * already in front, and should be left exactly where the user put it.
+ */
+export function cameraPoseFacing(position, target, facing) {
+  if (!facing || facingSideOf(position, facing) >= 0) return null;
+  return { position: mirrorAcrossFacing(position, facing), target: mirrorAcrossFacing(target, facing) };
+}
+
+export function fitCameraToBox(camera, controls, box, presetName = DEFAULT_PRESET_NAME, facing = null) {
   const preset = PRESETS[presetName] || PRESETS[DEFAULT_PRESET_NAME];
-  const direction = preset.clone().normalize();
+  const direction = directionFacing(preset, facing).normalize();
   const center = box.getCenter(new THREE.Vector3());
   const distance = perspectiveFitDistance(camera, box);
 

@@ -1,0 +1,416 @@
+{
+  "version": 1,
+  "parameters": [],
+  "sketches": [
+    {
+      "id": "shop-box-body-blank",
+      "name": "Control box body blank",
+      "plane": "XY",
+      "profile": {
+        "type": "polygon",
+        "points": [
+          [24.1612, 0],
+          [181.5612, 0],
+          [181.5612, 22.52],
+          [179.8812, 22.52],
+          [179.8812, 25.8412],
+          [183.2023, 25.8412],
+          [183.2023, 22.8612],
+          [205.7223, 22.8612],
+          [205.7223, 122.8612],
+          [183.2023, 122.8612],
+          [183.2023, 119.8812],
+          [179.8812, 119.8812],
+          [179.8812, 123.2023],
+          [181.5612, 123.2023],
+          [181.5612, 145.7223],
+          [24.1612, 145.7223],
+          [24.1612, 123.2023],
+          [25.8412, 123.2023],
+          [25.8412, 119.8812],
+          [22.52, 119.8812],
+          [22.52, 122.8612],
+          [0, 122.8612],
+          [0, 22.8612],
+          [22.52, 22.8612],
+          [22.52, 25.8412],
+          [25.8412, 25.8412],
+          [25.8412, 22.52],
+          [24.1612, 22.52]
+        ],
+        "holes": [
+          {
+            "type": "circle",
+            "radius": 2.75,
+            "center": [38.9306, 38.9306]
+          },
+          {
+            "type": "circle",
+            "radius": 2.75,
+            "center": [166.7917, 38.9306]
+          },
+          {
+            "type": "circle",
+            "radius": 2.75,
+            "center": [166.7917, 106.7917]
+          },
+          {
+            "type": "circle",
+            "radius": 2.75,
+            "center": [38.9306, 106.7917]
+          },
+          {
+            "type": "circle",
+            "radius": 6.25,
+            "center": [194.4623, 72.8612]
+          }
+        ]
+      },
+      "primitives": [],
+      "constrained": false
+    },
+    {
+      "id": "shop-box-lid-blank",
+      "name": "Control box lid blank",
+      "plane": "XY",
+      "profile": {
+        "type": "rectangle",
+        "width": 160,
+        "height": 128.7223,
+        "origin": [0, 0]
+      },
+      "primitives": [],
+      "constrained": false
+    }
+  ],
+  "parts": [
+    {
+      "id": "shop-box-body",
+      "name": "Control box body — sheet metal",
+      "material": "SPCC cold-rolled steel",
+      "features": [
+        {
+          "id": "shop-box-body-sheet",
+          "type": "sheetmetal",
+          "sketchId": "shop-box-body-blank",
+          "thickness": 1.2,
+          "stock": "spcc",
+          "kFactor": null,
+          "base": null,
+          "marks": [
+            {
+              "id": "shop-box-body-mark-1",
+              "a": [23.9306, 25.8412],
+              "b": [23.9306, 119.8812]
+            },
+            {
+              "id": "shop-box-body-mark-2",
+              "a": [181.7917, 119.8812],
+              "b": [181.7917, 25.8412]
+            },
+            {
+              "id": "shop-box-body-mark-3",
+              "a": [179.8812, 23.9306],
+              "b": [25.8412, 23.9306]
+            },
+            {
+              "id": "shop-box-body-mark-4",
+              "a": [25.8412, 121.7917],
+              "b": [179.8812, 121.7917]
+            }
+          ],
+          "bends": [
+            {
+              "id": "shop-box-bend-left",
+              "a": [23.930575101461816, 146.7223],
+              "b": [23.930575101461816, -1],
+              "angle": 90,
+              "direction": "up",
+              "radius": null,
+              "punch": "straight-88",
+              "die": "v8-88"
+            },
+            {
+              "id": "shop-box-bend-right",
+              "a": [181.79172489853818, -1],
+              "b": [181.79172489853818, 146.7223],
+              "angle": 90,
+              "direction": "up",
+              "radius": null,
+              "punch": "straight-88",
+              "die": "v8-88"
+            },
+            {
+              "id": "shop-box-bend-front",
+              "a": [25.841150202923632, 23.930575101461816],
+              "b": [179.8811502029236, 23.930575101461816],
+              "angle": 90,
+              "direction": "up",
+              "radius": null,
+              "punch": "straight-88",
+              "die": "v8-88"
+            },
+            {
+              "id": "shop-box-bend-rear",
+              "a": [179.8811502029236, 121.79172530438545],
+              "b": [25.841150202923632, 121.79172530438545],
+              "angle": 90,
+              "direction": "up",
+              "radius": null,
+              "punch": "straight-88",
+              "die": "v8-88"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shop-box-lid",
+      "name": "Control box lid — sheet metal",
+      "material": "SPCC cold-rolled steel",
+      "features": [
+        {
+          "id": "shop-box-lid-sheet",
+          "type": "sheetmetal",
+          "sketchId": "shop-box-lid-blank",
+          "thickness": 1.2,
+          "stock": "spcc",
+          "kFactor": null,
+          "base": null,
+          "marks": [
+            {
+              "id": "shop-box-lid-mark-1",
+              "a": [160, 13.9306],
+              "b": [0, 13.9306]
+            },
+            {
+              "id": "shop-box-lid-mark-2",
+              "a": [0, 114.7917],
+              "b": [160, 114.7917]
+            }
+          ],
+          "bends": [
+            {
+              "id": "shop-box-lid-bend-front",
+              "a": [-1, 13.930575101461816],
+              "b": [161, 13.930575101461816],
+              "angle": 90,
+              "direction": "down",
+              "radius": null,
+              "punch": "straight-88",
+              "die": "v8-88"
+            },
+            {
+              "id": "shop-box-lid-bend-rear",
+              "a": [161, 114.79172489853818],
+              "b": [-1, 114.79172489853818],
+              "angle": 90,
+              "direction": "down",
+              "radius": null,
+              "punch": "straight-88",
+              "die": "v8-88"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "instances": [
+    {
+      "id": "shop-box-body-instance",
+      "partId": "shop-box-body",
+      "name": "Control box body",
+      "position": [0, 0, 0],
+      "rotation": [0, 0, 0],
+      "visible": true,
+      "groupId": "shop-box-group"
+    },
+    {
+      "id": "shop-box-lid-instance",
+      "partId": "shop-box-lid",
+      "name": "Control box lid",
+      "position": [22.8612, 8.5, 25],
+      "rotation": [0, 0, 0],
+      "visible": true,
+      "groupId": "shop-box-group"
+    }
+  ],
+  "connections": [],
+  "marks": [],
+  "groups": [
+    {
+      "id": "shop-box-group",
+      "name": "Control box",
+      "parentId": null
+    }
+  ],
+  "welds": [
+    {
+      "id": "shop-box-weld-1",
+      "a": {
+        "instanceId": "shop-box-body-instance",
+        "local": [24.161150202923633, 24.06115020292363, 25]
+      },
+      "b": {
+        "instanceId": "shop-box-body-instance",
+        "local": [24.161150202923633, 24.061150202923635, 2.4800000000000004]
+      },
+      "kind": "fillet",
+      "process": "tig",
+      "size": 1.2,
+      "pitch": 40,
+      "note": ""
+    },
+    {
+      "id": "shop-box-weld-2",
+      "a": {
+        "instanceId": "shop-box-body-instance",
+        "local": [181.5611502029236, 24.06115020292363, 25]
+      },
+      "b": {
+        "instanceId": "shop-box-body-instance",
+        "local": [181.5611502029236, 24.061150202923635, 2.4800000000000004]
+      },
+      "kind": "fillet",
+      "process": "tig",
+      "size": 1.2,
+      "pitch": 40,
+      "note": ""
+    },
+    {
+      "id": "shop-box-weld-3",
+      "a": {
+        "instanceId": "shop-box-body-instance",
+        "local": [181.5611502029236, 121.66115020292364, 25.000000000000014]
+      },
+      "b": {
+        "instanceId": "shop-box-body-instance",
+        "local": [181.5611502029236, 121.66115020292364, 2.480000000000004]
+      },
+      "kind": "fillet",
+      "process": "tig",
+      "size": 1.2,
+      "pitch": 40,
+      "note": ""
+    },
+    {
+      "id": "shop-box-weld-4",
+      "a": {
+        "instanceId": "shop-box-body-instance",
+        "local": [24.161150202923633, 121.66115020292364, 25.000000000000014]
+      },
+      "b": {
+        "instanceId": "shop-box-body-instance",
+        "local": [24.161150202923633, 121.66115020292364, 2.480000000000004]
+      },
+      "kind": "fillet",
+      "process": "tig",
+      "size": 1.2,
+      "pitch": 40,
+      "note": ""
+    }
+  ],
+  "finishes": [
+    {
+      "id": "shop-box-finish-1",
+      "instanceId": "shop-box-body-instance",
+      "kind": "powder",
+      "name": "RAL 7035 Light grey",
+      "colour": "#c5c7c4",
+      "gloss": "texture",
+      "thickness": 70
+    },
+    {
+      "id": "shop-box-finish-2",
+      "instanceId": "shop-box-lid-instance",
+      "kind": "powder",
+      "name": "RAL 7035 Light grey",
+      "colour": "#c5c7c4",
+      "gloss": "texture",
+      "thickness": 70
+    }
+  ],
+  "prints": [
+    {
+      "id": "shop-box-print-1",
+      "instanceId": "shop-box-lid-instance",
+      "origin": [32, 64.36115, 1.2],
+      "x": [1, 0, 0],
+      "normal": [0, 0, 1],
+      "width": 24,
+      "height": 24,
+      "rotation": 0,
+      "method": "uv",
+      "kind": "image",
+      "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAABAS0lEQVR4AQFAQL+/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABPfFAAT3yfAE98zwBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3zPAE98nwBPfFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABPfEAAT3zfAE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfN8AT3xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAT3xgAE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3xgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE98YABPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3xgAAAAAAAAAAAAAAAAAABPfEAAT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/MHCV/0B7nf9wnLX/gKe+/4Cnvv+Ap77/gKe+/3Cctf9Ae53/MHCV/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3xAAAAAAAAAAAAAAE983wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/zBwlf9wnLX/v9Pe/////////////////////////////////////////////////////////////////7/T3v9wnLX/MHCV/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfN8AAAAAAABPfFAAT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/EFqE/3Cctf/P3ub/////////////////////////////////////////////////////////////////////////////////////////////////z97m/3Cctf8QWoT/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfFAAAE98nwBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/EFqE/4Cnvv/v9Pf//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////+/09/+Ap77/EFqE/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98nwAAT3zPAE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/2CRrf/v9Pf////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////v9Pf/YJGt/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3zPAABPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/xBahP+/097////////////////////////////////////////////f6e//n73O/3Cctf9Ae53/EFqE/wBPfP8AT3z/AE98/wBPfP8QWoT/QHud/3Cctf+fvc7/3+nv////////////////////////////////////////////v9Pe/xBahP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AAE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP9Ae53/7/T3/////////////////////////////////+/09/+fvc7/MHCV/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8cUG3/AE98/wBPfP8AT3z/MHCV/5+9zv/v9Pf/////////////////////////////////7/T3/0B7nf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wAAT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/YJGt/////////////////////////////////+/09/+Ap77/EFqE/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/Dk90/5tSKf8AT3z/AE98/wBPfP8AT3z/AE98/xBahP+Ap77/7/T3/////////////////////////////////2CRrf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AABPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/2CRrf////////////////////////////////+vyNb/EFqE/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP+bUin/cVFA/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8QWoT/r8jW/////////////////////////////////2CRrf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AAE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP9gka3////////////////////////////v9Pf/UIal/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/Y1FH/+JTA/9xUUD/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/UIal/+/09////////////////////////////2CRrf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wAAT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/QHud////////////////////////////z97m/zBwlf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/xxQbf/UUwv/4lMD/0dQVv8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/MHCV/8/e5v///////////////////////////0B7nf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AABPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/xBahP/v9Pf//////////////////////8/e5v8QWoT/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/qlIh/+JTA//iUwP/OVBe/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/EFqE/8/e5v//////////////////////7/T3/xBahP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AAE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/v9Pe///////////////////////P3ub/EFqE/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/2NRR//iUwP/4lMD/+JTA/8cUG3/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/EFqE/8/e5v//////////////////////v9Pe/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wAAT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/2CRrf//////////////////////7/T3/zBwlf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8qUGX/1FML/+JTA//iUwP/4lMD/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/MHCV/+/09///////////////////////YJGt/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AABPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8QWoT/7/T3//////////////////////9QhqX/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/7hSGv/iUwP/4lMD/+JTA//GUxL/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/UIal///////////////////////v9Pf/EFqE/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AAE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/4Cnvv//////////////////////r8jW/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP9xUUD/4lMD/+JTA//iUwP/4lMD/6pSIf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/r8jW//////////////////////+Ap77/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wAAT3z/AE98/wBPfP8AT3z/AE98/wBPfP8QWoT/7/T3/////////////////+/09/8QWoT/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/KlBl/+JTA//iUwP/4lMD/+JTA//iUwP/m1Ip/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8QWoT/7/T3/////////////////+/09/8QWoT/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AABPfP8AT3z/AE98/wBPfP8AT3z/AE98/3Cctf//////////////////////gKe+/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP+4Uhr/4lMD/+JTA//iUwP/4lMD/+JTA/9xUUD/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP+Ap77//////////////////////3Cctf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AAE98/wBPfP8AT3z/AE98/wBPfP8AT3z/z97m/////////////////+/09/8QWoT/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/f1E4/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/3FRQP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/xBahP/v9Pf/////////////////z97m/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wAAT3z/AE98/wBPfP8AT3z/AE98/zBwlf//////////////////////n73O/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/zlQXv/iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/OVBe/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/5+9zv//////////////////////MHCV/wBPfP8AT3z/AE98/wBPfP8AT3z/AABPfP8AT3z/AE98/wBPfP8AT3z/cJy1//////////////////////8wcJX/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8OT3T/xlMS/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA/85UF7/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/MHCV//////////////////////9wnLX/AE98/wBPfP8AT3z/AE98/wBPfP8AAE98/wBPfP8AT3z/AE98/wBPfP+/097/////////////////3+nv/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/39ROP/iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/3+nv/////////////////7/T3v8AT3z/AE98/wBPfP8AT3z/AE98/wAAT3z/AE98/wBPfP8AT3z/AE98//////////////////////+fvc7/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP85UF7/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP+fvc7//////////////////////wBPfP8AT3z/AE98/wBPfP8AT3z/AABPfP8AT3z/AE98/wBPfP8wcJX//////////////////////3Cctf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/Dk90/9RTC//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/R1BW/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/3Cctf//////////////////////MHCV/wBPfP8AT3z/AE98/wBPfP8AAE98/wBPfP8AT3z/AE98/0B7nf//////////////////////QHud/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP+bUin/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/41SMP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/QHud//////////////////////9Ae53/AE98/wBPfP8AT3z/AE98/wAAT3z/AE98/wBPfP8AT3z/cJy1//////////////////////8QWoT/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/R1BW/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//GUxL/Dk90/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8QWoT//////////////////////3Cctf8AT3z/AE98/wBPfP8AT3z/AABPfP8AT3z/AE98/wBPfP+Ap77//////////////////////wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/w5PdP/UUwv/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/ypQZf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP//////////////////////gKe+/wBPfP8AT3z/AE98/wBPfP8AAE98/wBPfP8AT3z/AE98/4Cnvv//////////////////////AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/m1Ip/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA/9xUUD/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98//////////////////////+Ap77/AE98/wBPfP8AT3z/AE98/wAAT3z/AE98/wBPfP8AT3z/gKe+//////////////////////8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/2NRR//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/qlIh/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z//////////////////////4Cnvv8AT3z/AE98/wBPfP8AT3z/AABPfP8AT3z/AE98/wBPfP+Ap77//////////////////////wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8cUG3/1FML/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/9RTC/8cUG3/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP//////////////////////gKe+/wBPfP8AT3z/AE98/wBPfP8AAE98/wBPfP8AT3z/AE98/3Cctf//////////////////////EFqE/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/0dQVv9xUUD/cVFA/3FRQP9xUUD/cVFA/3FRQP9xUUD/cVFA/3FRQP9xUUD/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/R1BW/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/EFqE//////////////////////9wnLX/AE98/wBPfP8AT3z/AE98/wAAT3z/AE98/wBPfP8AT3z/QHud//////////////////////9Ae53/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/xxQbf/iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/41SMP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP9Ae53//////////////////////0B7nf8AT3z/AE98/wBPfP8AT3z/AABPfP8AT3z/AE98/wBPfP8wcJX//////////////////////3Cctf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/VVFP/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/+JTA//GUxL/Dk90/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/3Cctf//////////////////////MHCV/wBPfP8AT3z/AE98/wBPfP8AAE98/wBPfP8AT3z/AE98/wBPfP//////////////////////n73O/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP+NUjD/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/4lMD/ypQZf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/n73O//////////////////////8AT3z/AE98/wBPfP8AT3z/AE98/wAAT3z/AE98/wBPfP8AT3z/AE98/7/T3v/////////////////f6e//AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/7hSGv/iUwP/4lMD/+JTA//iUwP/4lMD/+JTA/9xUUD/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP/f6e//////////////////v9Pe/wBPfP8AT3z/AE98/wBPfP8AT3z/AABPfP8AT3z/AE98/wBPfP8AT3z/cJy1//////////////////////8wcJX/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8OT3T/4lMD/+JTA//iUwP/4lMD/+JTA//iUwP/qlIh/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/MHCV//////////////////////9wnLX/AE98/wBPfP8AT3z/AE98/wBPfP8AAE98/wBPfP8AT3z/AE98/wBPfP8wcJX//////////////////////5+9zv8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/0dQVv/iUwP/4lMD/+JTA//iUwP/4lMD/9RTC/8cUG3/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP+fvc7//////////////////////zBwlf8AT3z/AE98/wBPfP8AT3z/AE98/wAAT3z/AE98/wBPfP8AT3z/AE98/wBPfP/P3ub/////////////////7/T3/xBahP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/f1E4/+JTA//iUwP/4lMD/+JTA//iUwP/R1BW/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/EFqE/+/09//////////////////P3ub/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AABPfP8AT3z/AE98/wBPfP8AT3z/AE98/3Cctf//////////////////////gKe+/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP+qUiH/4lMD/+JTA//iUwP/4lMD/41SMP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP+Ap77//////////////////////3Cctf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AAE98/wBPfP8AT3z/AE98/wBPfP8AT3z/EFqE/+/09//////////////////v9Pf/EFqE/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/+JTA//iUwP/4lMD/+JTA//GUxL/Dk90/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/EFqE/+/09//////////////////v9Pf/EFqE/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wAAT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/gKe+//////////////////////+vyNb/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP85UF7/4lMD/+JTA//iUwP/4lMD/ypQZf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP+vyNb//////////////////////4Cnvv8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AABPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8QWoT/7/T3//////////////////////9QhqX/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/3FRQP/iUwP/4lMD/+JTA/9xUUD/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/UIal///////////////////////v9Pf/EFqE/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AAE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP9gka3//////////////////////+/09/8wcJX/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/m1Ip/+JTA//iUwP/qlIh/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/zBwlf/v9Pf//////////////////////2CRrf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wAAT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP+/097//////////////////////8/e5v8QWoT/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP/UUwv/4lMD/9RTC/8cUG3/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8QWoT/z97m//////////////////////+/097/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AABPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/xBahP/v9Pf//////////////////////8/e5v8QWoT/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/KlBl/+JTA//iUwP/R1BW/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/EFqE/8/e5v//////////////////////7/T3/xBahP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AAE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/0B7nf///////////////////////////8/e5v8wcJX/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP9jUUf/4lMD/41SMP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/zBwlf/P3ub///////////////////////////9Ae53/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wAAT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/2CRrf///////////////////////////+/09/9QhqX/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/41SMP/GUxL/Dk90/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP9QhqX/7/T3////////////////////////////YJGt/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AABPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/2CRrf////////////////////////////////+vyNb/EFqE/wBPfP8AT3z/AE98/wBPfP8AT3z/xlMS/ypQZf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8QWoT/r8jW/////////////////////////////////2CRrf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AAE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/2CRrf/////////////////////////////////v9Pf/gKe+/xBahP8AT3z/AE98/xxQbf9xUUD/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8QWoT/gKe+/+/09/////////////////////////////////9gka3/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wAAT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/0B7nf/v9Pf/////////////////////////////////7/T3/5+9zv8wcJX/Dk90/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8wcJX/n73O/+/09//////////////////////////////////v9Pf/QHud/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AABPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/xBahP+/097////////////////////////////////////////////f6e//n73O/3Cctf9Ae53/EFqE/wBPfP8AT3z/AE98/wBPfP8QWoT/QHud/3Cctf+fvc7/3+nv////////////////////////////////////////////v9Pe/xBahP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AAE98zwBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP9gka3/7/T3////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////7/T3/2CRrf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98zwAAT3yfAE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8QWoT/gKe+/+/09///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////7/T3/4Cnvv8QWoT/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3yfAABPfFAAT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/EFqE/3Cctf/P3ub/////////////////////////////////////////////////////////////////////////////////////////////////z97m/3Cctf8QWoT/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfFAAAAAAAABPfN8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8wcJX/cJy1/7/T3v////////////////////////////////////////////////////////////////+/097/cJy1/zBwlf8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3zfAAAAAAAAAAAAAE98QABPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8wcJX/QHud/3Cctf+Ap77/gKe+/4Cnvv+Ap77/cJy1/0B7nf8wcJX/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfEAAAAAAAAAAAAAAAAAAAE98YABPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3xgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE98YABPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98YAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE98QABPfN8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE983wBPfEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABPfFAAT3yfAE98zwBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3z/AE98/wBPfP8AT3zPAE98nwBPfFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAusrR86mUY8wAAAABJRU5ErkJggg==",
+      "colour": "#111111"
+    },
+    {
+      "id": "shop-box-print-2",
+      "instanceId": "shop-box-lid-instance",
+      "origin": [104, 64.36115, 1.2],
+      "x": [1, 0, 0],
+      "normal": [0, 0, 1],
+      "width": 72,
+      "height": 9,
+      "rotation": 0,
+      "method": "silk",
+      "kind": "text",
+      "text": "CONTROL BOX",
+      "font": "sans-serif",
+      "colour": "#111111"
+    }
+  ],
+  "assembly": [
+    {
+      "id": "shop-box-step-1",
+      "name": "Fit the lid onto the body",
+      "instanceIds": ["shop-box-lid-instance"],
+      "fasteners": [],
+      "from": null,
+      "note": ""
+    }
+  ],
+  "sheets": [
+    {
+      "id": "assembly-sheet",
+      "title": "Assembly",
+      "size": "A3",
+      "units": "mm",
+      "scaleMode": "fit",
+      "scale": 0.05,
+      "revision": "A",
+      "tolerance": "±0.5 mm",
+      "views": ["front", "top", "right", "isometric"],
+      "annotations": []
+    },
+    {
+      "id": "shop-box-flat-sheet",
+      "title": "Control box body — flat pattern",
+      "partId": "shop-box-body",
+      "layout": "engineering",
+      "size": "A3",
+      "units": "mm",
+      "scaleMode": "fit",
+      "scale": 1,
+      "revision": "A",
+      "tolerance": "±0.2 mm",
+      "material": "SPCC cold-rolled steel t 1.2",
+      "views": ["flat"],
+      "annotations": [],
+      "notes": "Laser cut, etch the bend lines, then bend in the order of the bend table."
+    }
+  ],
+  "fabrication": {
+    "kerf": 3,
+    "allowance": 0,
+    "stockLength": 6000,
+    "sheetWidth": 2440,
+    "sheetHeight": 1220,
+    "shop": {
+      "machine": "brake-50-2000",
+      "laser": "fiber-2kw",
+      "sheet": "1219x2438"
+    }
+  }
+}

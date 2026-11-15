@@ -1,6 +1,7 @@
 import { numeric } from './model.js';
 import { isDrawnAnnotation } from './sheetAnnotations.js';
 import { partsListHeight, partsListRows, sheetHasPartsList } from './partsList.js';
+import { bendTableHeight } from './bendTable.js';
 
 // Drawing sheet geometry shared by fit and both renderers (Phase R,
 // docs/sketch-studio-drawing-fit.md §4): where each view's cell sits, the box
@@ -67,8 +68,11 @@ export function viewCells(sheet, views = sheet.views, parts = []) {
       used.add(slot);
       const x = 15 + (slot % 2) * cellW,
         y = 12 + Math.floor(slot / 2) * cellH;
-      const avail = [cellW - 26, cellH - 46];
-      return { slot, x, y, width: cellW, height: cellH, avail, frame: [x + 18, y + 25, ...avail] };
+      // A flat view's bend table (SM-4) sits under its overall dimensions.
+      const table = bendTableHeight(view);
+      const avail = [cellW - 26, cellH - 46 - (table ? table + 2 : 0)];
+      const cell = { slot, x, y, width: cellW, height: cellH, avail, frame: [x + 18, y + 25, ...avail] };
+      return table ? { ...cell, table: { x: x + 18, y: y + 25 + avail[1] + 12, width: avail[0] } } : cell;
     });
     return { width, height, titleY, cells };
   }
@@ -80,18 +84,22 @@ export function viewCells(sheet, views = sheet.views, parts = []) {
   const notesHeight = Math.max(36, 27 + notes.length * 4, parts.length ? partsListHeight(parts) + 20 : 0);
   const cellW = (width - 30) / columns,
     cellH = (height - notesHeight - 26) / rows;
-  const cells = views.map((_, index) => {
+  const cells = views.map((view, index) => {
     const x = 15 + (index % columns) * cellW,
       y = 12 + Math.floor(index / columns) * cellH;
-    return {
+    // A flat view's bend table (SM-4) sits under the view, above the overall dimension.
+    const table = bendTableHeight(view);
+    const reserve = table ? table + 4 : 0;
+    const cell = {
       slot: index,
       x,
       y,
       width: cellW,
       height: cellH,
-      avail: [cellW - 18, cellH - 24],
-      frame: [x, y + 10, cellW, cellH - 24],
+      avail: [cellW - 18, cellH - 24 - reserve],
+      frame: [x, y + 10, cellW, cellH - 24 - reserve],
     };
+    return table ? { ...cell, table: { x: x + 9, y: y + 10 + cellH - 24 - reserve + 2, width: cellW - 18 } } : cell;
   });
   return { width, height, titleY: height - notesHeight, notesHeight, notes, cells };
 }

@@ -3,6 +3,7 @@ import { engineeringSheetSvg } from './engineeringSheet.js';
 import { threadNote } from './hardware.js';
 import { circularCut } from './circularCuts.js';
 import { manualDimensionsSvg } from './sheetAnnotations.js';
+import { bendLinesSvg, bendTableSvg } from './bendTable.js';
 import { balloonsSvg, partsListRows, partsListSvg, sheetHasPartsList, PARTS_LIST_WIDTH } from './partsList.js';
 import {
   fitsCell,
@@ -146,6 +147,13 @@ export function sheetSvg(sheet, model, snapshot, page = 1, pages = 1, { allowOve
       style: 'overview',
       format: (v) => fmt(v, sheet.units),
     });
+    // A flat view (SM-4): its bend lines with labels, and the bend table under it.
+    if (view.bendLines?.length) body += bendLinesSvg(view, point, { stroke: '#253444' });
+    if (cell.table)
+      body += bendTableSvg(view.bendTable, cell.table.x, cell.table.y, cell.table.width, {
+        format: (v) => fmt(v, sheet.units),
+        stroke: '#253444',
+      });
     if (parts.length && kind === 'isometric' && !balloonsDone) {
       balloonsDone = true;
       body += balloonsSvg(parts, view, snapshot, point, { x: cx, y: cy, width: cellW, height: cellH }, '#253444');
@@ -171,5 +179,14 @@ export function viewDataAttributes(view) {
 
 export function profileSvg(profile) {
   const [x, y, w, h] = profile.viewBox;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="${x} ${y} ${w} ${h}"><g fill="none" stroke="black" stroke-width="0.1">${profile.visible.map((d) => `<path d="${xml(d)}"/>`).join('')}</g></svg>`;
+  // A sheet-metal flat pattern's bend lines (in the frame of `visible`), dashed.
+  // A round bend's tangent lines (docs/sketch-studio-round-bend.md §7): solid, titled as the zone's edge.
+  const bends = profile.bendLines?.length
+    ? `<g fill="none" stroke="red" stroke-width="0.1" stroke-dasharray="2 1">${profile.bendLines.map((b) => `<line x1="${b.a[0]}" y1="${b.a[1]}" x2="${b.b[0]}" y2="${b.b[1]}"${b.tangent ? ' stroke-dasharray="none" stroke-width="0.05"' : ''}><title>${xml(`${b.direction.toUpperCase()} ${b.angle}° R${Number(b.radius.toFixed(2))}${b.tangent ? ' TANGENT' : ''}`)}</title></line>`).join('')}</g>`
+    : '';
+  // Etched marks (SM-4), dotted, only when the blank has any.
+  const etches = profile.etchLines?.length
+    ? `<g fill="none" stroke="blue" stroke-width="0.1" stroke-dasharray="0.5 1">${profile.etchLines.map((m) => `<line x1="${m.a[0]}" y1="${m.a[1]}" x2="${m.b[0]}" y2="${m.b[1]}"><title>ETCH</title></line>`).join('')}</g>`
+    : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="${x} ${y} ${w} ${h}"><g fill="none" stroke="black" stroke-width="0.1">${profile.visible.map((d) => `<path d="${xml(d)}"/>`).join('')}</g>${bends}${etches}</svg>`;
 }

@@ -1,63 +1,269 @@
+/*
+ * Assembly editors (wall + ceiling) — one stylesheet, one token layer.
+ * docs/assembly-editor-ui.md §2.
+ *
+ * Every colour below the token block is a var(--ae-…). The block itself is the
+ * only place a literal colour may appear: values come from src/styles/variables.css
+ * wherever a matching variable exists, and a dark variant is one more block of
+ * the same names. Roles, not hues: the accent is the ONE interactive colour
+ * (active tool, active step, focus ring, primary button, toggles); selection
+ * orange means "the selected piece on the drawing" and nothing else; warn /
+ * danger / ok are status only.
+ */
+
+/* ======================================================================
+   TOKEN BLOCK — the only literals in this file.
+   ====================================================================== */
+
+.overlay {
+  /* Surfaces */
+  --ae-bg: var(--color-panel-bg);
+  --ae-bg-raised: var(--color-surface-elevated);
+  --ae-bg-quiet: var(--color-background);
+  --ae-surface: var(--color-surface-elevated);
+  --ae-surface-sunken: var(--color-panel-bg-alt);
+  --ae-surface-hover: rgba(30, 36, 51, 0.05);
+  --ae-surface-pressed: rgba(30, 36, 51, 0.09);
+  --ae-border: rgba(0, 0, 0, 0.08);
+  --ae-border-strong: rgba(0, 0, 0, 0.16);
+  --ae-border-hover: rgba(0, 0, 0, 0.24);
+  --ae-divider: rgba(0, 0, 0, 0.06);
+  --ae-scrim: rgba(250, 250, 248, 0.94);
+  --ae-shadow-pop: 0 10px 30px rgba(30, 36, 51, 0.16), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --ae-shadow-drawer: 0 18px 44px rgba(30, 36, 51, 0.18);
+  --ae-shadow-control: 0 1px 2px rgba(30, 36, 51, 0.06);
+  --ae-shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.03);
+
+  /* Text — tertiary is darkened from --color-text-tertiary to hold 4.5:1 on the panel ground. */
+  --ae-text: var(--color-text-primary);
+  --ae-text-2: var(--color-text-secondary);
+  --ae-text-3: #646976;
+  --ae-text-disabled: rgba(30, 36, 51, 0.38);
+
+  /* The one interactive colour */
+  --ae-accent: var(--color-accent);
+  --ae-accent-hover: var(--color-accent-hover);
+  --ae-accent-subtle: rgba(26, 122, 104, 0.1);
+  --ae-accent-border: rgba(26, 122, 104, 0.38);
+  --ae-on-accent: #ffffff;
+
+  /* Status only */
+  --ae-warn: #92540a;
+  --ae-warn-line: #d08a1e;
+  --ae-warn-subtle: rgba(245, 158, 11, 0.1);
+  --ae-danger: #b91c1c;
+  --ae-danger-line: var(--color-danger);
+  --ae-danger-subtle: var(--color-danger-subtle);
+  --ae-danger-border: var(--color-danger-ghost-border);
+  --ae-ok: #0f7a52;
+  --ae-ok-line: var(--color-success);
+  --ae-ok-subtle: var(--color-success-subtle);
+  --ae-info: var(--color-active-glow);
+  --ae-info-subtle: var(--color-active-glow-subtle);
+
+  /* The selected piece — same hue family as the 3D pane's SELECTION_ACCENTS.assembly,
+     with the line deepened to hold 3:1 against light boards. */
+  --ae-selected-line: #b25800;
+  --ae-selected-face: #efb478;
+  --ae-selected-wash: rgba(255, 180, 92, 0.6);
+  --ae-selected-ink: #8a4300;
+
+  /* Canvas ground */
+  --ae-canvas: #e4e2dc;
+  --ae-canvas-sheet: #cdd1d4;
+  --ae-canvas-halo: #f7f6f2;
+  --ae-canvas-ink: var(--color-text-primary);
+  --ae-canvas-ink-2: #4f5866;
+  --ae-canvas-shadow: rgba(30, 36, 51, 0.14);
+
+  /* Grid + rulers */
+  --ae-grid-minor: rgba(30, 36, 51, 0.07);
+  --ae-grid-major: rgba(30, 36, 51, 0.15);
+  --ae-grid-floor: #5b6275;
+  --ae-grid-origin: var(--color-accent);
+  --ae-ruler-bg: rgba(250, 250, 248, 0.95);
+  --ae-ruler-border: rgba(0, 0, 0, 0.1);
+  --ae-ruler-tick: #a3a8b1;
+  --ae-ruler-tick-major: #6e7480;
+  --ae-ruler-label: #5b6275;
+  --ae-ruler-span: rgba(26, 122, 104, 0.55);
+  --ae-ruler-corner: var(--color-panel-bg-alt);
+
+  /* Construction linework (weights live in --cad-*; only colours here) */
+  --ae-board-line: #3b4250;
+  --ae-board-hover-line: #2d5f8e;
+  --ae-frame-fill: rgba(58, 111, 150, 0.2);
+  --ae-frame-line: #34688f;
+  --ae-frame-hover-fill: rgba(58, 111, 150, 0.42);
+  --ae-frame-hover-line: #22527a;
+  --ae-jamb-fill: rgba(217, 140, 30, 0.34);
+  --ae-jamb-line: #a7650c;
+  --ae-clash-fill: rgba(220, 38, 38, 0.32);
+  --ae-clash-line: #c0261d;
+  --ae-opening-void: rgba(252, 252, 250, 0.94);
+  --ae-opening-line: #141922;
+  --ae-siding-line: rgba(48, 57, 67, 0.55);
+  --ae-slab-fill: rgba(91, 98, 117, 0.12);
+  --ae-slab-line: rgba(91, 98, 117, 0.55);
+  --ae-slab-datum: #5b6275;
+  --ae-slab-text: #3b4252;
+  --ae-overhang-fill: rgba(200, 120, 40, 0.14);
+  --ae-overhang-line: rgba(176, 104, 28, 0.6);
+  --ae-overhang-wall-end: #b06c1c;
+  --ae-setback-fill: rgba(91, 98, 117, 0.08);
+  --ae-setback-line: rgba(91, 98, 117, 0.45);
+  --ae-asbuilt-ok: #0f8a5a;
+  --ae-asbuilt-off: #c0261d;
+
+  /* Annotation */
+  --ae-dim-user: var(--color-active-glow);
+  --ae-dim-auto: #5d6676;
+  --ae-dim-selected: #b25800;
+  --ae-snap: #0f8a5a;
+  --ae-acquire: #b45309;
+  --ae-grip-fill: #0f8a5a;
+  --ae-grip-line: #ffffff;
+  --ae-guide: #1f6f93;
+  --ae-guide-selected: var(--color-accent);
+  --ae-guide-remainder: #a35a0f;
+  --ae-preview-line: #c2610c;
+  --ae-preview-fill: rgba(234, 140, 40, 0.2);
+  --ae-preview-point-line: #ffffff;
+  --ae-preview-frame-fill: rgba(234, 140, 40, 0.32);
+  --ae-preview-frame-line: #c2610c;
+  --ae-preview-snap-fill: rgba(15, 138, 90, 0.35);
+  --ae-chip-text: var(--color-text-primary);
+
+  /* Reflected ceiling plan: hanger rings and luminaire symbols. Lights are a
+     deep gold, not the selection orange — a selected light wears that, plus
+     the ring every selected marker gets. Both hold 3:1 on the boards. */
+  --ae-hanger-line: #2c6d94;
+  --ae-fixture-line: #8a6100;
+
+  /* The floor plan under a ceiling: context, never content. Washes and a
+     dashed room line, all lighter than any board or framing edge drawn over
+     them, so the ceiling's own linework always reads first. */
+  --ae-plan-wall: rgba(62, 70, 86, 0.3);
+  --ae-plan-door: rgba(196, 128, 32, 0.32);
+  --ae-plan-window: rgba(40, 128, 188, 0.22);
+  --ae-plan-room: rgba(80, 88, 104, 0.6);
+  --ae-plan-furniture: rgba(80, 88, 104, 0.42);
+  --ae-plan-label: #5b6275;
+
+  /* Chrome fills */
+  --ae-hud-bg: rgba(30, 36, 51, 0.92);
+  --ae-hud-text: #fafaf8;
+  --ae-hud-text-2: #c4c9d2;
+}
+
+/* ======================================================================
+   Frame
+   ====================================================================== */
+
 .overlay {
   position: fixed;
   inset: 0;
   z-index: 300;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  background: #111820;
-  color: #edf2f5;
+  background: var(--ae-bg);
+  color: var(--ae-text);
   font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .overlay :focus-visible {
-  outline: 2px solid #7ed6b8;
+  outline: 2px solid var(--ae-accent);
   outline-offset: 2px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs, 4px);
 }
 
+/* ---------- Header: one 48 px line ---------- */
+
 .header {
-  min-height: 76px;
+  position: relative;
+  z-index: 6; /* its Export menu drops over the workspace */
+  height: 48px;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  padding: 12px 18px;
-  border-bottom: 1px solid #303b45;
-  background: linear-gradient(180deg, #1a242e, #172029);
+  gap: 16px;
+  padding: 0 12px 0 8px;
+  border-bottom: 1px solid var(--ae-border);
+  background: var(--ae-bg-raised);
 }
-
+.headerLead {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.headerDivider {
+  flex: none;
+  width: 1px;
+  height: 22px;
+  background: var(--ae-border);
+}
 .headerIdentity {
   min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  white-space: nowrap;
 }
 .header h1 {
-  margin: 1px 0;
-  font: 600 19px/1.2 var(--font-heading);
+  flex: none;
+  margin: 0;
+  font: 600 15px/1.2 var(--font-heading);
+  color: var(--ae-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.header p {
-  margin: 2px 0 0;
-  color: #9eabb5;
-  font-size: 11px;
+.header p,
+.headerMeta {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ae-text-2);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.eyebrow {
-  color: #67c5a6;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-}
-.headerActions,
-.buttonRow {
+.headerActions {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+}
+.backButton {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px 0 8px;
+  color: var(--ae-text-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 5px);
+  font: 600 12px var(--font-ui);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast, 0.1s) var(--ease-out, ease),
+    background var(--duration-fast, 0.1s) var(--ease-out, ease);
+}
+.backButton:hover {
+  color: var(--ae-text);
+  background: var(--ae-surface-hover);
 }
 
 .body {
   position: relative; /* focus-mode drawers, peek tabs, and the tool HUD anchor here */
   min-height: 0;
   display: grid;
-  grid-template-columns: 296px minmax(380px, 1fr) 336px;
+  grid-template-columns: 280px minmax(380px, 1fr) 320px;
 }
 .body[data-focus='true'] {
   grid-template-columns: minmax(0, 1fr);
@@ -67,16 +273,15 @@
 .rightPanel {
   min-height: 0;
   overflow: auto;
-  background: #172029;
+  background: var(--ae-bg);
   scrollbar-width: thin;
-  scrollbar-color: #3b4852 #172029;
+  scrollbar-color: var(--ae-border-strong) transparent;
 }
-
 .leftPanel {
-  border-right: 1px solid #303b45;
+  border-right: 1px solid var(--ae-border);
 }
 .rightPanel {
-  border-left: 1px solid #303b45;
+  border-left: 1px solid var(--ae-border);
 }
 
 /* Focus mode: panels leave the grid and become slide-in drawers over the canvas. */
@@ -87,19 +292,19 @@
   bottom: 0;
   z-index: 8;
   visibility: hidden;
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--ae-shadow-drawer);
   transition:
     transform var(--duration-smooth, 0.28s) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
     visibility 0s linear var(--duration-smooth, 0.28s);
 }
 .body[data-focus='true'] .leftPanel {
   left: 0;
-  width: 296px;
+  width: 280px;
   transform: translateX(-102%);
 }
 .body[data-focus='true'] .rightPanel {
   right: 0;
-  width: 336px;
+  width: 320px;
   transform: translateX(102%);
 }
 .body[data-focus='true'] .leftPanel[data-peek='true'],
@@ -117,11 +322,12 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 7px;
-  padding: 11px 4px 13px;
-  color: #9eabb5;
-  background: rgba(23, 32, 41, 0.94);
-  border: 1px solid #303b45;
+  gap: 8px;
+  padding: 12px 5px 14px;
+  color: var(--ae-text-2);
+  background: var(--ae-bg-raised);
+  border: 1px solid var(--ae-border-strong);
+  box-shadow: var(--ae-shadow-control);
   cursor: pointer;
   transform: translateY(-50%);
   transition:
@@ -131,8 +337,8 @@
     border-color var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
 .panelPeekTab:hover {
-  color: #e8f6f1;
-  border-color: #d2a24f;
+  color: var(--ae-accent);
+  border-color: var(--ae-accent-border);
 }
 .panelPeekTabLeft {
   left: 0;
@@ -145,19 +351,18 @@
   border-radius: 6px 0 0 6px;
 }
 .panelPeekTabLeft[data-open='true'] {
-  left: 296px;
+  left: 280px;
 }
 .panelPeekTabRight[data-open='true'] {
-  right: 336px;
+  right: 320px;
 }
 .panelPeekChevron {
-  font: 700 13px/1 var(--font-blueprint);
+  font: 700 13px/1 var(--font-ui);
 }
 .panelPeekLabel {
   writing-mode: vertical-rl;
-  font: 600 9px var(--font-blueprint);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font: 600 11px var(--font-ui);
+  letter-spacing: 0.06em;
 }
 
 /* Keyboard-shortcut HUD: transient chip so tool switches read without any panel. */
@@ -170,20 +375,24 @@
   align-items: center;
   gap: 9px;
   padding: 7px 13px;
-  color: #e8eef2;
-  font: 600 11px var(--font-blueprint);
-  background: rgba(13, 19, 26, 0.93);
-  border: 1px solid rgba(210, 162, 79, 0.5);
-  border-radius: 5px;
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.42);
+  color: var(--ae-hud-text);
+  font: 600 12px var(--font-ui);
+  background: var(--ae-hud-bg);
+  border-radius: var(--radius-sm, 5px);
+  box-shadow: var(--ae-shadow-pop);
   pointer-events: none;
   animation: wallDetailHudLife 1.6s var(--ease-out, ease) forwards;
 }
 .toolHud em {
-  color: #93a2ad;
-  font-size: 10px;
+  color: var(--ae-hud-text-2);
+  font-size: 11px;
   font-style: normal;
   font-weight: 500;
+}
+.toolHud .kbd {
+  color: var(--ae-hud-text);
+  background: transparent;
+  border-color: var(--ae-hud-text-2);
 }
 @keyframes wallDetailHudLife {
   0% {
@@ -215,51 +424,39 @@
   }
 }
 
-/* ---------- Orientation card (first open) ---------- */
+/* ---------- Orientation card (first open): two lines and "Got it" ---------- */
 
 .orientationCard {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  margin: 12px 12px 4px;
-  padding: 12px 13px;
-  border: 1px solid rgba(105, 199, 168, 0.38);
+  gap: 4px;
+  margin: 10px 10px 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--ae-accent-border);
   border-radius: var(--radius-md, 8px);
-  background: linear-gradient(160deg, rgba(20, 46, 41, 0.95), rgba(19, 29, 36, 0.95));
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  background: var(--ae-accent-subtle);
   animation: wallDetailRise var(--duration-smooth, 0.3s) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
 }
 .orientationCard h2 {
   margin: 0;
-  font: 700 14px/1.25 var(--font-heading);
-  color: #e8f6f1;
+  font: 600 13px/1.3 var(--font-heading);
+  color: var(--ae-text);
 }
 .orientationCard p {
   margin: 0;
-  color: #a9bcc4;
-  font-size: 10px;
-  line-height: 1.5;
-}
-.orientationCard ol {
-  display: grid;
-  gap: 3px;
-  margin: 2px 0 0;
-  padding-left: 18px;
-  color: #cbdbe1;
-  font-size: 10px;
-  line-height: 1.5;
-}
-.orientationCard ol li::marker {
-  color: #7ed6b8;
-  font-weight: 700;
-}
-.orientationTip {
-  color: #7ed6b8 !important;
+  color: var(--ae-text-2);
+  font-size: 12px;
+  line-height: 1.45;
 }
 .orientationActions {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.orientationActions .button {
+  min-height: 26px;
+  padding: 0 10px;
 }
 
 @keyframes wallDetailRise {
@@ -273,100 +470,23 @@
   }
 }
 
-/* ---------- Workflow step strip ---------- */
-
-.stepStrip {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 11px 12px;
-  border-bottom: 1px solid #2a343e;
-  background: rgba(23, 32, 41, 0.96);
-  backdrop-filter: blur(6px);
-}
-.stepStripLabel {
-  color: #7f8e99;
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-.stepStrip ol {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.stepStrip button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 7px 4px 4px;
-  color: #8c9aa4;
-  background: #111920;
-  border: 1px solid #2c3945;
-  border-radius: 99px;
-  font-size: 9px;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    color var(--duration-fast, 0.1s) var(--ease-out, ease),
-    background var(--duration-fast, 0.1s) var(--ease-out, ease),
-    border-color var(--duration-fast, 0.1s) var(--ease-out, ease);
-}
-.stepStrip button:hover {
-  color: #e2ecf1;
-  border-color: #4d5f6c;
-  background: #17222b;
-}
-.stepStrip button[data-open='true'] {
-  color: #d9f5ec;
-  border-color: rgba(105, 199, 168, 0.55);
-  background: rgba(38, 79, 69, 0.5);
-}
-.stepIndex {
-  display: inline-grid;
-  width: 15px;
-  height: 15px;
-  place-items: center;
-  border-radius: 50%;
-  background: #26333d;
-  color: #9fb0ba;
-  font: 800 8px var(--font-blueprint);
-}
-.stepStrip button[data-open='true'] .stepIndex {
-  background: #69c7a8;
-  color: #0b1915;
-}
-.stepName {
-  white-space: nowrap;
-}
-
 /* ---------- Collapsible sections ---------- */
 
 .collapsible {
-  border-bottom: 1px solid #2a343e;
-}
-/* Clears the sticky workflow strip when a step is scrolled into view. */
-.leftPanel .collapsible {
-  scroll-margin-top: 66px;
+  border-bottom: 1px solid var(--ae-divider);
 }
 .sectionHeading {
   margin: 0;
   font: inherit;
 }
+/* badge · titles (flex) · count (content-sized) · chevron at the far right. */
 .sectionHeader {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   width: 100%;
-  padding: 11px 14px;
+  min-height: 52px;
+  padding: 8px 14px;
   color: inherit;
   background: transparent;
   border: 0;
@@ -375,75 +495,131 @@
   transition: background var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
 .sectionHeader:hover {
-  background: #1b262f;
+  background: var(--ae-surface-hover);
 }
-.collapsible[data-open='true'] > .sectionHeader {
-  background: #1a242d;
+.sectionHeaderStatic,
+.sectionHeaderStatic:hover {
+  min-height: 44px;
+  background: transparent;
+  cursor: default;
+}
+.collapsible[data-open='true'] > .sectionHeading > .sectionHeader:not(.sectionHeaderStatic) {
+  background: var(--ae-surface);
+}
+.leftPanel .collapsible[data-step='true'][data-open='true'] > .sectionHeading > .sectionHeader {
+  box-shadow: inset 3px 0 var(--ae-accent);
 }
 .sectionStep {
+  flex: none;
   display: inline-grid;
-  width: 19px;
-  height: 19px;
+  width: 22px;
+  height: 22px;
   place-items: center;
   border-radius: 50%;
-  border: 1px solid #3a4a56;
-  background: #111920;
-  color: #9fb0ba;
-  font: 800 9px var(--font-blueprint);
+  border: 1px solid var(--ae-border-strong);
+  background: var(--ae-surface);
+  color: var(--ae-text-2);
+  font: 600 12px var(--font-ui);
+  font-variant-numeric: tabular-nums;
   transition:
     background var(--duration-fast, 0.1s) var(--ease-out, ease),
-    color var(--duration-fast, 0.1s) var(--ease-out, ease);
+    color var(--duration-fast, 0.1s) var(--ease-out, ease),
+    border-color var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
 .collapsible[data-open='true'] .sectionStep {
-  border-color: #7ed6b8;
-  background: #69c7a8;
-  color: #0b1915;
+  border-color: var(--ae-accent);
+  background: var(--ae-accent);
+  color: var(--ae-on-accent);
 }
 .sectionTitles {
+  flex: 1 1 auto;
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 .sectionTitle {
   overflow: hidden;
-  font: 700 10px/1.2 var(--font-heading);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: 600 13px/1.3 var(--font-heading);
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #d3dee5;
+  color: var(--ae-text);
 }
 .sectionTitles small {
   overflow: hidden;
-  color: #7e8d98;
-  font-size: 9px;
+  color: var(--ae-text-2);
+  font-size: 11px;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sectionBadge {
-  min-width: 17px;
-  padding: 1px 5px;
+/* An un-numbered step that still has its place in the order. */
+.sectionOptional {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--ae-border-strong);
   border-radius: 99px;
-  background: #2b3843;
-  color: #c3d0d8;
-  font: 700 9px var(--font-blueprint);
+  color: var(--ae-text-2);
+  font: 600 11px var(--font-ui);
+  vertical-align: 1px;
+}
+.sectionBadge {
+  flex: 0 0 auto;
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: 99px;
+  background: var(--ae-surface-sunken);
+  color: var(--ae-text-2);
+  font: 600 11px/16px var(--font-blueprint);
   text-align: center;
 }
 .sectionBadge[data-tone='alert'] {
-  background: #5a2a28;
-  color: #ffc9c1;
+  background: var(--ae-danger-subtle);
+  color: var(--ae-danger);
+  box-shadow: inset 0 0 0 1px var(--ae-danger-border);
 }
 .chevron {
-  color: #6d7c87;
+  flex: none;
+  color: var(--ae-text-3);
   transition: transform var(--duration-normal, 0.2s) var(--ease-out, ease);
 }
-.collapsible[data-open='true'] > .sectionHeader .chevron {
+.sectionHeader > .chevron {
+  margin-left: auto;
+}
+.collapsible[data-open='true'] > .sectionHeading > .sectionHeader .chevron {
   transform: rotate(180deg);
 }
 .sectionBody {
-  padding: 2px 14px 14px;
+  padding: 4px 14px 14px;
+  background: var(--ae-surface);
   animation: wallDetailFade var(--duration-normal, 0.2s) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.collapsible[data-static='true'] > .sectionBody {
+  background: transparent;
+}
+.stepNextRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ae-divider);
+}
+.stepNext {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  color: var(--ae-on-accent);
+  background: var(--ae-accent);
+  border: 1px solid var(--ae-accent);
+  border-radius: var(--radius-sm, 5px);
+  font: 600 12px var(--font-ui);
+  cursor: pointer;
+  transition: background var(--duration-fast, 0.1s) var(--ease-out, ease);
+}
+.stepNext:hover {
+  background: var(--ae-accent-hover);
 }
 
 @keyframes wallDetailFade {
@@ -461,38 +637,37 @@
 
 .advanced {
   margin-top: 10px;
-  border: 1px solid #2c3945;
-  border-radius: var(--radius-xs, 4px);
-  background: #131c23;
+  border: 1px solid var(--ae-border);
+  border-radius: var(--radius-sm, 5px);
+  background: var(--ae-bg-quiet);
 }
 .advancedToggle {
   display: flex;
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 7px 9px;
-  color: #93a3ad;
+  min-height: 32px;
+  padding: 0 10px;
+  color: var(--ae-text-2);
   background: transparent;
   border: 0;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font: 600 12px var(--font-ui);
   text-align: left;
   cursor: pointer;
   transition: color var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
-.advancedToggle:hover {
-  color: #dfe8ed;
-}
+.advancedToggle:hover,
 .advanced[data-open='true'] .advancedToggle {
-  color: #cfdde4;
+  color: var(--ae-text);
+}
+.advancedToggle .chevron {
+  transform: rotate(-90deg);
 }
 .advanced[data-open='true'] .advancedToggle .chevron {
-  transform: rotate(180deg);
+  transform: none;
 }
 .advancedBody {
-  padding: 2px 9px 9px;
+  padding: 2px 10px 10px;
   animation: wallDetailFade var(--duration-normal, 0.2s) var(--ease-out, ease);
 }
 
@@ -505,44 +680,44 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 8px 3px 3px;
-  color: #85949f;
+  min-height: 24px;
+  padding: 2px 8px 2px 3px;
+  color: var(--ae-text-2);
   background: transparent;
-  border: 1px solid #2f3d48;
+  border: 1px solid var(--ae-border);
   border-radius: 99px;
-  font-size: 9px;
-  font-weight: 600;
+  font: 600 11px var(--font-ui);
   cursor: pointer;
   transition:
     color var(--duration-fast, 0.1s) var(--ease-out, ease),
     border-color var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
 .infoHintButton:hover {
-  color: #dbe6ec;
-  border-color: #4e606d;
+  color: var(--ae-text);
+  border-color: var(--ae-border-hover);
 }
 .infoHint[data-open='true'] .infoHintButton {
-  color: #cfe6de;
-  border-color: rgba(105, 199, 168, 0.45);
+  color: var(--ae-accent);
+  border-color: var(--ae-accent-border);
 }
 .infoHint[data-open='true'] .infoHintButton .chevron {
   transform: rotate(180deg);
 }
 .infoHintMark {
   display: inline-grid;
-  width: 15px;
-  height: 15px;
+  width: 17px;
+  height: 17px;
   place-items: center;
   border-radius: 50%;
-  background: #2b3843;
-  color: #b9c8d1;
-  font: 800 9px var(--font-blueprint);
+  background: var(--ae-surface-sunken);
+  color: var(--ae-text-2);
+  font: 700 11px var(--font-ui);
 }
 .infoHintBody {
   margin-top: 6px;
-  padding: 8px 9px;
-  border-left: 2px solid #3d5b6b;
-  background: #121b21;
+  padding: 8px 10px;
+  border-left: 2px solid var(--ae-border-strong);
+  background: var(--ae-bg-quiet);
   border-radius: 0 var(--radius-xs, 4px) var(--radius-xs, 4px) 0;
   animation: wallDetailFade var(--duration-normal, 0.2s) var(--ease-out, ease);
 }
@@ -550,14 +725,16 @@
   margin-top: 0;
 }
 
-/* ---------- Workspace ---------- */
+/* ======================================================================
+   Workspace
+   ====================================================================== */
 
 .workspace {
   min-width: 0;
   min-height: 0;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  background: #0c1218;
+  background: var(--ae-canvas);
 }
 .workspaceViews {
   position: relative; /* anchors the focus-mode keyboard HUD over the canvas, clear of the toolbar */
@@ -567,7 +744,7 @@
   overflow: hidden;
 }
 .workspaceViews[data-view='split'] {
-  grid-template-rows: minmax(0, 3fr) minmax(190px, 2fr);
+  grid-template-rows: minmax(0, 62fr) minmax(160px, 38fr);
 }
 .workspaceViews[data-view='elevation'],
 .workspaceViews[data-view='3d'] {
@@ -577,7 +754,7 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
 .previewPane {
@@ -585,84 +762,184 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-top: 1px solid #43515c;
+  border-top: 1px solid var(--ae-border-strong);
 }
-/* The ceiling editor's Light tool places from the 3D pane too: say so with the cursor. */
+/* The ceiling editor's Light tool places from the 3D pane too: say so with the
+   cursor, and with one quiet line while the tool is armed (never otherwise). */
 .previewPane[data-light-armed='true'] canvas {
   cursor: crosshair;
+}
+.paneHint {
+  position: absolute;
+  z-index: 4;
+  left: 10px;
+  bottom: 10px;
+  max-width: calc(100% - 20px);
+  overflow: hidden;
+  padding: 4px 10px;
+  border: 1px solid var(--ae-border-strong);
+  border-radius: 99px;
+  background: var(--ae-scrim);
+  box-shadow: var(--ae-shadow-control);
+  color: var(--ae-text);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
 }
 .wallPreviewPanel {
   border-left: 0;
 }
-.liveBadge {
-  position: absolute;
-  z-index: 4;
-  left: 12px;
-  top: 12px;
-  display: flex;
-  max-width: min(360px, calc(100% - 24px));
-  flex-direction: column;
-  gap: 2px;
-  padding: 7px 9px;
-  color: #dff8ee;
-  background: rgba(13, 38, 33, 0.9);
-  border: 1px solid rgba(105, 199, 168, 0.5);
-  border-radius: 4px;
-  pointer-events: none;
-}
-.liveBadge span {
-  color: #7ed6b8;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.liveBadge small {
-  color: #bdd5cc;
-  font-size: 8px;
-}
+/* ---------- Buttons (shared) ---------- */
 
-/* ---------- Canvas toolbar + tool palette ---------- */
-
-.canvasToolbar {
-  min-height: 44px;
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--ae-border-strong);
+  border-radius: var(--radius-sm, 5px);
+  color: var(--ae-text);
+  background: var(--ae-surface);
+  box-shadow: var(--ae-shadow-control);
+  font: 600 12px var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast, 0.1s) var(--ease-out, ease),
+    background var(--duration-fast, 0.1s) var(--ease-out, ease),
+    border-color var(--duration-fast, 0.1s) var(--ease-out, ease),
+    transform var(--duration-micro, 0.08s) var(--ease-out, ease);
+}
+.button:hover:not(:disabled) {
+  background: var(--ae-bg-quiet);
+  border-color: var(--ae-border-hover);
+}
+.button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.button:disabled {
+  cursor: not-allowed;
+  color: var(--ae-text-disabled);
+  box-shadow: none;
+}
+.buttonActive,
+.buttonActive:hover:not(:disabled) {
+  color: var(--ae-accent);
+  background: var(--ae-accent-subtle);
+  border-color: var(--ae-accent-border);
+}
+.buttonDanger {
+  color: var(--ae-danger);
+  border-color: var(--ae-danger-border);
+}
+.buttonDanger:hover:not(:disabled) {
+  color: var(--ae-danger);
+  background: var(--ae-danger-subtle);
+  border-color: var(--ae-danger-line);
+}
+.buttonRow {
   display: flex;
   align-items: center;
-  gap: 8px 14px;
+  gap: 6px;
   flex-wrap: wrap;
-  padding: 7px 12px;
-  background: #141d25;
-  border-bottom: 1px solid #303b45;
-  font-size: 10px;
+  margin-top: 10px;
 }
-.toolGroup {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding-right: 12px;
-  border-right: 1px solid #35414b;
+
+.iconButton {
+  flex: none;
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  color: var(--ae-text-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 5px);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast, 0.1s) var(--ease-out, ease),
+    background var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
-.toolGroup > span:first-child {
-  color: #7f8e99;
-  font-weight: 700;
-  text-transform: uppercase;
+.iconButton:hover:not(:disabled) {
+  color: var(--ae-text);
+  background: var(--ae-surface-hover);
 }
-.toolPalette {
+.iconButton:disabled {
+  color: var(--ae-text-disabled);
+  cursor: not-allowed;
+}
+.iconButton[aria-pressed='true'] {
+  color: var(--ae-accent);
+  background: var(--ae-accent-subtle);
+}
+.iconButtonDanger:hover:not(:disabled) {
+  color: var(--ae-danger);
+  background: var(--ae-danger-subtle);
+}
+
+/* ---------- Toolbar: 44 px, never wraps ---------- */
+
+/*
+  The canvas contain-fits whatever height its frame has left, so a toolbar or
+  context bar that wraps or grows re-scales the drawing and reads as a zoom.
+  Both rows are a fixed height and `nowrap`; when the tools do not fit, they
+  step down through the density tiers below (container queries).
+*/
+.toolbar {
+  container-type: inline-size;
+  container-name: ae-toolbar;
+  position: relative;
+  z-index: 4;
+  height: 44px;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 0 10px;
+  overflow: hidden;
+  white-space: nowrap;
+  background: var(--ae-bg-raised);
+  border-bottom: 1px solid var(--ae-border);
+}
+.toolbar .toolPalette {
+  flex: 0 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.toolbar .toolCluster {
+  gap: 1px;
+  padding-right: 4px;
+}
+.toolbarSpacer {
+  flex: 1 1 auto;
+  min-width: 8px;
+}
+
+.toolPalette {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex-wrap: wrap;
-  padding: 3px;
-  border: 1px solid #2b3742;
+  padding: 2px;
+  border: 1px solid var(--ae-border);
   border-radius: var(--radius-md, 8px);
-  background: #101922;
+  background: var(--ae-bg-quiet);
 }
 .toolCluster {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding-right: 8px;
-  border-right: 1px solid #26313a;
+  padding-right: 6px;
+  border-right: 1px solid var(--ae-border);
 }
 .toolCluster:last-child {
   padding-right: 0;
@@ -672,17 +949,18 @@
   display: contents;
 }
 .toolButton {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 28px;
+  gap: 6px;
+  height: 30px;
   padding: 0 8px;
-  color: #b8c6cf;
+  color: var(--ae-text-2);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-xs, 4px);
-  font-size: 9px;
-  font-weight: 600;
+  border-radius: var(--radius-sm, 5px);
+  font: 600 12px var(--font-ui);
+  white-space: nowrap;
   cursor: pointer;
   transition:
     color var(--duration-fast, 0.1s) var(--ease-out, ease),
@@ -691,177 +969,624 @@
     transform var(--duration-micro, 0.08s) var(--ease-out, ease);
 }
 .toolButton:hover:not(:disabled) {
-  color: #f2f7fa;
-  background: #1d2a34;
-  border-color: #3e4d59;
+  color: var(--ae-text);
+  background: var(--ae-surface-hover);
 }
 .toolButton:active:not(:disabled) {
   transform: translateY(1px);
 }
 .toolButton:disabled {
-  opacity: 0.35;
+  color: var(--ae-text-disabled);
   cursor: not-allowed;
 }
 .toolButtonActive,
 .toolButtonActive:hover:not(:disabled) {
-  color: #08201a;
-  background: #69c7a8;
-  border-color: #8fe0c5;
-}
-.toolButtonActive .kbd {
-  border-color: rgba(4, 26, 20, 0.35);
-  background: rgba(4, 26, 20, 0.18);
-  color: #08201a;
-}
-.toolButtonDanger {
-  color: #f0a79e;
+  color: var(--ae-accent);
+  background: var(--ae-accent-subtle);
+  border-color: var(--ae-accent-border);
 }
 .toolButtonDanger:hover:not(:disabled) {
-  color: #ffd7d1;
-  background: #352324;
-  border-color: #6a3a38;
+  color: var(--ae-danger);
+  background: var(--ae-danger-subtle);
+}
+.toolButtonIconOnly {
+  width: 30px;
+  justify-content: center;
+  padding: 0;
 }
 .toolButtonLabel {
   white-space: nowrap;
+}
+/* The shortcut as a quiet key hint, not a boxed badge. */
+.toolKey {
+  min-width: 7px;
+  color: var(--ae-text-3);
+  font: 500 11px/1 var(--font-blueprint);
+}
+.toolButtonActive .toolKey {
+  color: var(--ae-accent);
+}
+.toolButton:disabled .toolKey {
+  color: inherit;
 }
 .glyph {
   flex: none;
 }
 .kbd {
-  min-width: 14px;
-  padding: 0 3px;
-  border: 1px solid #3b4852;
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  border: 1px solid var(--ae-border-strong);
   border-radius: 3px;
-  background: #0d151b;
-  color: #93a3ad;
-  font: 700 8px/14px var(--font-blueprint);
+  background: var(--ae-surface);
+  color: var(--ae-text-2);
+  font: 600 11px/16px var(--font-blueprint);
   text-align: center;
 }
+
+/*
+  Density tiers. Names are what make a tool row readable, so they are the last
+  thing to go: first the key hint drops (it stays in the tooltip), then the
+  names, then the keys. Breakpoints are the measured natural width of each tier
+  plus a few pixels, per editor — the ceiling has one tool more than the wall.
+
+  Container widths are the content box (the bar less its 20 px padding):
+  Wall (9 tools):     full ≥ 1133 · names 957–1132 · icon + key 761–956 · tight 601–760 · icon ≤ 600
+  Ceiling (10 tools): full ≥ 1215 · names 976–1214 · icon + key 771–975 · tight 691–770 · icon ≤ 690
+  A 1280 / 1366 / 1600 / 1920 px window gives a 660 / 746 / 980 / 1300 px box.
+*/
+/* Wall */
+@container ae-toolbar (max-width: 1132px) {
+  .toolbar:not(.toolbarCeiling) .toolKey {
+    display: none;
+  }
+  .toolbar:not(.toolbarCeiling) .toolButton:not(.toolButtonIconOnly) {
+    gap: 5px;
+    padding: 0 6px;
+  }
+  .toolbar:not(.toolbarCeiling) .segmentedOption {
+    padding: 0 9px;
+  }
+}
+@container ae-toolbar (max-width: 956px) {
+  .toolbar:not(.toolbarCeiling) .toolButtonLabel {
+    display: none;
+  }
+  .toolbar:not(.toolbarCeiling) .toolButton:not(.toolButtonIconOnly) .toolKey {
+    display: inline;
+  }
+  .toolbar:not(.toolbarCeiling) .toolButton:not(.toolButtonIconOnly) {
+    gap: 4px;
+    padding: 0 7px;
+  }
+  .toolbar:not(.toolbarCeiling) .segmentedOption {
+    padding: 0 11px;
+  }
+}
+/* Laptop widths: tighter tools, the keys still showing. */
+@container ae-toolbar (max-width: 760px) {
+  .toolbar:not(.toolbarCeiling) .toolButton:not(.toolButtonIconOnly) {
+    gap: 3px;
+    padding: 0 5px;
+  }
+  .toolbar:not(.toolbarCeiling) .toolButtonIconOnly {
+    width: 28px;
+  }
+  .toolbar:not(.toolbarCeiling) .toolCluster {
+    padding-right: 2px;
+  }
+  .toolbar:not(.toolbarCeiling) .segmentedOption {
+    padding: 0 8px;
+  }
+}
+@container ae-toolbar (max-width: 600px) {
+  .toolbar:not(.toolbarCeiling) .toolButton:not(.toolButtonIconOnly) .toolKey {
+    display: none;
+  }
+  .toolbar:not(.toolbarCeiling) .toolButton:not(.toolButtonIconOnly) {
+    width: 30px;
+    justify-content: center;
+    padding: 0;
+  }
+}
+
+/* Ceiling */
+@container ae-toolbar (max-width: 1214px) {
+  .toolbarCeiling .toolKey {
+    display: none;
+  }
+  /* One tool more than the wall: a hair tighter, so the names still fit a
+     1600 px window. */
+  .toolbarCeiling .toolPalette {
+    gap: 3px;
+  }
+  .toolbarCeiling .toolCluster {
+    padding-right: 2px;
+  }
+  .toolbarCeiling .toolButton:not(.toolButtonIconOnly) {
+    gap: 5px;
+    padding: 0 5px;
+  }
+  .toolbarCeiling .segmentedOption {
+    padding: 0 7px;
+  }
+}
+@container ae-toolbar (max-width: 975px) {
+  .toolbarCeiling .toolPalette {
+    gap: 4px;
+  }
+  .toolbarCeiling .toolCluster {
+    padding-right: 4px;
+  }
+  .toolbarCeiling .toolButtonLabel {
+    display: none;
+  }
+  .toolbarCeiling .toolButton:not(.toolButtonIconOnly) .toolKey {
+    display: inline;
+  }
+  .toolbarCeiling .toolButton:not(.toolButtonIconOnly) {
+    gap: 4px;
+    padding: 0 7px;
+  }
+  .toolbarCeiling .segmentedOption {
+    padding: 0 11px;
+  }
+}
+@container ae-toolbar (max-width: 770px) {
+  .toolbarCeiling .toolButton:not(.toolButtonIconOnly) {
+    gap: 3px;
+    padding: 0 5px;
+  }
+  .toolbarCeiling .toolButtonIconOnly {
+    width: 28px;
+  }
+  .toolbarCeiling .toolCluster {
+    padding-right: 2px;
+  }
+  .toolbarCeiling .segmentedOption {
+    padding: 0 8px;
+  }
+}
+@container ae-toolbar (max-width: 690px) {
+  .toolbarCeiling .toolButton:not(.toolButtonIconOnly) .toolKey {
+    display: none;
+  }
+  .toolbarCeiling .toolButton:not(.toolButtonIconOnly) {
+    width: 30px;
+    justify-content: center;
+    padding: 0;
+  }
+}
+
+/* The view switch (and any one-of-n choice): one control, the chosen part raised. */
+.segmentedControl {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--radius-sm, 5px);
+  background: var(--ae-surface-sunken);
+}
+.segmentedOption {
+  height: 26px;
+  padding: 0 11px;
+  color: var(--ae-text-2);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font: 600 12px var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast, 0.1s) var(--ease-out, ease),
+    background var(--duration-fast, 0.1s) var(--ease-out, ease);
+}
+.segmentedOption:hover {
+  color: var(--ae-text);
+}
+.segmentedOptionActive,
+.segmentedOptionActive:hover {
+  color: var(--ae-text);
+  background: var(--ae-surface);
+  box-shadow: var(--color-segment-active-shadow);
+}
+
 .toolRow {
   display: flex;
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
-  margin-bottom: 9px;
+  margin-bottom: 10px;
   padding: 3px;
-  border: 1px solid #2b3742;
-  border-radius: var(--radius-xs, 4px);
-  background: #101922;
+  border: 1px solid var(--ae-border);
+  border-radius: var(--radius-sm, 5px);
+  background: var(--ae-bg-quiet);
 }
 .presetRow {
   display: flex;
   align-items: center;
   gap: 5px;
   flex-wrap: wrap;
-  margin-top: 9px;
+  margin-top: 10px;
+}
+.presetRow .button {
+  min-height: 26px;
+  padding: 0 8px;
+  font-family: var(--font-blueprint);
+  font-weight: 500;
 }
 .presetLabel {
-  color: #7f8e99;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  margin-right: 4px;
+  color: var(--ae-text-2);
+  font-size: 12px;
+  font-weight: 500;
 }
 .snapControl {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  color: #aab6bf;
+  gap: 6px;
+  color: var(--ae-text-2);
+  font-size: 12px;
 }
 .snapControl select {
-  height: 25px;
-  color: #e7edf1;
-  background: #0f171e;
-  border: 1px solid #3b4852;
-  border-radius: 3px;
-  font-size: 9px;
+  height: 26px;
+  padding: 0 4px;
+  color: var(--ae-text);
+  background: var(--ae-surface);
+  border: 1px solid var(--ae-border-strong);
+  border-radius: 4px;
+  font: 500 12px var(--font-blueprint);
+  cursor: pointer;
 }
 .zoomReadout {
-  min-width: 38px;
-  color: #dce6eb;
-  font: 700 10px var(--font-blueprint);
+  min-width: 42px;
+  color: var(--ae-text);
+  font: 500 12px var(--font-blueprint);
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
-/* ---------- Status bar ---------- */
+/* ---------- Context bar: 32 px, never wraps ---------- */
 
 /*
-  One line, always. The bar sits directly above the canvas frame, and the canvas
-  contain-fits the drawing to whatever height that frame has left: when the bar
-  wrapped onto a second line — which it did the moment a longer status arrived,
-  e.g. "ceiling board selected" against "Nothing selected" — the drawing silently
-  re-scaled. Selecting a board looked like the plan zooming out, deselecting like
-  it zooming back in. Long text is clipped instead; the shortcut hint gives way
-  first because it is the one thing here that never changes.
+  One line, always (see .toolbar). Left: what the tool is doing — its chip,
+  its hint, the snap acquisition, a clash alert, the selection — all nowrap
+  with ellipsis, the hint giving way first. Right: snap, grid, layers, zoom,
+  and the "?" note. The bar itself does not clip, so its menus can drop over
+  the drawing; the live half clips instead.
 */
-.statusBar {
-  display: flex;
-  align-items: center;
-  gap: 6px 12px;
-  flex-wrap: nowrap;
-  min-height: 30px;
-  padding: 5px 12px;
-  overflow: hidden;
-  background: #101a22;
-  border-bottom: 1px solid #26313a;
-  font-size: 10px;
-  white-space: nowrap;
-}
-.statusLive {
-  display: flex;
-  align-items: center;
-  gap: 6px 12px;
-  flex-wrap: nowrap;
+.contextBar {
+  container-type: inline-size;
+  container-name: ae-context;
+  position: relative;
+  z-index: 3;
+  height: 32px;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 6px 0 10px;
+  white-space: nowrap;
+  background: var(--ae-bg-quiet);
+  border-bottom: 1px solid var(--ae-border);
+  font-size: 12px;
+}
+.contextLive {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   overflow: hidden;
 }
-.statusTool {
-  display: inline-flex;
+.contextTool {
   flex: none;
+  display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 2px 7px 2px 6px;
-  border: 1px solid rgba(105, 199, 168, 0.4);
+  height: 22px;
+  padding: 0 8px 0 6px;
   border-radius: 99px;
-  background: rgba(38, 79, 69, 0.42);
-  color: #b8ebda;
+  background: var(--ae-accent-subtle);
+  color: var(--ae-accent);
+  font-weight: 600;
 }
-.statusTool strong {
-  font-size: 9px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.statusHint {
-  flex: none;
-  color: #efbe7e;
-}
-.statusSnap {
-  flex: none;
-  padding: 2px 8px;
-  border-radius: 99px;
-  background: rgba(56, 122, 100, 0.35);
-  color: #7fe3bd;
-  font-weight: 700;
-}
-.statusBar[data-snapped='true'] .statusHint {
-  color: #8b98a1;
-}
-.statusSelection {
-  flex: none;
-  color: #93a2ad;
-}
-/* Shrinks before anything else: it is a fixed reminder, not live information. */
-.statusShortcut {
-  flex: 0 200 auto;
+.contextHint {
+  /* Gives way first, and so much faster than the selection that the selection
+     never loses a sub-pixel (and an ellipsis) while the hint still has room. */
+  flex: 0 100000 auto;
   min-width: 0;
-  margin-left: auto;
   overflow: hidden;
-  color: #6f7f8a;
-  font-size: 9px;
+  color: var(--ae-text-2);
   text-overflow: ellipsis;
 }
+.contextSnap {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--ae-ok-subtle);
+  color: var(--ae-ok);
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+.contextAlert {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 99px;
+  background: var(--ae-danger-subtle);
+  box-shadow: inset 0 0 0 1px var(--ae-danger-border);
+  color: var(--ae-danger);
+  font-weight: 600;
+}
+/* A tool's own option beside its chip (the ceiling Light tool's luminaire type). */
+.contextOption {
+  flex: 0 0 auto;
+  display: inline-flex;
+  min-width: 0;
+}
+.contextOption select {
+  max-width: 180px;
+  height: 24px;
+  padding: 0 4px;
+  color: var(--ae-text);
+  background: var(--ae-surface);
+  border: 1px solid var(--ae-border-strong);
+  border-radius: 4px;
+  font: 500 12px var(--font-ui);
+  cursor: pointer;
+}
+.contextSelection {
+  flex: 0 1 auto;
+  min-width: 48px;
+  overflow: hidden;
+  color: var(--ae-text);
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+.contextSelection::before {
+  content: '';
+  display: inline-block;
+  width: 1px;
+  height: 14px;
+  margin-right: 10px;
+  vertical-align: -2px;
+  background: var(--ae-border-strong);
+}
+.contextControls {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.contextDivider {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--ae-border);
+}
+.contextControls .toggle {
+  height: 26px;
+  padding: 0 4px;
+}
+.contextControls .iconButton {
+  width: 26px;
+  height: 26px;
+}
+.contextControls .button {
+  min-height: 26px;
+  padding: 0 9px;
+  box-shadow: none;
+}
 
-/* ---------- Canvas ---------- */
+/* A tool option beside the chip (the Light tool's type) takes the hint's room;
+   below this width the hint would be a one-letter stub, so it goes (the tool's
+   tooltip and the "?" note still say how to drive it). */
+@container ae-context (max-width: 1080px) {
+  .contextBar[data-tool-option='true'] .contextHint {
+    display: none;
+  }
+}
+/* A narrow bar keeps the controls and drops their words, so the live half keeps room. */
+@container ae-context (max-width: 900px) {
+  /* The chip names the tool; its full hint is the tool's own tooltip. */
+  .contextHint {
+    display: none;
+  }
+  .contextControls .snapControl > span,
+  .contextControls .popoverTrigger > span:not(.popoverIndicator) {
+    display: none;
+  }
+  .contextControls .popoverTrigger {
+    gap: 2px;
+    padding: 0 5px;
+  }
+}
+
+/* ---------- Popover / menu ---------- */
+
+.popover {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+}
+.popoverTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  color: var(--ae-text-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 5px);
+  font: 600 12px var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast, 0.1s) var(--ease-out, ease),
+    background var(--duration-fast, 0.1s) var(--ease-out, ease);
+}
+.popoverTrigger:hover,
+.popover[data-open='true'] > .popoverTrigger {
+  color: var(--ae-text);
+  background: var(--ae-surface-hover);
+}
+.popoverTrigger .chevron {
+  margin-left: -2px;
+}
+.popover[data-open='true'] > .popoverTrigger .chevron {
+  transform: rotate(180deg);
+}
+.popoverTriggerIcon {
+  width: 26px;
+  justify-content: center;
+  padding: 0;
+}
+/* The header's Export: a full button, not a quiet bar control. */
+.popoverTriggerButton {
+  height: 30px;
+  padding: 0 10px;
+  color: var(--ae-text);
+  background: var(--ae-surface);
+  border-color: var(--ae-border-strong);
+  box-shadow: var(--ae-shadow-control);
+}
+.popoverTriggerButton:hover,
+.popover[data-open='true'] > .popoverTriggerButton {
+  background: var(--ae-bg-quiet);
+  border-color: var(--ae-border-hover);
+}
+.popoverIndicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ae-accent);
+}
+.popoverPanel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 200px;
+  max-width: 340px;
+  padding: 6px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--ae-surface);
+  box-shadow: var(--ae-shadow-pop);
+  color: var(--ae-text);
+  font-size: 12px;
+  white-space: normal;
+  text-align: left;
+  animation: wallDetailFade var(--duration-fast, 0.1s) var(--ease-out, ease);
+}
+.popoverPanel[hidden] {
+  display: none;
+}
+.popoverPanelStart {
+  right: auto;
+  left: 0;
+}
+.popoverTitle {
+  margin: 4px 6px 6px;
+  color: var(--ae-text-3);
+  font-size: 11px;
+  font-weight: 600;
+}
+.popoverSection + .popoverSection {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--ae-divider);
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+  color: var(--ae-text);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  font: 500 13px var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.menuItem:hover,
+.menuItem:focus-visible {
+  background: var(--ae-surface-hover);
+}
+.menuItem .glyph {
+  color: var(--ae-text-2);
+}
+.menuItemText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.menuItemText small {
+  color: var(--ae-text-2);
+  font-size: 11px;
+}
+.layerList {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0;
+}
+.layerList .toggle {
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 13px;
+}
+.layerList .toggle:hover {
+  background: var(--ae-surface-hover);
+}
+.helpPanel {
+  width: 320px;
+  padding: 10px 12px 12px;
+}
+.helpList {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px 10px;
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+.helpList dt {
+  color: var(--ae-text);
+  font: 500 11px/18px var(--font-blueprint);
+  white-space: nowrap;
+}
+.helpList dd {
+  margin: 0;
+  color: var(--ae-text-2);
+  line-height: 18px;
+}
+.helpNotes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ae-text-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* ======================================================================
+   Canvas
+   ====================================================================== */
 
 .canvasFrame {
   position: relative;
@@ -872,7 +1597,7 @@
   padding: 34px;
   overflow: hidden;
   touch-action: none;
-  background: #0d141a;
+  background: var(--ae-canvas);
   /* The drawing arrives over the opening placeholder as one crossfade. */
   animation: detailCanvasArrive var(--duration-smooth) var(--ease-out) backwards;
 }
@@ -886,7 +1611,7 @@
 }
 /* The opening shell's stand-in for the tool palette: one row, the palette's width. */
 .shellToolbar {
-  width: min(640px, 70%);
+  width: min(560px, 62%);
 }
 .canvas {
   width: 100%;
@@ -896,7 +1621,11 @@
   user-select: none;
   transform-origin: center center;
   will-change: transform;
-  filter: drop-shadow(0 18px 30px rgba(0, 0, 0, 0.38));
+  filter: drop-shadow(0 6px 16px var(--ae-canvas-shadow));
+}
+/* The wall's own backdrop under the boards: what a reveal gap shows through. */
+.canvasSheet {
+  fill: var(--ae-canvas-sheet);
 }
 .canvasEmptyHint {
   position: absolute;
@@ -908,19 +1637,20 @@
   flex-direction: column;
   gap: 3px;
   padding: 9px 12px;
-  border: 1px dashed rgba(239, 190, 126, 0.45);
+  border: 1px solid var(--ae-border-strong);
   border-radius: var(--radius-md, 8px);
-  background: rgba(20, 29, 37, 0.94);
-  color: #b6c4cd;
-  font-size: 10px;
+  background: var(--ae-scrim);
+  box-shadow: var(--ae-shadow-control);
+  color: var(--ae-text-2);
+  font-size: 12px;
   line-height: 1.45;
   text-align: center;
   transform: translateX(-50%);
   pointer-events: none;
 }
 .canvasEmptyHint strong {
-  color: #efbe7e;
-  font-size: 10px;
+  color: var(--ae-text);
+  font-size: 12px;
 }
 .canvas[data-tool='select'] {
   cursor: grab;
@@ -946,6 +1676,7 @@
    missing here leaves the default arrow, which reads as "nothing will happen". */
 .canvas[data-tool='draw_panel'],
 .canvas[data-tool='trace_panel'],
+.canvas[data-tool='draw_accent'],
 .canvas[data-tool='draw_stud'],
 .canvas[data-tool='draw_noggin'],
 .canvas[data-tool='draw_furring'],
@@ -958,6 +1689,52 @@
 }
 .drawPreview {
   pointer-events: none;
+}
+
+/* ---------- Draw previews (what the pointer is drawing, before it commits) ---------- */
+
+.previewShape {
+  fill: var(--ae-preview-fill);
+  stroke: var(--ae-preview-line);
+}
+.previewTrace {
+  fill: none;
+  stroke: var(--ae-preview-line);
+}
+.previewTrace[data-closed='true'] {
+  fill: var(--ae-preview-fill);
+}
+.previewPoint {
+  fill: var(--ae-preview-line);
+  stroke: var(--ae-preview-point-line);
+}
+.previewPoint[data-first='true'] {
+  fill: var(--ae-snap);
+}
+.previewSnap {
+  fill: var(--ae-preview-snap-fill);
+  stroke: var(--ae-snap);
+}
+.previewFrame {
+  fill: var(--ae-preview-frame-fill);
+  stroke: var(--ae-preview-frame-line);
+}
+.previewFrame[data-fouls='true'] {
+  fill: var(--ae-clash-fill);
+  stroke: var(--ae-clash-line);
+}
+/* The accent tool's drag rectangle. */
+.drawPreview[data-accent-preview='true'] {
+  fill: var(--ae-preview-fill);
+  stroke: var(--ae-preview-line);
+  stroke-width: var(--cad-board-line);
+  stroke-dasharray: 8 5;
+}
+.asBuiltLine {
+  stroke: var(--ae-asbuilt-off);
+}
+.asBuiltLine[data-status='within_tolerance'] {
+  stroke: var(--ae-asbuilt-ok);
 }
 
 /* ---------- Rulers ---------- */
@@ -975,8 +1752,8 @@
   left: 0;
   width: 100%;
   height: 22px;
-  background: rgba(13, 20, 26, 0.92);
-  border-bottom: 1px solid #26313a;
+  background: var(--ae-ruler-bg);
+  border-bottom: 1px solid var(--ae-ruler-border);
 }
 .rulerLeft {
   position: absolute;
@@ -984,8 +1761,8 @@
   left: 0;
   width: 34px;
   height: 100%;
-  background: rgba(13, 20, 26, 0.92);
-  border-right: 1px solid #26313a;
+  background: var(--ae-ruler-bg);
+  border-right: 1px solid var(--ae-ruler-border);
 }
 .rulerCorner {
   position: absolute;
@@ -995,28 +1772,31 @@
   width: 34px;
   height: 22px;
   place-items: center;
-  background: #101a22;
-  border-right: 1px solid #2b3945;
-  border-bottom: 1px solid #2b3945;
-  color: #67c5a6;
-  font: 700 8px var(--font-blueprint);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  background: var(--ae-ruler-corner);
+  border-right: 1px solid var(--ae-ruler-border);
+  border-bottom: 1px solid var(--ae-ruler-border);
+  color: var(--ae-ruler-label);
+  font: 600 11px var(--font-blueprint);
 }
 .rulerTick {
-  stroke: #3d505d;
+  stroke: var(--ae-ruler-tick);
   stroke-width: 1;
 }
 .rulerTickMajor {
-  stroke: #5d7484;
+  stroke: var(--ae-ruler-tick-major);
   stroke-width: 1;
 }
 .rulerLabel {
-  fill: #8fa2ae;
-  font-size: 8.5px;
+  fill: var(--ae-ruler-label);
+  font-size: 10px;
+}
+/* Four digits at 10 px overrun the 34 px ruler from its x = 21 anchor; slide
+   them over the tick (above it, never across it) instead of moving the anchor. */
+.rulerLeft .rulerLabel {
+  transform: translateX(7px);
 }
 .rulerSpan {
-  fill: rgba(105, 199, 168, 0.55);
+  fill: var(--ae-ruler-span);
 }
 
 /* ---------- Drawing grid + datum ---------- */
@@ -1028,18 +1808,18 @@
   opacity: 0.4;
 }
 .gridMinorLine {
-  stroke: rgba(120, 158, 187, 0.13);
+  stroke: var(--ae-grid-minor);
 }
 .gridMajorLine {
-  stroke: rgba(136, 176, 204, 0.22);
+  stroke: var(--ae-grid-major);
 }
 .gridFloorLine {
-  stroke: #5b7183;
+  stroke: var(--ae-grid-floor);
   stroke-width: 2;
 }
 .gridOrigin {
   fill: none;
-  stroke: #67c5a6;
+  stroke: var(--ae-grid-origin);
   stroke-width: 1.5;
 }
 
@@ -1049,8 +1829,8 @@
   pointer-events: none;
 }
 .canvasChip text {
-  fill: #ffd9a0;
-  stroke: #10161c;
+  fill: var(--ae-chip-text);
+  stroke: var(--ae-canvas-halo);
   stroke-width: 0.32em;
   paint-order: stroke fill;
   font-family: var(--font-blueprint);
@@ -1067,8 +1847,8 @@
   pointer-events: none;
 }
 .canvasSizeTag text {
-  fill: #e8f1f7;
-  stroke: #0c1218;
+  fill: var(--ae-canvas-ink);
+  stroke: var(--ae-canvas-halo);
   stroke-width: 0.34em;
   paint-order: stroke fill;
   text-anchor: middle;
@@ -1077,22 +1857,20 @@
 }
 /* First line is the name of the piece; the size line carries the weight. */
 .canvasSizeTag text:nth-of-type(1) {
-  fill: #ffd9a0;
+  fill: var(--ae-selected-ink);
   font-size: 0.86em;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 .canvasSizeTag text:nth-of-type(3) {
-  fill: #9fb3c0;
+  fill: var(--ae-canvas-ink-2);
   font-size: 0.86em;
 }
 .sizeTagLeader {
-  stroke: #ffd9a0;
+  stroke: var(--ae-selected-line);
   stroke-width: 1px;
   opacity: 0.75;
 }
-
-/* ---------- Element hover feedback ---------- */
 
 /* ---------- CAD line-weight hierarchy ----------
    Canvas shapes all draw with vector-effect: non-scaling-stroke, so these are
@@ -1115,13 +1893,13 @@
      by fill, never by line weight — see above: a heavier line would move the
      edge the drawing is being measured against. `face` is opaque because it
      replaces a piece's own fill; `wash` lies over whatever is behind it. */
-  --assembly-selected-line: #ffb45c;
-  --assembly-selected-face: #efb478;
-  --assembly-selected-wash: rgba(255, 180, 92, 0.65);
+  --assembly-selected-line: var(--ae-selected-line);
+  --assembly-selected-face: var(--ae-selected-face);
+  --assembly-selected-wash: var(--ae-selected-wash);
 }
 
 .panelShape {
-  stroke: #303943;
+  stroke: var(--ae-board-line);
   stroke-width: var(--cad-board-line);
   transition:
     fill var(--duration-fast, 0.1s) var(--ease-out, ease),
@@ -1135,13 +1913,13 @@
   stroke: var(--assembly-selected-line);
 }
 .canvas[data-tool='select'] .panelShape:not([data-selected='true']):hover {
-  stroke: #8fd0f0;
+  stroke: var(--ae-board-hover-line);
   cursor: pointer;
 }
 /* Accent panels: a block of the face in another finish, outlined at the board
    weight. Selection changes the fill, never the line (see the hierarchy above). */
 .accentShape {
-  stroke: #303943;
+  stroke: var(--ae-board-line);
   stroke-width: var(--cad-board-line);
 }
 .accentShape[data-selected='true'] {
@@ -1149,47 +1927,54 @@
   stroke: var(--assembly-selected-line);
 }
 .canvas[data-tool='select'] .accentShape:not([data-selected='true']):hover {
-  stroke: #8fd0f0;
+  stroke: var(--ae-board-hover-line);
   cursor: pointer;
 }
 .accentList {
   display: grid;
   gap: 4px;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 .accentListItem {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
-  background: transparent;
+  min-height: 32px;
+  padding: 5px 8px;
+  border: 1px solid var(--ae-border);
+  border-radius: var(--radius-xs, 4px);
+  background: var(--ae-surface);
   color: inherit;
   font: inherit;
+  font-size: 12px;
   text-align: left;
   cursor: pointer;
 }
+.accentListItem:hover {
+  border-color: var(--ae-border-hover);
+}
 .accentListItem[data-selected='true'] {
-  border-color: var(--assembly-selected-line, #ffb45c);
+  border-color: var(--ae-selected-line);
+  box-shadow: inset 3px 0 var(--ae-selected-line);
 }
 .accentSwatch {
   width: 12px;
   height: 12px;
   border-radius: 2px;
   flex: none;
+  box-shadow: inset 0 0 0 1px var(--ae-border-strong);
 }
 /* Siding course joints: a set-out drawn over the board fill, at the lightest
    weight on the sheet so it never reads as a board edge. */
 .sidingCourses {
   fill: none;
-  stroke: rgba(48, 57, 67, 0.6);
+  stroke: var(--ae-siding-line);
   stroke-width: var(--cad-frame-line);
   pointer-events: none;
 }
 .frameShape {
-  fill: rgba(49, 129, 168, 0.35);
-  stroke: #2b789c;
+  fill: var(--ae-frame-fill);
+  stroke: var(--ae-frame-line);
   stroke-width: var(--cad-frame-line);
   transition:
     fill var(--duration-fast, 0.1s) var(--ease-out, ease),
@@ -1200,21 +1985,21 @@
   stroke: var(--assembly-selected-line);
 }
 .canvas[data-tool='select'] .frameShape:not([data-selected='true']):hover {
-  fill: rgba(96, 170, 208, 0.55);
-  stroke: #57b6dd;
+  fill: var(--ae-frame-hover-fill);
+  stroke: var(--ae-frame-hover-line);
   cursor: pointer;
 }
 /* Framing lapping an opening edge. The generated frame never does this any
    more — its trimmers land flush on the jamb — so what this colours is a member
    somebody moved or drew across the hole. */
 .frameShape[data-contact='jamb'] {
-  fill: rgba(214, 158, 74, 0.4);
-  stroke: #d69e4a;
+  fill: var(--ae-jamb-fill);
+  stroke: var(--ae-jamb-line);
 }
 /* Framing standing inside an opening — on a real wall this has to move or be cut. */
 .frameShape[data-contact='intrusion'] {
-  fill: rgba(214, 84, 68, 0.45);
-  stroke: #e4634f;
+  fill: var(--ae-clash-fill);
+  stroke: var(--ae-clash-line);
 }
 
 /* ---------- Openings ----------
@@ -1222,12 +2007,12 @@
    stays visible, then re-outlined on top so the jamb, head, and sill read as
    the crisp cut lines they are. */
 .openingVoid {
-  fill: rgba(226, 233, 240, 0.9);
+  fill: var(--ae-opening-void);
   stroke: none;
 }
 .openingProfile {
   fill: none;
-  stroke: #0d1116;
+  stroke: var(--ae-opening-line);
   stroke-width: var(--cad-profile-line);
 }
 /* ---------- Slab bands ----------
@@ -1238,17 +2023,17 @@
   pointer-events: none;
 }
 .slabBandFill {
-  fill: rgba(126, 148, 168, 0.16);
-  stroke: rgba(158, 182, 202, 0.6);
+  fill: var(--ae-slab-fill);
+  stroke: var(--ae-slab-line);
   stroke-width: 1px;
 }
 .slabBandDatum {
-  stroke: #9eb6ca;
+  stroke: var(--ae-slab-datum);
   stroke-width: 1.25px;
 }
 .slabBandLabel {
-  fill: #9eb6ca;
-  stroke: #202830;
+  fill: var(--ae-slab-text);
+  stroke: var(--ae-canvas-halo);
   stroke-width: 3px;
   paint-order: stroke fill;
   font: 600 11px var(--font-blueprint);
@@ -1262,16 +2047,16 @@
 /* The strip of board that is out beyond the wall — warm, so it reads as
    material that is there rather than as a void. */
 .boardOverhangFill {
-  fill: rgba(224, 168, 96, 0.15);
-  stroke: rgba(224, 168, 96, 0.5);
+  fill: var(--ae-overhang-fill);
+  stroke: var(--ae-overhang-line);
   stroke-width: 1px;
   stroke-dasharray: 10 6;
 }
 /* Wall with no board on it, because the board was set back to let the
    neighbour's lap over — cool and empty, the opposite reading. */
 .boardSetbackFill {
-  fill: rgba(126, 148, 168, 0.1);
-  stroke: rgba(158, 182, 202, 0.45);
+  fill: var(--ae-setback-fill);
+  stroke: var(--ae-setback-line);
   stroke-width: 1px;
   stroke-dasharray: 4 6;
 }
@@ -1279,7 +2064,7 @@
    something that is really there but not in section — without it the overhang
    would just look like a longer wall. */
 .boardOverhangWallEnd {
-  stroke: #e0a860;
+  stroke: var(--ae-overhang-wall-end);
   stroke-width: 1.5px;
   stroke-dasharray: 14 7;
 }
@@ -1291,7 +2076,7 @@
   stroke: var(--assembly-selected-line);
 }
 .canvas[data-tool='select'] .fastenerGraphic:hover {
-  filter: brightness(1.45);
+  filter: brightness(1.2) saturate(1.2);
 }
 .canvas[data-tool='select'] .wallDimension:hover {
   filter: brightness(1.25);
@@ -1308,24 +2093,25 @@
   stroke: none;
 }
 .dimensionGripDot {
-  fill: #67c5a6;
-  stroke: #10141a;
+  fill: var(--ae-grip-fill);
+  stroke: var(--ae-grip-line);
   stroke-width: 1.25px;
 }
 .dimensionGripEditable:hover .dimensionGripDot {
-  fill: #ffffff;
-  stroke: #67c5a6;
+  fill: var(--ae-grip-line);
+  stroke: var(--ae-grip-fill);
   stroke-width: 1.5px;
 }
 .dimensionAcquisition {
-  color: #ffbe66;
+  color: var(--ae-acquire);
   pointer-events: none;
 }
 .dimensionAcquisition[data-snapped='true'] {
-  color: #67e0b5;
+  color: var(--ae-snap);
 }
 .dimensionAcquisition circle {
-  fill: rgba(17, 25, 32, 0.72);
+  fill: var(--ae-canvas-halo);
+  fill-opacity: 0.72;
   stroke: currentColor;
   stroke-width: 1.5;
 }
@@ -1335,7 +2121,7 @@
 }
 .dimensionAcquisition text {
   fill: currentColor;
-  stroke: #111820;
+  stroke: var(--ae-canvas-halo);
   stroke-width: 3px;
   paint-order: stroke fill;
   font-family: var(--font-blueprint);
@@ -1343,15 +2129,15 @@
   dominant-baseline: central;
 }
 .dimensionAcquisitionCoords {
-  opacity: 0.78;
+  opacity: 0.85;
   font-weight: 600 !important;
 }
 .fastenerGuide {
-  color: #69cbe8;
+  color: var(--ae-guide);
   pointer-events: none;
 }
 .fastenerGuideSelected {
-  color: #79e2b8;
+  color: var(--ae-guide-selected);
 }
 .fastenerGuideLine,
 .fastenerGuideTick {
@@ -1369,7 +2155,7 @@
 .fastenerGuideLabel,
 .fastenerGuideRemainder {
   fill: currentColor;
-  stroke: #111820;
+  stroke: var(--ae-canvas-halo);
   stroke-width: 7px;
   paint-order: stroke fill;
   font-family: var(--font-blueprint);
@@ -1383,17 +2169,14 @@
 }
 .fastenerGuideRemainder {
   font-size: 24px;
-  fill: #ffbf69;
+  fill: var(--ae-guide-remainder);
 }
 .fastenerGraphic {
   cursor: pointer;
 }
-.fastenerGraphic[data-appearance='tonal'] {
-  opacity: 0.78;
-}
-.fastenerGraphic[data-selected='true'] {
-  opacity: 1;
-}
+/* No group opacity on a tonal head: it is already drawn in the board's own
+   colour, and fading it as well is what made it vanish into the board
+   (docs/wall-fastener-visibility.md §2.3). Its ring carries it. */
 /* Ring around the selected screw. Its own colour would be lost among the
    hundreds beside it, so the answer is the halo, in the editor's orange. */
 .fastenerHalo {
@@ -1401,61 +2184,103 @@
   stroke: var(--assembly-selected-line);
   stroke-width: 3px;
 }
+
+/* ---------- Reflected ceiling plan (CeilingPlanLayers, CeilingLightPlacement) ---------- */
+
+.hangerMark {
+  fill: none;
+  stroke: var(--ae-hanger-line);
+}
+/* A luminaire symbol strokes (and, for a pendant, fills) in currentColor, so
+   the one colour is set here: gold, or the selection orange when picked. */
+.fixtureSymbol {
+  color: var(--ae-fixture-line);
+}
+.fixtureSymbol[data-selected='true'] {
+  color: var(--assembly-selected-line);
+}
+/* What the Light tool is about to place: the ghost, a row or grid outline, and
+   the alignment guides it locked to — the preview colour, like every draw tool. */
+.lightGhost {
+  color: var(--ae-preview-line);
+}
+.lightGuide {
+  stroke: var(--ae-preview-line);
+}
+.lightRunOutline {
+  fill: none;
+  stroke: var(--ae-preview-line);
+}
+
+/* The floor plan under the ceiling, for orientation only. */
+.planWall {
+  fill: var(--ae-plan-wall);
+}
+.planDoor {
+  fill: var(--ae-plan-door);
+}
+.planWindow {
+  fill: var(--ae-plan-window);
+}
+.planRoom {
+  fill: none;
+  stroke: var(--ae-plan-room);
+}
+.planFurniture {
+  fill: none;
+  stroke: var(--ae-plan-furniture);
+}
+.planLabel {
+  fill: var(--ae-plan-label);
+  stroke: var(--ae-canvas-halo);
+  font-family: var(--font-ui);
+  font-weight: 600;
+}
+
+/* ---------- Screw pencil-guide builder (left panel) ---------- */
+
 .fastenerGuideBuilder {
   display: flex;
   flex-direction: column;
   gap: 7px;
   margin: 12px 0;
-  border: 1px solid #33444f;
-  border-radius: var(--radius-xs, 4px);
-  background: #131d24;
 }
 .fastenerGuideBuilder .advanced {
   margin-top: 0;
-  border: 0;
-  background: transparent;
-}
-.fastenerGuideBuilder .advancedToggle {
-  color: #79e2b8;
-  font-family: var(--font-blueprint);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-.fastenerGuideBuilder .advancedToggle:hover {
-  color: #b6f4dd;
 }
 .fastenerGuideBuilder p {
-  margin: 0 0 6px;
-  color: #96a6af;
-  font-size: 9px;
+  margin: 0 0 8px;
+  color: var(--ae-text-2);
+  font-size: 12px;
   line-height: 1.45;
 }
 .fastenerGuideSummary {
   display: grid;
   gap: 3px;
   margin-top: 8px;
-  padding: 8px;
-  border-left: 3px solid #69cbe8;
-  background: #0f171c;
-  color: #9eb0ba;
-  font-size: 9px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--ae-guide);
+  background: var(--ae-surface);
+  color: var(--ae-text-2);
+  font-size: 12px;
 }
 .fastenerGuideSummary strong {
-  color: #e7f8f2;
+  color: var(--ae-text);
 }
 .fastenerGuideDatum {
   display: flex;
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 6px;
-  padding: 8px;
-  border: 1px solid #33444f;
-  color: #91a3ad;
-  font-size: 9px;
+  padding: 7px 9px;
+  border: 1px solid var(--ae-border);
+  border-radius: var(--radius-xs, 4px);
+  background: var(--ae-surface);
+  color: var(--ae-text-2);
+  font-size: 12px;
 }
 .fastenerGuideDatum strong {
-  color: #79e2b8;
+  color: var(--ae-text);
   text-align: right;
 }
 .fastenerGuideList {
@@ -1466,29 +2291,30 @@
 }
 .fastenerGuideList > div {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
-  border: 1px solid #33414b;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  border: 1px solid var(--ae-border);
   border-radius: var(--radius-xs, 4px);
-  background: #111920;
+  background: var(--ae-surface);
   transition: border-color var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
 .fastenerGuideList > div:hover {
-  border-color: #4d616e;
+  border-color: var(--ae-border-hover);
 }
 .fastenerGuideList > div[data-active='true'] {
-  border-color: #69cbe8;
+  border-color: var(--ae-accent);
 }
 .fastenerGuideList button {
   min-width: 0;
-  padding: 7px;
+  padding: 7px 8px;
   border: 0;
-  color: #aebbc3;
+  color: var(--ae-text);
   background: transparent;
+  font-size: 12px;
   text-align: left;
   cursor: pointer;
 }
 .fastenerGuideList button:last-child {
-  color: #ef8f82;
+  color: var(--ae-danger);
   text-align: center;
 }
 .fastenerGuideList strong,
@@ -1497,69 +2323,67 @@
 }
 .fastenerGuideList small {
   margin-top: 2px;
-  color: #71838e;
-  font-size: 8px;
-}
-.dimensionBar {
-  min-height: 34px;
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 9px 14px;
-  border-top: 1px solid #303b45;
-  color: #93a2ad;
-  font: 10px var(--font-blueprint);
-}
-.dimensionBarAlert {
-  color: #f0836f;
-  font-weight: 700;
+  color: var(--ae-text-2);
+  font-size: 11px;
 }
 
-/* ---------- Form controls ---------- */
+/* ======================================================================
+   Form controls
+   ====================================================================== */
 
 .field {
   display: grid;
-  grid-template-columns: 102px minmax(0, 1fr);
+  grid-template-columns: 104px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  min-height: 31px;
-  font-size: 10px;
-  color: #aab6bf;
+  min-height: 36px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ae-text-2);
 }
 .field > input,
 .field select,
 .inputWrap input {
   min-width: 0;
   width: 100%;
-  height: 25px;
-  padding: 0 7px;
-  color: #edf2f5;
-  background: #0f171e;
-  border: 1px solid #37434e;
-  border-radius: 3px;
-  font: 10px var(--font-blueprint);
+  height: 30px;
+  padding: 0 8px;
+  color: var(--ae-text);
+  background: var(--ae-surface);
+  border: 1px solid var(--ae-border-strong);
+  border-radius: var(--radius-sm, 5px);
+  box-shadow: var(--ae-shadow-inset);
+  font: 500 12px var(--font-blueprint);
+  font-variant-numeric: tabular-nums;
   transition:
     border-color var(--duration-fast, 0.1s) var(--ease-out, ease),
-    background var(--duration-fast, 0.1s) var(--ease-out, ease);
+    box-shadow var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
 .field > input:hover,
 .field select:hover,
 .inputWrap input:hover {
-  border-color: #4d5f6c;
+  border-color: var(--ae-border-hover);
 }
 .field > input:focus,
 .field select:focus,
 .inputWrap input:focus {
-  border-color: #69c7a8;
-  background: #0c141a;
+  outline: none;
+  border-color: var(--ae-accent);
+  box-shadow: 0 0 0 3px var(--ae-accent-subtle);
 }
 .field > input:disabled,
 .inputWrap input:disabled {
-  opacity: 0.5;
+  color: var(--ae-text-disabled);
+  background: var(--ae-bg-quiet);
   cursor: not-allowed;
 }
+/* Text, not numbers: the UI face. */
+.field select,
+.field > input:not([type='number']) {
+  font: 500 12px var(--font-ui);
+}
 .field select {
-  font-family: var(--font-ui);
+  cursor: pointer;
 }
 .inputWrap {
   position: relative;
@@ -1567,174 +2391,154 @@
 }
 .inputWrap small {
   position: absolute;
-  right: 6px;
-  top: 7px;
-  color: #687783;
-  font-size: 8px;
+  right: 8px;
+  top: 50%;
+  color: var(--ae-text-3);
+  font: 11px var(--font-blueprint);
+  transform: translateY(-50%);
   pointer-events: none;
 }
 .inputWrap input {
-  padding-right: 25px;
+  padding-right: 30px;
 }
 
 .toggle {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  color: #aab6bf;
-  font-size: 10px;
+  gap: 7px;
+  color: var(--ae-text);
+  font-size: 12px;
   cursor: pointer;
   transition: color var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
 .toggle:hover {
-  color: #e3ecf1;
+  color: var(--ae-text);
 }
 .toggle input {
-  accent-color: #43ae8b;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--ae-accent);
   cursor: pointer;
 }
+/* The two-face switch in step 1: one control, the chosen face raised. */
 .segmented {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  gap: 2px;
   padding: 2px;
   margin-bottom: 10px;
-  border-radius: 4px;
-  background: #0e151b;
+  border-radius: var(--radius-sm, 5px);
+  background: var(--ae-surface-sunken);
 }
 .segmented button {
-  min-height: 32px;
-  padding: 3px 6px;
-  color: #8e9ba5;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ae-text-2);
   background: transparent;
   border: 0;
-  border-radius: 3px;
-  font-size: 10px;
-  text-transform: capitalize;
+  border-radius: 4px;
+  font: 600 12px var(--font-ui);
   cursor: pointer;
   transition:
     color var(--duration-fast, 0.1s) var(--ease-out, ease),
     background var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
 .segmented button:hover {
-  color: #dee8ed;
-  background: #1a242c;
-}
-.activeFaceNotice {
-  margin: -3px 0 9px;
-  padding: 7px 8px;
-  border-left: 3px solid #67c5a6;
-  color: #c9d6dc;
-  background: #111a21;
-  font-size: 10px;
+  color: var(--ae-text);
 }
 .segmented .segmentActive,
 .segmented .segmentActive:hover {
-  color: #fff;
-  background: #2c3b46;
-  box-shadow: inset 0 0 0 1px #43535f;
-}
-
-.button {
-  min-height: 27px;
-  padding: 0 9px;
-  border: 1px solid #43515c;
-  border-radius: 3px;
-  color: #dce4e9;
-  background: #202c35;
-  font-size: 9px;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    color var(--duration-fast, 0.1s) var(--ease-out, ease),
-    background var(--duration-fast, 0.1s) var(--ease-out, ease),
-    border-color var(--duration-fast, 0.1s) var(--ease-out, ease),
-    transform var(--duration-micro, 0.08s) var(--ease-out, ease);
-}
-.button:hover:not(:disabled) {
-  background: #293842;
-  border-color: #5a6c78;
-}
-.button:active:not(:disabled) {
-  transform: translateY(1px);
-}
-.button:disabled {
-  cursor: not-allowed;
-  opacity: 0.42;
-}
-.buttonActive,
-.buttonActive:hover:not(:disabled) {
-  color: #0b1915;
-  background: #69c7a8;
-  border-color: #7ed6b8;
-}
-.buttonDanger {
-  color: #f3a79e;
-  border-color: #6a3a38;
-  background: #332224;
-}
-.buttonDanger:hover:not(:disabled) {
-  color: #ffd7d1;
-  background: #3f2a2c;
-  border-color: #8a4a47;
-}
-.buttonRow {
-  margin-top: 9px;
+  color: var(--ae-text);
+  background: var(--ae-surface);
+  box-shadow: var(--color-segment-active-shadow);
 }
 
 .assemblySummary {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 8px;
   margin-top: 8px;
-  padding: 7px 8px;
-  color: #8d9aa4;
-  background: #111920;
-  border: 1px solid #303b45;
+  padding: 7px 10px;
+  color: var(--ae-text-2);
+  background: var(--ae-bg-quiet);
+  border: 1px solid var(--ae-border);
   border-radius: var(--radius-xs, 4px);
-  font-size: 9px;
+  font-size: 12px;
 }
 .assemblySummary strong {
-  color: #e8eef2;
-  font-family: var(--font-blueprint);
+  color: var(--ae-text);
+  font: 600 12px var(--font-blueprint);
+}
+/* A mode and the one action that changes it, on one line (ceiling step 1). */
+.layoutRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--ae-text-2);
+  font-size: 12px;
+}
+.layoutRow > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.layoutRow strong {
+  margin-left: 4px;
+  color: var(--ae-text);
+  font: 600 12px var(--font-ui);
+}
+.layoutRow .button {
+  min-height: 28px;
+  padding: 0 10px;
 }
 .inlineHelp {
   margin: 6px 0 0;
-  color: #9ba8b1;
-  font-size: 10px;
-  line-height: 1.45;
+  color: var(--ae-text-2);
+  font-size: 12px;
+  line-height: 1.5;
 }
 .dimensionToggles {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 7px;
-  margin-top: 9px;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 /* ---------- SVG dimension styling ---------- */
 
 .wallDimension {
-  color: #d9ad63;
+  color: var(--ae-dim-user);
   cursor: pointer;
   pointer-events: stroke;
 }
 .wallDimension[data-source='automatic'] {
-  color: #7fb8a4;
+  color: var(--ae-dim-auto);
 }
 .wallDimension[data-movable='true'] {
   cursor: move;
 }
-.wallDimensionSelected {
-  color: #ffd98a;
+.wallDimensionSelected,
+.wallDimension.wallDimensionSelected[data-source] {
+  color: var(--ae-dim-selected);
 }
 .dimensionScrewGuide {
-  stroke: #69cbe8;
+  stroke: var(--ae-guide);
   stroke-width: 1.5px;
   stroke-dasharray: 10 7;
 }
 .dimensionScrewGuidePoint {
-  fill: #69cbe8;
-  stroke: #10141a;
+  fill: var(--ae-guide);
+  stroke: var(--ae-grip-line);
   stroke-width: 1.25px;
 }
 .dimensionLine {
@@ -1758,7 +2562,7 @@
 }
 .dimensionText {
   fill: currentColor;
-  stroke: #202830;
+  stroke: var(--ae-canvas-halo);
   stroke-width: 3px;
   paint-order: stroke fill;
   font: 600 38px var(--font-blueprint);
@@ -1768,29 +2572,35 @@
   dominant-baseline: central;
   pointer-events: none;
 }
+
+/* ======================================================================
+   Inspector (right panel)
+   ====================================================================== */
+
 .measurementReadout {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  margin-bottom: 9px;
-  padding: 9px;
-  color: #8fa0aa;
-  background: #111920;
-  border: 1px solid #3b4852;
+  gap: 2px;
+  margin-bottom: 10px;
+  padding: 9px 10px;
+  color: var(--ae-text-2);
+  background: var(--ae-bg-quiet);
+  border: 1px solid var(--ae-border);
   border-radius: var(--radius-xs, 4px);
-  font-size: 9px;
+  font-size: 12px;
 }
 .measurementReadout strong {
-  color: #ffe0a3;
-  font: 700 15px var(--font-blueprint);
+  color: var(--ae-text);
+  font: 600 16px var(--font-blueprint);
+  font-variant-numeric: tabular-nums;
 }
 .referenceSummary {
   display: flex;
   flex-direction: column;
   gap: 3px;
   margin: 7px 0;
-  color: #7fbdab;
-  font-size: 9px;
+  color: var(--ae-text-2);
+  font: 12px var(--font-blueprint);
 }
 .dimensionSchedule {
   display: flex;
@@ -1805,21 +2615,24 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 8px;
-  color: #dbe4e9;
+  padding: 6px 8px;
+  color: var(--ae-text);
   text-align: left;
-  background: #111920;
-  border: 1px solid #303b45;
-  border-radius: 3px;
+  background: var(--ae-surface);
+  border: 1px solid var(--ae-border);
+  border-radius: var(--radius-xs, 4px);
   cursor: pointer;
   transition:
     border-color var(--duration-fast, 0.1s) var(--ease-out, ease),
     background var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
-.dimensionSchedule button:hover,
-.dimensionSchedule .scheduleActive {
-  border-color: #d2a24f;
-  background: #222a2d;
+.dimensionSchedule button:hover {
+  border-color: var(--ae-border-hover);
+}
+.dimensionSchedule .scheduleActive,
+.dimensionSchedule .scheduleActive:hover {
+  border-color: var(--ae-selected-line);
+  box-shadow: inset 3px 0 var(--ae-selected-line);
 }
 .dimensionSchedule span {
   display: flex;
@@ -1828,92 +2641,149 @@
 }
 .dimensionSchedule strong {
   overflow: hidden;
-  font-size: 9px;
+  font-size: 12px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .dimensionSchedule small {
-  color: #71818c;
-  font-size: 8px;
+  color: var(--ae-text-2);
+  font-size: 11px;
 }
 .dimensionSchedule b {
-  color: #f2c476;
-  font: 700 10px var(--font-blueprint);
+  color: var(--ae-text);
+  font: 600 12px var(--font-blueprint);
   white-space: nowrap;
 }
 
 .profileStatus {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   margin-top: 8px;
-  padding: 8px;
-  border-left: 3px solid #d49b55;
-  background: #121a21;
-  font-size: 9px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--ae-warn-line);
+  background: var(--ae-warn-subtle);
+  font-size: 12px;
 }
 .profileStatus strong {
-  color: #e7b878;
-  text-transform: uppercase;
+  color: var(--ae-warn);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
 }
 .profileStatus span,
 .profileStatus small {
-  color: #8896a0;
+  color: var(--ae-text-2);
+  font-size: 11px;
 }
 
-.metrics {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-.metric {
+/* Takeoff and elevations as a two-column schedule: label left, mono value
+   right on a dotted leader, the note under it (ReadoutRow). */
+.readoutList {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 8px;
-  background: #111920;
-  border: 1px solid #303b45;
-  border-radius: 3px;
-  transition: border-color var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
-.metric:hover {
-  border-color: #44535f;
+/* Consecutive lists (boards, then lighting, then per-type lines) read as
+   groups of one schedule. */
+.readoutList + .readoutList {
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--ae-border);
 }
-.metric span {
-  color: #84939e;
-  font-size: 8px;
-  text-transform: uppercase;
+.readoutRow {
+  display: grid;
+  grid-template-columns: auto minmax(8px, 1fr) auto;
+  align-items: baseline;
+  column-gap: 6px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--ae-divider);
 }
-.metric strong {
-  font: 600 14px var(--font-blueprint);
+.readoutRow:last-child {
+  border-bottom: 0;
 }
-.metric small {
-  color: #697883;
-  font-size: 8px;
+.readoutLabel {
+  grid-column: 1;
+  color: var(--ae-text-2);
+  font-size: 12px;
+  font-weight: 500;
+}
+.readoutLeader {
+  grid-column: 2;
+  align-self: end;
+  height: 1px;
+  margin-bottom: 4px;
+  border-bottom: 1px dotted var(--ae-border-strong);
+}
+.readoutValue {
+  grid-column: 3;
+  color: var(--ae-text);
+  font: 600 12px var(--font-blueprint);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+/* Rows whose label and value are both long: the value drops under its label. */
+.readoutListStacked .readoutRow {
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 1px;
+}
+.readoutListStacked .readoutLeader {
+  display: none;
+}
+.readoutListStacked .readoutValue {
+  grid-column: 1;
+  text-align: left;
+  white-space: normal;
+}
+.readoutNote {
+  grid-column: 1 / -1;
+  color: var(--ae-text-3);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .selectionCard {
   margin-bottom: 10px;
-  padding: 10px 11px;
-  border-radius: var(--radius-xs, 4px);
-  background: #1b252e;
-  box-shadow: inset 3px 0 #e1a960;
+  padding: 10px 12px;
+  border: 1px solid var(--ae-border);
+  border-radius: var(--radius-sm, 5px);
+  background: var(--ae-surface);
+  box-shadow: inset 3px 0 var(--ae-selected-line);
 }
 .selectionCard:last-child {
   margin-bottom: 0;
 }
 .selectionCard h3 {
   margin: 0 0 8px;
-  font: 700 10px/1.2 var(--font-heading);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #f0d3a6;
+  font: 600 13px/1.3 var(--font-heading);
+  color: var(--ae-text);
 }
 .selectionCard p {
   margin: 0 0 6px;
-  color: #8d9aa4;
-  font-size: 10px;
+  color: var(--ae-text-2);
+  font-size: 12px;
   line-height: 1.45;
+}
+.selectionCard > .button {
+  margin-top: 8px;
+}
+
+/* One stored item in a step's list (a ceiling's openings and lights): a plain
+   card, with the selection rule only on the one that is selected. */
+.listCard {
+  margin-top: 10px;
+  padding: 6px 10px 10px;
+  border: 1px solid var(--ae-border);
+  border-radius: var(--radius-sm, 5px);
+  background: var(--ae-bg-quiet);
+}
+.listCard[data-selected='true'] {
+  border-color: var(--ae-selected-line);
+  box-shadow: inset 3px 0 var(--ae-selected-line);
+}
+.listCard > .button {
+  margin-top: 8px;
 }
 
 .emptyState {
@@ -1922,40 +2792,41 @@
   align-items: flex-start;
   gap: 4px;
   padding: 12px;
-  border: 1px dashed #35434e;
-  border-radius: var(--radius-xs, 4px);
-  background: #121b22;
-  color: #8b98a1;
-  font-size: 10px;
+  border: 1px dashed var(--ae-border-strong);
+  border-radius: var(--radius-sm, 5px);
+  background: var(--ae-bg-quiet);
+  color: var(--ae-text-2);
+  font-size: 12px;
   line-height: 1.45;
 }
 .emptyState strong {
-  color: #c8d5dc;
-  font-size: 10px;
+  color: var(--ae-text);
+  font-size: 13px;
+  font-weight: 600;
 }
 .emptyState .glyph {
-  color: #56666f;
+  color: var(--ae-text-3);
 }
 
 .measurements,
 .issues {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
   margin-top: 8px;
 }
 .measurements > div {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 7px;
-  padding: 7px;
-  border-left: 3px solid #d9534f;
-  background: #111920;
-  font-size: 9px;
+  gap: 8px;
+  padding: 7px 9px;
+  border-left: 2px solid var(--ae-danger-line);
+  background: var(--ae-bg-quiet);
+  font-size: 12px;
 }
 .measurements > div[data-status='within_tolerance'] {
-  border-left-color: #42aa80;
+  border-left-color: var(--ae-ok-line);
 }
 .measurements span {
   display: flex;
@@ -1963,70 +2834,78 @@
   flex-direction: column;
 }
 .measurements small {
-  color: #7f8e99;
+  color: var(--ae-text-2);
+  font: 11px var(--font-blueprint);
+}
+.measurements b {
+  font: 600 12px var(--font-blueprint);
 }
 .measurements button {
-  color: #d88178;
+  color: var(--ae-text-3);
   background: transparent;
   border: 0;
+  font-size: 14px;
   cursor: pointer;
 }
 .measurements button:hover {
-  color: #ffd7d1;
+  color: var(--ae-danger);
 }
+/* Checks: a calm list — a thin rule and a small severity label carry the status. */
 .issues > div {
   display: grid;
-  gap: 3px;
-  padding: 7px;
-  border-left: 3px solid #d9534f;
-  background: #111920;
-  font-size: 9px;
+  gap: 2px;
+  padding: 6px 0 6px 10px;
+  border-left: 2px solid var(--ae-danger-line);
+  font-size: 12px;
 }
 .issues > div[data-severity='warning'] {
-  border-left-color: #d9a34c;
+  border-left-color: var(--ae-warn-line);
 }
 .issues strong {
-  color: #e6a39c;
-  font-size: 8px;
-  text-transform: uppercase;
+  color: var(--ae-danger);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+.issues > div[data-severity='warning'] strong {
+  color: var(--ae-warn);
 }
 .issues span {
-  line-height: 1.35;
+  color: var(--ae-text);
+  line-height: 1.4;
 }
 .issues small {
-  color: #6e7e89;
-  font: 8px var(--font-blueprint);
+  color: var(--ae-text-3);
+  font: 11px var(--font-blueprint);
+  overflow-wrap: anywhere;
+}
+.issues .emptyState {
+  margin: 0;
 }
 
 .missing {
   width: min(420px, 90vw);
   margin: auto;
   padding: 24px;
-  border: 1px solid #384651;
-  background: #172029;
+  border: 1px solid var(--ae-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--ae-surface);
+  box-shadow: var(--ae-shadow-pop);
 }
 .missing h2 {
   margin: 0 0 8px;
+  font: 600 16px var(--font-heading);
 }
 .missing p {
-  color: #97a5af;
+  color: var(--ae-text-2);
 }
 
-@media (max-width: 1050px) {
+@media (max-width: 1180px) {
   .body {
-    grid-template-columns: 250px minmax(330px, 1fr) 286px;
+    grid-template-columns: 248px minmax(330px, 1fr) 288px;
   }
   .field {
-    grid-template-columns: 86px minmax(0, 1fr);
-  }
-  .toolButtonLabel {
-    display: none;
-  }
-}
-
-@media (max-height: 760px) {
-  .workspaceViews[data-view='split'] {
-    grid-template-rows: minmax(0, 1fr) minmax(150px, 0.72fr);
+    grid-template-columns: 92px minmax(0, 1fr);
   }
 }
 

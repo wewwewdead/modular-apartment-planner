@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { createFloor, createProject, createSlab, createWall } from '@/domain/models';
 import { createWallDetailing } from '@/domain/wallDetailing';
 import { resolveWallVerticalSpan } from '@/domain/wallFit';
-import { createWallDetailPreviewProject } from './wallDetailPreviewProject';
+import { deriveWallAssemblyLayers, resolveWallAssembly } from '@/domain/wallAssemblies';
+import { createWallDetailPreviewProject, wallFacePreviewFacing } from './wallDetailPreviewProject';
 
 describe('createWallDetailPreviewProject', () => {
   it('isolates the edited wall and its hosted openings for a camera-fitted live preview', () => {
@@ -96,5 +97,48 @@ describe('createWallDetailPreviewProject', () => {
     expect(second.floors[0].walls[0].assembly.detailing.sides.interior.layout.customPanels).toEqual([
       expect.objectContaining({ id: 'panel-a', u: 100, v: 200 }),
     ]);
+  });
+});
+
+describe('wallFacePreviewFacing (docs/wall-fastener-visibility.md §2.1)', () => {
+  const layersOf = (wall) => deriveWallAssemblyLayers(resolveWallAssembly(wall));
+
+  it('points each face out along the normal its boards are built on, in world x/z', () => {
+    const wall = createWall({ x: 0, y: 1000 }, { x: 4000, y: 1000 }, 150, { assembly: { preset: 'fiber_cement' } });
+    const layers = layersOf(wall);
+    const inside = wallFacePreviewFacing(
+      wall,
+      layers.find((layer) => layer.side === 'interior'),
+    );
+    const outside = wallFacePreviewFacing(
+      wall,
+      layers.find((layer) => layer.side === 'exterior'),
+    );
+    // perpendicular((1, 0)) is (0, 1): plan +y, which is world +z.
+    const insideSign = layers.find((layer) => layer.side === 'interior').sign;
+    expect(inside.normalX).toBeCloseTo(0, 9);
+    expect(inside.normalZ).toBe(insideSign);
+    expect(outside.normalZ).toBe(-insideSign);
+    // The plane runs through the middle of the wall.
+    expect(inside).toMatchObject({ pointX: 2000, pointZ: 1000 });
+    expect(outside).toMatchObject({ pointX: 2000, pointZ: 1000 });
+  });
+
+  it('puts the plane through the body of an outboard wall, not its drawn line', () => {
+    const wall = {
+      ...createWall({ x: 0, y: 0 }, { x: 0, y: 3000 }, 150, { assembly: { preset: 'fiber_cement' } }),
+      outboardOffset: 200,
+    };
+    const facing = wallFacePreviewFacing(wall, layersOf(wall)[0]);
+    // perpendicular((0, 1)) is (-1, 0).
+    expect(facing.pointX).toBeCloseTo(-200, 9);
+    expect(facing.pointZ).toBeCloseTo(1500, 9);
+  });
+
+  it('answers null without a wall or a face', () => {
+    const wall = createWall({ x: 0, y: 0 }, { x: 1000, y: 0 }, 150, { assembly: { preset: 'fiber_cement' } });
+    expect(wallFacePreviewFacing(null, layersOf(wall)[0])).toBeNull();
+    expect(wallFacePreviewFacing(wall, null)).toBeNull();
+    expect(wallFacePreviewFacing({ ...wall, end: { ...wall.start } }, layersOf(wall)[0])).toBeNull();
   });
 });

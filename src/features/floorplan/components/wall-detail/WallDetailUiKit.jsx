@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useNumericDraft } from '@/hooks/useNumericDraft';
 import styles from './WallDetailEditor.module.css';
 
@@ -39,6 +39,14 @@ const GLYPHS = {
       <path d="M8 12h8" />
     </>
   ),
+  // A luminaire as a lit disc: the RCP circle with its throw drawn round it, so
+  // it never reads as the screw's slotted head.
+  light: (
+    <>
+      <circle cx="12" cy="12" r="4.2" />
+      <path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7" />
+    </>
+  ),
   measure: (
     <>
       <path d="M3 12h18M4 7v10M20 7v10" />
@@ -67,6 +75,39 @@ const GLYPHS = {
       <path d="M20 10H10a6 6 0 0 0 0 12h4" />
     </>
   ),
+  back: <path d="M19 12H5M11 6l-6 6 6 6" />,
+  close: <path d="M6 6l12 12M18 6L6 18" />,
+  download: <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />,
+  focus: <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" />,
+  layers: (
+    <>
+      <path d="M12 4l9 5-9 5-9-5z" />
+      <path d="M3 14l9 5 9-5" />
+    </>
+  ),
+  help: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.6 9.4a2.5 2.5 0 0 1 4.8 1c0 1.7-2.4 2.1-2.4 3.6" />
+      <circle cx="12" cy="17.2" r="0.6" fill="currentColor" />
+    </>
+  ),
+  minus: <path d="M6 12h12" />,
+  plus: <path d="M12 6v12M6 12h12" />,
+  fit: (
+    <>
+      <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" />
+      <rect x="9" y="9" width="6" height="6" />
+    </>
+  ),
+  alert: (
+    <>
+      <path d="M12 4l9 16H3z" />
+      <path d="M12 10v4" />
+      <circle cx="12" cy="17" r="0.6" fill="currentColor" />
+    </>
+  ),
+  next: <path d="M5 12h14M13 6l6 6-6 6" />,
 };
 
 export function ToolGlyph({ name }) {
@@ -196,12 +237,18 @@ export function Toggle({ checked, onChange, label }) {
   );
 }
 
-export function Metric({ label, value, note }) {
+/**
+ * One derived number as a schedule line: label left, the value set in the
+ * blueprint face on a dotted leader, its note underneath in secondary text.
+ * Computed values are read, never typed, so nothing here looks like a field.
+ */
+export function ReadoutRow({ label, value, note }) {
   return (
-    <div className={styles.metric}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      {note ? <small>{note}</small> : null}
+    <div className={styles.readoutRow}>
+      <span className={styles.readoutLabel}>{label}</span>
+      <span className={styles.readoutLeader} aria-hidden="true" />
+      <strong className={styles.readoutValue}>{value}</strong>
+      {note ? <small className={styles.readoutNote}>{note}</small> : null}
     </div>
   );
 }
@@ -218,7 +265,12 @@ export function ToolbarButton({ active = false, danger = false, children, ...pro
   );
 }
 
-/** Icon + label + shortcut badge. The single visual language for every canvas tool. */
+/**
+ * Icon + label + shortcut key. The single visual language for every canvas tool.
+ * The key is a quiet hint beside the label, not a boxed badge; it is in the
+ * tooltip too. `iconOnly` drops both for the toolbar's Undo / Redo / Delete,
+ * whose names live in the tooltip and the accessible name.
+ */
 export function ToolButton({
   icon,
   label,
@@ -228,6 +280,7 @@ export function ToolButton({
   danger = false,
   disabled = false,
   toggle = true,
+  iconOnly = false,
   onClick,
 }) {
   return (
@@ -235,7 +288,7 @@ export function ToolButton({
       type="button"
       className={`${styles.toolButton} ${active ? styles.toolButtonActive : ''} ${
         danger ? styles.toolButtonDanger : ''
-      }`}
+      } ${iconOnly ? styles.toolButtonIconOnly : ''}`}
       title={title}
       aria-label={title}
       aria-pressed={toggle ? active : undefined}
@@ -244,8 +297,200 @@ export function ToolButton({
       onClick={onClick}
     >
       <ToolGlyph name={icon} />
-      <span className={styles.toolButtonLabel}>{label}</span>
-      {shortcut ? <kbd className={styles.kbd}>{shortcut}</kbd> : null}
+      {iconOnly ? null : <span className={styles.toolButtonLabel}>{label}</span>}
+      {shortcut && !iconOnly ? (
+        <span className={styles.toolKey} aria-hidden="true">
+          {shortcut}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+/** A square glyph button for chrome actions (zoom, close, help). The name is the tooltip and the accessible name. */
+export function IconButton({ icon, label, title, active, danger = false, className = '', ...props }) {
+  return (
+    <button
+      type="button"
+      className={`${styles.iconButton} ${danger ? styles.iconButtonDanger : ''} ${className}`}
+      title={title || label}
+      aria-label={label}
+      aria-pressed={active === undefined ? undefined : active}
+      {...props}
+    >
+      <ToolGlyph name={icon} />
+    </button>
+  );
+}
+
+/** A row of mutually exclusive choices drawn as one control — the workspace view switch. */
+export function SegmentedControl({ label, options, value, onChange, className = '' }) {
+  return (
+    <div className={`${styles.segmentedControl} ${className}`} role="group" aria-label={label}>
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            className={`${styles.segmentedOption} ${selected ? styles.segmentedOptionActive : ''}`}
+            aria-pressed={selected}
+            title={option.title}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/*
+ * Popovers and the editors' Escape key.
+ *
+ * Both assembly editors listen for keys on `window` in the capture phase and
+ * read Escape as "cancel the gesture, then return to Select". An open popover
+ * has to take that Escape for itself — close, and nothing else — while a closed
+ * one must not swallow it. The editor's listener is registered first, so it
+ * asks `isPopoverOpen()` and stands aside; the popover's own listener (only
+ * attached while it is open) then claims the key outright, so a bubble-phase
+ * Escape handler (the trace cancel) never sees it either.
+ */
+const openPopovers = new Set();
+
+/** True while any kit popover is open: the editors' Escape handlers stand aside for it. */
+export function isPopoverOpen() {
+  return openPopovers.size > 0;
+}
+
+/**
+ * A button that opens a small panel under itself: the Export and Layers menus
+ * and the "?" note. The panel stays mounted and `hidden` while closed, like a
+ * section body, so what it holds is always in the DOM. It closes on Escape, on
+ * a pointer-down outside it, and — for menus — when an item is chosen.
+ */
+export function Popover({
+  label,
+  icon,
+  title,
+  ariaLabel,
+  panelLabel,
+  kind = 'dialog',
+  align = 'end',
+  caret = true,
+  indicator = false,
+  triggerClassName = '',
+  panelClassName = '',
+  children,
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
+  const focusFirstRef = useRef(false);
+  const panelId = useId();
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const token = {};
+    openPopovers.add(token);
+    if (focusFirstRef.current) {
+      focusFirstRef.current = false;
+      panelRef.current?.querySelector('button:not(:disabled), input, select, [tabindex="0"]')?.focus();
+    }
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    const onPointerDown = (event) => {
+      if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
+    };
+    const onResize = () => setOpen(false);
+    window.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('resize', onResize);
+    return () => {
+      openPopovers.delete(token);
+      window.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [open]);
+
+  // A menu closes once one of its items has done its work.
+  const handlePanelClick = (event) => {
+    if (kind !== 'menu' || !event.target.closest?.('[role="menuitem"]')) return;
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
+
+  // Up / Down walk a menu's items; Home / End jump to its ends.
+  const handlePanelKeyDown = (event) => {
+    if (kind !== 'menu') return;
+    const items = Array.from(panelRef.current?.querySelectorAll('[role="menuitem"]:not(:disabled)') || []);
+    if (!items.length) return;
+    const index = items.indexOf(document.activeElement);
+    let next = null;
+    if (event.key === 'ArrowDown') next = items[(index + 1) % items.length];
+    else if (event.key === 'ArrowUp') next = items[(index - 1 + items.length) % items.length];
+    else if (event.key === 'Home') next = items[0];
+    else if (event.key === 'End') next = items[items.length - 1];
+    if (!next) return;
+    event.preventDefault();
+    next.focus();
+  };
+
+  return (
+    <div className={styles.popover} ref={rootRef} data-open={open ? 'true' : 'false'}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`${styles.popoverTrigger} ${label ? '' : styles.popoverTriggerIcon} ${triggerClassName}`}
+        title={title}
+        aria-label={ariaLabel}
+        aria-haspopup={kind === 'menu' ? 'menu' : 'dialog'}
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={(event) => {
+          // A keyboard click (Enter / Space) carries no pointer detail: take focus into the panel.
+          focusFirstRef.current = !open && event.detail === 0;
+          setOpen((value) => !value);
+        }}
+      >
+        {icon ? <ToolGlyph name={icon} /> : null}
+        {label ? <span>{label}</span> : null}
+        {indicator ? <span className={styles.popoverIndicator} aria-hidden="true" /> : null}
+        {caret && label ? <Chevron /> : null}
+      </button>
+      <div
+        ref={panelRef}
+        id={panelId}
+        className={`${styles.popoverPanel} ${align === 'start' ? styles.popoverPanelStart : ''} ${panelClassName}`}
+        role={kind === 'menu' ? 'menu' : 'dialog'}
+        aria-label={panelLabel}
+        hidden={!open}
+        onKeyDown={handlePanelKeyDown}
+        onClick={handlePanelClick}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** One choice in a `kind="menu"` Popover; choosing it closes the menu. */
+export function MenuItem({ icon, label, detail, onSelect, ...props }) {
+  return (
+    <button type="button" role="menuitem" className={styles.menuItem} onClick={() => onSelect?.()} {...props}>
+      {icon ? <ToolGlyph name={icon} /> : null}
+      <span className={styles.menuItemText}>
+        <span>{label}</span>
+        {detail ? <small>{detail}</small> : null}
+      </span>
     </button>
   );
 }
@@ -300,60 +545,84 @@ export function AdvancedGroup({ label = 'Advanced', children }) {
   );
 }
 
-/** Collapsible panel section. `step` renders the numbered workflow badge. */
-export function CollapsibleSection({ id, step, title, summary, badge, badgeTone, open, onToggle, innerRef, children }) {
+/**
+ * Collapsible panel section. `step` renders the numbered workflow badge;
+ * `optional` marks an un-numbered step that keeps its place in the order.
+ * `next` ({ label, onClick }) ends the open body with a "Next: …" button, and
+ * `collapsible={false}` makes a section that is always open (the inspector's
+ * Selection). The header lays out as: badge · titles (flex) · count · chevron
+ * at the far right, with or without a step number.
+ */
+export function CollapsibleSection({
+  id,
+  step,
+  optional = false,
+  title,
+  summary,
+  badge,
+  badgeTone,
+  open,
+  onToggle,
+  innerRef,
+  next = null,
+  collapsible = true,
+  children,
+}) {
   const bodyId = `wall-detail-${id}`;
+  const headerContent = (
+    <>
+      {step ? <span className={styles.sectionStep}>{step}</span> : null}
+      <span className={styles.sectionTitles}>
+        <span className={styles.sectionTitle}>
+          {title}
+          {optional ? <span className={styles.sectionOptional}>Optional</span> : null}
+        </span>
+        {summary ? <small>{summary}</small> : null}
+      </span>
+      {badge ? (
+        <span className={styles.sectionBadge} data-tone={badgeTone || 'neutral'}>
+          {badge}
+        </span>
+      ) : null}
+      {collapsible ? <Chevron /> : null}
+    </>
+  );
+  const isOpen = collapsible ? open : true;
   return (
-    <section className={styles.collapsible} data-open={open ? 'true' : 'false'} ref={innerRef}>
+    <section
+      className={styles.collapsible}
+      data-open={isOpen ? 'true' : 'false'}
+      data-static={collapsible ? undefined : 'true'}
+      data-step={step || optional ? 'true' : undefined}
+      ref={innerRef}
+    >
       <h2 className={styles.sectionHeading}>
-        <button
-          type="button"
-          className={styles.sectionHeader}
-          aria-expanded={open}
-          aria-controls={bodyId}
-          onClick={onToggle}
-        >
-          {step ? <span className={styles.sectionStep}>{step}</span> : null}
-          <span className={styles.sectionTitles}>
-            <span className={styles.sectionTitle}>{title}</span>
-            {summary ? <small>{summary}</small> : null}
-          </span>
-          {badge ? (
-            <span className={styles.sectionBadge} data-tone={badgeTone || 'neutral'}>
-              {badge}
-            </span>
-          ) : null}
-          <Chevron />
-        </button>
+        {collapsible ? (
+          <button
+            type="button"
+            className={styles.sectionHeader}
+            aria-expanded={open}
+            aria-controls={bodyId}
+            onClick={onToggle}
+          >
+            {headerContent}
+          </button>
+        ) : (
+          <span className={`${styles.sectionHeader} ${styles.sectionHeaderStatic}`}>{headerContent}</span>
+        )}
       </h2>
-      <div className={styles.sectionBody} id={bodyId} hidden={!open}>
+      <div className={styles.sectionBody} id={bodyId} hidden={!isOpen}>
         {children}
+        {next ? (
+          <div className={styles.stepNextRow}>
+            <button type="button" className={styles.stepNext} onClick={next.onClick}>
+              <span>Next: {next.label}</span>
+              <ToolGlyph name="next" />
+            </button>
+          </div>
+        ) : null}
       </div>
     </section>
-  );
-}
-
-/** Compact numbered map of the whole job, so nobody has to guess the order. */
-export function StepStrip({ steps, isOpen, onSelect }) {
-  return (
-    <nav className={styles.stepStrip} aria-label="Wall detailing workflow">
-      <span className={styles.stepStripLabel}>Workflow</span>
-      <ol>
-        {steps.map((step, index) => (
-          <li key={step.id}>
-            <button
-              type="button"
-              data-open={isOpen(step.id) ? 'true' : 'false'}
-              title={`${index + 1}. ${step.title} — ${step.hint}`}
-              onClick={() => onSelect(step.id)}
-            >
-              <span className={styles.stepIndex}>{index + 1}</span>
-              <span className={styles.stepName}>{step.short}</span>
-            </button>
-          </li>
-        ))}
-      </ol>
-    </nav>
   );
 }
 

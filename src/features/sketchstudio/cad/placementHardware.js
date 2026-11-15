@@ -252,33 +252,32 @@ export function hardwareReplace(draft) {
 
 // ---------------------------------------------------------------- finish
 
-// Enter / Seat in N holes / double-click: the whole result in one step. Every
-// pose comes from the chosen holes (the context is not needed; kept in the
-// signature so all placement rules read alike).
-export function finishHardware(draft, _ctx = null) {
-  const p = draft.placement;
-  const holes = chosenHoles(draft);
+/**
+ * The model records that seat one hardware part in `holes` (chosen-hole
+ * records: instanceId, featureId, index, side, point, normal): an instance
+ * per hole, posed on its opening, and one concentric connection each (which
+ * hole of a row, Phase K; the far opening, Phase Q). The kernel then holds
+ * every instance on its hole. Used by Add hardware (finishHardware) and the
+ * kiosk example's fasteners (shopExamples.js), so a fastener seated either
+ * way is the same data. `part`: the hardware part
+ * already made (else one is created for `feature`); `firstInstance`: the
+ * first instance's record to reuse; `previous`: hole key → an instance id to
+ * keep; `offset`: the axial offset of every connection. Returns { part,
+ * instances, connections }.
+ */
+export function seatHardware({ feature, holes, part = null, firstInstance = null, previous = null, offset = 0 }) {
   if (!holes.length) throw new Error(NO_HOLES);
-  const feature = draft.feature || { ...p.hardware, id: uid('hardware') };
-  const created = draft.newPart ? null : createHardware(feature);
-  const newPart = draft.newPart || { ...created.part, features: [] };
-  // An instance keeps its id while its hole stays chosen (Remove in Shape
-  // rebuilds the rest); the first reuses the draft's new instance.
-  const previous = new Map(
-    (draft.connections || []).map((c) => [
-      holeKey({ instanceId: c.to, featureId: c.toFeatureId, index: c.holeIndex }),
-      c.from,
-    ]),
-  );
-  const firstId = draft.newInstance?.id || created?.instance.id || uid('instance');
+  const created = part ? null : createHardware(feature);
+  const newPart = part || { ...created.part, features: [] };
+  const firstId = firstInstance?.id || created?.instance.id || uid('instance');
   const used = new Set([firstId]);
   const instances = holes.map((hole, i) => {
-    let id = i === 0 ? firstId : previous.get(holeKey(hole));
+    let id = i === 0 ? firstId : previous?.get(holeKey(hole));
     if (i > 0 && (!id || used.has(id))) id = uid('instance');
     used.add(id);
     const pose = frameToInstance(placeFrame(hole.point, hole.normal));
     if (i === 0)
-      return { ...(draft.newInstance || created?.instance || { visible: true }), id, partId: newPart.id, ...pose };
+      return { ...(firstInstance || created?.instance || { visible: true }), id, partId: newPart.id, ...pose };
     return { id, partId: newPart.id, ...pose, visible: true };
   });
   const connections = holes.map((hole, i) => ({
@@ -293,8 +292,39 @@ export function finishHardware(draft, _ctx = null) {
     ...(hole.index > 0 ? { holeIndex: hole.index } : {}),
     // Seated on the far opening (Phase Q); the drill side writes no key.
     ...(hole.side === 'far' ? { side: 'far' } : {}),
-    offset: draft.connections?.[0]?.offset ?? 0,
+    offset,
   }));
+  return { part: newPart, instances, connections };
+}
+
+// Enter / Seat in N holes / double-click: the whole result in one step. Every
+// pose comes from the chosen holes (the context is not needed; kept in the
+// signature so all placement rules read alike).
+export function finishHardware(draft, _ctx = null) {
+  const p = draft.placement;
+  const holes = chosenHoles(draft);
+  if (!holes.length) throw new Error(NO_HOLES);
+  const feature = draft.feature || { ...p.hardware, id: uid('hardware') };
+  // An instance keeps its id while its hole stays chosen (Remove in Shape
+  // rebuilds the rest); the first reuses the draft's new instance.
+  const previous = new Map(
+    (draft.connections || []).map((c) => [
+      holeKey({ instanceId: c.to, featureId: c.toFeatureId, index: c.holeIndex }),
+      c.from,
+    ]),
+  );
+  const {
+    part: newPart,
+    instances,
+    connections,
+  } = seatHardware({
+    feature,
+    holes,
+    part: draft.newPart || null,
+    firstInstance: draft.newInstance || null,
+    previous,
+    offset: draft.connections?.[0]?.offset ?? 0,
+  });
   const first = holes[0];
   const frame = placeFrame(first.point, first.normal);
   return {

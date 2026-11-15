@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { RevisionWorker } from './workerClient.js';
+import { kernelPayload, sameKernelInput } from './model.js';
 
 // A preview switched off keeps its warm workers this long before letting them
 // go, so the WASM heaps are still freed when it stays off.
@@ -13,7 +14,14 @@ export default function useCadModel(model, enabled = true) {
   }, [model]);
   const sequence = useRef(0);
   const [attempt, retry] = useState(0);
+  // The Retry that the last build ran for: a retry always rebuilds.
+  const builtAttempt = useRef(0);
   const [state, setState] = useState({ status: 'idle', snapshot: null, source: null });
+  // The state as of the last render, for the build effect's rebuild rule.
+  const shown = useRef(state);
+  useLayoutEffect(() => {
+    shown.current = state;
+  }, [state]);
   // OpenCascade has loaded in the current worker; a restarted worker loads it again.
   const [kernelAwake, setKernelAwake] = useState(false);
   useEffect(() => {
@@ -37,6 +45,26 @@ export default function useCadModel(model, enabled = true) {
     };
   }, []);
   useEffect(() => {
+    // Kernel-inert edits (docs/sketch-studio-fab-shop.md §4.3): when only
+    // finishes, prints or the fabrication settings changed since the snapshot on show was built,
+    // it stays: the source moves to this model under the same revision, so
+    // request() (drawings, exports) keeps working without a rebuild.
+    const current = shown.current;
+    if (
+      enabled &&
+      current.status === 'ready' &&
+      current.source &&
+      current.source !== model &&
+      current.revision === sequence.current &&
+      builtAttempt.current === attempt &&
+      sameKernelInput(current.source, model)
+    ) {
+      setState((old) =>
+        old.status === 'ready' && old.revision === current.revision ? { ...old, source: model } : old,
+      );
+      return;
+    }
+    builtAttempt.current = attempt;
     let active = true;
     const revision = ++sequence.current;
     const { kernel, solver } = clients.current;
@@ -64,9 +92,11 @@ export default function useCadModel(model, enabled = true) {
       if (revision !== sequence.current) return;
       setState((old) => ({ ...old, status: 'building', error: null }));
       try {
+        // The shop's records stay on the main thread (model.js kernelPayload).
+        const input = kernelPayload(model);
         const solved = model.sketches.some((s) => s.constrained)
-          ? await solver.request('solve', model, revision)
-          : { model, reports: [] };
+          ? await solver.request('solve', input, revision)
+          : { model: input, reports: [] };
         if (!active || revision !== sequence.current) return;
         const snapshot = await kernel.request('build', solved.model, revision);
         if (active && revision === sequence.current)
@@ -83,15 +113,18 @@ export default function useCadModel(model, enabled = true) {
       solver.supersede();
     };
   }, [model, attempt, enabled]);
-  const ready = enabled && state.status === 'ready' && state.source === model;
+  // A kernel-inert edit is ready at once: the effect above moves the source
+  // after this render, and nothing flashes "rebuilding" in between.
+  const ready = enabled && state.status === 'ready' && sameKernelInput(state.source, model);
   const request = useCallback(
     async (type, payload = null) => {
-      if (!ready || state.source !== currentModel.current)
+      if (!ready || !sameKernelInput(state.source, currentModel.current))
         throw new Error('Wait for the current model to rebuild before exporting or inspecting.');
       const source = currentModel.current;
       try {
         const result = await clients.current.kernel.request(type, payload, state.revision);
-        if (source !== currentModel.current) throw new Error('Model changed during the operation. Run it again.');
+        if (!sameKernelInput(source, currentModel.current))
+          throw new Error('Model changed during the operation. Run it again.');
         return result;
       } catch (error) {
         // Only a dead worker (crashed, timed out) takes the whole workspace

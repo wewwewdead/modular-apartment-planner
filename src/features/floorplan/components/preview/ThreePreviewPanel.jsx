@@ -24,7 +24,7 @@ import {
 } from './renderStyle';
 import CompassOverlay from '@/features/floorplan/components/CompassOverlay';
 import { CameraIcon, ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
-import { VIEW_PRESET_OPTIONS } from './previewCameraMath';
+import { VIEW_PRESET_OPTIONS, resolveFacing } from './previewCameraMath';
 import { PALETTE_LOOKS } from './materials';
 import { resolveRoofAppearance } from '@/domain/roofCoveringCatalog';
 import { isTypingTarget } from '@/utils/keyboard';
@@ -122,6 +122,14 @@ function useHeldWhileSuspended(value, suspended) {
  * so the timeline carries on from the Suspense fallback the caller showed
  * first. `paneKind` names the pane for scripts (`data-preview-pane`), and
  * `placeholderTone` matches the ground the picture will arrive on.
+ *
+ * `faceNormalX/Z` and `facePlaneX/Z` are the wall editor's face being edited:
+ * its outward normal and a point on the wall's centre plane, in world x/z
+ * (docs/wall-fastener-visibility.md §2.1). Four numbers rather than an object,
+ * for the same reason as the selection — the memo has to hold while the
+ * elevation beside it pans. The first fit and Reset View look at that face,
+ * and a change turns the camera round only if it is behind the wall. Absent,
+ * the pane fits exactly as it always has.
  */
 function ThreePreviewPanelBody({
   onRetryViewport,
@@ -142,6 +150,10 @@ function ThreePreviewPanelBody({
   silhouette = null,
   loadingSince,
   placeholderTone = 'dark',
+  faceNormalX,
+  faceNormalZ,
+  facePlaneX,
+  facePlaneZ,
 }) {
   const assemblyDriven = assemblySelection !== undefined;
   // Taken apart here so the overlay effect depends on three primitives: a caller
@@ -436,6 +448,12 @@ function ThreePreviewPanelBody({
     };
   }, []);
 
+  // Before the scene build below, deliberately: the first world's fit is the
+  // one that has to know which face to look at.
+  useEffect(() => {
+    viewportRef.current?.setFacing?.(resolveFacing(faceNormalX, faceNormalZ, facePlaneX, facePlaneZ));
+  }, [faceNormalX, faceNormalZ, facePlaneX, facePlaneZ]);
+
   // Scene structure effect: rebuild only when project data / phase filter / floor visibility changes
   const meshMapRef = useRef(null);
   const lastBuildAt = useRef(0);
@@ -627,6 +645,147 @@ function ThreePreviewPanelBody({
           ? 'Realistic: sky lighting, ambient occlusion, soft sun shadows. The image keeps refining for a moment after the camera stops.'
           : 'Shaded: flat drawing view with outlines and the ground grid.';
 
+  const lightingToggle = (
+    <div className={styles.modeToggle} role="group" aria-label="Preview interior lighting">
+      <button
+        type="button"
+        className={interiorLightsOn ? styles.modeButtonActive : styles.modeButton}
+        onClick={() => setInteriorLightsOn((on) => !on)}
+        title="Switch the ceiling light fixtures on or off in the preview"
+        aria-pressed={interiorLightsOn}
+      >
+        Lights
+      </button>
+      <button
+        type="button"
+        className={nightMode ? styles.modeButtonActive : styles.modeButton}
+        onClick={() => setNightMode((on) => !on)}
+        title="Night: no sun and no daylight, so the fixtures light the model on their own"
+        aria-pressed={nightMode}
+      >
+        Night
+      </button>
+    </div>
+  );
+  const viewModeToggle = (
+    <div className={styles.modeToggle} role="group" aria-label={VIEW_MODE_COPY.groupLabel}>
+      {VIEW_MODE_ORDER.map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          className={viewMode === mode ? styles.modeButtonActive : styles.modeButton}
+          onClick={() => setViewMode(mode)}
+          title={VIEW_MODE_COPY[mode].title}
+          aria-label={VIEW_MODE_COPY[mode].name}
+          aria-pressed={viewMode === mode}
+        >
+          {VIEW_MODE_COPY[mode].label}
+        </button>
+      ))}
+    </div>
+  );
+  const renderStyleSelect = (
+    <select
+      className={styles.floorSelect}
+      value={renderStyle}
+      onChange={(e) => setRenderStyle(e.target.value)}
+      title="Realistic adds sky lighting, ambient occlusion and soft sun shadows; Shaded is the flat drawing view."
+      aria-label="Preview render style"
+    >
+      {Object.entries(RENDER_STYLE_PRESETS).map(([name, preset]) => (
+        <option key={name} value={name}>
+          {preset.label}
+        </option>
+      ))}
+    </select>
+  );
+
+  /*
+   * Inside an assembly editor the pane is a working view of one wall or
+   * ceiling beside its drawing (docs/assembly-editor-ui.md §2.5): one compact
+   * row of the controls that change the picture, and nothing that only means
+   * something for the whole model — no title, no Inspect / Walk, no floor
+   * scope, no inspect card, no compass, no footer (its orbit hint is Reset
+   * view's tooltip). The compass's needle ref is null-safe in the frame loop.
+   * Chrome only: the view state, the scene and its cache are the same pane's.
+   */
+  if (assemblyDriven) {
+    return (
+      <section
+        ref={sectionRef}
+        className={`${styles.panel} ${styles.panelCompact} ${className}`}
+        data-preview-pane={paneKind}
+        data-view-mode={viewMode}
+        data-loading-state={firstPictureState}
+        aria-busy={firstPictureState === 'ready' || firstPictureState === 'error' ? 'false' : 'true'}
+        data-roof-colour={roofColourHex}
+        data-closure-colour={closureColourHex}
+      >
+        <div className={styles.headerCompact}>
+          {viewModeToggle}
+          {lightingToggle}
+          {renderStyleSelect}
+          <button
+            type="button"
+            className={styles.button}
+            onClick={() => viewportRef.current?.resetView()}
+            title={`Put the camera back on the whole piece · ${primaryFooter}`}
+          >
+            {resetLabel}
+          </button>
+        </div>
+
+        <div
+          className={styles.viewportWrap}
+          // Focusable from a click, never by Tab, so the X key keeps working
+          // after the pointer has left the picture for the pane's own controls.
+          tabIndex={-1}
+          onPointerDown={(event) => {
+            if (!event.currentTarget.contains(document.activeElement)) {
+              event.currentTarget.focus({ preventScroll: true });
+            }
+          }}
+          onPointerEnter={() => {
+            hoveredRef.current = true;
+          }}
+          onPointerLeave={() => {
+            hoveredRef.current = false;
+          }}
+        >
+          <div ref={containerRef} className={styles.viewport} />
+          <PanePlaceholder
+            overlay
+            tone={placeholderTone}
+            active={firstPictureState !== 'ready'}
+            state={firstPictureState === 'ready' ? 'loading' : firstPictureState}
+            label={placeholderLabel}
+            detail={placeholderDetail}
+            showDetail={firstPictureState === 'compiling' && Boolean(placeholderDetail)}
+            silhouette={silhouette}
+            since={loadingSince}
+            error={viewportError ? { message: LOADING_COPY.previewFailed, onRetry: onRetryViewport } : null}
+          />
+          <LoadingBar active={catchingUp} placement="region" tone={placeholderTone} />
+          <LoadingPill active={catchingUp} label={LOADING_COPY.catchingUp} placement="region" tone={placeholderTone} />
+          {refining ? (
+            <span className={styles.refining} role="status">
+              <Spinner />
+              {LOADING_COPY.refining}
+            </span>
+          ) : null}
+          {!sceneDescriptor.hasVisibleObjects && (
+            <div className={styles.emptyState}>
+              <span className={styles.emptyTitle}>Scene Empty</span>
+              <span className={styles.emptyBody}>
+                Add walls, slab, columns, beams, stairs, doors, or windows to populate the read-only preview.
+              </span>
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section
       ref={sectionRef}
@@ -666,54 +825,9 @@ function ThreePreviewPanelBody({
               Walk
             </button>
           </div>
-          <div className={styles.modeToggle} role="group" aria-label="Preview interior lighting">
-            <button
-              type="button"
-              className={interiorLightsOn ? styles.modeButtonActive : styles.modeButton}
-              onClick={() => setInteriorLightsOn((on) => !on)}
-              title="Switch the ceiling light fixtures on or off in the preview"
-              aria-pressed={interiorLightsOn}
-            >
-              Lights
-            </button>
-            <button
-              type="button"
-              className={nightMode ? styles.modeButtonActive : styles.modeButton}
-              onClick={() => setNightMode((on) => !on)}
-              title="Night: no sun and no daylight, so the fixtures light the model on their own"
-              aria-pressed={nightMode}
-            >
-              Night
-            </button>
-          </div>
-          <div className={styles.modeToggle} role="group" aria-label={VIEW_MODE_COPY.groupLabel}>
-            {VIEW_MODE_ORDER.map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                className={viewMode === mode ? styles.modeButtonActive : styles.modeButton}
-                onClick={() => setViewMode(mode)}
-                title={VIEW_MODE_COPY[mode].title}
-                aria-label={VIEW_MODE_COPY[mode].name}
-                aria-pressed={viewMode === mode}
-              >
-                {VIEW_MODE_COPY[mode].label}
-              </button>
-            ))}
-          </div>
-          <select
-            className={styles.floorSelect}
-            value={renderStyle}
-            onChange={(e) => setRenderStyle(e.target.value)}
-            title="Realistic adds sky lighting, ambient occlusion and soft sun shadows; Shaded is the flat drawing view."
-            aria-label="Preview render style"
-          >
-            {Object.entries(RENDER_STYLE_PRESETS).map(([name, preset]) => (
-              <option key={name} value={name}>
-                {preset.label}
-              </option>
-            ))}
-          </select>
+          {lightingToggle}
+          {viewModeToggle}
+          {renderStyleSelect}
           <select
             className={styles.floorSelect}
             value={previewScope}

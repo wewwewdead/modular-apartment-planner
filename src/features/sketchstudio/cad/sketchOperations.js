@@ -1,5 +1,6 @@
 import { createPart, uid } from './model.js';
-import { entitiesToProfile, profileToEntities } from './sketchProfile.js';
+import { entitiesToProfile, profileToEntities, splitOutlines } from './sketchProfile.js';
+import { splitDimensions } from './sketchDimensions.js';
 import {
   frameToInstance,
   frameToSketchFields,
@@ -13,15 +14,20 @@ import {
 // Model sketch entry for a finished in-viewport sketch. A new sketch is stored
 // in world coordinates on its frame; an edited one keeps its stored plane
 // (it may already be in a part's coordinates), only the drawing changes.
-export function sketchFromSession({ session, entities, existing, name }) {
+// `dimensions` (docs/sketch-studio-sketch-dimensions.md §3.1): the key is
+// there only when there are any, so an edit that removes the last one drops it.
+export function sketchFromSession({ session, entities, existing, name, dimensions = [] }) {
   const { profile, problems, closed } = entitiesToProfile(entities);
   if (!profile) throw new Error(problems[0] || 'Draw a closed outline first.');
-  if (existing)
+  const kept = dimensions.length ? { dimensions } : {};
+  if (existing) {
+    const { dimensions: _stored, ...rest } = existing;
     return {
-      sketch: { ...existing, profile, entities, primitives: existing.primitives || [], constrained: false },
+      sketch: { ...rest, profile, entities, ...kept, primitives: existing.primitives || [], constrained: false },
       problems,
       closed,
     };
+  }
   return {
     sketch: {
       id: uid('sketch'),
@@ -29,6 +35,7 @@ export function sketchFromSession({ session, entities, existing, name }) {
       ...frameToSketchFields(session.frame),
       profile,
       entities,
+      ...kept,
       support: session.support,
       primitives: [],
       constrained: false,
@@ -36,6 +43,53 @@ export function sketchFromSession({ session, entities, existing, name }) {
     problems,
     closed,
   };
+}
+
+// A sketch finished for the shop (docs/sketch-studio-outline-edit-sheet-nest.md
+// §3.4): every separate outline drawn is its own blank. The first group
+// (the largest outline, with whatever belongs to no outline) is the session's
+// sketch — an edited one keeps its id, name and plane; each other group is a
+// new sketch on the same plane fields, named "{name} · 2", "{name} · 3"…, the
+// first names not in `taken`. An edited sketch stays the outline it was: the
+// group holding most of the entities it was opened with comes first, so a
+// larger outline drawn beside a cut part's blank never becomes that part.
+// Each sketch keeps the dimensions that hang on its own outline
+// (splitDimensions; one hanging on none stays with the first).
+// Returns sketchFromSession's result plus `extras`.
+export function outlineSketches({ session, entities, existing, name, taken = [], dimensions = [] }) {
+  const groups = splitOutlines(entities);
+  if (existing && groups.length > 1) {
+    const opened = new Set((session.entities || []).map((e) => e.id));
+    const kept = (group) => group.filter((e) => opened.has(e.id)).length;
+    const own = groups.reduce((best, group, index) => (kept(group) > kept(groups[best]) ? index : best), 0);
+    if (own) groups.unshift(...groups.splice(own, 1));
+  }
+  const lists = splitDimensions(groups, dimensions);
+  const first = sketchFromSession({ session, entities: groups[0], existing, name, dimensions: lists[0] });
+  const base = first.sketch.name;
+  const used = new Set([...taken, base]);
+  let n = 2;
+  const extras = groups.slice(1).map((group, index) => {
+    while (used.has(`${base} · ${n}`)) n++;
+    const extraName = `${base} · ${n}`;
+    used.add(extraName);
+    const { plane, origin, normal, xDirection, support } = first.sketch;
+    return clean({
+      id: uid('sketch'),
+      name: extraName,
+      plane,
+      origin,
+      normal,
+      xDirection,
+      profile: entitiesToProfile(group).profile,
+      entities: group,
+      dimensions: lists[index + 1].length ? lists[index + 1] : undefined,
+      support,
+      primitives: [],
+      constrained: false,
+    });
+  });
+  return { ...first, extras };
 }
 
 // Strip undefined plane fields so JSON stays tidy.

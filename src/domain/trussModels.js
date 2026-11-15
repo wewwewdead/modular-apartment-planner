@@ -4,6 +4,7 @@ import { getDefaultActiveFloorId, getFloorTopElevation, getProjectFloor } from '
 import { deriveBeamSupportedInstanceGeometry } from '@/truss/beamSupports';
 import { normalizePlanLengthScale, normalizePlanOffset, normalizeRotationDegrees } from '@/truss/systemTransform';
 import { normalizeRoofColour } from './roofCoveringCatalog';
+import { reuseArrayIfSameElements, reuseIfEqual } from './structuralSharing';
 
 const TRUSS_FAMILIES = new Set(['shed', 'gable', 'flat']);
 const TRUSS_SHAPES = new Set([
@@ -834,9 +835,16 @@ export function syncProjectTrussSystems(project) {
   if (!project) return project;
 
   const catalog = getDefaultTrussTypes();
-  const normalizedTrussSystems = (project.trussSystems || [])
-    .map((trussSystem) => syncTrussSystemGeometry(trussSystem, project, catalog))
-    .filter(Boolean);
+  // A system the sync leaves as it was keeps its identity (structuralSharing.js):
+  // the truss geometry and roof attachment memos, and the 3D preview's floor
+  // cache, are keyed on it, and an edit elsewhere in the building must not look
+  // to them like a new truss system.
+  const normalizedTrussSystems = reuseArrayIfSameElements(
+    project.trussSystems,
+    (project.trussSystems || [])
+      .map((trussSystem) => reuseIfEqual(trussSystem, syncTrussSystemGeometry(trussSystem, project, catalog)))
+      .filter(Boolean),
+  );
 
   const validTrussIds = new Set(normalizedTrussSystems.map((entry) => entry.id));
   const roofSystem =

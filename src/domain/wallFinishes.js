@@ -282,6 +282,29 @@ export function parseWallFinishMaterialKey(key) {
   return course ? { ...parsed, course } : null;
 }
 
+const TONAL_FASTENER_KEY_PREFIX = 'wallFastenerTonal:';
+
+/**
+ * The 3D palette key of a tonal ("panel-matched") screw head on a face drawn
+ * in `faceKey` — the face's own key, stock or finish, behind a prefix.
+ *
+ * A tonal head used to BE the face's material, and a board-coloured disc 1 mm
+ * proud of a board of the same material has no pixel that differs from it
+ * (docs/wall-fastener-visibility.md §1 B). Its own key lets the palette build
+ * it as a darker shade of whatever the face is (`paletteMaterialFor`), and
+ * because the face key is inside it, a face that changes colour changes its
+ * screws' key with it — there is nothing to recolour in place.
+ */
+export function wallFastenerTonalMaterialKey(faceKey) {
+  return typeof faceKey === 'string' && faceKey ? `${TONAL_FASTENER_KEY_PREFIX}${faceKey}` : null;
+}
+
+/** The inverse of `wallFastenerTonalMaterialKey`: the face key inside it, or `null`. */
+export function parseWallFastenerTonalMaterialKey(key) {
+  if (typeof key !== 'string' || !key.startsWith(TONAL_FASTENER_KEY_PREFIX)) return null;
+  return key.slice(TONAL_FASTENER_KEY_PREFIX.length) || null;
+}
+
 /** The colour a face is finished in, as `#RRGGBB`, or `null` for a stock face. */
 export function wallFinishHex(layer) {
   return layer?.finish ? normalizeHexColour(layer.finish.colour?.hex) : null;

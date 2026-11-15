@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
 import { createFloor, createSlab, createWall } from '@/domain/models';
 import { createWallDetailing, createWallDimension, deriveWallFasteners } from '@/domain/wallDetailing';
 import WallDetailEditor from './WallDetailEditor';
@@ -690,10 +690,10 @@ describe('WallDetailEditor clicking a piece on the elevation', () => {
  */
 describe('WallDetailEditor turning to the other face mid-drawing', () => {
   const canvas = (container) => container.querySelector('svg[data-tool]');
-  const tracePreview = (container) => container.querySelector('svg[data-tool] polyline[stroke="#ffb85c"]');
+  const tracePreview = (container) => container.querySelector('svg[data-tool] polyline[data-preview="trace"]');
   const acquisitionMarker = (container) => container.querySelector('svg[data-tool] g[data-snapped]');
   const outsideButton = (container) =>
-    [...container.querySelectorAll('button')].find((node) => node.textContent.startsWith('Outside ·'));
+    [...container.querySelectorAll('button')].find((node) => node.textContent === 'Outside face');
 
   function startTrace(container) {
     fireEvent.click(container.querySelector('button[title^="Trace cut panel"]'));
@@ -754,7 +754,7 @@ describe('WallDetailEditor Escape while a trace is open', () => {
     const svg = container.querySelector('svg[data-tool]');
     fireEvent.click(container.querySelector('button[title^="Trace cut panel"]'));
     fireEvent.pointerDown(svg, { button: 0, pointerId: 1, clientX: 300, clientY: 300 });
-    const tracePreview = () => container.querySelector('svg[data-tool] polyline[stroke="#ffb85c"]');
+    const tracePreview = () => container.querySelector('svg[data-tool] polyline[data-preview="trace"]');
     expect(tracePreview()).not.toBeNull();
 
     const field = container.querySelector('input[type="number"]');
@@ -976,5 +976,125 @@ describe('accent panels in the wall detail editor (spec §7.1)', () => {
     expect(container.textContent).toContain('No accents on this face');
     fireEvent.keyDown(window, { key: 'a' });
     expect(canvas(container).getAttribute('data-tool')).not.toBe('draw_accent');
+  });
+});
+
+/**
+ * The left panel is the workflow (docs/assembly-editor-ui.md §2.3): one step
+ * open at a time, every body still mounted (hidden) so nothing is lost, and a
+ * Next button walking to the following required step. The right panel's
+ * sections stay independent, and Selection is always open.
+ */
+describe('WallDetailEditor workflow steps', () => {
+  const header = (container, id) => container.querySelector(`button[aria-controls="wall-detail-${id}"]`);
+  const body = (container, id) => container.querySelector(`#wall-detail-${id}`);
+  const LEFT_STEPS = ['face', 'assembly', 'panels', 'accents', 'framing', 'fasteners', 'dimensions'];
+  const openSteps = (container) =>
+    LEFT_STEPS.filter((id) => header(container, id).getAttribute('aria-expanded') === 'true');
+
+  it('opens one step at a time and keeps every body mounted', () => {
+    const { container } = render(<WallDetailEditor />);
+    expect(openSteps(container)).toEqual(['face']);
+
+    fireEvent.click(header(container, 'framing'));
+    expect(openSteps(container)).toEqual(['framing']);
+    expect(body(container, 'face').hidden).toBe(true);
+    expect(body(container, 'framing').hidden).toBe(false);
+    // Closed bodies are hidden, not unmounted: their controls are still there.
+    expect(body(container, 'panels').querySelector('select')).not.toBeNull();
+
+    fireEvent.click(header(container, 'framing'));
+    expect(openSteps(container)).toEqual([]);
+  });
+
+  it('walks to the next required step, skipping the optional one', () => {
+    const { container, getByText } = render(<WallDetailEditor />);
+    fireEvent.click(getByText('Next: Complete wall assembly'));
+    expect(openSteps(container)).toEqual(['assembly']);
+
+    fireEvent.click(header(container, 'panels'));
+    fireEvent.click(within(body(container, 'panels')).getByText('Next: Framing'));
+    expect(openSteps(container)).toEqual(['framing']);
+    // The last step has nowhere to go.
+    expect(body(container, 'dimensions').textContent).not.toContain('Next:');
+  });
+
+  it('leaves the right panel alone, and never folds Selection away', () => {
+    const { container } = render(<WallDetailEditor />);
+    const takeoffOpen = () => header(container, 'takeoff').getAttribute('aria-expanded');
+    expect(takeoffOpen()).toBe('true');
+
+    fireEvent.click(header(container, 'framing'));
+    expect(takeoffOpen()).toBe('true');
+    fireEvent.click(header(container, 'takeoff'));
+    expect(takeoffOpen()).toBe('false');
+    expect(openSteps(container)).toEqual(['framing']);
+
+    expect(header(container, 'selection')).toBeNull();
+    expect(body(container, 'selection').hidden).toBe(false);
+  });
+});
+
+/**
+ * The Layers / Export / "?" popovers and the editor both want Escape
+ * (docs/assembly-editor-ui.md §2.6). An open popover takes it — it closes and
+ * the armed tool stays armed — and a closed one never swallows it.
+ */
+describe('WallDetailEditor popovers and Escape', () => {
+  const canvas = (container) => container.querySelector('svg[data-tool]');
+  const layersTrigger = (container) =>
+    [...container.querySelectorAll('button[aria-haspopup]')].find((node) => node.textContent.startsWith('Layers'));
+
+  it('closes an open popover on Escape without returning the tool to Select', () => {
+    const { container } = render(<WallDetailEditor />);
+    fireEvent.click(container.querySelector('button[title^="Draw stud"]'));
+    expect(canvas(container).getAttribute('data-tool')).toBe('draw_stud');
+
+    const trigger = layersTrigger(container);
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    const panel = document.getElementById(trigger.getAttribute('aria-controls'));
+    expect(panel.hidden).toBe(false);
+
+    fireEvent.keyDown(trigger, { key: 'Escape' });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(panel.hidden).toBe(true);
+    expect(canvas(container).getAttribute('data-tool')).toBe('draw_stud');
+
+    // Closed, it lets Escape through: the editor returns to Select.
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(canvas(container).getAttribute('data-tool')).toBe('select');
+  });
+
+  it('closes on a pointer-down outside it, and keeps the layer toggles inside it', () => {
+    const { container, getByLabelText } = render(<WallDetailEditor />);
+    const screws = () => container.querySelectorAll('svg[data-tool] g[data-appearance]').length;
+    expect(screws()).toBeGreaterThan(0);
+    const trigger = layersTrigger(container);
+    fireEvent.click(trigger);
+    fireEvent.click(getByLabelText('Screws'));
+    // Toggling a layer keeps the menu open; the screws leave the drawing.
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(screws()).toBe(0);
+
+    fireEvent.pointerDown(canvas(container), { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('keeps a half-drawn trace when Escape only closes a popover', () => {
+    const { container } = render(<WallDetailEditor />);
+    fireEvent.click(container.querySelector('button[title^="Trace cut panel"]'));
+    fireEvent.pointerDown(canvas(container), { button: 0, pointerId: 1, clientX: 300, clientY: 300 });
+    const tracePreview = () => container.querySelector('svg[data-tool] polyline[data-preview="trace"]');
+    expect(tracePreview()).not.toBeNull();
+
+    const trigger = layersTrigger(container);
+    fireEvent.click(trigger);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(tracePreview()).not.toBeNull();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(tracePreview()).toBeNull();
   });
 });

@@ -8,7 +8,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
 import { createBeam, createFloor, createRoom } from '@/domain/models';
 import {
   createCeiling,
@@ -1086,7 +1086,7 @@ describe('panel trace pointer mapping', () => {
     rect = { ...rect, left: -200, right: 400 };
     fireEvent.pointerMove(svg, { pointerId: 1, clientX: 100, clientY: 300 });
 
-    const preview = container.querySelector('polyline[stroke="#ffb85c"]');
+    const preview = container.querySelector('polyline[data-preview="trace"]');
     expect(preview).not.toBeNull();
     expect(preview.getAttribute('points')).toBe('1000,1000 3000,1000');
   });
@@ -1098,7 +1098,7 @@ describe('panel trace pointer mapping', () => {
     const svg = container.querySelector('svg[data-tool="trace_panel"]');
     svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 400, right: 600, bottom: 400 });
     fireEvent.pointerDown(svg, { button: 0, pointerId: 1, clientX: 100, clientY: 300 });
-    const preview = () => container.querySelector('polyline[stroke="#ffb85c"]');
+    const preview = () => container.querySelector('polyline[data-preview="trace"]');
     expect(preview()).not.toBeNull();
 
     const field = container.querySelector('input[type="number"]');
@@ -1287,7 +1287,7 @@ describe('placing a light', () => {
     // On light A's V line, so the ghost is guided along it.
     expect(container.querySelector('[data-light-guide="v"]')?.getAttribute('y1')).toBe('1000');
     expect(chipText(container)).toContain('In line with Light 1 · 2,500 mm');
-    expect(container.querySelector('circle[fill="#ffd166"]')).toBeNull();
+    expect(container.querySelector('circle[data-preview="fastener"]')).toBeNull();
 
     fireEvent.pointerUp(svg, { ...at, ...toScreen({ u: 3500, v: 1030 }) });
     const moved = mocks.dispatch.mock.calls.at(-1)[0];
@@ -1373,7 +1373,7 @@ describe('placing a light', () => {
     const grid = container.querySelector('[data-light-run="grid"]');
     expect(grid).not.toBeNull();
     expect(grid.querySelectorAll('[data-light-ghost]')).toHaveLength(4);
-    expect(grid.querySelector('rect[stroke="#ffb85c"]')).not.toBeNull();
+    expect(grid.querySelector('rect[data-preview="light-run"]')).not.toBeNull();
     expect(chipText(container)).toContain('2 × 2 · 3,000 × 2,000 mm');
 
     fireEvent.pointerUp(svg, { pointerId: 1, button: 0, shiftKey: true, ...toScreen(GRID_END) });
@@ -1466,7 +1466,8 @@ describe('placing a light', () => {
     expect(pane().hasAttribute('data-light-armed')).toBe(false);
     pressKey('l');
     expect(pane().getAttribute('data-light-armed')).toBe('true');
-    expect(pane().textContent).toContain('Light tool armed: click a board here to place a light');
+    // One quiet line in the pane, only while the tool is armed, says it places there too.
+    expect(pane().textContent).toContain('click a board here to place a light');
 
     const space = resolveCeilingLocalSpace(ceiling, mocks.project);
     // A free point, so the 50 mm grid takes it.
@@ -1522,5 +1523,153 @@ describe('placing a light', () => {
     expect(ceilingUpdates()).toHaveLength(0);
     const pane = container.querySelector('[aria-label="Live ceiling assembly 3D preview"]');
     expect(pane.hasAttribute('data-light-armed')).toBe(false);
+    expect(pane.textContent).not.toContain('place a light');
+  });
+});
+
+/**
+ * The left panel is the workflow (docs/assembly-editor-ui.md §2.3): one step
+ * open at a time, every body still mounted (hidden) so nothing is lost, and a
+ * Next button walking to the following step. The right panel's sections stay
+ * independent, and Selection is always open.
+ */
+describe('ceiling workflow steps', () => {
+  const header = (container, id) => container.querySelector(`button[aria-controls="wall-detail-ceiling-${id}"]`);
+  const body = (container, id) => container.querySelector(`#wall-detail-ceiling-${id}`);
+  const LEFT_STEPS = ['face', 'structure', 'suspension', 'openings', 'lighting', 'screws', 'dimensions', 'takeoff'];
+  const openSteps = (container) =>
+    LEFT_STEPS.filter((id) => header(container, id).getAttribute('aria-expanded') === 'true');
+
+  it('opens one step at a time and keeps every body mounted', () => {
+    const { container } = mountManualCeiling({ beamless: true });
+    expect(openSteps(container)).toEqual(['face']);
+
+    fireEvent.click(header(container, 'structure'));
+    expect(openSteps(container)).toEqual(['structure']);
+    expect(body(container, 'face').hidden).toBe(true);
+    expect(body(container, 'structure').hidden).toBe(false);
+    // Closed bodies are hidden, not unmounted: their controls are still there.
+    expect(body(container, 'screws').querySelector('select')).not.toBeNull();
+
+    fireEvent.click(header(container, 'structure'));
+    expect(openSteps(container)).toEqual([]);
+  });
+
+  it('walks every step in order with Next, and the last has none', () => {
+    const { container, getByText } = mountManualCeiling({ beamless: true });
+    fireEvent.click(getByText('Next: Structure'));
+    expect(openSteps(container)).toEqual(['structure']);
+
+    for (const [from, to, title] of [
+      ['structure', 'suspension', 'Suspension'],
+      ['suspension', 'openings', 'Openings'],
+      ['openings', 'lighting', 'Lighting'],
+      ['lighting', 'screws', 'Screws'],
+      ['screws', 'dimensions', 'Dimensions'],
+      ['dimensions', 'takeoff', 'Takeoff'],
+    ]) {
+      fireEvent.click(within(body(container, from)).getByText(`Next: ${title}`));
+      expect(openSteps(container)).toEqual([to]);
+    }
+    expect(body(container, 'takeoff').textContent).not.toContain('Next:');
+  });
+
+  it('leaves the right panel alone, and never folds Selection away', () => {
+    const { container } = mountManualCeiling({ beamless: true });
+    const summaryOpen = () => header(container, 'summary').getAttribute('aria-expanded');
+    expect(summaryOpen()).toBe('true');
+
+    fireEvent.click(header(container, 'lighting'));
+    expect(summaryOpen()).toBe('true');
+    fireEvent.click(header(container, 'summary'));
+    expect(summaryOpen()).toBe('false');
+    expect(openSteps(container)).toEqual(['lighting']);
+
+    expect(header(container, 'selection')).toBeNull();
+    expect(body(container, 'selection').hidden).toBe(false);
+  });
+});
+
+/**
+ * The Layers and "?" popovers and the editor both want Escape
+ * (docs/assembly-editor-ui.md §2.6). An open popover takes it — it closes and
+ * the armed tool stays armed — and a closed one never swallows it.
+ */
+describe('ceiling popovers and Escape', () => {
+  const canvas = (container) => container.querySelector('svg[data-tool]');
+  const layersTrigger = (container) =>
+    [...container.querySelectorAll('button[aria-haspopup]')].find((node) => node.textContent.startsWith('Layers'));
+
+  it('closes an open popover on Escape without returning the tool to Select', () => {
+    const { container } = mountManualCeiling({ beamless: true });
+    fireEvent.click(container.querySelector('button[title^="Draw furring channel"]'));
+    expect(canvas(container).getAttribute('data-tool')).toBe('draw_furring');
+
+    const trigger = layersTrigger(container);
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    const panel = document.getElementById(trigger.getAttribute('aria-controls'));
+    expect(panel.hidden).toBe(false);
+
+    fireEvent.keyDown(trigger, { key: 'Escape' });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(panel.hidden).toBe(true);
+    expect(canvas(container).getAttribute('data-tool')).toBe('draw_furring');
+
+    // Closed, it lets Escape through: the editor returns to Select.
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(canvas(container).getAttribute('data-tool')).toBe('select');
+  });
+
+  it('does the same for the "?" note', () => {
+    const { container } = mountManualCeiling({ beamless: true });
+    fireEvent.click(container.querySelector('button[title^="Place light"]'));
+    const help = container.querySelector('button[aria-label="Shortcuts and drawing notes"]');
+    fireEvent.click(help);
+    expect(help.getAttribute('aria-expanded')).toBe('true');
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(help.getAttribute('aria-expanded')).toBe('false');
+    expect(canvas(container).getAttribute('data-tool')).toBe('add_light');
+  });
+
+  it('closes on a pointer-down outside it, and keeps the nine layer toggles inside it', () => {
+    const { container, getByLabelText } = mountManualCeiling({ beamless: true });
+    const screws = () =>
+      Array.from(container.querySelectorAll('svg[data-tool] title')).filter((node) =>
+        node.textContent.startsWith('Screw'),
+      ).length;
+    expect(screws()).toBeGreaterThan(0);
+    const trigger = layersTrigger(container);
+    const panel = document.getElementById(trigger.getAttribute('aria-controls'));
+    expect(panel.querySelectorAll('input[type="checkbox"]')).toHaveLength(9);
+
+    fireEvent.click(trigger);
+    fireEvent.click(getByLabelText('Screws'));
+    // Toggling a layer keeps the menu open; the screws leave the drawing.
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(screws()).toBe(0);
+
+    fireEvent.pointerDown(canvas(container), { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('keeps a half-drawn trace when Escape only closes a popover', () => {
+    const { container } = mountManualCeiling({ beamless: true });
+    fireEvent.click(container.querySelector('button[title^="Trace cut board"]'));
+    const svg = canvas(container);
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 400, right: 600, bottom: 400 });
+    fireEvent.pointerDown(svg, { button: 0, pointerId: 1, clientX: 100, clientY: 300 });
+    const tracePreview = () => container.querySelector('svg[data-tool] polyline[data-preview="trace"]');
+    expect(tracePreview()).not.toBeNull();
+
+    const trigger = layersTrigger(container);
+    fireEvent.click(trigger);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(tracePreview()).not.toBeNull();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(tracePreview()).toBeNull();
   });
 });

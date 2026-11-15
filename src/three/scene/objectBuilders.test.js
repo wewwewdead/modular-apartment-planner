@@ -210,9 +210,34 @@ describe('buildFloorPreviewObjects', () => {
     expect(descriptors.find((entry) => entry.geometry === 'fastener')).toMatchObject({
       radius: 4,
       depth: 1.5,
-      materialKey: 'wallFiberCement',
+      // A tonal head is a shade of its board, not the board's own material
+      // (docs/wall-fastener-visibility.md §2.2).
+      materialKey: 'wallFastenerTonal:wallFiberCement',
     });
     expect(descriptors.filter((entry) => entry.metadata.wallDetailKind === 'panel').length).toBeGreaterThan(2);
+  });
+
+  it('gives a tonal head its own shade of the face, and leaves the other expressions as they were', () => {
+    const screwKeys = (appearance, material = 'fiber_cement') => {
+      const floor = createFloor('Ground Floor', 0);
+      const wall = createWall({ x: 0, y: 0 }, { x: 3000, y: 0 }, 100, {
+        assembly: { preset: 'fiber_cement', interior: { material } },
+      });
+      wall.assembly.detailing = createWallDetailing({
+        enabled: true,
+        sides: { interior: { enabled: true, fasteners: { appearance } } },
+      });
+      floor.walls = [wall];
+      const screws = buildFloorPreviewObjects(floor).filter((entry) => entry.geometry === 'fastener');
+      expect(screws.length).toBeGreaterThan(0);
+      return new Set(screws.map((entry) => entry.materialKey));
+    };
+
+    expect(screwKeys('tonal')).toEqual(new Set(['wallFastenerTonal:wallFiberCement']));
+    expect(screwKeys('tonal', 'plywood')).toEqual(new Set(['wallFastenerTonal:wallPlywood']));
+    expect(screwKeys('metal')).toEqual(new Set(['wallFastener']));
+    expect(screwKeys('contrast')).toEqual(new Set(['wallFastenerContrast']));
+    expect(screwKeys('construction')).toEqual(new Set(['wallFastenerConstruction']));
   });
 
   it('frames a bypass wall over its whole span in 3D and carries the deck on a ledger', () => {
@@ -1145,7 +1170,9 @@ describe('wall face finishes in 3D (docs/wall-cladding-finishes.md §5.3)', () =
     expect(panels.length).toBeGreaterThan(2);
     expect(new Set(panels.map((entry) => entry.materialKey))).toEqual(new Set(['wallFinish:paint:fc:E0701F:satin']));
     expect(screws.length).toBeGreaterThan(0);
-    expect(new Set(screws.map((entry) => entry.materialKey))).toEqual(new Set(['wallFinish:paint:fc:E0701F:satin']));
+    expect(new Set(screws.map((entry) => entry.materialKey))).toEqual(
+      new Set(['wallFastenerTonal:wallFinish:paint:fc:E0701F:satin']),
+    );
     // The undetailed outside face keeps its stock skin.
     const outside = entries.filter((entry) => entry.metadata.assemblySide === 'exterior');
     expect(outside.length).toBeGreaterThan(0);

@@ -28,10 +28,15 @@ const CEILING_SHELL_LEFT_SECTIONS = Object.freeze([
   { id: 'takeoff', step: 8, title: 'Takeoff' },
 ]);
 const CEILING_SHELL_RIGHT_SECTIONS = Object.freeze([
-  { id: 'selection', title: 'Selection' },
+  { id: 'selection', title: 'Selection', static: true },
   { id: 'summary', title: 'Takeoff summary' },
   { id: 'elevations', title: 'Elevations' },
 ]);
+
+/** The ceiling as people name it, the header's title in the shell and the editor alike. */
+export function ceilingDisplayName(ceiling) {
+  return ceiling?.name?.trim() || 'Ceiling';
+}
 
 /** The ceiling editor's frame for `storedCeiling`, drawn only from data already in memory. */
 export function CeilingEditorOpeningShell({ ceilingId, storedCeiling, editorDispatch, openedAt }) {
@@ -41,9 +46,9 @@ export function CeilingEditorOpeningShell({ ceilingId, storedCeiling, editorDisp
   return (
     <DetailEditorShell
       dialogLabel="Ceiling assembly detail editor"
-      eyebrow="Reflected ceiling plan workspace"
-      title="Ceiling assembly editor — reflected ceiling plan"
-      subtitle={storedCeiling.name || 'Ceiling'}
+      // The size line waits for the derived frame: a ceiling's extents are
+      // measured in its own rotated U/V frame, and the shell only says what it knows.
+      title={ceilingDisplayName(storedCeiling)}
       closeTitle="Close the ceiling detail editor and return to the floorplan"
       onClose={() => editorDispatch({ type: 'CLOSE_CEILING_DETAIL_EDITOR' })}
       leftLabel="Ceiling detailing steps"

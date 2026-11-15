@@ -1,5 +1,5 @@
 import { LoadingBar, PanePlaceholder, Skeleton } from '@/ui/loading';
-import { ToolbarButton } from './WallDetailUiKit';
+import { ToolGlyph, ToolbarButton } from './WallDetailUiKit';
 import styles from './WallDetailEditor.module.css';
 
 /**
@@ -14,13 +14,16 @@ import styles from './WallDetailEditor.module.css';
  * editor, in the same grid, so the swap moves nothing — while the editor
  * itself renders behind it as a transition.
  *
+ * It mirrors the editor's layout (docs/assembly-editor-ui.md §2.3): the 48 px
+ * header line, the 44 px toolbar, the 32 px context bar, the 280 / 320 px side
+ * panels and the 62 / 38 split, all on the light ground.
+ *
  * Only data already in memory goes in: the object's name, its outline (the
- * `silhouette`, drawn on both panes), section titles. Close works; nothing
- * else here is interactive, because nothing here is real yet.
+ * `silhouette`, drawn on both panes), section titles. Back and Close work;
+ * nothing else here is interactive, because nothing here is real yet.
  */
 export default function DetailEditorShell({
   dialogLabel,
-  eyebrow,
   title,
   subtitle,
   closeTitle,
@@ -48,14 +51,21 @@ export default function DetailEditorShell({
     >
       <LoadingBar placement="viewport" />
       <header className={styles.header}>
-        <div className={styles.headerIdentity}>
-          <span className={styles.eyebrow}>{eyebrow}</span>
-          <h1>{title}</h1>
-          <p>{subtitle}</p>
+        <div className={styles.headerLead}>
+          <button type="button" className={styles.backButton} title={closeTitle} onClick={onClose}>
+            <ToolGlyph name="back" />
+            <span>Back to plan</span>
+          </button>
+          <span className={styles.headerDivider} aria-hidden="true" />
+          <div className={styles.headerIdentity}>
+            <h1>{title}</h1>
+            {subtitle ? <span className={styles.headerMeta}>{subtitle}</span> : null}
+          </div>
         </div>
         <div className={styles.headerActions}>
           <ToolbarButton title={closeTitle} onClick={onClose}>
             Close
+            <ToolGlyph name="close" />
           </ToolbarButton>
         </div>
       </header>
@@ -66,17 +76,17 @@ export default function DetailEditorShell({
         </aside>
 
         <main className={styles.workspace}>
-          <div className={styles.canvasToolbar} aria-hidden="true">
-            <Skeleton tone="dark" className={styles.shellToolbar}>
+          <div className={styles.toolbar} aria-hidden="true">
+            <Skeleton className={styles.shellToolbar}>
               <Skeleton.Row />
             </Skeleton>
           </div>
           {/* Kept for its height; the panes below carry the words. */}
-          <div className={styles.statusBar} aria-hidden="true" />
+          <div className={styles.contextBar} aria-hidden="true" />
           <div className={styles.workspaceViews} data-view="split">
             <div className={styles.elevationPane}>
               <PanePlaceholder
-                tone="dark"
+                tone="paper"
                 label={label}
                 detail={detail}
                 silhouette={silhouette}
@@ -86,7 +96,7 @@ export default function DetailEditorShell({
             </div>
             <div className={styles.previewPane}>
               <PanePlaceholder
-                tone="dark"
+                tone="paper"
                 label={previewLabel}
                 silhouette={silhouette}
                 since={since}
@@ -111,18 +121,27 @@ export default function DetailEditorShell({
  */
 function ShellSections({ sections = [] }) {
   return sections.map((section, index) => (
-    <section key={section.id} className={styles.collapsible} data-open={index === 0 ? 'true' : 'false'}>
+    <section
+      key={section.id}
+      className={styles.collapsible}
+      data-open={index === 0 ? 'true' : 'false'}
+      data-step={section.step || section.optional ? 'true' : undefined}
+      data-static={section.static ? 'true' : undefined}
+    >
       <h2 className={styles.sectionHeading}>
-        <span className={styles.sectionHeader}>
+        <span className={`${styles.sectionHeader} ${section.static ? styles.sectionHeaderStatic : ''}`}>
           {section.step ? <span className={styles.sectionStep}>{section.step}</span> : null}
           <span className={styles.sectionTitles}>
-            <span className={styles.sectionTitle}>{section.title}</span>
+            <span className={styles.sectionTitle}>
+              {section.title}
+              {section.optional ? <span className={styles.sectionOptional}>Optional</span> : null}
+            </span>
           </span>
         </span>
       </h2>
       {index === 0 ? (
         <div className={styles.sectionBody}>
-          <Skeleton tone="dark">
+          <Skeleton>
             <Skeleton.Field />
             <Skeleton.Field />
             <Skeleton.Field />

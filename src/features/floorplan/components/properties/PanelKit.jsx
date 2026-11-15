@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useId, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useNumericDraft } from '@/hooks/useNumericDraft';
 import styles from './PanelKit.module.css';
 
@@ -228,6 +228,85 @@ function normalizeHex(value) {
 }
 
 /**
+ * The shortest gap between two commits of a system-picker drag: about 15 a
+ * second. Each commit is a whole project edit — a reducer pass, a 3D rebuild
+ * and a Realistic refine restart — and the picker reports a colour for every
+ * pixel the pointer crosses, so committing at its rate saturated the main
+ * thread (docs/paint-edit-performance.md §2.4). Fifteen is still faster than
+ * the eye follows a colour change across a wall.
+ */
+const PICK_COMMIT_INTERVAL_MS = 67;
+
+const scheduleFrame = (callback) =>
+  typeof requestAnimationFrame === 'function' ? requestAnimationFrame(callback) : setTimeout(callback, 16);
+const cancelFrame = (handle) =>
+  typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame(handle) : clearTimeout(handle);
+
+/**
+ * Commits the latest of a burst of values at most once per frame and no more
+ * often than `PICK_COMMIT_INTERVAL_MS`, always ending on the last one pushed.
+ *
+ * `push` keeps only the newest value and arranges one commit for it: on the
+ * next frame when the last commit is old enough, otherwise on the first frame
+ * after the interval has run out — so a burst gets a trailing commit of its
+ * final value without anyone having to ask. `flush` commits whatever is
+ * waiting now, synchronously; it is what a pick end calls *before* it closes
+ * the gesture, so the last colour lands inside it. `cancel` drops the waiting
+ * value, for an edit that supersedes it.
+ */
+function useCoalescedCommit(commit) {
+  const commitRef = useRef(commit);
+  // A layout effect, so a frame callback that lands between a render and its
+  // passive effects still commits through the latest render's callback.
+  useLayoutEffect(() => {
+    commitRef.current = commit;
+  });
+  const queueRef = useRef({ pending: null, frame: 0, timer: 0, lastCommitAt: -Infinity });
+
+  const cancel = useCallback(() => {
+    const queue = queueRef.current;
+    if (queue.frame) cancelFrame(queue.frame);
+    if (queue.timer) clearTimeout(queue.timer);
+    queue.frame = 0;
+    queue.timer = 0;
+    queue.pending = null;
+  }, []);
+
+  const flush = useCallback(() => {
+    const queue = queueRef.current;
+    const value = queue.pending;
+    cancel();
+    if (value === null) return;
+    queue.lastCommitAt = performance.now();
+    commitRef.current(value);
+  }, [cancel]);
+
+  const push = useCallback(
+    (value) => {
+      const queue = queueRef.current;
+      queue.pending = value;
+      if (queue.frame || queue.timer) return;
+      const onFrame = () => {
+        queue.frame = 0;
+        flush();
+      };
+      const wait = queue.lastCommitAt + PICK_COMMIT_INTERVAL_MS - performance.now();
+      if (wait > 0) {
+        queue.timer = setTimeout(() => {
+          queue.timer = 0;
+          queue.frame = scheduleFrame(onFrame);
+        }, wait);
+      } else {
+        queue.frame = scheduleFrame(onFrame);
+      }
+    },
+    [flush],
+  );
+
+  return { push, flush, cancel };
+}
+
+/**
  * A colour: the system picker and the hex beside it (the pair RoomProperties
  * introduced), plus a swatch strip of named catalogue colours with a toggle
  * between catalogues.
@@ -248,33 +327,28 @@ function normalizeHex(value) {
  * picker `input` after the last end; end fires on the native `change` (the
  * picker closing on a colour) and on blur, whichever comes first, and at most
  * once per start. Swatches and the hex box are single edits and never bracket.
+ *
+ * The picker's colours are not committed one `onChange` each: they are
+ * coalesced (`useCoalescedCommit`) to the latest colour at most once a frame
+ * and about fifteen times a second, and whatever is still waiting is flushed
+ * on the native `change`, on blur and on unmount — always before `onPickEnd`,
+ * so a bracketed pick stays one undo step that ends on the colour the pointer
+ * stopped on. The picker's own swatch and the hex text follow the pointer
+ * straight away from a local `liveHex`, never waiting for the commit.
+ * Swatches and the hex box commit immediately, and drop any picker colour
+ * still waiting, since they supersede it.
  */
 export function ColourField({ label, value, onChange, catalogues = null, id, onPickStart, onPickEnd }) {
   const pickerRef = useRef(null);
   const pickingRef = useRef(false);
+  // The colour the picker is showing while its commit is still on the way.
+  const [liveHex, setLiveHex] = useState(null);
   // Read through refs so the native listener below is bound once and still
   // calls the callbacks of the latest render.
   const pickEndRef = useRef(onPickEnd);
   useEffect(() => {
     pickEndRef.current = onPickEnd;
   });
-  const endPick = useCallback(() => {
-    if (!pickingRef.current) return;
-    pickingRef.current = false;
-    pickEndRef.current?.();
-  }, []);
-  // React's onChange on a colour input is the native `input` event; the
-  // native `change` — the one that means "the picker closed on this" — has to
-  // be listened for directly.
-  useEffect(() => {
-    const picker = pickerRef.current;
-    if (!picker) return undefined;
-    picker.addEventListener('change', endPick);
-    return () => picker.removeEventListener('change', endPick);
-  }, [endPick]);
-  // A field that unmounts mid-pick (the selection moved on) still closes it.
-  useEffect(() => endPick, [endPick]);
-
   const hex = normalizeHex(value?.hex) || '#000000';
   const catalogueKeys = Object.keys(catalogues || {});
   const [draft, setDraft] = useState(hex);
@@ -296,7 +370,39 @@ export function ColourField({ label, value, onChange, catalogues = null, id, onP
     return true;
   };
 
+  const pickCommit = useCoalescedCommit((nextHex) => {
+    setLiveHex(null);
+    commitCustom(nextHex);
+  });
+  const { flush: flushPick } = pickCommit;
+  const endPick = useCallback(() => {
+    flushPick();
+    if (!pickingRef.current) return;
+    pickingRef.current = false;
+    pickEndRef.current?.();
+  }, [flushPick]);
+  // React's onChange on a colour input is the native `input` event; the
+  // native `change` — the one that means "the picker closed on this" — has to
+  // be listened for directly.
+  useEffect(() => {
+    const picker = pickerRef.current;
+    if (!picker) return undefined;
+    picker.addEventListener('change', endPick);
+    return () => picker.removeEventListener('change', endPick);
+  }, [endPick]);
+  // A field that unmounts mid-pick (the selection moved on) still closes it.
+  useEffect(() => endPick, [endPick]);
+
+  // An immediate edit (a swatch, a typed hex) supersedes a picker colour still
+  // waiting to be committed.
+  const commitNow = (commit) => {
+    pickCommit.cancel();
+    setLiveHex(null);
+    commit();
+  };
+
   const colours = activeCatalogue ? catalogues[activeCatalogue]?.colours || [] : [];
+  const shownHex = liveHex || hex;
 
   return (
     <div data-colour-field={id || label}>
@@ -309,13 +415,17 @@ export function ColourField({ label, value, onChange, catalogues = null, id, onP
             ref={pickerRef}
             type="color"
             className={styles.colourPicker}
-            value={hex.toLowerCase()}
+            value={shownHex.toLowerCase()}
             onChange={(event) => {
+              const nextHex = normalizeHex(event.target.value);
+              if (!nextHex) return;
               if (!pickingRef.current && onPickStart) {
                 pickingRef.current = true;
                 onPickStart();
               }
-              commitCustom(event.target.value);
+              setLiveHex(nextHex);
+              setDraft(nextHex);
+              pickCommit.push(nextHex);
             }}
             onBlur={endPick}
             aria-label={`${label} picker`}
@@ -327,8 +437,9 @@ export function ColourField({ label, value, onChange, catalogues = null, id, onP
             spellCheck={false}
             aria-label={`${label} hex`}
             onChange={(event) => {
-              setDraft(event.target.value);
-              commitCustom(event.target.value);
+              const typed = event.target.value;
+              setDraft(typed);
+              if (normalizeHex(typed)) commitNow(() => commitCustom(typed));
             }}
             onBlur={() => setDraft(hex)}
           />
@@ -368,12 +479,14 @@ export function ColourField({ label, value, onChange, catalogues = null, id, onP
                   aria-pressed={selected}
                   data-swatch={colour.name}
                   onClick={() =>
-                    onChange({
-                      hex: colour.hex,
-                      name: colour.name,
-                      catalogue: activeCatalogue,
-                      solarAbsorptance: Number.isFinite(colour.sa) ? colour.sa : null,
-                    })
+                    commitNow(() =>
+                      onChange({
+                        hex: colour.hex,
+                        name: colour.name,
+                        catalogue: activeCatalogue,
+                        solarAbsorptance: Number.isFinite(colour.sa) ? colour.sa : null,
+                      }),
+                    )
                   }
                 />
               );
