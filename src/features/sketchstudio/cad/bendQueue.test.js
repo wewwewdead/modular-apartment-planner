@@ -159,10 +159,24 @@ describe('brakeCarry (§7.3)', () => {
       scrub: { bendId: 'b' },
       lastHit: { bendId: 'b' },
     };
-    expect(brakeCarry(session)).toEqual({ punch: 'gooseneck-88', die: 'v16-88', reverse: true });
+    // The tools' lengths stay in the machine too (brake tool length §9.4, TL-2).
+    expect(brakeCarry(session)).toEqual({
+      punch: 'gooseneck-88',
+      die: 'v16-88',
+      reverse: true,
+      punchTrim: 5,
+      dieTrim: 5,
+    });
     // The next part's session: the defaults, the tooling still in.
     const next = { ...brakeSessionDefaults(), ...brakeCarry(session) };
-    expect(next).toEqual({ ...brakeSessionDefaults(), punch: 'gooseneck-88', die: 'v16-88', reverse: true });
+    expect(next).toEqual({
+      ...brakeSessionDefaults(),
+      punch: 'gooseneck-88',
+      die: 'v16-88',
+      reverse: true,
+      punchTrim: 5,
+      dieTrim: 5,
+    });
     // An automatic die stays automatic; no session carries nothing.
     expect(brakeCarry({ ...brakeSessionDefaults(), die: null })).toEqual({
       punch: brakeSessionDefaults().punch,

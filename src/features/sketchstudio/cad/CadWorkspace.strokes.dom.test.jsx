@@ -7,11 +7,12 @@
 // tabs the sheet has already bent apart is refused. Draw → Flanged panel: the
 // form and its preview, and both endings. The kernel hook and the 3D viewport
 // are stand-ins.
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useImperativeHandle } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import CadWorkspace from './CadWorkspace.jsx';
+import { forgetPunch } from './brakeMemory.js';
 import { emptyModel } from './model.js';
 import { sheetMetalPart } from './ShopPanels.jsx';
 vi.setConfig({ testTimeout: 20000 });
@@ -52,6 +53,8 @@ vi.mock('./CadViewport.jsx', () => ({
     return <div aria-label="Solid model viewport" />;
   },
 }));
+// The punch stays in the machine (docs/sketch-studio-shop-punches.md §5.5): each test starts from the default.
+beforeEach(() => forgetPunch());
 afterEach(() => cleanup());
 
 // The gang probe's plate: 200 × 300, a 34 mm left flange strip notched at

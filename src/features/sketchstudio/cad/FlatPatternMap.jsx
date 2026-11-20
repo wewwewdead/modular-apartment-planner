@@ -14,9 +14,12 @@
 // Where click areas overlap (on a thin blank the long edges' strips cover the
 // short ends, the etched lines and the segments), a pointer click goes to the
 // nearest line whose own area holds the pointer, not to the one drawn last.
+// Tight bends §7.4 (e): in gauge mode a made bend that can be bent on is a
+// button too (its line seats the punch line on it, as the row's Bend on does).
 import { useRef } from 'react';
 import { hitSequence, isRoundBend } from './sheetMetal.js';
 import { nearestLine } from './pressBrake.js';
+import { bendOnKey } from './brakeStation.js';
 
 const BEND_COLOURS = { up: '#c2410c', down: '#1864ab' };
 // Snap reach for two-point picks, in screen pixels.
@@ -36,7 +39,11 @@ const snapPoints = ({ outer, holes }) =>
 /**
  * `station`: brakeStation(); `session`: brakeSession. onPickEdge(index),
  * onDistance(L) while dragging the punch line, onPoints([[x, y], ...]),
- * onMark(mark) for an etched line, onSkip(index) for a segment of the line.
+ * onMark(mark) for an etched line, onSkip(index) for a segment of the line,
+ * onBendOn(step key) for a made bend's line (gauge mode). `gapEdges`: the
+ * hovered flange gap's edge(s) of the blank ([[p, q], …], flat mm,
+ * docs/sketch-studio-corner-gaps.md §3.3), drawn over the rest and never in a
+ * click's way; absent, nothing is drawn for it.
  */
 export default function FlatPatternMap({
   station,
@@ -46,6 +53,8 @@ export default function FlatPatternMap({
   onPoints,
   onMark = null,
   onSkip = null,
+  onBendOn = null,
+  gapEdges = null,
   disabled = false,
 }) {
   const svg = useRef(null);
@@ -100,9 +109,10 @@ export default function FlatPatternMap({
     const { point } = toFlat(event);
     const distance = (point[0] - edge.a[0]) * edge.inward[0] + (point[1] - edge.a[1]) * edge.inward[1];
     const next = Math.max(0, Math.round(distance * 10) / 10);
-    if (next === Number(session.distance)) return;
+    // The card's line is where it lies on the flat blank (skin gauge §4.7): a flat distance, named so.
+    if (next === Number(station.flat ?? session.distance)) return;
     drag.current.moved = dragged.current = true;
-    onDistance(next);
+    onDistance(next, { stop: null });
   };
   const endDrag = (event) => {
     if (!drag.current) return;
@@ -152,6 +162,19 @@ export default function FlatPatternMap({
   if (onMark)
     for (const mark of feature.marks || [])
       targets.set(`mark-${mark.id}`, { a: mark.a, b: mark.b, reach: bandReach, act: () => onMark(mark) });
+  // Point at the bend (tight bends §7.4 (e)): each made bend that can be bent
+  // on, but those the pending hit already bends on, sets the line on it.
+  const onward =
+    session.mode === 'gauge' && onBendOn && !disabled
+      ? fold.bends
+          .filter((bend) => !(pending?.again?.bendIds || []).includes(bend.id))
+          .map((bend) => ({ bend, key: bendOnKey(fold, bend.id) }))
+          .filter((b) => b.key)
+      : [];
+  for (const { bend, key } of onward)
+    segmentsOf(bend).forEach(([a, b], k) =>
+      targets.set(`bend-${bend.id}-${k}`, { a, b, reach: bandReach, act: () => onBendOn(key) }),
+    );
   if ((station.segments || []).length > 1 && onSkip)
     for (const segment of station.segments)
       targets.set(`segment-${segment.index}`, {
@@ -298,6 +321,26 @@ export default function FlatPatternMap({
             </g>
           );
         })}
+        {/* Under the gauge edges and the pending line: their clicks and the line's drag are unchanged. */}
+        {onward.map(({ bend }) => (
+          <g
+            key={`${bend.id}-on`}
+            className="cad-map-bend-on"
+            role="button"
+            aria-label={`Bend ${strokeNumber.get(bend.id)}'s line: bend it on`}
+            onClick={(event) => {
+              event.stopPropagation();
+              pickAt(event, `bend-${bend.id}-0`);
+            }}
+          >
+            {segmentsOf(bend).map(([a, b], k) => (
+              <g key={k}>
+                <polygon className="cad-map-hit" points={band(a, b)} />
+                <line x1={a[0]} y1={-a[1]} x2={b[0]} y2={-b[1]} />
+              </g>
+            ))}
+          </g>
+        ))}
         {session.mode === 'gauge' &&
           edges.map((e) => {
             // A strip either side of the edge to click (a bare line has no area to hit).
@@ -371,14 +414,22 @@ export default function FlatPatternMap({
         {edge && station.gauge?.distance != null && pendingBend && (
           <text
             className="cad-map-reading"
-            x={(edge.a[0] + edge.b[0]) / 2 + (edge.inward[0] * station.gauge.distance) / 2}
-            y={-((edge.a[1] + edge.b[1]) / 2 + (edge.inward[1] * station.gauge.distance) / 2)}
+            // Half way to the line where it lies on the blank (off a flange L is not the flat distance).
+            x={(edge.a[0] + edge.b[0]) / 2 + (edge.inward[0] * (station.flat ?? station.gauge.distance)) / 2}
+            y={-((edge.a[1] + edge.b[1]) / 2 + (edge.inward[1] * (station.flat ?? station.gauge.distance)) / 2)}
             fontSize={dot * 2.6}
             textAnchor="middle"
           >
             L {fmt(station.gauge.distance)}
           </text>
         )}
+        {gapEdges?.map(([a, b], k) => (
+          // A ring round its middle: a corner's edges are short on a whole blank.
+          <g key={`gap-${k}`} className="cad-map-gap" aria-label={k === 0 ? 'Flange gap edge' : undefined}>
+            <line x1={a[0]} y1={-a[1]} x2={b[0]} y2={-b[1]} />
+            <circle cx={(a[0] + b[0]) / 2} cy={-(a[1] + b[1]) / 2} r={dot * 2} />
+          </g>
+        ))}
         {session.mode === 'points' &&
           session.points.map((p, i) => (
             <circle

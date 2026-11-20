@@ -168,13 +168,17 @@ describe('the hit and its refusals', () => {
     const result = hit({ a: [20, -1], b: [20, 61], angle: 120 });
     expect(codes(result)).toEqual(['angle']);
     expect(result.refusals[0].message).toBe(
-      'The V10 88° die bends to at most 92° (180° − its 88° V). For 120° fit an acute 30° die (V8, V12 or V16) and the acute punch.',
+      'The V10 88° die bends to at most 92° (180° − its 88° V). For 120° fit an acute 30° die (V8, V12 or V16) and a 30° punch (the A 103 or the Acute 30°).',
     );
     // The acute tooling takes it.
     expect(codes(hit({ a: [20, -1], b: [20, 61], angle: 120, die: 'v12-30', punch: 'acute-30' }))).toEqual([]);
   });
   it('refuses a punch blunter than its die', () => {
     expect(codes(hit({ a: [20, -1], b: [20, 61], die: 'v12-30' }))).toEqual(['punch-angle']);
+    // Both 30° punches named (docs/sketch-studio-shop-punches.md §5.6).
+    expect(hit({ a: [20, -1], b: [20, 61], die: 'v12-30' }).refusals[0].message).toBe(
+      'The Straight 88° punch does not go into the V12 30° die: a punch may not be blunter than its die. Use a 30° punch: the A 103 or the Acute 30°.',
+    );
   });
   it('refuses a flange shorter than the die minimum, naming the die that fits', () => {
     const result = hit({ a: [6, -1], b: [6, 61] });

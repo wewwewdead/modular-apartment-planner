@@ -18,45 +18,64 @@ import {
   lineSegments,
   madeBends,
   profilePolygon,
+  poseFold,
   sheetMetalFeature,
   stepOf,
   stepPose,
   strokeBends,
+  transformPoint,
 } from './sheetMetal.js';
 import {
   DEFAULT_MACHINE,
   DIES,
+  HORNS,
+  HORN_KEYS,
   MACHINES,
   PUNCHES,
+  RACK_ORDER,
   SHORTEST_SECTION,
+  airBendRadius,
+  dieOf,
+  hornOf,
   machineOf,
   maxBendAngle,
+  minLeg,
   punchOf,
   punchSymmetric,
+  stockOf,
+  suggestedDie,
 } from './shopCatalog.js';
 import {
   assessBend,
   backSide,
+  brakeFrame,
   brakeHit,
+  brakeReading,
   bumpTimeline,
   gaugeBendLine,
   gaugeEdges,
   gaugeReading,
+  gaugeStops,
+  lineTooling,
+  machineFrom,
   MIN_COVERAGE,
   pairTimeline,
+  stopTakeUp,
   strokeTimeline,
   strokeTooling,
 } from './pressBrake.js';
 import {
-  ADVISED_PUNCH,
   EARLIER,
   PUNCH_LABELS,
   brakeCollisions,
   hangingMessage,
+  hitName,
   partSurface,
   ramClearance,
+  takeOffOf,
 } from './brakeCollisions.js';
 import { nodeName } from './groups.js';
+import { flangeGaps, foldOverlaps, pieceTriangles } from './cornerGaps.js';
 
 export const PENDING_BEND = 'pending-hit';
 
@@ -95,23 +114,40 @@ export const brakeSessionDefaults = () => ({
   // Brake tool length (docs/sketch-studio-brake-tool-length.md §3.1): mm off
   // each end of every run of the punch (its holders follow it) and of the
   // die; negative runs past the bend; null fitted. Stored on the bend record
-  // (a stored step is rechecked with it); reset with `skip` by a new line.
+  // (a stored step is rechecked with it). Since TL-2 (§9) a new line keeps
+  // them: a tool's length changes only when the operator changes it. Beside
+  // them, `punchHold` / `dieHold` (absent until a length is set, brakePatch):
+  // the length in mm the tool is held at while one run stands under the line.
   punchTrim: null,
   dieTrim: null,
+  // Horn sections at the ends of the punch (docs/sketch-studio-punch-library.md
+  // §4.1): tooling, so a new line keeps them; written on the bend record only
+  // when on (not with a radius punch, which has none).
+  horns: false,
   // The brake finds the way (docs/sketch-studio-tight-bends.md §5.2): a try
   // the collision card offered and the operator armed — { kind: 'before',
   // key } (this hit before the step `key`) or { kind: 'partway', key, angle }
   // (the step `key` opened to `angle`, finished after this hit). The pending
   // hit is checked, posed and committed that way; null: made last, as ever.
   armed: null,
+  // Gauging off a flange (docs/sketch-studio-skin-gauge.md §4.3): `distance`
+  // is what the backgauge reads, L from `stop` — null, the gauge edge; or a
+  // made bend's id, the outside face of that bend's flange (the line lies
+  // `distance` + its take-up from the edge on the flat blank). `stopHold`:
+  // the operator's own choice of stop (§4.6; 'edge' or a bend id), null
+  // automatic (§4.4). Neither is carried to the next part.
+  stop: null,
+  stopHold: null,
 });
 
 /**
  * What stays in the machine when the brake moves to the next part without the
  * station being left (docs/sketch-studio-outline-edit-sheet-nest.md §7.3):
  * the punch, the die and which way round the punch is clamped — never the
- * picks (edge, L, points, angle, shape, skips, trims, turned, scrub, the last
- * hit). null with no session. A die that does not suit the next part is told
+ * picks (edge, L, points, angle, shape, skips, turned, scrub, the last
+ * hit). Since TL-2 (brake tool length §9.4) the tools' lengths go too: the
+ * holds and the trims when set; the next part's first line derives its trim
+ * from the hold as any new line does. null with no session. A die that does not suit the next part is told
  * by the station's own checks, as when it is chosen by hand.
  */
 export function brakeCarry(session) {
@@ -121,14 +157,62 @@ export function brakeCarry(session) {
     punch: session.punch ?? defaults.punch,
     die: session.die ?? defaults.die,
     reverse: Boolean(session.reverse),
+    // Horn sections go with the punch (punch library §4.1), named only when on.
+    ...(hornOf(session.horns) && !PUNCHES[session.punch]?.round ? { horns: hornSetting(hornOf(session.horns)) } : {}),
+    ...Object.fromEntries(
+      HELD_TOOLS.flatMap(([trim, hold]) => [
+        ...(trimSet(session[trim]) ? [[trim, Number(session[trim])]] : []),
+        ...(Number.isFinite(session[hold]) ? [[hold, session[hold]]] : []),
+      ]),
+    ),
   };
+}
+
+// The tools' lengths (brake tool length §9.4, TL-2): each trim beside the
+// length in mm it holds the tool at.
+const HELD_TOOLS = [
+  ['punchTrim', 'punchHold'],
+  ['dieTrim', 'dieHold'],
+];
+// The span of the one tooling run under the session's line (pressBrake.js
+// lineTooling), or null: no station, no line, or several runs (tabs).
+function oneRun(station, session) {
+  if (!station?.polygon || !station.edges) return null;
+  const { line } = sessionLine(station, session);
+  if (!line) return null;
+  const runs = lineTooling(station.fold, station.polygon, line, session.skip || []);
+  return runs.length === 1 ? runs[0][1] - runs[0][0] : null;
+}
+/**
+ * The lengths stay as set (brake tool length §9.3, §9.4): `next` (the
+ * session after `patch`) gets its trims and holds. A patch naming a trim
+ * takes it as given: with one run under the line the hold is that length (a
+ * null trim, fitted, removes it); several runs or no station, the hold goes
+ * and the trim itself stays. A new line keeps the trim, or, with a hold and
+ * one run under it, derives the trim from the hold. A patch naming `skip`
+ * keeps the trim and re-reads the hold from it. A session that never sets a
+ * length gains no key.
+ */
+function holdTools(next, patch, newLine, station) {
+  let span;
+  const run = () => (span === undefined ? (span = oneRun(station, next)) : span);
+  for (const [trim, hold] of HELD_TOOLS) {
+    if (trim in patch || 'skip' in patch) {
+      if (!trimSet(next[trim]) || run() == null) delete next[hold];
+      else next[hold] = exact(run() - 2 * Number(next[trim]));
+    } else if (newLine && Number.isFinite(next[hold]) && run() != null) {
+      const derived = exact((run() - next[hold]) / 2);
+      next[trim] = Math.abs(derived) < 1e-6 ? null : derived;
+    }
+  }
 }
 
 /**
  * The session patch that puts the punch `key` in (brake blades §4.1): the one
  * rule the Punch select and the blade picker share. A radius punch is Round ·
  * Radius punch (round-bend spec §12.6); between a radius punch and any other
- * the die goes back to automatic.
+ * the die goes back to automatic. A radius punch has no horn sections
+ * (docs/sketch-studio-punch-library.md §4.1): choosing one clears them.
  */
 export function punchChoice(session, key) {
   const round = Boolean(PUNCHES[key]?.round);
@@ -136,29 +220,62 @@ export function punchChoice(session, key) {
     punch: key,
     ...(round ? { shape: 'round' } : {}),
     ...(round !== Boolean(PUNCHES[session.punch]?.round) ? { die: null } : {}),
+    ...(round && session.horns ? { horns: false } : {}),
   };
 }
 /**
  * The session after a patch, as the workspace applies every pick
  * (docs/sketch-studio-brake-hands-on.md §5.4: the one copy of the rule). A
  * new line (an edge, L, points or the mode) puts every segment back in the
- * hit (shop floor §6.2), starts the right way round (Turn sheet around, brake
- * flip tooling §5.2) and fits the punch and die to it (brake tool length
- * §3.1); a patch naming `skip` is a segment toggle on the same line.
+ * hit (shop floor §6.2) and starts the right way round (Turn sheet around,
+ * brake flip tooling §5.2); the punch and die keep their lengths (brake tool
+ * length §9.3, holdTools); a patch naming `skip` is a segment toggle on the
+ * same line.
  * `station` (brakeStation(), docs/sketch-studio-tight-bends.md §4.4): a line
  * that arrives on a made bend's line with an angle not above the bend's sets
  * the angle to 90° (to 180° for a bend at 90° or more), once, on arriving;
  * the line moving on before the angle is touched puts the angle it had back
  * (`arrived`: { from, set }, the spec's silence filled: a gauge edge clicked
  * at the last L may pass over a made line on the way to the one meant).
+ * A new line along a made bend within half the V seats on it first (tight
+ * bends §7.3, seatOf): the session's line is moved onto the bend's and
+ * `seated` { number, off, from (the L asked for, gauge mode; else null) }
+ * says so; a new line that does not seat clears it. A session that never
+ * seated gains no key. A patch naming `seated` (Esc on a finger drag,
+ * brakeHands.js fingerRestore) puts it back as it was.
+ * Gauging off a flange (docs/sketch-studio-skin-gauge.md §4.5): in gauge mode
+ * `distance` is what the backgauge reads off `stop`. A new line's stop is the
+ * patch's own (writers of a flat distance name `stop: null`), else the held
+ * one (`stopHold`, Gauge off), else the automatic rule (§4.4; a finger drag's
+ * `dragStop`, a patch-only key, tried first); the seat and the arrival run on
+ * the line that gives, and last the line is written canonical (its own stop,
+ * the L the fingers read). A new edge, the mode or the points clear the hold.
  */
 export function brakePatch(session, patch, station = null) {
   const newLine = ['edge', 'distance', 'points', 'mode'].some((k) => k in patch) && !('skip' in patch);
   const next = {
     ...session,
-    ...(newLine ? { skip: [], turned: false, punchTrim: null, dieTrim: null } : {}),
+    // A new line keeps the tools' lengths (brake tool length §9.3): holdTools below.
+    ...(newLine ? { skip: [], turned: false } : {}),
     ...patch,
   };
+  if ('dragStop' in next) delete next.dragStop;
+  // Which stop L is read from (skin gauge §4.5 steps 1, 2), before the line is
+  // found: named, held (Gauge off), a finger drag's own, or automatic (§4.4).
+  if (newLine) stopOfPatch(next, patch, session, station);
+  // A bent line seats itself in the die (§7.4 (b)): before the arrival rule,
+  // which then runs on the seated line as on an exact one; an etched mark's
+  // patch names the angle too, and seats all the same.
+  if (newLine && !('seated' in patch)) {
+    const seat = station ? seatOf(station, next) : null;
+    if (seat) {
+      const from = next.mode === 'gauge' ? Number(next.distance) : null;
+      Object.assign(next, seat.patch);
+      next.seated = { number: seat.number, off: seat.off, from };
+    } else if (next.seated) next.seated = null;
+  }
+  // The tools' lengths (brake tool length §9.4), on the line as it now stands.
+  holdTools(next, patch, newLine, station);
   // An armed try (tight bends §5.2) was tried for this very hit: a new line, a
   // segment toggled, Flip sheet or another bend shape is another hit and
   // disarms it (the tooling, the angle and the lengths keep it, re-checked).
@@ -185,6 +302,10 @@ export function brakePatch(session, patch, station = null) {
       next.angle = set;
     }
   }
+  // Last, the line in its canonical form (skin gauge §4.5 step 4): the field
+  // shows what the fingers read, after Bend on, the seat or Turn sheet around too.
+  // Bend on names its segments (`skip`) with the line, and its stop: canonical as well.
+  if (newLine || 'stop' in patch) canonicalStop(next, station);
   return next;
 }
 
@@ -193,13 +314,208 @@ export function brakePatch(session, patch, station = null) {
  * points. `station`: { polygon, edges } (brakeStation's). { edge, line,
  * gaugePoint } (line null while none is picked).
  */
-export function sessionLine({ polygon, edges }, session) {
+export function sessionLine(station, session) {
+  const { polygon, edges } = station;
   const edge = session.mode === 'gauge' && session.edge != null ? edges[session.edge] || null : null;
   let line = null;
-  if (edge) line = gaugeBendLine(polygon.outer, edge, Number(session.distance) || 0);
+  // L is what the backgauge reads (skin gauge §4.3): the line lies L plus the stop's take-up from the edge.
+  if (edge) line = gaugeBendLine(polygon.outer, edge, flatDistance(station, session, edge));
   else if (session.mode === 'points' && session.points?.length === 2)
     line = { a: session.points[0], b: session.points[1] };
   return { edge, line, gaugePoint: edge ? [(edge.a[0] + edge.b[0]) / 2, (edge.a[1] + edge.b[1]) / 2] : null };
+}
+
+// ---------------------------------------------------------------- gauging off a flange (docs/sketch-studio-skin-gauge.md)
+// The stops of a gauge edge and their take-ups, per fold object (§4.3): while
+// one station stands, brakePatch, sessionLine and the station read them many
+// times (a finger drag's every sample), and a fold is never changed in place.
+const STOPS = new WeakMap();
+function stopMemo(fold) {
+  let memo = STOPS.get(fold);
+  if (!memo) STOPS.set(fold, (memo = new Map()));
+  return memo;
+}
+/** The made bends a gauge edge's fingers can stand against (pressBrake.js gaugeStops), nearest the edge first, with their bend numbers. */
+export function edgeStops(fold, edge) {
+  if (!fold?.bends?.length || !edge) return [];
+  const memo = stopMemo(fold);
+  const key = `stops|${edge.index}`;
+  if (!memo.has(key))
+    memo.set(
+      key,
+      gaugeStops(fold, edge).map((s) => ({ ...s, number: bendNumber(fold, s.bendId) })),
+    );
+  return memo.get(key);
+}
+// The take-up of the stop `bendId` (pressBrake.js stopTakeUp): 0 for the edge (null).
+function takeUpOf(fold, edge, bendId, up) {
+  if (bendId == null || !fold || !edge) return 0;
+  const memo = stopMemo(fold);
+  const key = `${edge.index}|${bendId}|${up ? 'up' : 'down'}`;
+  if (!memo.has(key)) memo.set(key, stopTakeUp(fold, edge, bendId, { up }));
+  return memo.get(key);
+}
+/** The session's stop as the fold has it (§4.3): a bend id the fold no longer has reads as the edge (null). */
+export const sessionStop = (fold, session) =>
+  session.stop != null && fold?.bends?.some((b) => b.id === session.stop) ? session.stop : null;
+// Which side up a hit at flat `x` from the edge is made: a made bend's line
+// there is bent on its own way up (tight bends §4.4), anything else as Flip sheet says.
+function upAt(fold, edge, session, x) {
+  const on = edgeStops(fold, edge).find((s) => Math.abs(s.d - x) <= MADE_LINE_TOLERANCE);
+  const bend = on && fold.bends.find((b) => b.id === on.bendId);
+  return bend ? bend.direction === 'up' : !session.flip;
+}
+/**
+ * The punch line's flat distance from the gauge edge (§4.3): the session's L
+ * plus the take-up of its stop (0 for the edge, or with no fold). The take-up
+ * is for the side up the hit is made: Flip sheet's, or where the line lands on
+ * a made bend's line (bent on), that bend's own.
+ */
+export function flatDistance(station, session, edge) {
+  const L = Number(session.distance) || 0;
+  const { fold } = station || {};
+  const stop = sessionStop(fold, session);
+  if (stop == null) return L;
+  const up = !session.flip;
+  const own = L + takeUpOf(fold, edge, stop, up);
+  const other = L + takeUpOf(fold, edge, stop, !up);
+  // A flange whose reading depends on the side up: the other way up only where a bend of that way is there to bend on.
+  if (Math.abs(other - own) > 1e-9 && upAt(fold, edge, session, other) === !up) return other;
+  return own;
+}
+/**
+ * Whether stop `k` (0 the edge, k the flange of edge stop k) can make a line
+ * at L (§4.4): the flat line L + takeUp(k) is beyond its own bend zone and
+ * no farther than the next stop's bend plus the seat's reach (half the V;
+ * that bend's half zone where nothing seats); the last stop has no limit.
+ */
+function stopFits(station, session, edge, L, k) {
+  const { fold } = station;
+  const stops = edgeStops(fold, edge);
+  const own = k ? stops[k - 1] : null;
+  const x = L + (own ? takeUpOf(fold, edge, own.bendId, !session.flip) : 0);
+  const next = stops[k];
+  const reach = seatReach(fold, session);
+  if (own && x < own.d + own.half - 1e-6) return false;
+  return !next || x <= next.d + (reach > 0 ? reach : next.half) + 1e-6;
+}
+/**
+ * Which stop a typed L means (§4.4, automatic): the nearest stop that can
+ * make the line, the edge when none can. `first` (a finger drag's stop,
+ * §4.5): tried before the rest, so a drag stays on the stop it started on
+ * while that stop makes the line. A bend id, or null (the edge).
+ */
+export function automaticStop(station, session, edge, L, first = undefined) {
+  const stops = edgeStops(station.fold, edge);
+  if (first !== undefined) {
+    const k = first == null ? 0 : stops.findIndex((s) => s.bendId === first) + 1;
+    if ((first == null || k > 0) && stopFits(station, session, edge, L, k)) return first ?? null;
+  }
+  for (let k = 0; k <= stops.length; k++)
+    if (stopFits(station, session, edge, L, k)) return k ? stops[k - 1].bendId : null;
+  return null;
+}
+// The stop the operator holds (§4.6): 'edge' → null, a bend the fold still has → its id, else none (undefined).
+const heldStop = (fold, session) =>
+  session.stopHold === 'edge'
+    ? null
+    : session.stopHold != null && fold?.bends?.some((b) => b.id === session.stopHold)
+      ? session.stopHold
+      : undefined;
+/**
+ * The line's own stop (§4.5 step 4): the made bend nearest the line among the
+ * edge's stops strictly between the edge and it (its flange is what the
+ * fingers meet), null when there is none (a line on bend 1 or in the first
+ * face reads off the edge, as ever).
+ */
+export function lineStop(fold, edge, x) {
+  const between = edgeStops(fold, edge).filter((s) => s.d < x - MADE_LINE_TOLERANCE);
+  return between.length ? between.at(-1).bendId : null;
+}
+// The stop of a new line in gauge mode (§4.5 steps 1, 2): named (taken as
+// given), held, a finger drag's, or automatic. Keys only where they change,
+// so a session that never gauged off a flange gains none.
+function stopOfPatch(next, patch, session, station) {
+  // A new edge, the mode or the points put Gauge off back to automatic (§4.3).
+  if (
+    !('stopHold' in patch) &&
+    next.stopHold != null &&
+    (('edge' in patch && patch.edge !== session.edge) ||
+      ('mode' in patch && patch.mode !== session.mode) ||
+      'points' in patch)
+  )
+    next.stopHold = null;
+  if (!station?.fold || !station.edges || next.mode !== 'gauge') return;
+  const edge = next.edge != null ? station.edges[next.edge] || null : null;
+  if (!edge || 'stop' in patch) return;
+  const held = heldStop(station.fold, next);
+  const L = Number(next.distance) || 0;
+  const stop =
+    held !== undefined ? held : automaticStop(station, next, edge, L, 'dragStop' in patch ? patch.dragStop : undefined);
+  if (stop !== (next.stop ?? null)) next.stop = stop;
+}
+// The line written in its canonical form (§4.5 step 4): `stop` the line's own,
+// `distance` what the fingers read off it; the flat line unchanged. Under a
+// held stop the line has left, the held stop stays and the station refuses
+// the hit in words (`gauge-stop`).
+function canonicalStop(next, station) {
+  if (!station?.fold || !station.edges || next.mode !== 'gauge' || next.edge == null) return;
+  const edge = station.edges[next.edge];
+  if (!edge) return;
+  const { fold } = station;
+  const x = flatDistance(station, next, edge);
+  const held = heldStop(fold, next);
+  const own = lineStop(fold, edge, x);
+  const stop = held !== undefined ? held : own;
+  if (stop === sessionStop(fold, next)) return;
+  next.stop = stop;
+  next.distance = exact(x - takeUpOf(fold, edge, stop, upAt(fold, edge, next, x)));
+}
+// A stop as the panel says it: "the edge", "bend 2's flange".
+const stopWords = (fold, stop) => (stop == null ? 'the edge' : `bend ${bendNumber(fold, stop)}'s flange`);
+/**
+ * Gauge off a stop the line has left (§4.5 step 4, the builder's call): with a
+ * held stop, the fingers read the line off another, so the field's L is not
+ * what they read. A refusal with the one click that gauges off what they do
+ * stop on (the same line), or null.
+ */
+function stopRefusal({ session, fold, gauge, edge }) {
+  if (session.mode !== 'gauge' || !edge || session.stopHold == null) return null;
+  const held = heldStop(fold, session);
+  if (held === undefined) return null;
+  const read = gauge.stop?.bendId ?? null;
+  if (read === held) return null;
+  const there = stopWords(fold, read);
+  return {
+    code: 'gauge-stop',
+    message: `Gauged off ${stopWords(fold, held)}, L ${fmt(Number(session.distance) || 0)} mm does not reach this line: here the fingers stop on ${there}, at L ${fmt(gauge.distance)} mm. Gauge off ${there}, or set L again.`,
+    fix: {
+      label: `Gauge off ${there}`,
+      session: { stopHold: read ?? 'edge', stop: read, distance: exact(gauge.distance) },
+    },
+  };
+}
+/**
+ * The hint under the L field (§4.6): automatic took the edge, and the same L
+ * would also make a line off a made flange (§4.4's test passes for a later
+ * stop). { L, bendId, number, words, label } or null.
+ */
+function gaugeHint({ fold, session, edge, stops, pending }) {
+  if (session.mode !== 'gauge' || session.stopHold != null || !stops.length || sessionStop(fold, session) != null)
+    return null;
+  // The L asked for: a line that seated on a bend was asked for at `seated.from`.
+  const L = session.seated?.from ?? (Number(session.distance) || 0);
+  const k = stops.findIndex((_, i) => stopFits({ fold }, session, edge, L, i + 1));
+  if (k < 0) return null;
+  const { bendId, number } = stops[k];
+  const on = pending?.again?.number ?? null;
+  return {
+    L,
+    bendId,
+    number,
+    words: `L ${fmt(L)} is from the edge, ${on != null ? `on bend ${on}'s line` : `inside bend ${stops[0].number}'s flange`}.`,
+    label: `Gauge off bend ${number}'s flange`,
+  };
 }
 
 // ---------------------------------------------------------------- bend on (docs/sketch-studio-tight-bends.md §4.4)
@@ -255,13 +571,28 @@ export function madeLine(fold, polygon, line, skip = []) {
  * right way round and the tooling fitted. null when no line finds them.
  */
 export function bendOnPatch(station, key) {
-  const { fold, polygon, edges } = station;
+  const { fold } = station;
   const step = fold ? stepOf(fold, key) : null;
   if (!step) return null;
   const ids = [...new Set(step.bendIds)];
   const members = ids.map((id) => fold.bends.find((b) => b.id === id)).filter(Boolean);
   if (!members.length) return null;
-  const fresh = { turned: false, punchTrim: null, dieTrim: null, scrub: null };
+  const patch = lineOnBends(station, members);
+  // A new line like any other (brake tool length §9.4): the tools' lengths stay.
+  return patch ? { ...patch, turned: false, scrub: null } : null;
+}
+
+// The punch line put on made bends `members` (fold bends, §4.4 (b), shared by
+// the seat, tight bends §7.4 (b)): { mode, edge, distance, skip } or { mode,
+// points, skip }, every other segment the line crosses left out, or null.
+// `mode` 'gauge' keeps the session's own `edge` (the operator chose it: the
+// nearest edge may be on a face another bend cuts off from the gauge) when it
+// is parallel and in front of the bend; 'points' two points along the bends,
+// the first the end nearer `start` (the operator's point A stays A); none,
+// the search Bend on has always made.
+function lineOnBends(station, members, { edge = null, mode = null, start = null } = {}) {
+  const { fold, polygon, edges } = station;
+  const ids = members.map((b) => b.id);
   const fit = (line) => {
     const skip = lineSegments(polygon, line)
       .filter((s) => !members.some((b) => runsOf(b).some((run) => sameRun(run, [s.a, s.b]))))
@@ -270,17 +601,23 @@ export function bendOnPatch(station, key) {
     return made && made.bendIds.length === ids.length && ids.every((id) => made.bendIds.includes(id)) ? skip : null;
   };
   const [first] = members;
-  const gauged = (edges || [])
-    .filter((e) => Math.abs(e.d[0] * first.u[1] - e.d[1] * first.u[0]) < 1e-6)
-    .map((e) => ({
-      edge: e,
-      distance: exact((first.a[0] - e.a[0]) * e.inward[0] + (first.a[1] - e.a[1]) * e.inward[1]),
-    }))
-    .filter((g) => g.distance > 1e-6)
-    .sort((p, q) => p.distance - q.distance);
-  for (const { edge, distance } of gauged) {
-    const skip = fit(gaugeBendLine(polygon.outer, edge, distance));
-    if (skip) return { mode: 'gauge', edge: edge.index, distance, skip, ...fresh };
+  if (mode !== 'points') {
+    const parallel = (e) => Math.abs(e.d[0] * first.u[1] - e.d[1] * first.u[0]) < 1e-6;
+    const gauged = (mode === 'gauge' ? (edge ? [edge] : []) : edges || [])
+      .filter(parallel)
+      .map((e) => ({
+        edge: e,
+        distance: exact((first.a[0] - e.a[0]) * e.inward[0] + (first.a[1] - e.a[1]) * e.inward[1]),
+      }))
+      .filter((g) => g.distance > 1e-6)
+      .sort((p, q) => p.distance - q.distance);
+    for (const { edge: e, distance } of gauged) {
+      const skip = fit(gaugeBendLine(polygon.outer, e, distance));
+      // A flat distance (skin gauge §4.5 step 1): from the edge, where the edge has stops to tell it from.
+      if (skip)
+        return { mode: 'gauge', edge: e.index, distance, skip, ...(edgeStops(fold, e).length ? { stop: null } : {}) };
+    }
+    if (mode === 'gauge') return null;
   }
   const along = members.flatMap((b) =>
     b.intervals.flat().map((s) => {
@@ -290,8 +627,153 @@ export function bendOnPatch(station, key) {
   );
   const point = (s) => [exact(first.a[0] + first.u[0] * s), exact(first.a[1] + first.u[1] * s)];
   const points = [point(Math.min(...along)), point(Math.max(...along))];
+  const gap = (p) => Math.hypot(p[0] - start[0], p[1] - start[1]);
+  if (start && gap(points[1]) < gap(points[0])) points.reverse();
   const skip = fit({ a: points[0], b: points[1] });
-  return skip ? { mode: 'points', points, skip, ...fresh } : null;
+  return skip ? { mode: 'points', points, skip } : null;
+}
+
+/**
+ * The step a made bend is bent on from (tight bends §7.4 (c)): the key of its
+ * last step, as the sequence row's Bend on button has it (every bend of that
+ * step sharp and under 180°, none of them hit again later); null when the
+ * bend is round, at 180° or not on the part.
+ */
+export function bendOnKey(fold, bendId) {
+  const steps = hitSequence(fold);
+  const at = steps.findLastIndex((s) => s.bendIds.includes(bendId));
+  if (at < 0) return null;
+  const step = steps[at];
+  const members = step.bendIds.map((id) => fold.bends.find((b) => b.id === id));
+  if (!members.every((b) => b && !isRoundBend(b) && b.angle < 180 - 1e-9)) return null;
+  if (steps.slice(at + 1).some((later) => later.bendIds.some((id) => step.bendIds.includes(id)))) return null;
+  return step.key;
+}
+
+// ---------------------------------------------------------------- the seat (docs/sketch-studio-tight-bends.md §7)
+// How far each end of a made bend's material lies from the infinite line a → b (mm).
+const offLine = ({ a, b }) => {
+  const length = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  const n = [-(b[1] - a[1]) / length, (b[0] - a[0]) / length];
+  return (bend) =>
+    Math.max(
+      ...runsOf(bend)
+        .flat()
+        .map((p) => Math.abs((p[0] - a[0]) * n[0] + (p[1] - a[1]) * n[1])),
+    );
+};
+
+/**
+ * How far a line seats on a made bend (§7.4 (b)): half the V of the hit's die
+ * (the session's, else the automatic one). 0 (no seat) for a round bend, by
+ * radius punch or bump hits: its die and its zone are another size.
+ */
+export function seatReach(fold, session) {
+  if (session.shape === 'round' || punchOf(session.punch).round) return 0;
+  const die = session.die ? DIES[session.die] : suggestedDie(fold.thickness, session.punch).die;
+  return die ? die.v / 2 : 0;
+}
+
+/**
+ * The made bends a punch line lies along (§7.4 (b)): every end of every run
+ * of a bend within `reach` (mm, or a function of the bend) of the infinite
+ * line through line.a, line.b, and one of its runs overlapping a kept segment
+ * of the line (lineSegments less `skip`) along it. The nearest wins (its
+ * farthest end the nearest; ties in fold order) with the bends collinear with
+ * it (every end within MADE_LINE_TOLERANCE of its line). null, or { bendIds
+ * (fold order), bendId (the nearest's), number (its bend number), off (mm, its
+ * farthest end from the line), whole (every kept segment of the line overlaps
+ * a run of those bends: the line crosses no piece they do not bend) }.
+ */
+export function bendAlong(fold, polygon, line, skip = [], reach = 0) {
+  if (!line || !fold?.bends?.length) return null;
+  const length = Math.hypot(line.b[0] - line.a[0], line.b[1] - line.a[1]);
+  if (!(length > 1e-6)) return null;
+  const u = [(line.b[0] - line.a[0]) / length, (line.b[1] - line.a[1]) / length];
+  const at = (p) => (p[0] - line.a[0]) * u[0] + (p[1] - line.a[1]) * u[1];
+  const kept = lineSegments(polygon, line)
+    .filter((s) => !skip.includes(s.index))
+    .map((s) => [Math.min(at(s.a), at(s.b)), Math.max(at(s.a), at(s.b))]);
+  const off = offLine(line);
+  // A run of `bend` and the kept segment [s0, s1] share more than a point along the line.
+  const meets = (bend, [s0, s1]) =>
+    runsOf(bend).some(([p, q]) => Math.min(Math.max(at(p), at(q)), s1) - Math.max(Math.min(at(p), at(q)), s0) > 1e-6);
+  const candidates = [];
+  for (const bend of fold.bends) {
+    const far = off(bend);
+    const limit = typeof reach === 'function' ? reach(bend) : reach;
+    if (!(far <= limit + 1e-6)) continue;
+    if (kept.some((segment) => meets(bend, segment))) candidates.push({ bend, far });
+  }
+  if (!candidates.length) return null;
+  const nearest = candidates.reduce((best, c) => (c.far < best.far - 1e-9 ? c : best));
+  const own = nearest.bend;
+  const onIts = offLine({ a: own.a, b: [own.a[0] + own.u[0], own.a[1] + own.u[1]] });
+  const members = candidates.filter((c) => onIts(c.bend) <= MADE_LINE_TOLERANCE).map((c) => c.bend);
+  return {
+    bendIds: members.map((b) => b.id),
+    bendId: own.id,
+    number: bendNumber(fold, own.id),
+    off: nearest.far,
+    // Every kept segment lies on the members' material: no unbent piece on the line (the seat's condition).
+    whole: kept.every((segment) => members.some((bend) => meets(bend, segment))),
+  };
+}
+
+/**
+ * The seat (§7.3, §7.4 (b)): a session's punch line lying along a made bend
+ * within seatReach IS that bend's line. null when there is no line, when it
+ * is on a made line already (madeLine answers, with or without its error:
+ * nothing to move), when the hit does not seat (seatReach 0), when no bend lies
+ * along it, or when the line also crosses material those bends do not bend
+ * (a made tab and an unbent one on the same line: the operator's line, its
+ * segment toggles kept, goes to the station's net); else { number, off, patch } — the patch that puts the line on the
+ * bend ({ mode, edge, distance, skip } off the session's own edge, or { mode,
+ * points, skip }), given only when madeLine answers on the line it makes.
+ * `station`: brakeStation()'s { fold, polygon, edges }.
+ */
+export function seatOf(station, session) {
+  const { fold, polygon, edges } = station || {};
+  if (!fold?.bends?.length || !polygon || !edges) return null;
+  const { edge, line } = sessionLine(station, session);
+  if (!line) return null;
+  const skip = session.skip || [];
+  if (madeLine(fold, polygon, line, skip)) return null;
+  const reach = seatReach(fold, session);
+  if (!(reach > 0)) return null;
+  const along = bendAlong(fold, polygon, line, skip, reach);
+  // No makeable bend is lost (§7.3): the whole line must be the bends' line.
+  if (!along?.whole) return null;
+  const members = along.bendIds.map((id) => fold.bends.find((b) => b.id === id));
+  const patch = lineOnBends(station, members, { edge, mode: session.mode, start: session.points?.[0] || null });
+  if (!patch) return null;
+  const moved = sessionLine(station, { ...session, ...patch }).line;
+  if (!madeLine(fold, polygon, moved, patch.skip)) return null;
+  return { number: along.number, off: along.off, patch };
+}
+
+// The refusal a new line gets from the fold when it lies along or across a
+// made bend (§7.4 (c)): the fold's "Bend j crosses bend i." in the brake's
+// words, the made bend by its step number, with `seat` (Bend {n} on instead)
+// where it lies along one that can be bent on. null for any other fold error.
+function crossingRefusal(error, { fold, line, segments }) {
+  const crossing = error?.crossing;
+  const bend = crossing && crossing.bend === fold.bends.length ? fold.bends[crossing.other] : null;
+  if (!bend) return null;
+  const n = bendNumber(fold, bend.id);
+  const off = offLine(line)(bend);
+  const key = bendOnKey(fold, bend.id);
+  if (!crossing.along)
+    return {
+      error: `This line runs across bend ${n}, which is already made: the brake cannot bend across a formed bend.${segments.length > 1 ? ' Click that piece on the flat blank to leave it out of this hit.' : ''}`,
+    };
+  return {
+    error:
+      off > MADE_LINE_TOLERANCE
+        ? `This line is ${fmt(off)} mm from bend ${n}'s line: too close for a new bend.${key ? ` To bend bend ${n} further, bend it on.` : ''}`
+        : `This line is bend ${n}'s line, but the pieces in this hit are not the ones bend ${n} bends: a made bend is bent on whole, and nothing else with it.${segments.length > 1 ? ' Click a piece on the flat blank to leave it out of this hit.' : ''}`,
+    ...(key ? { seat: { key, number: n, off, label: `Bend ${n} on instead` } } : {}),
+  };
 }
 
 /** Reverse punch applies: the session's punch is not its own mirror image. */
@@ -348,14 +830,148 @@ export function finishedHere(model, instanceId) {
   };
 }
 
+// ---------------------------------------------------------------- the sheet's thickness (corner gaps §5)
+// Where a flange's metal ends inside another's at the end of a stroke. The
+// stroke itself is checked on the mid-surface (brakeCollisions); its end pose
+// once more at the sheet's true thickness (cornerGaps.js foldOverlaps), so a
+// flange may no longer end up to t/2 inside another unseen. A fact of the
+// part's outline, not of the order, the angle or the tooling: no remedy is
+// tried for it (the card says where the outline is changed).
+const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+// The blank as polygons, for the end faces when the caller has no profile
+// (sequenceChecks({ fold, machine })): its straight edges are the outline's, a
+// curve's chords among them (only the depth in the message reads them).
+const blankProfile = (fold) => ({
+  type: 'polygon',
+  points: fold.blank.outer,
+  holes: (fold.blank.holes || []).map((points) => ({ type: 'polygon', points })),
+});
+/**
+ * The end of a stroke at the sheet's true thickness (docs/sketch-studio-
+ * corner-gaps.md §5): `fold` (unposed), `bendIds`, `angles` (the other bends'),
+ * `target`, `start`, `number`, `die`, `machine`, `gaugePoint`, `turned` as
+ * brakeCollisions takes them. The pose: this stroke's bends at `target` (a
+ * bend-on step's part-way angle; default the bend's), the others at `angles`
+ * or as made. foldOverlaps with `moved` the pieces this stroke carries. null
+ * when clear, else a hit { tool: 'part', thickness: true, phase: 'end',
+ * angle, owner, pieces ([the piece whose end runs in, the other]), bends
+ * (their bend numbers at the brake, null: the base), depth (mm, from the facing
+ * row of flangeGaps on that pose; null when no row faces), triangles (the two
+ * pieces' sheet faces in the machine frame, for showHit), message, ms; a round
+ * bend's: bump / bumps its last hit, where the view shows it }. `profile` /
+ * `params`: the blank's, for the end faces of the depth (default: the blank as
+ * polygons).
+ */
+export function thicknessHit({
+  fold,
+  bendId = null,
+  bendIds = null,
+  angles = {},
+  target = null,
+  start = 0,
+  number = null,
+  machine,
+  die,
+  gaugePoint = null,
+  turned = false,
+  profile = null,
+  params = {},
+}) {
+  const started = nowMs();
+  const ids = bendIds?.length ? bendIds : [bendId];
+  const bend = fold.bends.find((b) => b.id === ids[0]);
+  if (!bend) throw new Error(`Unknown bend: ${ids[0]}`);
+  const goal = target ?? bend.angle;
+  const from = bend.steps ? machineFrom(fold, ids, { gaugePoint, turned }) : null;
+  const posed = poseFold(fold, { ...angles, ...Object.fromEntries(ids.map((id) => [id, goal])) }, from);
+  const members = new Set(ids);
+  const moved = posed.pieces.filter((p) => p.path.some((id) => members.has(id))).map((p) => p.id);
+  const found = foldOverlaps(posed, { moved });
+  if (!found.length) return null;
+  // The depth from the row facing it (an end run into a face), the deepest of the pairs.
+  const { rows } = flangeGaps(posed, profile || blankProfile(fold), profile ? params : {});
+  const carried = new Set(moved);
+  const read = found.map((overlap) => {
+    const [p, q] = overlap.pieces;
+    const row =
+      rows
+        .filter((r) => r.overlap && ((r.a.piece === p && r.b.piece === q) || (r.a.piece === q && r.b.piece === p)))
+        .sort((x, y) => x.gap - y.gap)[0] || null;
+    // The end that runs in, then the other: the row's way, else the piece this stroke carries first.
+    const order = row ? [row.a.piece, row.b.piece] : carried.has(p) ? [p, q] : [q, p];
+    return { order, depth: row ? -row.gap : null };
+  });
+  const chosen = read.reduce((best, r) => ((r.depth ?? -1) > (best.depth ?? -1) ? r : best), read[0]);
+  const strokes = hitSequence(fold);
+  const pieceOf = (id) => posed.pieces.find((p) => p.id === id);
+  const ownBend = (id) => pieceOf(id).path.at(-1) ?? null;
+  const numberOf = (bendRef) =>
+    bendRef == null
+      ? null
+      : strokes.findIndex((s) => s.bendIds.includes(bendRef)) + 1 || fold.bends.find((b) => b.id === bendRef).index + 1;
+  const [inner, outer] = chosen.order;
+  // "the flange" (this stroke's, running in), else "bend 5's flange" (this one's too, when run into) / "the base".
+  const named = (id, subject) => {
+    const own = ownBend(id);
+    if (subject && own != null && members.has(own)) return 'the flange';
+    return own == null ? 'the base' : `bend ${numberOf(own)}'s flange`;
+  };
+  const press = typeof machine === 'string' || machine == null ? machineOf(machine) : machine;
+  const dieEntry = typeof die === 'string' ? dieOf(die) : die || suggestedDie(fold.thickness).die;
+  const frame = brakeFrame(posed, ids[0], {
+    die: dieEntry,
+    gaugePoint,
+    turned,
+    members: ids,
+    hit: bend.steps || null,
+    bed: press.bed,
+  });
+  // Both sheet faces of the two pieces, as the part is drawn in the machine.
+  const triangles = [inner, outer].flatMap((id) => {
+    const piece = pieceOf(id);
+    return [0, fold.thickness].flatMap((z) =>
+      pieceTriangles(piece).map((tri) =>
+        tri.map(([x, y]) => transformPoint(frame.matrix, transformPoint(piece.matrix, [x, y, z]))),
+      ),
+    );
+  });
+  const prefix = hitName({ fold, bendIds: ids, number, start, target: goal, strokes });
+  const depth = chosen.depth;
+  const how = depth != null ? `ends ${depth.toFixed(2)} mm inside` : 'ends inside';
+  return {
+    tool: 'part',
+    thickness: true,
+    phase: 'end',
+    angle: goal,
+    owner: inner,
+    pieces: [inner, outer],
+    bends: [numberOf(ownBend(inner)), numberOf(ownBend(outer))],
+    depth,
+    triangles,
+    ...(bend.steps ? { bump: bend.steps, bumps: bend.steps } : {}),
+    message: `${prefix}: ${named(inner, true)} ${how} ${named(outer, false)} (the sheet is ${Number(fold.thickness.toFixed(2))} mm thick). Give that gap 0 mm or more in the part's Sheet metal panel.`,
+    ms: nowMs() - started,
+  };
+}
+
 // A collision, and whether the sheet turned around (the other side to the back) clears.
-function collision(options) {
+// `thickness` (corner gaps §5): a stroke otherwise clear is checked at its end
+// at the sheet's true thickness (thicknessHit); the candidate searches (a
+// remedy being tried) leave it out. A thickness hit is cured by no turn.
+function collision(options, { thickness = true, profile = null, params = {} } = {}) {
   const result = brakeCollisions(options);
-  if (!result.hit) return { ...result, turnedClears: false };
+  if (!result.hit) {
+    const inside = thickness ? thicknessHit({ ...options, profile, params }) : null;
+    if (!inside) return { ...result, turnedClears: false };
+    return { ...result, hit: inside, takeOff: null, turnedClears: false, ms: result.ms + inside.ms };
+  }
   const turned = brakeCollisions({ ...options, turned: !options.turned, advise: false });
   return { ...result, turnedClears: !turned.hit, ms: result.ms + turned.ms };
 }
 
+/** The pending hit's warning when the part stands over the horn sections (docs/sketch-studio-punch-library.md §4.3). */
+export const HOOKED =
+  'The part stands over the horns: slide it onto them under the punch, and off again along the punch (or spring it off). The brake checks the stroke, not that.';
 // A session trim that is set: a number other than 0 (null, '' and 0 are fitted).
 const trimSet = (value) => value != null && value !== '' && Number.isFinite(Number(value)) && Number(value) !== 0;
 const mid = (edge) => [(edge.a[0] + edge.b[0]) / 2, (edge.a[1] + edge.b[1]) / 2];
@@ -396,10 +1012,19 @@ export function oppositeEdge(edges, edge, point) {
 export function turnAround(station, session) {
   const { edges, edge } = station;
   if (session.mode === 'gauge' && edge) {
-    const L = Number(session.distance) || 0;
+    // The line where it lies on the flat blank (skin gauge §4.3), L from its stop.
+    const L = flatDistance(station, session, edge);
     const point = [edge.a[0] + edge.inward[0] * L, edge.a[1] + edge.inward[1] * L];
     const opposite = !session.turned && oppositeEdge(edges || [], edge, point);
-    if (opposite) return { edge: opposite.edge.index, distance: exact(opposite.distance), turned: false };
+    // A flat distance from the opposite edge (§4.5 step 1): named so, where a stop could be meant.
+    const flat = (session.stop ?? null) !== null || edgeStops(station.fold, opposite?.edge).length;
+    if (opposite)
+      return {
+        edge: opposite.edge.index,
+        distance: exact(opposite.distance),
+        turned: false,
+        ...(flat ? { stop: null } : {}),
+      };
   }
   return { turned: !session.turned };
 }
@@ -451,47 +1076,103 @@ const tenthUp = (clears, { value, low }) => {
   return value;
 };
 
-// A collision whose advice names a punch (brakeCollisions.js ADVISED_PUNCH)
-// offers it as one click (brake blades §4.3), only when the hit really passes
-// with it: the throat to the operator first, then reversed. A reversed punch
-// is first tried turned back round (the smallest change). { fix (null when
-// none passes), tried: what was tried and does not pass, in words for the
-// card (BT-2 follow-up: "turning the punch round", "the gooseneck punch",
-// "the gooseneck punch reversed", "the gooseneck punch either way round") }.
-// A ram hit (brake tool length §3.6) tries every taller punch in the
-// catalogue instead: the straight-flanked ones of the same angle that stand
-// the ram higher, the lowest first. `ramStill`: the tallest of them was tried
-// and still meets the ram (no punch in the list holds it high enough).
+// A collision with the punch, its holders or the ram tried with the other
+// punches (brake blades §4.3), offered as one click only when the hit really
+// passes with it. A punch or holder hit (docs/sketch-studio-shop-punches.md
+// §5.4) tries the punch in the machine turned round first (the smallest
+// change), then every other sharp punch not blunter than the hit's die, in
+// rack order (RACK_ORDER: the shop's own first), each with its room toward
+// the operator first, then reversed. A ram hit (brake tool length §3.6) tries
+// every taller punch instead: the straight-flanked ones of the same angle
+// that stand the ram higher, the lowest first (a reversed punch first tried
+// turned back round). { fix (null when none passes), tried: what was tried
+// and does not pass, in words for the card ("turning the punch round", "the
+// gooseneck punch", "the gooseneck punch reversed", "the gooseneck punch
+// either way round"; past two punches one item, "every other punch in the
+// rack" / "every taller punch in the rack", with ", either way round" when
+// any of them was tried both ways) }. `ramStill`: the tallest was tried and
+// still meets the ram (no punch in the list holds it high enough).
+//
+// A quicker card (docs/sketch-studio-shop-punches.md §6.5): `check` is the
+// station's own collision check of the pending hit (brakeCollisions' options:
+// the fold, bends, other angles, start and target, die, gauge side, turned,
+// surface). A candidate that forms the same inside radius as the punch in the
+// machine with the hit's die (airBendRadius: the fold is then the same) is
+// first checked there with only its punch and way round changed; a hit there
+// is the station run's own collision, so it fails with no station run. Clear,
+// or another radius, the station run decides, as before.
+const labelOf = (p) => ({ key: p.key, label: PUNCH_LABELS[p.key] || `Use the ${p.name} punch` });
+// A punch as the card names it: "the A 101 punch" (its label without "Use").
+const punchWords = (key) => labelOf(punchOf(key)).label.replace(/^Use /, '');
 const tallerPunches = (session) => {
   const own = punchOf(session.punch);
-  return Object.values(PUNCHES)
+  return RACK_ORDER.map((key) => PUNCHES[key])
     .filter((p) => !p.round && p.angle === own.angle && p.height > own.height + 1e-9)
     .sort((a, b) => a.height - b.height)
-    .map((p) => ({ key: p.key, label: PUNCH_LABELS[p.key] || `Use the ${p.name} punch` }));
+    .map(labelOf);
 };
-function punchFix({ model, session, params, hit }) {
+// The rack's other sharp punches for a punch or holder hit (§5.4), in rack order.
+const rackPunches = (session, die) =>
+  RACK_ORDER.map((key) => PUNCHES[key])
+    .filter((p) => !p.round && p.key !== session.punch && !(die && p.angle > die.angle + 1e-9))
+    .map(labelOf);
+function punchFix({ model, session, params, hit, die = null, check = null }) {
   const ram = hit?.tool === 'ram';
-  const candidates = ram ? tallerPunches(session) : hit && ADVISED_PUNCH[hit.tool] ? [ADVISED_PUNCH[hit.tool]] : [];
-  if (!candidates.length) return { fix: null, tried: [], ramStill: ram };
+  const tool = hit?.tool === 'punch' || hit?.tool === 'holder';
+  const candidates = ram ? tallerPunches(session) : tool ? rackPunches(session, die) : [];
+  const own = punchOf(session.punch);
+  // The punch in the machine turned round: un-reversed as ever; for a punch or
+  // holder hit an asymmetric one not reversed is also tried reversed (§5.4).
+  const turnOwn = punchReversed(session) || (tool && !own.round && !punchSymmetric(own));
+  if (!candidates.length && (ram || !turnOwn)) return { fix: null, tried: [], ramStill: ram };
   const nameOf = (c) => c.label.replace(/^Use the /, 'the ');
   const tries = [
-    ...(punchReversed(session) ? [[session.punch, false, null]] : []),
+    ...(turnOwn ? [[session.punch, !punchReversed(session), null]] : []),
     ...candidates.flatMap((c) =>
       (punchSymmetric(punchOf(c.key)) ? [false] : [false, true]).map((reverse) => [c.key, reverse, c]),
     ),
   ];
+  // A punch tried both ways and passing neither: one item, "… either way round".
+  const eitherWay = (list) => {
+    let tried = list;
+    for (const c of candidates) {
+      const name = nameOf(c);
+      if (tried.includes(name) && tried.includes(`${name} reversed`))
+        tried = [...tried.filter((f) => f !== name && f !== `${name} reversed`), `${name} either way round`];
+    }
+    return tried;
+  };
   const failed = [];
+  // The punches tried and not passing, and whether any was tried both ways.
+  const missed = new Set();
+  let bothWays = false;
   const tallest = candidates.at(-1);
   let ramStill = ram;
+  // §6.5: the inside radius the punch in the machine forms with the hit's die (null: no shortcut).
+  const formed = (punch) => airBendRadius(stockOf(check.fold.stock), check.fold.thickness, punch, check.die).radius;
+  const ownRadius = check?.fold && check.die ? formed(own) : null;
   for (const [key, reverse, c] of tries) {
     const same = key === session.punch;
-    if (same && reverse === punchReversed(session)) continue;
     const patch = { ...punchChoice(session, key), reverse };
-    const { pending } = brakeStation({ model, session: { ...session, ...patch }, params, advise: false });
+    const candidate = punchOf(key);
+    const quick =
+      ownRadius != null && Math.abs(formed(candidate) - ownRadius) < 1e-9
+        ? brakeCollisions({
+            ...check,
+            punch: key,
+            reverse: reverse && !punchSymmetric(candidate),
+            advise: false,
+          }).hit
+        : null;
+    const { pending } = quick
+      ? { pending: { refusals: [], collision: { hit: quick } } }
+      : brakeStation({ model, session: { ...session, ...patch }, params, advise: false, thickness: false });
     if (!pending || pending.error || pending.refusals.length || pending.collision?.hit) {
       const name = c ? nameOf(c) : null;
       const what = same ? 'turning the punch round' : reverse ? `${name} reversed` : name;
       if (!failed.includes(what)) failed.push(what);
+      if (c) missed.add(c.key);
+      if (c && reverse) bothWays = true;
       // Every way the tallest was tried must still meet the ram to say none holds it high enough.
       if (c === tallest && pending?.collision?.hit?.tool !== 'ram') ramStill = false;
       continue;
@@ -501,21 +1182,88 @@ function punchFix({ model, session, params, hit }) {
         label: same ? 'Turn the punch round' : reverse ? `${c.label}, reversed` : c.label,
         session: patch,
       },
-      tried: failed,
+      tried: summarised(eitherWay(failed), candidates, missed, bothWays, { ram, all: false }),
       ramStill: false,
     };
   }
-  let tried = failed;
-  for (const c of candidates) {
-    const name = nameOf(c);
-    if (tried.includes(name) && tried.includes(`${name} reversed`))
-      tried = [...tried.filter((f) => f !== name && f !== `${name} reversed`), `${name} either way round`];
-  }
-  return { fix: null, tried, ramStill };
+  return {
+    fix: null,
+    tried: summarised(eitherWay(failed), candidates, missed, bothWays, { ram, all: true }),
+    ramStill,
+  };
+}
+// What was tried, in words (§5.4): one or two punches named, as they were
+// tried; past two, one item for them. `all`: every candidate was tried (no
+// punch passed): "every other punch in the rack" (a ram hit: "every taller
+// punch in the rack"); a fix found after more than two: "{n} other punches in
+// the rack" (the ones before it), so the words never claim more than was tried.
+function summarised(tried, candidates, missed, bothWays, { ram, all }) {
+  if (missed.size <= 2) return tried;
+  const names = new Set(candidates.filter((c) => missed.has(c.key)).map((c) => c.label.replace(/^Use the /, 'the ')));
+  const rest = tried.filter((f) => ![...names].some((n) => f === n || f.startsWith(`${n} `)));
+  const punches = all
+    ? ram
+      ? 'every taller punch in the rack'
+      : 'every other punch in the rack'
+    : `${missed.size} ${ram ? 'taller' : 'other'} punches in the rack`;
+  return [...rest, `${punches}${bothWays ? ', either way round' : ''}`];
 }
 
 // The patch that sets a tool's trim (§3.4): fitted is null.
 const trimKey = { punch: 'punchTrim', die: 'dieTrim' };
+// Every part triangle of a contact `hit` lies, along the bed, within `spare`
+// mm of an end of the runs the tool stood over (`hit.runs`, machine X), or
+// beside them: the contact is at the tool's ends (brake tool length §3.5).
+function contactAtEnds(hit, spare) {
+  if (!(hit.runs || []).length) return false;
+  return hit.triangles.every((triangle) => {
+    const xs = triangle.map((p) => p[0]);
+    const [lo, hi] = [Math.min(...xs), Math.max(...xs)];
+    return hit.runs.every(([x0, x1]) => {
+      const a = Math.max(lo, x0),
+        b = Math.min(hi, x1);
+      return b < a || b <= x0 + spare + 1e-6 || a >= x1 - spare - 1e-6;
+    });
+  });
+}
+/**
+ * The session's `horns` value for a horn (docs/sketch-studio-punch-library.md
+ * §4.8): `true` for the standard (as the checkbox and the PL-1 card set it),
+ * else the horn's key, its reach.
+ */
+export const hornSetting = (horn) => (horn === HORNS[20] ? true : horn.reach);
+/**
+ * Horn sections tried (docs/sketch-studio-punch-library.md §4.4, §4.8): a
+ * contact with the punch or its holders at the punch's ends, a punch that
+ * takes horns. Without horns, every horn, shortest first; with horns on, the
+ * longer ones. Each is tried only when the contact lies within its reach of
+ * the ends (contactAtEnds), and the first whose hit passes every check is
+ * offered as one click. { label, session } or null.
+ */
+function hornFix({ model, session, params, hit }) {
+  if (punchOf(session.punch).round) return null;
+  if (!(hit?.tool === 'punch' || hit?.tool === 'holder')) return null;
+  const now = hornOf(session.horns);
+  for (const key of HORN_KEYS) {
+    const horn = HORNS[key];
+    if (now && horn.reach <= now.reach) continue;
+    if (!contactAtEnds(hit, horn.reach)) continue;
+    const value = hornSetting(horn);
+    const tried = brakeStation({
+      model,
+      session: { ...session, horns: value },
+      params,
+      advise: false,
+      thickness: false,
+    }).pending;
+    if (tried && !tried.error && !tried.refusals.length && !tried.collision?.hit)
+      return {
+        label: value === true ? 'Use horn sections at the ends' : `Use ${horn.reach} mm horn sections at the ends`,
+        session: { horns: value },
+      };
+  }
+  return null;
+}
 // The shorter tools tried for a contact at a tool's ends (§3.5), mm off each end.
 const SHORTER_TRIMS = [5, 10, 20, 40];
 /**
@@ -536,7 +1284,13 @@ function lengthFix({ model, session, params, pending }) {
   const key = trimKey[kind];
   const now = Number(session[key]) || 0;
   const passes = (trim) => {
-    const tried = brakeStation({ model, session: { ...session, [key]: trim }, params, advise: false }).pending;
+    const tried = brakeStation({
+      model,
+      session: { ...session, [key]: trim },
+      params,
+      advise: false,
+      thickness: false,
+    }).pending;
     return Boolean(tried && !tried.error && !tried.refusals.length && !tried.collision?.hit);
   };
   if (now < 0)
@@ -557,25 +1311,14 @@ function lengthFix({ model, session, params, pending }) {
   });
   if (!allowed.length) return { kind, fix: null, tried: [] };
   // The contact must lie in the ends the shortest of them leaves bare (machine X, the runs the tool stood over).
-  const spare = allowed.at(-1) - now;
-  const atEnds = (hit.runs || []).length
-    ? hit.triangles.every((triangle) => {
-        const xs = triangle.map((p) => p[0]);
-        const [lo, hi] = [Math.min(...xs), Math.max(...xs)];
-        return hit.runs.every(([x0, x1]) => {
-          const a = Math.max(lo, x0),
-            b = Math.min(hi, x1);
-          return b < a || b <= x0 + spare + 1e-6 || a >= x1 - spare - 1e-6;
-        });
-      })
-    : false;
-  if (!atEnds) return { kind, fix: null, tried: [] };
+  if (!contactAtEnds(hit, allowed.at(-1) - now)) return { kind, fix: null, tried: [] };
   // The shortest still colliding settles it; refused instead (its load, §3.3), a longer one may pass.
   const shortest = brakeStation({
     model,
     session: { ...session, [key]: allowed.at(-1) },
     params,
     advise: false,
+    thickness: false,
   }).pending;
   const trim = shortest?.collision?.hit ? null : allowed.find(passes);
   if (trim == null) return { kind, fix: null, tried: [`a shorter ${kind}`] };
@@ -613,6 +1356,7 @@ function ramAdvice(hit, { turn, fix, tried, ramStill, punch, machine, need, ways
     turn && 'turn the sheet around',
     fix && `${lower(fix.label)}: it holds the ram higher`,
     ...way.partway,
+    ...way.compound,
   ].filter(Boolean);
   const nothing = way.nothing && !offered.length;
   const remedy = offered.length
@@ -632,14 +1376,26 @@ function ramAdvice(hit, { turn, fix, tried, ramStill, punch, machine, need, ways
     ...(nothing ? [] : way.tried),
     ...(ramStill && !fix ? [] : tried),
   ];
-  const said = failed.length
-    ? ` ${listed(failed)[0].toUpperCase()}${listed(failed).slice(1)} ${failed.length > 1 ? 'were' : 'was'} tried: ${
-        failed.length > 2 ? 'none clears' : failed.length > 1 ? 'neither clears' : 'it does not clear'
-      }.`
-    : '';
+  const said = triedWords(failed);
   return `${factOf(hit.message)} ${stands}${remedy}${none}${said}${nothing ? ` ${NO_WAY}` : ''}`;
 }
 
+// What was tried and does not clear, as the card's closing sentence (BT-2
+// follow-up): "Turning the sheet around and the gooseneck punch were tried:
+// neither clears." An item that stands for several punches (shop punches
+// §5.4: "every other punch in the rack, either way round") sets its way round
+// off with commas, and alone it reads "none clears".
+const RACK_ITEM = / in the rack(, either way round)?$/;
+function triedWords(failed) {
+  if (!failed.length) return '';
+  const text = listed(failed).replace(/, either way round(?= and |$)/, ', either way round,');
+  const many = failed.length > 1;
+  const group = !many && RACK_ITEM.test(failed[0]);
+  const verdict =
+    failed.length > 2 ? 'none clears' : many ? 'neither clears' : group ? 'none clears' : 'it does not clear';
+  const verb = many || /^\d+ /.test(failed[0]) ? 'were' : 'was';
+  return ` ${capital(text)} ${verb} tried: ${verdict}.`;
+}
 // Why a tool is in the way, once more where the advice names a punch: the
 // tall punch raises the clamps, the gooseneck the ram.
 const PUNCH_WHY = { holder: ': it holds the clamps higher', ram: ': it holds the ram higher' };
@@ -652,7 +1408,7 @@ const listed = (items) => (items.length > 1 ? `${items.slice(0, -1).join(', ')} 
  * and does not: "Turning the sheet around and the gooseneck punch were
  * tried: neither clears."
  */
-function triedAdvice(hit, { turn, fix, tried, length = null, ways = null }) {
+function triedAdvice(hit, { turn, fix, tried, length = null, horn = null, ways = null }) {
   const facts = factOf(hit.message);
   // The brake finds the way (tight bends §5.2): "bend this one earlier" only
   // where try 1 found the place (its button names it), else the order is
@@ -662,9 +1418,13 @@ function triedAdvice(hit, { turn, fix, tried, length = null, ways = null }) {
     turn && 'turn the sheet around',
     fix &&
       `${fix.label[0].toLowerCase()}${fix.label.slice(1)}${fix.label.startsWith('Use') ? PUNCH_WHY[hit.tool] || '' : ''}`,
+    // Horn sections (punch library §4.4), when the hit clears with them:
+    // said before a shorter punch, as their button stands before its.
+    horn && lower(horn.label),
     // Brake tool length §3.5: the punch fitted or shorter, when that clears.
     length?.fix && lower(length.fix.label),
     ...way.partway,
+    ...way.compound,
   ].filter(Boolean);
   // Try 3: no order, no part-way bend and nothing else clears it.
   const nothing = way.nothing && !offered.length;
@@ -686,11 +1446,7 @@ function triedAdvice(hit, { turn, fix, tried, length = null, ways = null }) {
     ...tried,
     ...(length?.tried || []),
   ];
-  const said = failed.length
-    ? ` ${listed(failed)[0].toUpperCase()}${listed(failed).slice(1)} ${failed.length > 1 ? 'were' : 'was'} tried: ${
-        failed.length > 2 ? 'none clears' : failed.length > 1 ? 'neither clears' : 'it does not clear'
-      }.`
-    : '';
+  const said = triedWords(failed);
   return `${facts}${remedy ? ` ${remedy}` : ''}${said}${nothing ? ` ${NO_WAY}` : ''}`;
 }
 
@@ -715,7 +1471,8 @@ export const needsAdvice = (station) => {
 export function bladeOptions({ model, session, params = {}, kind }) {
   const choices =
     kind === 'punch'
-      ? Object.keys(PUNCHES).map((key) => [key, punchChoice(session, key)])
+      ? // The rack's order (docs/sketch-studio-shop-punches.md §5.2): the shop's own punches first.
+        RACK_ORDER.map((key) => [key, punchChoice(session, key)])
       : [[null, { die: null }], ...Object.keys(DIES).map((key) => [key, { die: key }])];
   return choices.map(([key, patch]) => {
     const pending = brakeStation({ model, session: { ...session, ...patch }, params, advise: false }).pending;
@@ -755,14 +1512,22 @@ function hangingStep({ model, session, params, edge, pending, hanging }) {
     const move = spacingOf(step) - Math.abs(across);
     if (session.mode === 'gauge' && edge) {
       const madeL = (made.a[0] - edge.a[0]) * edge.inward[0] + (made.a[1] - edge.a[1]) * edge.inward[1];
+      // Which way is judged on the flat blank; L moves as much on the session's own stop (skin gauge §4.5).
+      const flatL = (bend.a[0] - edge.a[0]) * edge.inward[0] + (bend.a[1] - edge.a[1]) * edge.inward[1];
       const L = Number(session.distance) || 0;
-      return { distance: exact(L + Math.sign(L - madeL) * move) };
+      return { distance: exact(L + Math.sign(flatL - madeL) * move), stop: session.stop ?? null };
     }
     const sign = across > 0 ? -1 : 1;
     return { points: session.points.map((p) => [p[0] + bend.n[0] * sign * move, p[1] + bend.n[1] * sign * move]) };
   };
   const clears = (step) => {
-    const tried = brakeStation({ model, session: { ...session, ...patchFor(step) }, params, advise: false }).pending;
+    const tried = brakeStation({
+      model,
+      session: { ...session, ...patchFor(step) },
+      params,
+      advise: false,
+      thickness: false,
+    }).pending;
     return Boolean(tried && !tried.error && !tried.refusals.length && !tried.collision?.hit);
   };
   const found = smallestClearing(clears, now, { step: 2, tries: 7, tolerance: 0.05 });
@@ -824,6 +1589,9 @@ function offsetPair(ctx, { offset, die = undefined, quick = false }) {
     const opposite = oppositeEdge(edges, edge, bend.a);
     const other = opposite && gaugeReading(fold, id, opposite.edge);
     if (other?.distance != null) return { gauge: other, gaugePoint: mid(opposite.edge), turned: false, around: true };
+    // Where neither edge is beside the line, the fingers stop on a made flange (skin gauge §4.2).
+    const skin = brakeReading(fold, id, edge, { angles: { [id]: 0 } });
+    if (skin.distance != null) return { gauge: skin, gaugePoint: mid(edge), turned: false };
     return { gauge: { distance: null, reason: own.reason }, gaugePoint: null, turned: false };
   };
   const hitOf = (made, data) => {
@@ -844,21 +1612,24 @@ function offsetPair(ctx, { offset, die = undefined, quick = false }) {
       angles: { [data.id]: 0 },
     });
     const refused = assessed.refusals.length > 0;
-    const hit =
-      quick && refused
-        ? { hit: null, samples: 0, ms: 0 }
-        : brakeCollisions({
-            fold,
-            bendIds: [data.id],
-            machine,
-            punch: assessed.punch,
-            die: assessed.die,
-            gaugePoint: g.gaugePoint,
-            turned: g.turned,
-            reverse,
-            number: hitSequence(fold).length,
-            advise: false,
-          });
+    const options = {
+      fold,
+      bendIds: [data.id],
+      machine,
+      punch: assessed.punch,
+      die: assessed.die,
+      gaugePoint: g.gaugePoint,
+      turned: g.turned,
+      reverse,
+      number: hitSequence(fold).length,
+      advise: false,
+    };
+    let hit = quick && refused ? { hit: null, samples: 0, ms: 0 } : brakeCollisions(options);
+    // The end at the sheet's true thickness (corner gaps §5), not in the searches (`quick`).
+    if (!quick && !hit.hit) {
+      const inside = thicknessHit({ ...options, profile, params });
+      if (inside) hit = { ...hit, hit: inside, takeOff: null, ms: hit.ms + inside.ms };
+    }
     return {
       ...assessed,
       data,
@@ -906,7 +1677,7 @@ function offsetPending(ctx) {
   const gauge = edge
     ? ctx.turned
       ? { distance: null, reason: TURNED_GAUGE }
-      : gaugeReading(pair.alone.fold, OFFSET_IDS[0], edge)
+      : brakeReading(pair.alone.fold, OFFSET_IDS[0], edge)
     : { distance: null, reason: 'Two-point line: no backgauge edge.' };
   const made = pair.ab?.ok ? pair.ab : pair.ba?.ok ? pair.ba : null;
   // A step too small for even the two bend zones has no hits to show (pair.ab null).
@@ -1091,6 +1862,8 @@ function offsetProblem(ctx, pair, offset, angle) {
     return { refusals, found: null };
   }
   const hit = failing.collision.hit;
+  // Metal inside metal at the end (corner gaps §5): the outline's, said as it is.
+  if (hit.thickness) return { refusals: [], found: { hit, where: failing } };
   if (hit.hanging && !search) return { refusals: [], found: { hit, where: failing } };
   if (hit.hanging) {
     // Tried: the side shorter (brakeCollisions, the other order already known
@@ -1141,16 +1914,27 @@ function againHit({ feature, profile, params, data, ids, from, machine, dieAuto 
 }
 
 // ---------------------------------------------------------------- the brake finds the way (tight bends §5.2)
-/** The part-way angles tried for a step in the way, the largest first (§5.2 try 2). */
-export const PART_WAY = Object.freeze([60, 45, 30, 15]);
+/**
+ * The part-way angles tried for a step in the way (§5.2 try 2), each only
+ * below the step's own angle. 45° first (docs/sketch-studio-shop-punches.md
+ * §6.4: the shop's own way into a tight space, 45° and the rest later), then
+ * the others, the largest first.
+ */
+export const PART_WAY = Object.freeze([45, 60, 30, 15]);
 // The tools whose collision the order and a part-way bend may cure (§5.2).
 const WAY_TOOLS = ['ram', 'punch', 'holder', 'die', 'bed'];
 // The bend-on entry that finishes a step opened part-way, while it is only tried.
 const FINISH_ID = `${PENDING_BEND}:finish`;
-/** Try 3 (§5.2): nothing in the order and no part-way bend clears it, and nothing else was offered. */
+/**
+ * Nothing in the order, no part-way bend and no other punch for the earlier
+ * bends clears it (§5.2 item 3), and nothing else was offered. Reworded by
+ * docs/sketch-studio-shop-punches.md §5.4 to claim only what was tried, and
+ * by §6.2 once the earlier bends with another punch are tried too.
+ */
 export const NO_WAY =
-  'No order and no part-way bend clears it with this punch either: the shape cannot be closed with the tools in this rack. Make the web wider or the flange shorter, or use tooling this rack does not hold.';
-const TRIM_FIELDS = ['punchTrim', 'dieTrim'];
+  'No order, no part-way bend and no other punch for the earlier bends clears it. Make the web wider or the flange shorter, or use tooling this rack does not hold.';
+// The step's own lengths and horn sections (punch library §4.1), carried only when set.
+const TRIM_FIELDS = ['punchTrim', 'dieTrim', 'horns'];
 // A step opened part-way is finished by a bend-on entry with the step's own punch, die and lengths (§5.2).
 const finishOf = (made, id) => ({
   id,
@@ -1164,16 +1948,24 @@ const finishOf = (made, id) => ({
 /**
  * The feature's bends once a pending hit's `records` are made (§5.2):
  * appended (the hit made last, as ever); with `armed` { kind: 'before', key }
- * put in before the record `key` (try 1: this hit first); with { kind:
- * 'partway', key, angle } appended, the record `key` set to `angle` and a
- * bend-on entry (`finishId`) taking it back to its own angle after this hit
- * (try 2). No new keys: an ordinary record at a place, or one angle changed
- * and a TB-1 bend-on entry.
+ * put in before the record `key` (try 1: this hit first), and with its
+ * `punches` ({ [record id]: punch key }, docs/sketch-studio-shop-punches.md
+ * §6.2, try 3) those records after the place made with those punches; with
+ * { kind: 'partway', key, angle } appended, the record `key` set to `angle`
+ * and a bend-on entry (`finishId`) taking it back to its own angle after this
+ * hit (try 2). No new keys: an ordinary record at a place (its punch changed),
+ * or one angle changed and a TB-1 bend-on entry.
  */
 export function placedBends(bends, records, armed = null, finishId = FINISH_ID) {
   if (armed?.kind === 'before') {
     const at = bends.findIndex((b) => b.id === armed.key);
-    if (at >= 0) return [...bends.slice(0, at), ...records, ...bends.slice(at)];
+    if (at >= 0) {
+      const punches = armed.punches || null;
+      const later = punches
+        ? bends.slice(at).map((b) => (punches[b.id] ? { ...b, punch: punches[b.id] } : b))
+        : bends.slice(at);
+      return [...bends.slice(0, at), ...records, ...later];
+    }
   }
   if (armed?.kind === 'partway') {
     const made = bends.find((b) => b.id === armed.key && !isBendOn(b));
@@ -1190,12 +1982,42 @@ export function placedBends(bends, records, armed = null, finishId = FINISH_ID) 
 // The last step of `steps` that hits one of the bends `own` (-1: none): a bend-on hit goes after it.
 const lastOf = (steps, own) => steps.reduce((at, s, i) => (s.bendIds.some((id) => own.includes(id)) ? i : at), -1);
 
+// A sharp step (not a round bend, nor one made with a radius punch).
+const sharpStep = (fold, step) => !step.bendIds.some((id) => isRoundBend(fold.bends.find((b) => b.id === id)));
+// The sharp punches of the rack, by key.
+const rackPunch = (key) => Boolean(PUNCHES[key] && !PUNCHES[key].round);
+
+/**
+ * An armed try's `punches` (docs/sketch-studio-shop-punches.md §6.2) as they
+ * stand on `fold`: only records of steps from `from` on (after the place), of
+ * sharp steps, naming sharp punches of the rack; any other entry is dropped.
+ * { punches, changes ([{ key (the step's), number, again, punch }], in the
+ * order made) } or null when none is left.
+ */
+function armedPunches(fold, steps, from, punches) {
+  if (!punches || typeof punches !== 'object') return null;
+  const kept = {};
+  const changes = [];
+  for (const [id, key] of Object.entries(punches)) {
+    const step = steps.find((s) => s.recordIds.includes(id));
+    if (!step || step.index < from || !sharpStep(fold, step) || !rackPunch(key)) continue;
+    kept[id] = key;
+    if (!changes.some((c) => c.key === step.key))
+      changes.push({ key: step.key, index: step.index, number: step.index + 1, again: step.again, punch: key });
+  }
+  if (!changes.length) return null;
+  changes.sort((a, b) => a.index - b.index);
+  return { punches: kept, changes: changes.map(({ index: _index, ...c }) => c) };
+}
+
 /**
  * The session's armed try (§5.2) as it stands on `fold` (the part as made):
  * the step it names must still be there, a bend-on hit (`own`, its bends)
  * must stay after its bend, and a step opened part-way must be a sharp bend
  * of one tab, made in one hit (its only one), above the angle. Else null:
- * the hit is made last, as if nothing were armed.
+ * the hit is made last, as if nothing were armed. A try made before a step
+ * keeps the `punches` armedPunches keeps (shop punches §6.2; with none it is
+ * plain try 1); a part-way try never has any (§6.6).
  */
 function armedOf(fold, armed, own = []) {
   if (!armed?.key) return null;
@@ -1203,7 +2025,11 @@ function armedOf(fold, armed, own = []) {
   const step = steps.find((s) => s.key === armed.key);
   if (!step) return null;
   const words = { number: step.index + 1, again: step.again };
-  if (armed.kind === 'before') return step.index > lastOf(steps, own) ? { ...armed, ...words, step } : null;
+  if (armed.kind === 'before') {
+    if (!(step.index > lastOf(steps, own))) return null;
+    const changed = armedPunches(fold, steps, step.index, armed.punches);
+    return { kind: 'before', key: armed.key, ...(changed || {}), ...words, step };
+  }
   if (armed.kind !== 'partway') return null;
   const [id] = step.bendIds;
   const bend = fold.bends.find((b) => b.id === id);
@@ -1217,7 +2043,7 @@ function armedOf(fold, armed, own = []) {
     !steps.some((s) => s.index > step.index && s.bendIds.includes(id)) &&
     angle > 1e-9 &&
     angle < step.to[id] - 1e-9;
-  return fits ? { ...armed, ...words, angle, step, bendId: id, to: step.to[id] } : null;
+  return fits ? { kind: 'partway', key: armed.key, ...words, angle, step, bendId: id, to: step.to[id] } : null;
 }
 
 /**
@@ -1248,8 +2074,14 @@ function armedHit({ feature, profile, params, data, ids, armed, machine, dieAuto
   return { ...assessed, others, place: step.index, trial };
 }
 
-/** One step of the sequence (hitSequence's `index`) checked as the machine would make it: sequenceChecks' row. */
-function stepCheck(fold, stroke, index, machine, surface) {
+/**
+ * One step of the sequence (hitSequence's `index`) checked as the machine
+ * would make it: sequenceChecks' row. `thickness` (corner gaps §5): a step
+ * otherwise clear is checked at its end at the sheet's true thickness
+ * (thicknessHit; `profile` / `params` the blank's for the depth); the
+ * candidate searches leave it out.
+ */
+function stepCheck(fold, stroke, index, machine, surface, { thickness = true, profile = null, params = {} } = {}) {
   const pose = stepPose(fold, index);
   const shown = pose.fold;
   const ids = stroke.bendIds;
@@ -1276,6 +2108,7 @@ function stepCheck(fold, stroke, index, machine, surface) {
     };
     const first = brakeCollisions(options);
     hit = first.hit ? brakeCollisions({ ...options, turned: true, advise: false }).hit && first.hit : null;
+    if (!hit && thickness) hit = thicknessHit({ ...options, profile, params });
   }
   return {
     bendId: stroke.key,
@@ -1291,6 +2124,10 @@ function stepCheck(fold, stroke, index, machine, surface) {
   };
 }
 const failed = (check) => Boolean(check && (check.refusals.length || check.collision));
+// Failed on the mid-surface: a refusal, or a collision other than metal inside metal at the end (corner
+// gaps §5). The candidate searches check their trials without the thickness, so they count today's alike.
+const failedMid = (check) =>
+  Boolean(check && (check.refusals.length || (check.collision && !check.collision.thickness)));
 
 /**
  * (§5.2 (ii)) The first step of `trial` from step `from` on (less the steps
@@ -1302,21 +2139,49 @@ const failed = (check) => Boolean(check && (check.refusals.length || check.colli
 function worseFrom({ trial, from, skip = [], since, fold, today = null, machine }) {
   const made = hitSequence(fold);
   let allowed = 0;
-  if (today) allowed = today.filter((c, i) => i >= since && failed(c)).length;
+  // On the mid-surface (corner gaps §5: a try, not a verdict): the thickness is left out on both sides.
+  if (today) allowed = today.filter((c, i) => i >= since && failedMid(c)).length;
   else {
     const surface = partSurface(fold);
-    for (let i = since; i < made.length; i++) if (failed(stepCheck(fold, made[i], i, machine, surface))) allowed++;
+    for (let i = since; i < made.length; i++)
+      if (failed(stepCheck(fold, made[i], i, machine, surface, { thickness: false }))) allowed++;
   }
   const steps = hitSequence(trial);
   const surface = partSurface(trial);
   let failing = 0;
   for (let i = from; i < steps.length; i++) {
     if (skip.includes(i)) continue;
-    const check = stepCheck(trial, steps[i], i, machine, surface);
+    const check = stepCheck(trial, steps[i], i, machine, surface, { thickness: false });
     if (failed(check) && ++failing > allowed) return check;
   }
   return null;
 }
+
+/**
+ * The words of a try that changes the punch of made steps
+ * (docs/sketch-studio-shop-punches.md §6.2), from `changes` ([{ number,
+ * again, punch }], in the order made): `mode` 'with' "bend 1 with the A 101
+ * punch" (the button), 'is' "bend 1 is made with the A 101 punch" (the armed
+ * card), 'now' "bend 2 is now made with the A 101 punch" (the line after the
+ * commit). Several steps with one punch: "bends 1 and 3 with the A 101
+ * punch"; with several punches each is named.
+ */
+export function punchChangeWords(changes, mode = 'with') {
+  const name = (c) => `${c.again ? 'step' : 'bend'} ${c.number}`;
+  const verb = (many) => (mode === 'with' ? 'with' : `${many ? 'are' : 'is'}${mode === 'now' ? ' now' : ''} made with`);
+  if (new Set(changes.map((c) => c.punch)).size === 1) {
+    const many = changes.length > 1;
+    const kind = changes.every((c) => c.again === changes[0].again);
+    const who =
+      many && kind
+        ? `${changes[0].again ? 'steps' : 'bends'} ${listed(changes.map((c) => c.number))}`
+        : listed(changes.map(name));
+    return `${who} ${verb(many)} ${punchWords(changes[0].punch)}`;
+  }
+  return listed(changes.map((c, i) => `${name(c)} ${i ? 'with' : verb(false)} ${punchWords(c.punch)}`));
+}
+// The most made steps try 3 changes the punch of (§6.2).
+const MOST_CHANGED = 3;
 
 /**
  * The tries (§5.2) for a pending hit that collides, on the station's own
@@ -1325,35 +2190,73 @@ function worseFrom({ trial, from, skip = [], since, fold, today = null, machine 
  * (after a bend-on hit's own bend) where this hit passes with that step and
  * the later ones not yet made and every step after it is no worse. Try 2,
  * when no place passes: the made steps from the latest back, each a sharp
- * bend of one tab made in one hit (not this hit's own), at the largest of
- * PART_WAY below its angle with which that step, the steps between, this hit
- * and the bend-on entry finishing it all pass. `today`: sequenceChecks of
- * the part as made. null with nothing made to reorder, else { first, partway
- * ({ label, session } or absent), places, openings (how many were tried) }.
+ * bend of one tab made in one hit (not this hit's own), at the first of
+ * PART_WAY below its angle (45° first) with which that step, the steps
+ * between, this hit and the bend-on entry finishing it all pass. Try 3
+ * (docs/sketch-studio-shop-punches.md §6.2), the last resort — when neither
+ * found anything and the card offers nothing else for this hit (`offered`:
+ * Turn the sheet around, a punch or a length for it): at the latest place of
+ * try 1 where this hit itself passes and only the order is refused, the step
+ * the refusal names made with another punch of the rack (a sharp step stopped
+ * by its punch or holder: the sharp punches not blunter than its die, in
+ * RACK_ORDER, its own left out). Each candidate is first checked on that step
+ * alone (stepCheck on the trial with its punch swapped: it may only rule the
+ * candidate out), then tried armed with `punches`; a punch with which the
+ * station passes is the try, one that moves the refusal to another step is
+ * kept and that step tried next (at most MOST_CHANGED steps). One place only
+ * (the follow-up to SP-2's audit, §6.8): a step from the place on is made with
+ * the same part before it wherever earlier the hit goes in, so what cannot be
+ * cured there cannot be cured earlier — unless the part as made already has
+ * failing steps between, whose count the order rule allows: then the earlier
+ * places are walked too, and without the step check. `feature`, `profile`:
+ * the part's, for the step check. `today`: sequenceChecks of the part as made.
+ * null with nothing made to reorder, else { first, partway, compound ({ label,
+ * session, number, changes: [{ number, punch }] }), each present only when
+ * found, and the counts places, openings, compoundPlaces (try 3's places),
+ * stepChecks, stepPassed (try 3's step checks, and those passed), punchRuns
+ * (try 3's armed station runs) }.
  */
-export function wayTries({ model, session, params, fold, machine, pending, today }) {
+export function wayTries({
+  model,
+  session,
+  params,
+  fold,
+  machine,
+  pending,
+  today,
+  feature = null,
+  profile = null,
+  offered = false,
+}) {
   const steps = hitSequence(fold);
   if (!steps.length) return null;
-  const checks = today || sequenceChecks({ fold, machine });
+  const checks = today || sequenceChecks({ fold, machine, thickness: false });
   const own = pending.again?.bendIds || [];
-  const passes = (armed) => {
-    const tried = brakeStation({ model, session: { ...session, armed }, params, advise: false, checks }).pending;
-    return Boolean(tried?.armed && !tried.error && !tried.refusals.length && !tried.collision?.hit);
-  };
+  const run = (armed) =>
+    brakeStation({ model, session: { ...session, armed }, params, advise: false, checks, thickness: false }).pending;
+  const passes = (tried) => Boolean(tried?.armed && !tried.error && !tried.refusals.length && !tried.collision?.hit);
   let places = 0,
-    openings = 0;
+    openings = 0,
+    punchRuns = 0,
+    compoundPlaces = 0,
+    stepChecks = 0,
+    stepPassed = 0;
+  const counts = () => ({ places, openings, compoundPlaces, stepChecks, stepPassed, punchRuns });
+  // Try 1's runs, kept for try 3 (the same armed run with no punch changed).
+  const before = new Map();
   for (let k = steps.length - 1; k > lastOf(steps, own); k--) {
     places++;
     const armed = { kind: 'before', key: steps[k].key };
-    if (passes(armed))
+    const tried = run(armed);
+    before.set(k, tried);
+    if (passes(tried))
       return {
         first: {
           label: `Make this hit before ${steps[k].again ? 'step' : 'bend'} ${k + 1}`,
           session: { armed },
           number: k + 1,
         },
-        places,
-        openings,
+        ...counts(),
       };
   }
   for (let k = steps.length - 1; k >= 0; k--) {
@@ -1363,7 +2266,7 @@ export function wayTries({ model, session, params, fold, machine, pending, today
     openings++;
     for (const angle of angles) {
       const armed = { kind: 'partway', key: step.key, angle };
-      if (passes(armed))
+      if (passes(run(armed)))
         return {
           partway: {
             label: `Bend ${k + 1} to ${fmt(angle)}° first, finish it after this hit`,
@@ -1371,27 +2274,128 @@ export function wayTries({ model, session, params, fold, machine, pending, today
             number: k + 1,
             angle,
           },
-          places,
-          openings,
+          ...counts(),
         };
     }
   }
-  return { places, openings };
+  // Try 3 (§6.2): the last resort, when the card has nothing else for this hit.
+  if (offered) return counts();
+  // The hit itself passes at the place and only the order is refused.
+  const orderOnly = (tried) =>
+    tried?.armed && !tried.error && !tried.collision?.hit && tried.refusals.length
+      ? tried.refusals.every((r) => r.code === 'order')
+        ? tried.refusals[0]
+        : null
+      : null;
+  const first = lastOf(steps, own);
+  let latest = null;
+  for (let k = steps.length - 1; k > first && latest == null; k--) if (orderOnly(before.get(k))) latest = k;
+  if (latest == null) return counts();
+  // The steps of the part as made that already fail from `k` on: the "no worse" rule allows as many.
+  const spare = (k) => checks.filter((c, i) => i >= k && failedMid(c)).length;
+  const stock = stockOf(fold.stock);
+  const radiusOf = (key, die) => (die ? airBendRadius(stock, fold.thickness, punchOf(key), die).radius : null);
+  // A candidate on the refused step alone: the trial with the punches, that step's own check (either way round).
+  const stepClears = (key, punches, index) => {
+    let trial;
+    try {
+      trial = foldSheet(
+        { ...feature, bends: placedBends(feature.bends || [], pending.data, { kind: 'before', key, punches }) },
+        profile,
+        params,
+      );
+    } catch {
+      return false;
+    }
+    const step = hitSequence(trial)[index];
+    return Boolean(step) && !failed(stepCheck(trial, step, index, machine, partSurface(trial), { thickness: false }));
+  };
+  for (let k = latest; k > first; k--) {
+    // An earlier place is the same refusal with more steps after the hit, unless it allows more failures.
+    if (k !== latest && spare(k) === spare(latest)) break;
+    if (!orderOnly(before.get(k))) continue;
+    compoundPlaces++;
+    // The step check may rule a candidate out only where no failing step is allowed (it is then the station's).
+    const checked = Boolean(feature && profile) && spare(k) === 0;
+    const key = steps[k].key;
+    const punches = {};
+    const changes = [];
+    let tried = before.get(k);
+    for (;;) {
+      const order = orderOnly(tried);
+      // The trial holds this hit at index k: a later step of the trial is step index − 1 as made.
+      const made = order && order.step > tried.armed.place ? steps[order.step - 1] : null;
+      if (
+        !made ||
+        !['punch', 'holder'].includes(order.tool) ||
+        !sharpStep(fold, made) ||
+        changes.some((c) => c.key === made.key) ||
+        changes.length >= MOST_CHANGED
+      )
+        break;
+      const die = DIES[made.die] || null;
+      let cured = null;
+      for (const { key: punch } of rackPunches({ punch: made.punch }, die)) {
+        const next = { ...punches, ...Object.fromEntries(made.recordIds.map((id) => [id, punch])) };
+        // Ruled out by the step's own check (the same inside radius: the rest of the trial unchanged).
+        if (checked && radiusOf(punch, die) === radiusOf(made.punch, die)) {
+          stepChecks++;
+          if (!stepClears(key, next, order.step)) continue;
+          stepPassed++;
+        }
+        const armed = { kind: 'before', key, punches: next };
+        const result = run(armed);
+        punchRuns++;
+        const change = { key: made.key, number: made.index + 1, again: made.again, punch };
+        if (passes(result)) {
+          const all = [...changes, change].sort((a, b) => a.number - b.number);
+          return {
+            compound: {
+              label: `Make this hit before ${steps[k].again ? 'step' : 'bend'} ${k + 1}, and ${punchChangeWords(all, 'with')}`,
+              session: { armed },
+              number: k + 1,
+              changes: all.map((c) => ({ number: c.number, punch: c.punch })),
+            },
+            ...counts(),
+          };
+        }
+        const moved = orderOnly(result);
+        if (moved && moved.step !== order.step) {
+          cured = { next, result, change };
+          break;
+        }
+      }
+      if (!cured) break;
+      Object.assign(punches, cured.next);
+      changes.push(cured.change);
+      tried = cured.result;
+    }
+  }
+  return counts();
 }
 
 // What the tries add to a card's words (§5.2): "bend this one earlier" only
 // where try 1 found the place, else the order said tried; a part-way bend
-// offered; try 3 (`nothing`: no order, no part-way bend) for the caller to
-// end with NO_WAY when nothing else is offered either.
+// offered; the earlier bends with another punch offered (shop punches §6.2:
+// "make this hit before bend 1 and make bend 1 with the A 101 punch", the
+// part-way bend then said tried; the order is the offer's own, not said
+// tried); `nothing` (no order, no part-way bend, no other punch for the
+// earlier bends) for the caller to end with NO_WAY when nothing else is
+// offered either.
 function wayWords(ways) {
-  if (!ways) return { first: false, partway: [], tried: [], nothing: false };
-  const nothing = !ways.first && !ways.partway;
+  if (!ways) return { first: false, partway: [], compound: [], tried: [], nothing: false };
+  const nothing = !ways.first && !ways.partway && !ways.compound;
   return {
     first: Boolean(ways.first),
     partway: ways.partway ? [lower(ways.partway.label)] : [],
+    compound: ways.compound ? [lower(ways.compound.label).replace(', and ', ' and make ')] : [],
     tried: ways.first
       ? []
-      : ['bending this one earlier', ...(nothing && ways.openings ? ['a part-way bend first'] : [])],
+      : ways.compound
+        ? ways.openings
+          ? ['a part-way bend first']
+          : []
+        : ['bending this one earlier', ...(nothing && ways.openings ? ['a part-way bend first'] : [])],
     nothing,
   };
 }
@@ -1410,7 +2414,8 @@ function dieWays(hit, ways) {
   const way = wayWords(ways);
   const fact = factOf(hit.message);
   const rest = hit.message.slice(fact.length).trim();
-  const partway = way.partway[0];
+  // A part-way bend, or the earlier bends with another punch (shop punches §6.2): offered alike.
+  const partway = way.partway[0] || way.compound[0];
   if (hit.hanging) {
     // A side that hangs (brake flip tooling §5.4): its message tried the other order already.
     if (hit.hanging.otherFirst) return hit.message;
@@ -1425,7 +2430,10 @@ function dieWays(hit, ways) {
   if (/^Bending it before bend/.test(rest)) return partway ? `${hit.message} Or ${partway}.` : hit.message;
   const flip = rest && /flip the sheet/i.test(rest) ? 'flip the sheet (bend the other way up)' : null;
   const offered = [partway, flip].filter(Boolean);
-  return `${fact}${offered.length ? ` ${capital(orList(offered))}.` : ''} ${capital(listed(way.tried))} ${way.tried.length > 1 ? 'were' : 'was'} tried: ${way.tried.length > 1 ? 'neither clears' : 'it does not clear'}.`;
+  const said = way.tried.length
+    ? ` ${capital(listed(way.tried))} ${way.tried.length > 1 ? 'were' : 'was'} tried: ${way.tried.length > 1 ? 'neither clears' : 'it does not clear'}.`
+    : '';
+  return `${fact}${offered.length ? ` ${capital(orList(offered))}.` : ''}${said}`;
 }
 
 /**
@@ -1441,7 +2449,7 @@ function dieWays(hit, ways) {
  * punch (brake blades §4.3) carries `fix: { label, session }` when the hit
  * made with that punch passes every check (tried; `advise: false` skips it).
  */
-export function brakeStation({ model, session, params = {}, advise = true, checks = null }) {
+export function brakeStation({ model, session, params = {}, advise = true, checks = null, thickness = true }) {
   const instance = model.instances.find((i) => i.id === session.instanceId);
   const part = model.parts.find((p) => p.id === instance?.partId);
   const feature = sheetMetalFeature(part);
@@ -1458,7 +2466,11 @@ export function brakeStation({ model, session, params = {}, advise = true, check
   const machineKnown = Boolean(MACHINES[key]);
   const machine = machineOf(machineKnown ? key : DEFAULT_MACHINE);
   const edges = gaugeEdges(polygon.outer);
-  const { edge, line, gaugePoint } = sessionLine({ polygon, edges }, session);
+  const { edge, line, gaugePoint } = sessionLine({ polygon, edges, fold }, session);
+  // Gauging off a flange (skin gauge §4.3, §4.7): the line's flat distance from
+  // the edge, the stop L is read from and the stops the edge has (Gauge off).
+  const flat = edge ? flatDistance({ fold }, session, edge) : null;
+  const stops = edge ? edgeStops(fold, edge) : [];
   const skip = session.skip || [];
   const segments = line ? lineSegments(polygon, line).map((s) => ({ ...s, skipped: skip.includes(s.index) })) : [];
   let pending = null,
@@ -1466,6 +2478,8 @@ export function brakeStation({ model, session, params = {}, advise = true, check
   // A round bend: the automatic hit count for the session's radius and tooling (the panel's placeholder).
   // A radius punch (round-bend spec §12.6) makes it in one ordinary hit instead: no radius, no hits.
   const radiusPunch = Boolean(punchOf(session.punch).round);
+  // Horn sections (punch library §4.1): a radius punch takes none.
+  const hornsOn = radiusPunch ? null : hornOf(session.horns);
   const roundShape = session.shape === 'round' && !radiusPunch;
   let autoSteps = null;
   if (roundShape)
@@ -1500,6 +2514,8 @@ export function brakeStation({ model, session, params = {}, advise = true, check
       // Brake tool length (§3.1): only when set, so a fitted hit's record is as before.
       ...(trimSet(session.punchTrim) ? { punchTrim: Number(session.punchTrim) } : {}),
       ...(trimSet(session.dieTrim) ? { dieTrim: Number(session.dieTrim) } : {}),
+      // Horn sections (docs/sketch-studio-punch-library.md §4.1): only when on, as the trims.
+      ...(hornsOn ? { horns: hornSetting(hornsOn) } : {}),
     };
     // A made bend's line (docs/sketch-studio-tight-bends.md §4.4): this hit
     // bends it on. Its line, side and shape are the bend's; the angle is the
@@ -1522,6 +2538,7 @@ export function brakeStation({ model, session, params = {}, advise = true, check
         ...(session.die ? { die: session.die } : {}),
         ...(trimSet(session.punchTrim) ? { punchTrim: Number(session.punchTrim) } : {}),
         ...(trimSet(session.dieTrim) ? { dieTrim: Number(session.dieTrim) } : {}),
+        ...(hornsOn ? { horns: hornSetting(hornsOn) } : {}),
       }));
       folded = made.error
         ? { error: made.error }
@@ -1552,7 +2569,11 @@ export function brakeStation({ model, session, params = {}, advise = true, check
       } catch (error) {
         // The fold names the new bend by its place among the bends (a bend-on hit is none, §4.1).
         const number = madeBends(feature.bends || []).length + 1;
-        lines = { error: (error.message || String(error)).replace(`Bend ${number}`, 'This hit') };
+        // A line along or across a made bend (tight bends §7.4 (c)): said in the brake's words,
+        // never a dead end where the bend can be bent on.
+        lines = crossingRefusal(error, { fold, line, segments }) || {
+          error: (error.message || String(error)).replace(`Bend ${number}`, 'This hit'),
+        };
       }
       // An offset is made on one tab at a time.
       if (offsetShape && !lines.error && lines.length > 1)
@@ -1572,7 +2593,15 @@ export function brakeStation({ model, session, params = {}, advise = true, check
             ? armedHit({ feature, profile, params, data, ids, armed, machine, dieAuto: !base.die })
             : brakeHit({ feature, profile, params, bend: data, machine });
     }
-    if (folded?.error) pending = { error: folded.error, data, bendIds: ids, ...(again ? { again } : {}) };
+    if (folded?.error)
+      pending = {
+        error: folded.error,
+        data,
+        bendIds: ids,
+        ...(again ? { again } : {}),
+        // Bend {n} on instead (§7.4 (c)).
+        ...(folded.seat ? { seat: folded.seat } : {}),
+      };
     else if (offsetShape && !again) {
       const ctx = {
         model,
@@ -1597,13 +2626,17 @@ export function brakeStation({ model, session, params = {}, advise = true, check
       if (!pending.error && pending.fold && pending.bend)
         pending.tooling = strokeTooling(pending.fold, [pending.bend.id], { bed: machine.bed });
     } else {
+      // An armed try (§5.2): the other bends as they stand when this hit is made there.
+      const others = armed ? folded.others || {} : {};
+      // What the backgauge reads (skin gauge §4.2): off the edge beside the line,
+      // else off the skin of the part as it stands then (this stroke's bends flat).
       gauge = edge
         ? turned
           ? { distance: null, reason: TURNED_GAUGE }
-          : gaugeReading(folded.fold, ids, edge)
+          : brakeReading(folded.fold, ids, edge, { angles: others })
         : { distance: null, reason: 'Two-point line: no backgauge edge.' };
-      // An armed try (§5.2): the other bends as they stand when this hit is made there.
-      const others = armed ? folded.others || {} : {};
+      // The stop by its number at the brake (the bends as made, not the armed order's places).
+      if (gauge.stop) gauge = { ...gauge, stop: { ...gauge.stop, number: bendNumber(fold, gauge.stop.bendId) } };
       const hit =
         gauge.distance != null
           ? assessBend(folded.fold, ids.length === 1 ? ids[0] : ids, {
@@ -1615,7 +2648,27 @@ export function brakeStation({ model, session, params = {}, advise = true, check
               angles: { ...others, ...Object.fromEntries(ids.map((id) => [id, again ? again.from : 0])) },
             })
           : folded;
+      // A held stop the line has left (skin gauge §4.5 step 4): the fingers would not read the field's L, so refused in words.
+      const off = gauge.distance != null && !armed ? stopRefusal({ session, fold, gauge, edge, flat }) : null;
+      if (off) hit.refusals = [...hit.refusals, off];
       const inLine = hit.refusals.some((r) => r.code === 'not-in-line');
+      // The collision check of this hit (also the card's quick punch check, shop punches §6.5).
+      const check = inLine
+        ? null
+        : {
+            fold: hit.fold,
+            bendIds: ids,
+            angles: others,
+            machine,
+            punch: hit.punch,
+            die: hit.die,
+            gaugePoint,
+            turned,
+            reverse: punchReversed(session),
+            // A bend bent on runs from the angle it stands at (§4.3).
+            ...(again ? { start: again.from, target: again.to } : {}),
+            ...(again ? {} : { number: armed ? folded.place + 1 : hitSequence(hit.fold).length }),
+          };
       pending = {
         ...hit,
         data,
@@ -1625,22 +2678,18 @@ export function brakeStation({ model, session, params = {}, advise = true, check
         // A stroke whose tabs are not in line cannot be posed in the die: no collision check.
         collision: inLine
           ? { hit: null, samples: 0, ms: 0, turnedClears: false }
-          : collision({
-              fold: hit.fold,
-              bendIds: ids,
-              angles: others,
-              machine,
-              punch: hit.punch,
-              die: hit.die,
-              gaugePoint,
-              turned,
-              reverse: punchReversed(session),
-              // A bend bent on runs from the angle it stands at (§4.3).
-              ...(again ? { start: again.from, target: again.to } : {}),
-              ...(again ? {} : { number: armed ? folded.place + 1 : hitSequence(hit.fold).length }),
-              advise,
-            }),
+          : collision({ ...check, advise }, { thickness, profile, params }),
       };
+      // The part stands over the horns (punch library §4.3): said, as the brake checks only the stroke.
+      if (pending.collision.hooked) pending.warnings = [...pending.warnings, { code: 'horn-hooked', message: HOOKED }];
+      // A new bend whose leg is too short because the line lies along a made bend
+      // (tight bends §7.4 (c)): that bend on instead, beside the refusal's own fix.
+      if (!again && hit.refusals.some((r) => r.code === 'short-leg')) {
+        const need = minLeg(hit.die, Number(session.angle));
+        const near = bendAlong(fold, polygon, line, skip, (bend) => need + bend.allowance / 2);
+        const key = near && bendOnKey(fold, near.bendId);
+        if (key) pending.seat = { key, number: near.number, off: near.off, label: `Bend ${near.number} on instead` };
+      }
       // (§5.2 (ii)) Armed, the steps after this hit must be no worse with it
       // made there (try 2: the steps from the one opened on, and the bend-on
       // entry that finishes it): re-checked here, so at the pedal, as every hit is.
@@ -1656,31 +2705,44 @@ export function brakeStation({ model, session, params = {}, advise = true, check
           today: checks,
           machine,
         });
+        // The step it names and why (docs/sketch-studio-shop-punches.md §6.2): `step` its
+        // index in the trial, `tool` its collision's tool (null: refused by the machine).
         if (worse)
           pending.refusals = [
             ...pending.refusals,
             {
               code: 'order',
               message: `That order is refused: step ${worse.index + 1} could not be made then. ${worse.collision?.message || worse.refusals[0].message}`,
+              step: worse.index,
+              tool: worse.collision?.tool ?? null,
             },
           ];
       }
       // Brake tool length (§3.2): where the punch and die stand along the line, for the panel's lengths.
       pending.tooling = strokeTooling(hit.fold, ids, { bed: machine.bed });
-      const punchTry = advise ? punchFix({ model, session, params, hit: pending.collision.hit }) : null;
+      // Metal inside metal at the end (corner gaps §5) is the outline's: no punch, turn or order cures it.
+      const thick = Boolean(pending.collision.hit?.thickness);
+      const punchTry =
+        advise && !thick ? punchFix({ model, session, params, hit: pending.collision.hit, die: hit.die, check }) : null;
       if (punchTry?.fix) pending.collision = { ...pending.collision, fix: punchTry.fix };
+      // Horn sections (docs/sketch-studio-punch-library.md §4.4), tried before a
+      // shorter punch: the corners pressed, where shortening leaves them open.
+      const hornTry =
+        advise && pending.collision.hit ? hornFix({ model, session, params, hit: pending.collision.hit }) : null;
+      if (hornTry) pending.collision = { ...pending.collision, horn: hornTry };
       // The punch or die fitted or shorter (§3.5), a button of its own when the hit clears with it.
       const lengthTry = advise && pending.collision.hit ? lengthFix({ model, session, params, pending }) : null;
       if (lengthTry?.fix) pending.collision = { ...pending.collision, length: lengthTry.fix };
       // "Turned around it clears" is a button (§5.2), only when the whole hit passes that way.
       if (advise && pending.collision.turnedClears) {
-        const patch = turnAround({ edges, edge }, session);
+        const patch = turnAround({ edges, edge, fold }, session);
         const tried = brakeStation({
           model,
           // A new edge is a new line, as the workspace takes it: every segment back, the tooling fitted.
           session: brakePatch(session, patch),
           params,
           advise: false,
+          thickness: false,
         }).pending;
         if (tried && !tried.error && !tried.refusals.length && !tried.collision?.hit)
           pending.collision = { ...pending.collision, turn: { label: 'Turn the sheet around', session: patch } };
@@ -1691,12 +2753,31 @@ export function brakeStation({ model, session, params = {}, advise = true, check
       const contact = pending.collision.hit;
       const ways =
         advise && !armed && contact && WAY_TOOLS.includes(contact.tool)
-          ? wayTries({ model, session, params, fold, machine, pending, today: checks })
+          ? wayTries({
+              model,
+              session,
+              params,
+              fold,
+              machine,
+              pending,
+              today: checks,
+              feature,
+              profile,
+              // Try 3 is the last resort (shop punches §6.2): not when the card offers a remedy for this hit.
+              offered: Boolean(
+                pending.collision.turn || pending.collision.fix || pending.collision.horn || pending.collision.length,
+              ),
+            })
           : null;
-      if (ways?.first || ways?.partway)
+      // Try 3 (docs/sketch-studio-shop-punches.md §6.2): `compound` only when found.
+      if (ways?.first || ways?.partway || ways?.compound)
         pending.collision = {
           ...pending.collision,
-          ways: { first: ways.first || null, partway: ways.partway || null },
+          ways: {
+            first: ways.first || null,
+            partway: ways.partway || null,
+            ...(ways.compound ? { compound: ways.compound } : {}),
+          },
         };
       // The punch, its holders or the ram: the advice says what was tried (BT-2 follow-up).
       if (advise && contact?.tool === 'ram') {
@@ -1740,6 +2821,7 @@ export function brakeStation({ model, session, params = {}, advise = true, check
               fix: pending.collision.fix,
               tried: punchTry?.tried || [],
               length: lengthTry,
+              horn: pending.collision.horn || null,
               ways,
             }),
           },
@@ -1786,6 +2868,14 @@ export function brakeStation({ model, session, params = {}, advise = true, check
     edge,
     gaugePoint,
     gauge,
+    // Gauging off a flange (skin gauge §4.3, §4.6, §4.7): the line's flat
+    // distance from the gauge edge (gauge mode), the stop L is read from (a
+    // bend id, null the edge), the edge's stops, and the hint that the same L
+    // would also make a line off a flange.
+    flat,
+    stop: edge ? sessionStop(fold, session) : null,
+    stops,
+    gaugeHint: edge ? gaugeHint({ fold, session, edge, stops, pending }) : null,
     segments,
     pending,
     // Round (§6): the automatic hit count for the session's radius, or null.
@@ -1924,6 +3014,8 @@ export function startStroke({ station, token, id = null, newId = null, strokeId 
       bendIds: ids,
       target: pending.bend.angle,
       timeline: hitTimeline(machine, pending.readouts.ramDepth, pending.readouts.hits),
+      // The slant the part comes off the punch along (docs/sketch-studio-shop-punches.md §5.3): view only.
+      takeOff: pending.collision?.takeOff ?? null,
       commit: true,
     },
   };
@@ -1951,6 +3043,8 @@ function startOffset({ station, token, id, newId, params }) {
     gaugePoint: h.gaugePoint,
     turned: h.turned,
     gaugeDistance: h.gauge?.distance ?? null,
+    // Each hit's take-off (shop punches §5.3), view only.
+    takeOff: h.collision?.takeOff ?? null,
   }));
   const [first, second] = pending.pair;
   return {
@@ -1988,12 +3082,19 @@ function armedStroke({ station, records, id, newId, params }) {
   const placed = placedBends(feature.bends || [], records, armed, finishId);
   const fold = foldSheet({ ...feature, bends: placed }, profile, params);
   const finished = finishId ? stepOf(fold, finishId) : null;
+  // The earlier bends with another punch (shop punches §6.2): numbered as the
+  // rows read after the commit (this hit now stands before them).
+  const changed = armed.changes
+    ? armed.changes.map((c) => ({ ...c, number: (stepOf(fold, c.key)?.index ?? c.number - 1) + 1 }))
+    : null;
   return {
     placed,
     fold,
     notice: finished
       ? `Bend ${armed.number} now stands at ${fmt(armed.angle)}° and is finished in step ${finished.index + 1}.`
-      : null,
+      : changed
+        ? `${capital(punchChangeWords(changed, 'now'))}.`
+        : null,
   };
 }
 
@@ -2040,6 +3141,7 @@ function startAgain({ station, token, id, newId, strokeId, params }) {
       target: pending.again.to,
       // A bend-on hit is one hit, timed as one (§4.3).
       timeline: hitTimeline(machine, pending.readouts.ramDepth),
+      takeOff: pending.collision?.takeOff ?? null,
       commit: true,
     },
   };
@@ -2059,6 +3161,20 @@ export function rerunStroke({ station, token, bendId }) {
   // The stroke poses its own bends: only the others' angles stand in the view.
   const angles = Object.fromEntries(Object.entries(pose.angles).filter(([id]) => !ids.includes(id)));
   const from = stroke.from[ids[0]] || 0;
+  // The part taken off the punch as the pedal's stroke takes it (shop punches
+  // §5.3), the return alone checked, as the view poses it (no gauge, this
+  // side back, the punch as the station clamps it).
+  const takeOff = takeOffOf({
+    fold: pose.fold,
+    bendIds: ids,
+    angles,
+    machine,
+    punch: stroke.punch,
+    die: stroke.die,
+    reverse: Boolean(station.view?.reverse),
+    ...(from > 0 ? { start: from } : {}),
+    target: stroke.to[ids[0]],
+  });
   return {
     view: {
       fold: pose.fold,
@@ -2078,6 +3194,7 @@ export function rerunStroke({ station, token, bendId }) {
       ...(from > 0 ? { from } : {}),
       target: stroke.to[ids[0]],
       timeline: hitTimeline(machine, report.readouts.ramDepth, stroke.again ? null : report.readouts.hits),
+      takeOff,
       commit: false,
     },
   };
@@ -2091,11 +3208,14 @@ export function rerunStroke({ station, token, bendId }) {
  * refusals, collision }] (collision: the hit when both ways round collide,
  * else null; a stroke whose tabs are no longer in line is refused, not posed).
  */
-export function sequenceChecks({ fold, machine }) {
+export function sequenceChecks({ fold, machine, profile = null, params = {}, thickness = true }) {
   const surface = partSurface(fold);
   // The steps in the order made (tight bends §4.3): each from its `from` to
-  // its `to`, the other bends as they stand then, its own angle and tooling.
-  return hitSequence(fold).map((stroke, index) => stepCheck(fold, stroke, index, machine, surface));
+  // its `to`, the other bends as they stand then, its own angle and tooling;
+  // each step's end at the sheet's true thickness (corner gaps §5).
+  return hitSequence(fold).map((stroke, index) =>
+    stepCheck(fold, stroke, index, machine, surface, { thickness, profile, params }),
+  );
 }
 
 /**
@@ -2103,29 +3223,38 @@ export function sequenceChecks({ fold, machine }) {
  * collides, the pending hit's two tries as moves of the made steps — the step
  * moved before an earlier one (the latest first; a bend-on step stays after
  * its bend), else an earlier step (a sharp bend of one tab, made in one hit,
- * not hit again before this one) opened to the largest of PART_WAY below its
- * angle that works, finished by a bend-on entry right after this step. Each
- * is tried on the folded new order: it folds, this step passes and fewer
- * steps fail than now (what changeBrakeBends, which commits it, re-checks).
- * `newId()`: the finishing entry's id. { [step key]: { move, partway } }, each
- * { label, bends (feature.bends to commit) } or null; steps with neither are
- * left out.
+ * not hit again before this one) opened to the first of PART_WAY below its
+ * angle that works (45° first), finished by a bend-on entry right after this
+ * step. A step stopped by its punch or holder (a sharp step) with neither
+ * gets a third (docs/sketch-studio-shop-punches.md §6.3): the first sharp
+ * punch in RACK_ORDER, its own left out and not blunter than its die, that it
+ * is made with. Each is tried on the folded new order: it folds, this step
+ * passes and fewer steps fail than now (what changeBrakeBends, which commits
+ * it, re-checks). `newId()`: the finishing entry's id. { [step key]: { move,
+ * partway, punch } }, each { label, bends (feature.bends to commit) } or
+ * null; steps with none are left out.
  */
 export function sequenceTries({ feature, profile, params = {}, machine, checks = null, newId = () => FINISH_ID }) {
   const fold = foldSheet(feature, profile, params);
   const steps = hitSequence(fold);
-  const today = checks || sequenceChecks({ fold, machine });
-  const failing = failingSteps(today);
+  const today = checks || sequenceChecks({ fold, machine, profile, params });
+  // The trials on the mid-surface (corner gaps §5: a search, not a verdict), today's failures counted alike.
+  const failing = today.filter(failedMid).length;
   const bends = feature.bends || [];
   const recordsOf = (step) => bends.slice(step.start, step.end + 1);
   const better = (list, index) => {
     if (foldProblem({ ...feature, bends: list }, profile, params)) return false;
-    const trial = sequenceChecks({ fold: foldSheet({ ...feature, bends: list }, profile, params), machine });
+    const trial = sequenceChecks({
+      fold: foldSheet({ ...feature, bends: list }, profile, params),
+      machine,
+      thickness: false,
+    });
     return !failed(trial[index]) && failingSteps(trial) < failing;
   };
   const tries = {};
   for (const [n, step] of steps.entries()) {
-    if (!today[n]?.collision) continue;
+    // Metal inside metal at a step's end (§5) is the outline's: no other order or punch cures it.
+    if (!today[n]?.collision || today[n].collision.thickness) continue;
     const records = recordsOf(step);
     const rest = steps.filter((s) => s !== step).map(recordsOf);
     let move = null;
@@ -2157,7 +3286,17 @@ export function sequenceTries({ feature, profile, params = {}, machine, checks =
         }
       }
     }
-    if (move || partway) tries[step.key] = { move, partway };
+    // §6.3: the step made with another punch of the rack (no move together with it, §6.6).
+    let punch = null;
+    if (!move && !partway && ['punch', 'holder'].includes(today[n].collision.tool) && sharpStep(fold, step))
+      for (const { key } of rackPunches({ punch: step.punch }, DIES[step.die] || null)) {
+        const list = bends.map((b, i) => (i >= step.start && i <= step.end ? { ...b, punch: key } : b));
+        if (better(list, n)) {
+          punch = { label: `Make step ${n + 1} with ${punchWords(key)}`, bends: list };
+          break;
+        }
+      }
+    if (move || partway || punch) tries[step.key] = { move, partway, punch };
   }
   return tries;
 }

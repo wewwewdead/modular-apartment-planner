@@ -16,7 +16,7 @@ import { shopRecordRows } from './shopRecords.js';
 import { memberIds, nodeName, treeRows } from './groups.js';
 import { isFabricated, notMadeHere } from './shopParts.js';
 import { csv } from './fabrication.js';
-import { DEFAULT_MACHINE, MACHINES, POWDER, dieOf, machineOf, punchOf, stockOf } from './shopCatalog.js';
+import { DEFAULT_MACHINE, MACHINES, POWDER, dieOf, hornWords, machineOf, punchOf, stockOf } from './shopCatalog.js';
 
 // Not in the spec, so stated here and labelled estimates in the sheet:
 // handling per press brake hit (pick the part up, set it to the backgauge,
@@ -161,7 +161,8 @@ function productRoute({ product, model, parts, records, machine, batch }) {
       // A punch or die set to its own length names it (docs/sketch-studio-brake-tool-length.md §3.4).
       const lengths =
         bend.punchTrim || bend.dieTrim ? toolLengths(made, ids, { bed: machine.bed }) : { punch: null, die: null };
-      const tooling = `${punchOf(bend.punch).name} punch${lengths.punch ? `, ${lengths.punch}` : ''}${lengths.punch || lengths.die ? ' ·' : ','} ${dieOf(bend.die).name} die${lengths.die ? `, ${lengths.die}` : ''}`;
+      // Horn sections at the punch's ends (docs/sketch-studio-punch-library.md §4.4).
+      const tooling = `${punchOf(bend.punch).name} punch${lengths.punch ? `, ${lengths.punch}` : ''}${lengths.punch || lengths.die ? ' ·' : ','} ${dieOf(bend.die).name} die${lengths.die ? `, ${lengths.die}` : ''}${hornWords(bend.horns) ? ` · ${hornWords(bend.horns)}` : ''}`;
       return {
         part: name(instance.id),
         label: `${name(instance.id)} · bend ${index + 1}`,

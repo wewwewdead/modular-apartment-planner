@@ -129,48 +129,50 @@ describe('try 1: this hit first (§5.2, §5.3 1: the screenshot’s part)', () =
   });
 });
 
+// docs/sketch-studio-shop-punches.md §6.4 (SP-2): PART_WAY tries 45° first, the shop's own
+// way into a tight space, so the tight Z's part-way bend is 45° (it was 60°, the largest first).
 describe('try 2: a part-way bend (§5.2, §5.3 2: the tight Z)', () => {
   const model = modelOf([line('b1', 150, ZH)], ZW, ZH);
   const down = session({ edge: ZRIGHT, distance: 150, angle: 90, flip: true });
-  it('no place passes; "Bend 1 to 60° first, finish it after this hit" does', () => {
+  it('no place passes; "Bend 1 to 45° first, finish it after this hit" does', () => {
     const { pending } = brakeStation({ model, session: down });
     expect(pending.collision.hit).toMatchObject({ tool: 'bed' });
     expect(pending.collision.ways.first).toBe(null);
     expect(pending.collision.ways.partway).toEqual({
-      label: 'Bend 1 to 60° first, finish it after this hit',
-      session: { armed: { kind: 'partway', key: 'b1', angle: 60 } },
+      label: 'Bend 1 to 45° first, finish it after this hit',
+      session: { armed: { kind: 'partway', key: 'b1', angle: 45 } },
       number: 1,
-      angle: 60,
+      angle: 45,
     });
     // The hanging side's advice (brake flip tooling §5.4) stands; the part-way bend follows it.
     expect(pending.collision.hit.message).toMatch(
-      /Neither order clears: .+\. Or bend 1 to 60° first, finish it after this hit\.$/,
+      /Neither order clears: .+\. Or bend 1 to 45° first, finish it after this hit\.$/,
     );
     expect(pending.collision.hit.message).not.toMatch(/Make this hit before|Bend this one earlier/);
     // Tried, not assumed: the order really fails (arming it is refused by the station's own checks).
     const before = brakeStation({ model, session: { ...down, armed: { kind: 'before', key: 'b1' } }, advise: false });
     expect(passes(before.pending)).toBe(false);
   });
-  it('armed: bend 1 shown at 60°; the pedal makes the hit and, in one commit, bend 1 at 60° and its bend-on entry', () => {
-    const armed = { kind: 'partway', key: 'b1', angle: 60 };
+  it('armed: bend 1 shown at 45°; the pedal makes the hit and, in one commit, bend 1 at 45° and its bend-on entry', () => {
+    const armed = { kind: 'partway', key: 'b1', angle: 45 };
     const station = brakeStation({ model, session: { ...down, armed }, advise: false });
     expect(passes(station.pending)).toBe(true);
-    expect(station.view.angles).toEqual({ b1: 60, 'pending-hit': 0 });
+    expect(station.view.angles).toEqual({ b1: 45, 'pending-hit': 0 });
     let n = 0;
     const stroke = startStroke({ station, token: 't', newId: () => `n${++n}` });
     expect(stroke.placed.map((b) => [b.id, b.again ?? null, b.angle, b.direction ?? null])).toEqual([
-      ['b1', null, 60, 'up'],
+      ['b1', null, 45, 'up'],
       ['n1', null, 90, 'down'],
       ['n2', 'b1', 90, null],
     ]);
     // Its punch and die the step's own.
     expect(stroke.placed[2]).toMatchObject({ punch: 'straight-88', die: 'v8-88' });
-    expect(stroke.notice).toBe('Bend 1 now stands at 60° and is finished in step 3.');
+    expect(stroke.notice).toBe('Bend 1 now stands at 45° and is finished in step 3.');
     const made = foldSheet(feature(stroke.placed), rectangle(ZW, ZH));
     expect(sequenceChecks({ fold: made, machine: MACHINE }).map((c) => [c.label, failedOf(c)])).toEqual([
-      ['UP 60° R1.28', false],
+      ['UP 45° R1.28', false],
       ['DOWN 90° R1.28', false],
-      ['bend 1 on: 60° → 90°', false],
+      ['bend 1 on: 45° → 90°', false],
     ]);
     // The same part as the two bends made at 90° (the bend-on entry keeps the 90° zone).
     const plain = foldSheet(
@@ -179,19 +181,22 @@ describe('try 2: a part-way bend (§5.2, §5.3 2: the tight Z)', () => {
     );
     expect(size(made)).toEqual(size(plain));
   });
-  it('tries the part-way angles largest first', () => {
-    expect(PART_WAY).toEqual([60, 45, 30, 15]);
+  it('tries the part-way angles 45° first, then the largest first (shop punches §6.4)', () => {
+    expect(PART_WAY).toEqual([45, 60, 30, 15]);
   });
 });
 const failedOf = (c) => Boolean(c.refusals.length || c.collision);
 
-describe('try 3: nothing passes (§5.2, §5.3 3: lip 15 / web 15)', () => {
+// docs/sketch-studio-shop-punches.md §5.8 item 8: with the shop's punches in the rack and the part
+// taken off along a slant (§5.3), lip 15 / web 15 now passes (shopPunches.test.js); lip 20 / web 10
+// (the lines 20 and 30 mm from the edge) is the case where nothing passes.
+describe('try 3: nothing passes (§5.2, §5.3 3: lip 20 / web 10)', () => {
   it('inner first, or the lip first: no button, the fact, what was tried and try 3’s words', () => {
     for (const [made, L] of [
-      ['inner', 15],
+      ['inner', 20],
       ['lip', 30],
     ]) {
-      const model = modelOf([line(made, made === 'inner' ? W - 30 : W - 15, H)], W, H);
+      const model = modelOf([line(made, made === 'inner' ? W - 30 : W - 20, H)], W, H);
       const { pending } = brakeStation({ model, session: session({ edge: RIGHT, distance: L, angle: 90 }) });
       expect(pending.collision.hit, made).toBeTruthy();
       expect(pending.collision.ways, made).toBeUndefined();
@@ -295,7 +300,7 @@ describe('the stored sequence’s remedies (§5.2, §5.3 4)', () => {
     expect(ids(tries.lip.move.bends)).toEqual(['lip', 'inner']);
     expect(allOk(foldSheet(feature(tries.lip.move.bends), rectangle(W, H)))).toBe(true);
   });
-  it('the tight Z by data: no move clears; "Bend 1 to 60° first" with its bend-on entry after step 2', () => {
+  it('the tight Z by data: no move clears; "Bend 1 to 45° first" (shop punches §6.4) with its bend-on entry after step 2', () => {
     const bends = [line('b1', 150, ZH), { ...line('b2', 165, ZH), direction: 'down' }];
     const tries = sequenceTries({
       feature: feature(bends),
@@ -304,9 +309,9 @@ describe('the stored sequence’s remedies (§5.2, §5.3 4)', () => {
       newId: () => 'fin',
     });
     expect(tries.b2.move).toBe(null);
-    expect(tries.b2.partway.label).toBe('Bend 1 to 60° first');
+    expect(tries.b2.partway.label).toBe('Bend 1 to 45° first');
     expect(tries.b2.partway.bends.map((b) => [b.id, b.again ?? null, b.angle])).toEqual([
-      ['b1', null, 60],
+      ['b1', null, 45],
       ['b2', null, 90],
       ['fin', 'b1', 90],
     ]);

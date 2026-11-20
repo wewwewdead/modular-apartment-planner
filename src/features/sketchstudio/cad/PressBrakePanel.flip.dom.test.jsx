@@ -207,7 +207,8 @@ it('gives the collision card a Turn the sheet around button when that clears the
   const card = within(region()).getByRole('alert', { name: 'Collision' });
   expect(card.textContent).not.toMatch(/Turned around/);
   act(() => fireEvent.click(within(region()).getByRole('button', { name: 'Turn the sheet around' })));
-  expect(onSession).toHaveBeenLastCalledWith({ edge: 3, distance: 95, turned: false, scrub: null });
+  // A flat distance past the made bend from that edge, named so (skin gauge §4.5 step 1).
+  expect(onSession).toHaveBeenLastCalledWith({ edge: 3, distance: 95, turned: false, stop: null, scrub: null });
   // Its punch fix stays beside it.
   expect(within(region()).getByRole('button', { name: 'Turn the punch round' })).toBeTruthy();
 });

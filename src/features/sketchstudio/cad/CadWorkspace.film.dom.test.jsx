@@ -15,6 +15,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { useImperativeHandle } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import CadWorkspace from './CadWorkspace.jsx';
+import { forgetPunch } from './brakeMemory.js';
 import { emptyModel } from './model.js';
 vi.setConfig({ testTimeout: 20000 });
 
@@ -70,6 +71,8 @@ beforeEach(() => {
   vi.stubGlobal('cancelAnimationFrame', () => {});
   vi.spyOn(performance, 'now').mockImplementation(() => now);
 });
+// The punch stays in the machine (docs/sketch-studio-shop-punches.md §5.5): each test starts from the default.
+beforeEach(() => forgetPunch());
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();

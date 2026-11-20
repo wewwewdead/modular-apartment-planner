@@ -12,7 +12,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react';
 import CadViewport from './CadViewport.jsx';
 import { emptyModel } from './model.js';
 import { SHEET_STOCK } from './shopCatalog.js';
-import { brakeSessionDefaults, brakeStation } from './brakeStation.js';
+import { brakePatch, brakeSessionDefaults, brakeStation } from './brakeStation.js';
 import { fingerOffer } from './brakeHands.js';
 
 const { scenes } = vi.hoisted(() => ({ scenes: { last: null } }));
@@ -366,6 +366,57 @@ it('sets L exactly from digits + Enter mid-drag, and Esc puts the line back', ()
   step();
   press('pointerDown', [x, y - 30], { button: 2, buttons: 2 });
   expect(spy.fingers.mock.calls.at(-1)[0]).toEqual({ cancel: true });
+});
+
+it('reads the L the fingers stand at and the bend while the line seats on a made bend (tight bends §7.4 (f))', () => {
+  // Bend 1 made at L 200 to 45° (the automatic V10 seats within 5 mm): the fingers grabbed at L 194,
+  // dragged toward the back onto it.
+  const sm = brakeModel.parts[0].features[0];
+  const made = {
+    ...brakeModel,
+    parts: [
+      {
+        ...brakeModel.parts[0],
+        features: [
+          {
+            ...sm,
+            bends: [
+              { id: 'b1', a: [100, 0], b: [100, 100], angle: 45, direction: 'up', radius: null, punch: 'straight-88' },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const at = (s) => {
+    const st = brakeStation({ model: made, session: s, advise: false });
+    return { st, now: { view: st.view, grip: { ...setup(s).grip, fingers: fingerOffer(st, s) } } };
+  };
+  const spy = calls();
+  const start = session({ distance: 194 });
+  const first = at(start);
+  expect(first.now.grip.fingers).toMatchObject({ offered: true, L: 194 });
+  expect('on' in first.now.grip.fingers).toBe(false);
+  const { rerender } = render(<CadViewport {...props(first.now, spy)} />);
+  const [x, y] = station().reach.fingers[0];
+  press('pointerDown', [x, y]);
+  for (let i = 1; i <= 12 && spy.fingers.mock.calls.length < 2; i++) {
+    press('pointerMove', [x, y - 4 - i], { buttons: 1 });
+    step();
+  }
+  const dragged = spy.fingers.mock.calls.at(-1)[0].distance;
+  expect(dragged).not.toBe(200);
+  expect(Math.abs(dragged - 200)).toBeLessThanOrEqual(5);
+  // The workspace has not caught up: the dragged L, as ever.
+  expect(chip().textContent).toMatch(new RegExp(`^L ${dragged} mm`));
+  // The pick seats on bend 1 (the workspace's brakePatch): the fingers stand at 200, the chip says so.
+  const seated = brakePatch(start, { distance: dragged }, first.st);
+  expect([seated.distance, seated.seated?.from]).toEqual([200, dragged]);
+  const next = at(seated);
+  expect(next.now.grip.fingers).toMatchObject({ L: 200, on: 1, from: dragged });
+  rerender(<CadViewport {...props(next.now, spy)} />);
+  expect(chip().textContent).toMatch(/^L 200 mm · on bend 1/);
+  press('pointerUp', [x, y - 20]);
 });
 
 it('asks for the L field on a click of the fingers, and for its picker on a click of a blade', () => {

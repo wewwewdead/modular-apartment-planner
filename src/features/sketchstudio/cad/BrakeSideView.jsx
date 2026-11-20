@@ -13,6 +13,7 @@
 // millimetres throughout: the backgauge (+Y) to the right, Z up (the SVG's y
 // is −Z).
 import { useEffect, useId, useRef } from 'react';
+import { hornWords } from './shopCatalog.js';
 
 const fmt = (value, digits = 1) => (Number.isFinite(value) ? Number(value.toFixed(digits)).toString() : '—');
 const signed = (value, digits = 2) => `${value < -1e-9 ? '−' : value > 1e-9 ? '+' : ''}${fmt(Math.abs(value), digits)}`;
@@ -78,9 +79,17 @@ function draw(nodes, pose) {
       .join(' '),
   );
   nodes.context.setAttribute('stroke-width', fmt(sheet.thickness, 3));
-  nodes.context.classList.toggle('is-hit', collision?.tool === 'self');
-  nodes.sheet.classList.toggle('is-hit', collision?.tool === 'self');
+  // The part against itself: on the mid-surface ('self') or at the sheet's thickness at the end ('part', corner gaps §5).
+  const itself = collision?.tool === 'self' || collision?.tool === 'part';
+  nodes.context.classList.toggle('is-hit', itself);
+  nodes.sheet.classList.toggle('is-hit', itself);
   nodes.breaks.setAttribute('d', sheet.breaks.map((b) => breakPath(b, width * 0.045)).join(' '));
+  // The part taken off the punch along a slant (docs/sketch-studio-shop-punches.md §5.3): during the
+  // return the sheet slides along Y with the ram's lift, as the 3D stage draws it.
+  const slide = pose.slide ? `translate(${fmt(pose.slide, 3)} 0)` : null;
+  for (const node of [nodes.sheet, nodes.context, nodes.breaks])
+    if (slide) node.setAttribute('transform', slide);
+    else node.removeAttribute('transform');
   // The punch line: the punch's centre, through the V.
   nodes.axis.setAttribute('d', `M 0 ${fmt(-window.z1, 3)} L 0 ${fmt(-window.z0, 3)}`);
   // The backgauge finger at L, or a pointer to it beyond the card's edge.
@@ -115,7 +124,8 @@ function draw(nodes, pose) {
         pose.angle > 1e-6 && !(pose.target && pose.angle < pose.target - 1e-6)
         ? 'Parked: the bend is made'
         : 'Parked above the sheet';
-  nodes.tooling.textContent = `${pose.punch} punch${pose.reverse ? ' (reversed)' : ''} · ${pose.die} die`;
+  // Horn sections at the punch's ends (docs/sketch-studio-punch-library.md §4.4).
+  nodes.tooling.textContent = `${pose.punch} punch${pose.reverse ? ' (reversed)' : ''} · ${pose.die} die${hornWords(pose.horns) ? ` · ${hornWords(pose.horns)}` : ''}`;
   // Which side of the sheet is up (§5.1): a bend down is made with it turned over.
   nodes.side.textContent = pose.flipped ? 'Flipped over' : 'This side up';
   nodes.side.classList.toggle('is-flipped', Boolean(pose.flipped));

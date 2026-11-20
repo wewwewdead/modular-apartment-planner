@@ -281,13 +281,8 @@ it('offers Cut all for two or more ready outlines and for the drawing’s blanks
   const all = screen.getByRole('button', { name: 'Cut all outlines' });
   expect(all.textContent).toMatch(/^Cut all 2 outlines/);
   act(() => fireEvent.click(all));
-  expect(onOutline).toHaveBeenLastCalledWith({
-    kind: 'batch',
-    items: [
-      { kind: 'sketch', sketchId: 'a' },
-      { kind: 'sketch', sketchId: 'b' },
-    ],
-  });
+  // docs/sketch-studio-cut-pick.md §4.1: Cut's picker with every ready outline selected.
+  expect(onOutline).toHaveBeenLastCalledWith({ kind: 'pick', selected: ['a', 'b'] });
   // The 2D drawing's two blanks.
   act(() => fireEvent.click(screen.getByRole('button', { name: /^From the 2D drawing/ })));
   const drawingAll = screen.getByRole('button', { name: 'Cut all drawing blanks' });

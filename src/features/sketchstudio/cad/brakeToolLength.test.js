@@ -13,13 +13,25 @@ import {
   assessBend,
   brakeFrame,
   brakeHit,
+  gaugeEdges,
+  lineTooling,
   strokeTooling,
   toolLengths,
   toolingRuns,
   trimRuns,
 } from './pressBrake.js';
 import { brakeCollisions, ramClearance } from './brakeCollisions.js';
-import { brakeSessionDefaults, brakeStation, sequenceChecks, startStroke } from './brakeStation.js';
+import {
+  bendOnPatch,
+  brakeCarry,
+  brakePatch,
+  brakeSessionDefaults,
+  brakeStation,
+  sequenceChecks,
+  sessionLine,
+  startStroke,
+} from './brakeStation.js';
+import { fingerRestore } from './brakeHands.js';
 import { jobSheet } from './jobSheet.js';
 import { emptyModel, normalizeModel } from './model.js';
 import { PUNCHES, SHORTEST_SECTION, machineOf, toolingLimit } from './shopCatalog.js';
@@ -178,13 +190,15 @@ describe('§4 items 4 – 5: the ram tells the truth (§3.6)', () => {
     expect(hit.tool).toBe('ram');
     close(hit.angle, 88.8, 1);
     expect(pending.collision.length).toBeUndefined();
+    // docs/sketch-studio-shop-punches.md §5.4: the taller punches now hold the shop's three 88°
+    // ones (95 mm), the lowest first: the A 101 is tried first and clears.
     expect(pending.collision.fix).toEqual({
-      label: 'Use the gooseneck punch',
-      session: { punch: 'gooseneck-88', reverse: false },
+      label: 'Use the A 101 punch',
+      session: { punch: 'a101', reverse: false },
     });
     // Tight bends TB-2 (docs/sketch-studio-tight-bends.md §5.2): the order and a part-way bend are tried too.
     expect(hit.message).toBe(
-      'Bend 3: the part hits the ram at 88.8°. This punch and its holder stand the ram 166.5 mm above the tip. Use the gooseneck punch: it holds the ram higher. Turning the sheet around, bending this one earlier and a part-way bend first were tried: none clears.',
+      'Bend 3: the part hits the ram at 88.8°. This punch and its holder stand the ram 166.5 mm above the tip. Use the A 101 punch: it holds the ram higher. Turning the sheet around, bending this one earlier and a part-way bend first were tried: none clears.',
     );
     expect(hit.message).not.toMatch(/shorten|shorter/i);
     expect(clears(station(setup, pending.collision.fix.session).pending)).toBe(true);
@@ -192,8 +206,18 @@ describe('§4 items 4 – 5: the ram tells the truth (§3.6)', () => {
   it('flanges 200: every punch meets the ram; the card says so, and the height the bend needs', () => {
     const setup = tray(200);
     const straight = Object.values(PUNCHES).filter((p) => !p.round && p.angle === 88);
+    // The shop's three 88° punches among them (shop punches §5.1).
     expect(straight.map((p) => p.key).sort()).toEqual(
-      ['gooseneck-88', 'gooseneck-88-deep', 'straight-88', 'straight-88-sharp', 'straight-88-tall'].sort(),
+      [
+        'a101',
+        'a102',
+        'a108',
+        'gooseneck-88',
+        'gooseneck-88-deep',
+        'straight-88',
+        'straight-88-sharp',
+        'straight-88-tall',
+      ].sort(),
     );
     for (const punch of straight)
       expect(station(setup, { punch: punch.key }, false).pending.collision.hit?.tool, punch.key).toBe('ram');
@@ -202,10 +226,11 @@ describe('§4 items 4 – 5: the ram tells the truth (§3.6)', () => {
     expect(pending.collision.length).toBeUndefined();
     // Tight bends TB-2 (§5.2): no order and no part-way bend clears it either, and nothing else is offered: try 3.
     expect(pending.collision.hit.message).toBe(
-      'Bend 3: the part hits the ram as the ram comes down. This punch and its holder stand the ram 166.5 mm above the tip. No punch in the list holds the ram high enough (the tallest gives 245 mm): this bend needs about 315 mm. Turning the sheet around was tried: it does not clear. No order and no part-way bend clears it with this punch either: the shape cannot be closed with the tools in this rack. Make the web wider or the flange shorter, or use tooling this rack does not hold.',
+      // Shop punches §5.4, then §6.2: NO_WAY says what was tried, the earlier bends with another punch among it.
+      'Bend 3: the part hits the ram as the ram comes down. This punch and its holder stand the ram 166.5 mm above the tip. No punch in the list holds the ram high enough (the tallest gives 245 mm): this bend needs about 315 mm. Turning the sheet around was tried: it does not clear. No order, no part-way bend and no other punch for the earlier bends clears it. Make the web wider or the flange shorter, or use tooling this rack does not hold.',
     );
     // No remedy that was not tried: not "bend this one earlier", no punch named.
-    expect(pending.collision.hit.message).not.toMatch(/earlier|Use the/);
+    expect(pending.collision.hit.message).not.toMatch(/bend this one earlier|Use the/i);
     // The height, measured from the stroke's poses: just over 310 mm.
     const need = ramClearance({ fold: pending.fold, bendIds: pending.bendIds, machine, die: pending.die });
     expect(need).toBeGreaterThan(310);
@@ -284,7 +309,9 @@ describe('§4 item 6: a shorter punch between return lips', () => {
     expect(hit).toMatchObject({ tool: 'punch', phase: 'approach' });
     expect(pending.collision.length).toEqual({ label: 'Shorten the punch to 348 mm', session: { punchTrim: 20 } });
     expect(hit.message).toBe(
-      'Bend 5: the part hits the punch as the ram comes down. Bend this one earlier (before the flange in the way), or shorten the punch to 348 mm. Turning the sheet around and the gooseneck punch either way round were tried: neither clears.',
+      // Shop punches §5.4: every other sharp punch in the rack is tried, said as one item.
+      // Punch library §4.4: horn sections clear these lips, so the card names them before the shorter punch.
+      'Bend 5: the part hits the punch as the ram comes down. Bend this one earlier (before the flange in the way), use horn sections at the ends or shorten the punch to 348 mm. Turning the sheet around and every other punch in the rack, either way round, were tried: neither clears.',
     );
     // 10 mm off each end is not enough (the lips reach 15 mm in); 20 is.
     expect(station(setup, { punchTrim: 10 }, false).pending.collision.hit?.tool).toBe('punch');
@@ -491,6 +518,364 @@ describe('several tooling runs', () => {
     ).toEqual({
       punch: '2 sections, 5 mm shorter at each end',
       die: null,
+    });
+  });
+});
+
+// ---------------------------------------------------------------- TL-2: the lengths stay as set (§9)
+describe('TL-2: a tool’s length changes only when the operator changes it (§9.3, §9.5)', () => {
+  const plate = (profile, bends = [], thickness = 1.2) =>
+    modelOf(
+      {
+        id: 'sm',
+        type: 'sheetmetal',
+        sketchId: 's',
+        thickness,
+        stock: 'spcc',
+        kFactor: null,
+        base: null,
+        marks: [],
+        bends,
+      },
+      profile,
+    );
+  const rectangle = (width, height) => ({ type: 'rectangle', width, height, origin: [0, 0] });
+  const [W, H] = [605.4, 420.4];
+  const BLANK = plate(rectangle(W, H));
+  const edgeAt = (width, height, x) =>
+    gaugeEdges([
+      [0, 0],
+      [width, 0],
+      [width, height],
+      [0, height],
+    ]).findIndex((e) => Math.abs(e.a[0] - x) < 1e-6 && Math.abs(e.b[0] - x) < 1e-6);
+  const RIGHT_EDGE = edgeAt(W, H, W);
+  const LEFT_EDGE = edgeAt(W, H, 0);
+  const fresh = (extra = {}) => ({
+    ...brakeSessionDefaults(),
+    stage: 'setup',
+    key: 'k',
+    instanceId: 'i',
+    mode: 'gauge',
+    angle: 90,
+    ...extra,
+  });
+  // The workspace's rule: the patch through brakePatch with the station of the session it applies to.
+  const stationOf = (model, s) => brakeStation({ model, session: s, advise: false });
+  const apply = (model, s, patch) => brakePatch(s, patch, stationOf(model, s));
+  // The one run under the session's line (lineTooling) and the Length field's value on it.
+  const spanOf = (model, s) => {
+    const st = stationOf(model, s);
+    const runs = lineTooling(st.fold, st.polygon, sessionLine(st, s).line, s.skip || []);
+    return runs.length === 1 ? runs[0][1] - runs[0][0] : null;
+  };
+  const field = (model, s, key = 'punchTrim') => Number((spanOf(model, s) - 2 * (Number(s[key]) || 0)).toFixed(1));
+  // Typing a length (BladeLength's commit): the trim per end on this line.
+  const typeLength = (model, s, length, key = 'punchTrim') =>
+    apply(model, s, { [key]: Math.round(((spanOf(model, s) - length) / 2) * 1e6) / 1e6, scrub: null });
+
+  it('lineTooling gives strokeTooling’s fitted lengths: a rectangle, the comb, a tab skipped, a line on a made bend', () => {
+    const comb = plate({
+      type: 'polygon',
+      points: [
+        [0, 0],
+        [95, 0],
+        [95, 60],
+        [105, 60],
+        [105, 0],
+        [195, 0],
+        [195, 60],
+        [205, 60],
+        [205, 0],
+        [300, 0],
+        [300, 100],
+        [0, 100],
+      ],
+    });
+    const made = plate(rectangle(W, H), [
+      { id: 'b1', a: [W - 29, 0], b: [W - 29, H], angle: 30, direction: 'up', radius: null, punch: 'straight-88' },
+    ]);
+    const cases = [
+      [BLANK, fresh({ edge: RIGHT_EDGE, distance: 29 })],
+      [
+        BLANK,
+        fresh({
+          mode: 'points',
+          points: [
+            [0, 200],
+            [W, 200],
+          ],
+        }),
+      ],
+      [
+        comb,
+        fresh({
+          mode: 'points',
+          points: [
+            [-1, 30],
+            [301, 30],
+          ],
+        }),
+      ],
+      [
+        comb,
+        fresh({
+          mode: 'points',
+          points: [
+            [-1, 30],
+            [301, 30],
+          ],
+          skip: [1],
+        }),
+      ],
+      [
+        comb,
+        fresh({
+          mode: 'points',
+          points: [
+            [-1, 30],
+            [301, 30],
+          ],
+          skip: [0],
+        }),
+      ],
+      [made, fresh({ edge: RIGHT_EDGE, distance: 29 })],
+    ];
+    for (const [model, s] of cases) {
+      const st = stationOf(model, s);
+      const ids = st.pending.again ? st.pending.again.bendIds : st.pending.bendIds;
+      const folded = strokeTooling(st.pending.fold, st.pending.bendIds, { bed: machine.bed }).fitted;
+      const before = lineTooling(st.fold, st.polygon, sessionLine(st, s).line, s.skip || []);
+      expect(ids.length).toBeGreaterThan(0);
+      expect(before.map(([a, b]) => b - a)).toHaveLength(folded.length);
+      before.forEach(([a, b], k) => close(b - a, folded[k][1] - folded[k][0], 6));
+    }
+    // The comb with its middle tab left flat: two runs.
+    expect(
+      lineTooling(stationOf(...cases[3]).fold, stationOf(...cases[3]).polygon, { a: [-1, 30], b: [301, 30] }, [1]),
+    ).toHaveLength(2);
+  });
+
+  it('380 on the right edge at L 29 stays 380: L 30, L 11, the left edge, two points, the fingers, Esc', () => {
+    let s = apply(BLANK, fresh(), { edge: RIGHT_EDGE, distance: 29 });
+    expect(field(BLANK, s)).toBe(420.4);
+    s = typeLength(BLANK, s, 380);
+    expect(s.punchHold).toBe(380);
+    expect(field(BLANK, s)).toBe(380);
+    for (const patch of [
+      { distance: 30 },
+      { distance: 11 },
+      { edge: LEFT_EDGE, distance: 29 },
+      {
+        mode: 'points',
+        points: [
+          [300, 0],
+          [300, H],
+        ],
+      },
+      { mode: 'gauge', edge: RIGHT_EDGE, distance: 29 },
+    ]) {
+      s = apply(BLANK, s, patch);
+      expect(field(BLANK, s)).toBe(380);
+      expect(s.punchHold).toBe(380);
+    }
+    // The fingers' drag: one patch per L, then Esc puts the line and its tools back.
+    const before = s;
+    for (const distance of [28, 26, 24, 22, 20]) {
+      s = apply(BLANK, s, { distance, scrub: null });
+      expect(field(BLANK, s)).toBe(380);
+    }
+    expect(apply(BLANK, s, fingerRestore(before))).toEqual(before);
+  });
+
+  it('a line of another length: the trim re-derived, the length kept (short of the bend, or past it on the next part)', () => {
+    let s = typeLength(BLANK, apply(BLANK, fresh(), { edge: RIGHT_EDGE, distance: 29 }), 380);
+    s = apply(BLANK, s, {
+      mode: 'points',
+      points: [
+        [0, 200],
+        [W, 200],
+      ],
+    });
+    expect(field(BLANK, s)).toBe(380);
+    close(s.punchTrim, (W - 380) / 2, 6);
+    expect(stationOf(BLANK, s).pending.warnings.map((w) => w.message)).toContain(
+      'The punch stops 112.7 mm short of each end of the bend: the ends are not pressed and come out a little open.',
+    );
+    // The next part (a 300 × 200 plate) with the tools still in: its first line derives the trim from the hold.
+    const SMALL = plate(rectangle(300, 200));
+    const carried = { ...fresh(), ...brakeCarry(s) };
+    expect(carried.punchHold).toBe(380);
+    const next = apply(SMALL, carried, { edge: edgeAt(300, 200, 300), distance: 29 });
+    expect(next.punchTrim).toBe(-90);
+    expect(field(SMALL, next)).toBe(380);
+    const pending = stationOf(SMALL, next).pending;
+    expect(pending.tooling.punch[0][1] - pending.tooling.punch[0][0]).toBeCloseTo(380, 6);
+  });
+
+  it('Fit to bend: fitted, and fitted on the next line too', () => {
+    let s = typeLength(BLANK, apply(BLANK, fresh(), { edge: RIGHT_EDGE, distance: 29 }), 380);
+    s = apply(BLANK, s, { punchTrim: null, scrub: null });
+    expect('punchHold' in s).toBe(false);
+    expect(field(BLANK, s)).toBe(420.4);
+    s = apply(BLANK, s, {
+      mode: 'points',
+      points: [
+        [0, 200],
+        [W, 200],
+      ],
+    });
+    expect(s.punchTrim).toBe(null);
+    expect(field(BLANK, s)).toBe(605.4);
+  });
+
+  it('the card’s "Shorten the punch to …": that length kept on the next line', () => {
+    // §4 item 6's tray: return lips over the punch's ends.
+    const [Hh, Ww, S] = [60, 15, 40];
+    const L = 2 + Hh + Ww;
+    const profile = {
+      type: 'polygon',
+      points: [
+        [6, -L],
+        [594, -L],
+        [594, 6],
+        [600 + S, 6],
+        [600 + S, 394],
+        [594, 394],
+        [594, 400 + L],
+        [6, 400 + L],
+        [6, 394],
+        [-S, 394],
+        [-S, 6],
+        [6, 6],
+      ],
+    };
+    const bend = (id, a, b, punch) => ({ id, a, b, angle: 90, direction: 'up', radius: null, punch });
+    const model = plate(
+      profile,
+      [
+        bend('lip1', [5, 2 - Hh], [595, 2 - Hh], 'straight-88'),
+        bend('lip2', [595, 398 + Hh], [5, 398 + Hh], 'straight-88'),
+        bend('long1', [5, 2], [595, 2], 'gooseneck-88'),
+        bend('long2', [595, 398], [5, 398], 'gooseneck-88'),
+      ],
+      1.5,
+    );
+    let s = apply(model, fresh(), {
+      mode: 'points',
+      points: [
+        [598, 5],
+        [598, 395],
+      ],
+    });
+    const fix = brakeStation({ model, session: s }).pending.collision.length;
+    expect(fix).toEqual({ label: 'Shorten the punch to 348 mm', session: { punchTrim: 20 } });
+    s = apply(model, s, { ...fix.session, scrub: null });
+    expect(s.punchHold).toBe(348);
+    s = apply(model, s, {
+      mode: 'points',
+      points: [
+        [597, 5],
+        [597, 395],
+      ],
+    });
+    expect(field(model, s)).toBe(348);
+    expect(s.punchTrim).toBe(20);
+  });
+
+  it('several runs: the trim kept; a segment toggled keeps it; the die the same as the punch', () => {
+    const comb = plate({
+      type: 'polygon',
+      points: [
+        [0, 0],
+        [95, 0],
+        [95, 60],
+        [105, 60],
+        [105, 0],
+        [195, 0],
+        [195, 60],
+        [205, 60],
+        [205, 0],
+        [300, 0],
+        [300, 100],
+        [0, 100],
+      ],
+    });
+    let s = apply(comb, fresh(), {
+      mode: 'points',
+      points: [
+        [-1, 30],
+        [301, 30],
+      ],
+    });
+    s = apply(comb, s, { skip: [1] });
+    s = apply(comb, s, { punchTrim: 5, scrub: null });
+    expect(s.punchTrim).toBe(5);
+    expect('punchHold' in s).toBe(false);
+    s = apply(comb, s, {
+      mode: 'points',
+      points: [
+        [-1, 35],
+        [301, 35],
+      ],
+    });
+    expect(s.punchTrim).toBe(5);
+    s = apply(comb, s, { skip: [1] });
+    expect(s.punchTrim).toBe(5);
+    expect('punchHold' in s).toBe(false);
+    // One run again (the skip put back): the trim stays, now a length held.
+    s = apply(comb, s, { skip: [] });
+    expect(s.punchTrim).toBe(5);
+    expect(s.punchHold).toBe(290);
+    // The die: 380 held across lines like the punch.
+    let d = typeLength(BLANK, apply(BLANK, fresh(), { edge: RIGHT_EDGE, distance: 29 }), 380, 'dieTrim');
+    d = apply(BLANK, d, { distance: 40 });
+    expect(field(BLANK, d, 'dieTrim')).toBe(380);
+    expect(d.punchTrim).toBe(null);
+  });
+
+  it('Bend on a made bend: the length kept', () => {
+    const made = plate(rectangle(W, H), [
+      { id: 'b1', a: [W - 29, 0], b: [W - 29, H], angle: 30, direction: 'up', radius: null, punch: 'straight-88' },
+    ]);
+    let s = typeLength(made, apply(made, fresh(), { edge: RIGHT_EDGE, distance: 100 }), 380);
+    const patch = bendOnPatch(stationOf(made, s), 'b1');
+    expect('punchTrim' in patch).toBe(false);
+    s = apply(made, s, patch);
+    expect(stationOf(made, s).pending.again).toBeTruthy();
+    expect(field(made, s)).toBe(380);
+  });
+
+  it('a session that never sets a length: no hold, the trims as today', () => {
+    let s = fresh();
+    for (const patch of [
+      { edge: RIGHT_EDGE, distance: 29 },
+      { distance: 30 },
+      { skip: [] },
+      { edge: LEFT_EDGE, distance: 29 },
+      {
+        mode: 'points',
+        points: [
+          [300, 0],
+          [300, H],
+        ],
+      },
+      { angle: 45 },
+    ]) {
+      s = apply(BLANK, s, patch);
+      expect(s.punchTrim).toBe(null);
+      expect(s.dieTrim).toBe(null);
+      expect('punchHold' in s || 'dieHold' in s).toBe(false);
+    }
+    // brakeCarry without and with a hold.
+    expect(brakeCarry(s)).toEqual({ punch: 'straight-88', die: null, reverse: false });
+    const held = typeLength(BLANK, apply(BLANK, fresh(), { edge: RIGHT_EDGE, distance: 29 }), 380);
+    expect(brakeCarry(held)).toEqual({
+      punch: 'straight-88',
+      die: null,
+      reverse: false,
+      punchTrim: 20.2,
+      punchHold: 380,
     });
   });
 });

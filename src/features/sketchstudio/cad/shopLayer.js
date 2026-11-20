@@ -26,7 +26,7 @@
 import * as THREE from 'three';
 import { createSheetMetalPreview } from './sheetMetalPreview.js';
 import { createShopDecor } from './shopDecor.js';
-import { bendArcPoint, poseFold, transformPoint } from './sheetMetal.js';
+import { bendArcPoint, pointInRing, poseFold, transformPoint } from './sheetMetal.js';
 import { displayedInstanceMatrix, mmPerPixelAt } from './marks.js';
 import { createBrakeGrip, GRIP_PICK_PX } from './brakeGrip.js';
 import { createBrakeLights } from './brakeLights.js';
@@ -61,8 +61,8 @@ import {
   strokeAt,
   trimAtBreaks,
 } from './pressBrake.js';
-import { partSection, partSurface, toolingSections } from './brakeCollisions.js';
-import { SHEET_STOCK, dieOf, machineOf, punchOf, suggestedDie } from './shopCatalog.js';
+import { HORN_DRAWN_SLICE, partSection, partSurface, toolingSections } from './brakeCollisions.js';
+import { FINGER_FACE, SHEET_STOCK, dieOf, hornOf, machineOf, punchOf, suggestedDie } from './shopCatalog.js';
 
 export const UNFOLD_MS = 600;
 // The press brake scene (SM-2, SM-2b): one tone per machine part, so each
@@ -108,7 +108,12 @@ const DIE_MARGIN = 40;
 // The die top stands this high above the floor (the viewport's ground at Z 0),
 // so the ground never cuts through the die and the bed.
 export const WORK_HEIGHT = 1000;
-const FINGER = Object.freeze({ depth: 30, width: 24, below: 8, above: 12 });
+// The flange gap marker (corner gaps §3.3): cad.css --shop-accent, the collision red for an overlap; its end crosses' half length (mm).
+const GAP_COLOURS = Object.freeze({ gap: '#287fb3', overlap: MACHINE_COLORS.hit });
+const GAP_TICK = 2.5;
+const GAP_DOT_PX = 9;
+// The stop face's heights are the catalogue's (skin gauge §4.2): the reading's rule and the drawn finger agree.
+const FINGER = Object.freeze({ depth: 30, width: 24, below: FINGER_FACE.below, above: FINGER_FACE.above });
 // A prism along X from a Y–Z ring (y, z), between x0 and x1.
 function prismGeometry(ring, x0, x1) {
   const shape = new THREE.Shape(ring.map(([y, z]) => new THREE.Vector2(y, z)));
@@ -375,12 +380,15 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
   // DIE_MARGIN to spare). `dieX` also frames the camera. `reverse`: the punch
   // turned round in its clamps (brake blades §4.2), drawn mirrored. The die
   // stands over its own runs (`dieRanges`, brake tool length §3.2: trimmed
-  // apart from the punch).
-  const buildTooling = (punch, dieEntry, ranges, dieRanges, dieX, sectional, reverse = false) => {
+  // apart from the punch). `horns` (docs/sketch-studio-punch-library.md
+  // §4.4): horn sections at the punch's ends, each horn part's ring drawn
+  // over its ranges as the body is, the body and holders standing back.
+  const buildTooling = (punch, dieEntry, ranges, dieRanges, dieX, sectional, reverse = false, horns = false) => {
     const runs = sectional ? ranges : [dieX];
     const dieRuns = sectional ? dieRanges || ranges : [dieX];
+    const horn = sectional ? hornOf(horns) : null;
     const text = (list) => list.map((r) => r.map((v) => v.toFixed(1)).join(',')).join(';');
-    const key = `${punch.key}${reverse ? ':reversed' : ''}|${dieEntry.key}|${text(runs)}|${dieX.join(',')}|${text(dieRuns)}`;
+    const key = `${punch.key}${reverse ? ':reversed' : ''}${horn ? (horn.reach === 20 ? ':horns' : `:horns-${horn.reach}`) : ''}|${dieEntry.key}|${text(runs)}|${dieX.join(',')}|${text(dieRuns)}`;
     if (station.tooling === key) return;
     dropGroup(station.die);
     dropGroup(station.ram);
@@ -392,6 +400,9 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
       ranges: runs,
       dieRanges: dieRuns,
       reverse,
+      horns: horn ? horns : false,
+      // Drawn to its profile in 1 mm slices (punch library §4.8); the check keeps its coarser ones.
+      hornSlice: HORN_DRAWN_SLICE,
     });
     const die = new THREE.Group();
     die.name = 'press-brake-die';
@@ -401,13 +412,16 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
     ram.name = 'press-brake-ram';
     const punchGroup = new THREE.Group();
     punchGroup.name = 'press-brake-punch';
-    for (const range of runs)
+    for (const range of tools.punch.ranges)
       punchGroup.add(solid(prismGeometry(tools.punch.ring, ...range), 'punch', 'press-brake-punch-section'));
+    for (const part of tools.punch.parts || [])
+      for (const range of part.ranges)
+        punchGroup.add(solid(prismGeometry(part.ring, ...range), 'punch', 'press-brake-punch-horn'));
     ram.add(punchGroup);
     if (tools.holder) {
       const holders = new THREE.Group();
       holders.name = 'press-brake-holders';
-      for (const range of runs)
+      for (const range of tools.holder.ranges)
         holders.add(solid(prismGeometry(tools.holder.ring, ...range), 'ram', 'press-brake-holder'));
       ram.add(holders);
     }
@@ -511,6 +525,99 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
                 : null;
     if (tool) paint(tool, 'hit');
   };
+  // A flange gap hovered in the press brake's card (docs/sketch-studio-corner-
+  // gaps.md §3.3): a line between the row's two points with a cross and a dot
+  // at each end, drawn through everything (depthTest off), never picked. Its points are
+  // kept in flat millimetres and placed on whichever piece of the pose shown
+  // holds them, in the part's own group: the marker follows the part through
+  // every pose and turn. A stroke clears it (the workspace hands it again on
+  // a new hover); so does closing the station.
+  let gapWanted = null,
+    gapPoints = null;
+  const gapLine = new THREE.LineSegments(
+    new THREE.BufferGeometry(),
+    new THREE.LineBasicMaterial({ color: GAP_COLOURS.gap, depthTest: false, transparent: true }),
+  );
+  gapLine.name = 'press-brake-gap';
+  gapLine.raycast = () => {};
+  gapLine.renderOrder = 6;
+  gapLine.visible = false;
+  // Its two ends as dots a constant size on screen: a gap of a millimetre is a few pixels at the brake's view.
+  const gapEnds = new THREE.Points(
+    new THREE.BufferGeometry(),
+    new THREE.PointsMaterial({
+      color: GAP_COLOURS.gap,
+      size: GAP_DOT_PX,
+      sizeAttenuation: false,
+      depthTest: false,
+      transparent: true,
+    }),
+  );
+  gapEnds.name = 'press-brake-gap-ends';
+  gapEnds.raycast = () => {};
+  gapEnds.renderOrder = 6;
+  gapLine.add(gapEnds);
+  // The posed piece holding a flat point: the one whose outline holds it, else the nearest (a point on a cut edge).
+  const pieceAt = (posed, [x, y]) => {
+    let best = null,
+      nearest = Infinity;
+    for (const piece of posed.pieces) {
+      if (pointInRing([x, y], piece.outer) && !(piece.holes || []).some((h) => pointInRing([x, y], h))) return piece;
+      for (const ring of [piece.outer, ...(piece.holes || [])])
+        ring.forEach((a, i) => {
+          const b = ring[(i + 1) % ring.length];
+          const d = [b[0] - a[0], b[1] - a[1]];
+          const f = Math.max(
+            0,
+            Math.min(1, ((x - a[0]) * d[0] + (y - a[1]) * d[1]) / (d[0] * d[0] + d[1] * d[1] || 1)),
+          );
+          const off = Math.hypot(x - a[0] - d[0] * f, y - a[1] - d[1] * f);
+          if (off < nearest) [best, nearest] = [piece, off];
+        });
+    }
+    return nearest < 0.01 ? best : null;
+  };
+  const hideGap = () => {
+    gapLine.visible = false;
+    gapPoints = null;
+  };
+  const placeGap = () => {
+    if (!station?.part || !station.pose) return hideGap();
+    // Re-posed mid-stroke: the marker is cleared, not carried through the stroke.
+    if (station.stroke && !station.stroke.done) gapWanted = null;
+    if (!gapWanted) return hideGap();
+    const posed = station.pose.posed;
+    const [P, Q] = gapWanted.flat.map((p) => {
+      const piece = pieceAt(posed, p);
+      return piece ? transformPoint(piece.matrix, p) : null;
+    });
+    if (!P || !Q) return hideGap();
+    const d = [Q[0] - P[0], Q[1] - P[1], Q[2] - P[2]];
+    const length = Math.hypot(...d);
+    const along = length > 1e-6 ? d.map((v) => v / length) : [0, 0, 1];
+    // Two directions square to the line for each end's cross.
+    const helper = Math.abs(along[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+    const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const unit = (v) => v.map((c) => c / Math.hypot(...v));
+    const side = unit(cross(along, helper)),
+      up = cross(along, side);
+    const points = [P, Q];
+    for (const end of [P, Q])
+      for (const dir of [side, up])
+        points.push(
+          end.map((v, i) => v - dir[i] * GAP_TICK),
+          end.map((v, i) => v + dir[i] * GAP_TICK),
+        );
+    gapLine.geometry.dispose();
+    gapLine.geometry = new THREE.BufferGeometry().setFromPoints(points.map((p) => new THREE.Vector3(...p)));
+    gapEnds.geometry.dispose();
+    gapEnds.geometry = new THREE.BufferGeometry().setFromPoints([P, Q].map((p) => new THREE.Vector3(...p)));
+    for (const object of [gapLine, gapEnds])
+      object.material.color.set(gapWanted.overlap ? GAP_COLOURS.overlap : GAP_COLOURS.gap);
+    if (gapLine.parent !== station.part.group) station.part.group.add(gapLine);
+    gapLine.visible = true;
+    gapPoints = { P, Q, length, overlap: Boolean(gapWanted.overlap) };
+  };
   // Pose the part, the tooling and the ram: `angle` overrides the bend in the
   // die; `tip` is the punch tip height, 'follow' (on the part, bending) or
   // absent (parked above the sheet, or where a shown collision happens).
@@ -565,6 +672,8 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
       dieExtent(partReach(posed, frame), frame.span),
       Boolean(view.bendId),
       reverse,
+      // Horn sections (punch library §4.4): the bend's record says, through the frame.
+      frame.horns || false,
     );
     markPunchLine(posed, members, frame);
     const tipZ = tip === 'follow' || (tip === undefined && view.collision) ? frame.tipZ : (tip ?? t + STROKE_GAP);
@@ -618,6 +727,7 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
         ranges: frame.ranges,
         dieRanges: frame.dieRanges,
         reverse,
+        horns: frame.horns || false,
       }),
       finger:
         gaugeDistance != null
@@ -633,14 +743,16 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
       target: bend ? bend.angle : 0,
       tipZ,
       punch: punch.name,
-      // Reverse punch (brake blades §4.2): the side view says so.
+      // Reverse punch (brake blades §4.2): the side view says so; horn sections too (punch library §4.4).
       reverse,
+      horns: frame.horns || false,
       die: dieEntry.name,
       // A round bend: the hit in the die (round-bend spec §6).
       bump: frame.hit ? { hit: frame.hit, hits: frame.hits } : null,
       // The sheet's side up (brake flip tooling §5.1).
       flipped,
     };
+    placeGap();
     return frame;
   };
   // The posed part's bounding-box centre (posed part mm) and the radius of the sphere round it.
@@ -848,6 +960,10 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
     run.phase = at.phase;
     run.part = part;
     run.hit = at.hit ?? null;
+    // The part taken off the punch along a slant (docs/sketch-studio-shop-punches.md
+    // §5.3): during the return it slides along machine Y by tan s × the ram's
+    // lift so far, so the drawn punch never passes through it. View only.
+    const takeOff = (run.hits ? run.hits[part]?.takeOff : run.takeOff) ?? null;
     if (at.phase === 'turn') {
       // Between the two hits the sheet turns over: from the first hit made to
       // the second line on the die, the ram parked (planned once, on entering).
@@ -865,12 +981,17 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
       // the ram lifting `at.gap` (BUMP_GAP between hits) and the fingers stepping on.
       if (at.phase === 'approach') poseStation(at.angle, t + at.gap * at.ram, at.hit);
       else if (at.phase === 'bend') poseStation(at.angle, 'follow', at.hit);
-      else if (at.phase === 'return') poseStation(at.angle, bottom + (t + at.gap - bottom) * at.ram, at.hit);
-      else poseStation(run.target, park, at.hit);
+      else if (at.phase === 'return') {
+        poseStation(at.angle, bottom + (t + at.gap - bottom) * at.ram, at.hit);
+        // Taken off after the last hit only (between hits the part stays on the punch).
+        if (at.hit === run.timeline.steps) slidePart(takeOff, bottom);
+      } else poseStation(run.target, park, at.hit);
     } else if (at.phase === 'approach') poseStation(at.angle, t + STROKE_GAP * at.ram);
     else if (at.phase === 'bend') poseStation(at.angle, 'follow');
-    else if (at.phase === 'return') poseStation(run.target, bottom + (park - bottom) * at.ram);
-    else poseStation(run.target, park);
+    else if (at.phase === 'return') {
+      poseStation(run.target, bottom + (park - bottom) * at.ram);
+      slidePart(takeOff, bottom);
+    } else poseStation(run.target, park);
     if (at.phase === 'done') {
       // The hit is made: the part stays where the stroke left it, the ram parked.
       run.done = true;
@@ -885,6 +1006,17 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
     ctx.render();
     strokeFrame(run, begin);
     stationLoop = requestAnimationFrame(strokeTick);
+  };
+  // The return's take-off (shop punches §5.3): the posed part moved along
+  // machine Y by tan(slant) × (the tip's height now − `bottom`, where the
+  // stroke bottomed out), the side view's sheet with it.
+  const slidePart = (slant, bottom) => {
+    if (!slant || !station.pose) return;
+    const dy = Math.tan((slant * Math.PI) / 180) * Math.max(0, station.pose.tipZ - bottom);
+    station.pose.slide = dy;
+    station.part.group.matrix.premultiply(new THREE.Matrix4().makeTranslation(0, dy, 0));
+    station.part.group.matrixWorldNeedsUpdate = true;
+    if (station.section) station.section = { ...station.section, slide: dy };
   };
   // The work of each stroke frame (pose, side view, render); an offset's turn
   // between its hits is also counted apart.
@@ -1409,6 +1541,16 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
   let hidden = new Set();
   const maskHides = (id) => hidden.has(id);
 
+  const gapState = () => {
+    // The machine frame (the part's group on the die: X along the bed, Z 0 the die top).
+    const placed = (p) => transformPoint(station.part.group.matrix.elements, p).map((v) => Number(v.toFixed(4)));
+    return {
+      overlap: gapPoints.overlap,
+      length: Number(gapPoints.length.toFixed(4)),
+      points: [placed(gapPoints.P), placed(gapPoints.Q)],
+      inPartGroup: gapLine.parent === station.part.group,
+    };
+  };
   const closeStation = () => {
     stopStroke();
     stopTurn();
@@ -1419,6 +1561,9 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
     reach = null;
     fingerHeld = false;
     lights.edge(null);
+    gapWanted = null;
+    gapLine.removeFromParent();
+    hideGap();
     if (!station) return;
     for (const key of ['parts', 'gauge', 'die', 'ram', 'hit']) dropGroup(station[key]);
     if (ctx.grid && station.gridShown != null) ctx.grid.visible = station.gridShown;
@@ -1589,6 +1734,17 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
       ctx.render();
     },
     stationOpen: () => Boolean(station),
+    /**
+     * A flange gap to mark (docs/sketch-studio-corner-gaps.md §3.3): { flat
+     * ([P, Q], each [x, y, z] in its piece's flat frame), overlap }, or null.
+     * Never inside the view (a new view re-poses the station).
+     */
+    setGap(gap) {
+      gapWanted = gap && gap.flat ? { flat: gap.flat, overlap: Boolean(gap.overlap) } : null;
+      if (!station) return;
+      if (station.pose) placeGap();
+      ctx.render();
+    },
     /**
      * The grip (hands on the sheet §5.2 – §5.4): { shown (the station is
      * being set up: the workspace says so, the layer never guesses from the
@@ -1987,6 +2143,13 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
             ranges: station.pose?.frame?.ranges || null,
             // Brake tool length (§3.2): the die's runs, trimmed apart from the punch's.
             dieRanges: station.pose?.frame?.dieRanges || null,
+            // Horn sections (punch library §4.4): the horn parts the scene drew.
+            horns: Boolean(station.pose?.frame?.horns),
+            hornReach: hornOf(station.pose?.frame?.horns)?.reach ?? null,
+            hornParts:
+              station.ram
+                ?.getObjectByName('press-brake-punch')
+                ?.children.filter((o) => o.name === 'press-brake-punch-horn').length ?? 0,
             angle: station.pose?.angle ?? 0,
             // The other bends as the view poses them (tight bends §5.2: an armed try shows the
             // sheet as it is then, the later steps flat or a step part-way).
@@ -1994,6 +2157,9 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
             // Where the backgauge fingers stand (a round bend's hit gauges one pitch nearer each).
             fingerDistance: station.pose?.gaugeDistance ?? null,
             tipZ: station.pose?.tipZ ?? null,
+            // The return's take-off (shop punches §5.3): the stroke's slant and how far the part has slid (mm, machine Y).
+            takeOff: station.stroke?.takeOff ?? null,
+            slide: station.pose?.slide ?? 0,
             gaugeDistance: station.view.gaugeDistance ?? null,
             stroking: Boolean(station.stroke && !station.stroke.done),
             // 'around': turning the sheet around, its side up kept (hands on the sheet §5.3).
@@ -2029,12 +2195,19 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
                 }
               : null,
             collision: station.view.collision
-              ? { tool: station.view.collision.tool, angle: station.view.collision.angle }
+              ? {
+                  tool: station.view.collision.tool,
+                  angle: station.view.collision.angle,
+                  // The red triangles showHit drew (corner gaps §5: a thickness hit marks its two pieces).
+                  marked: station.hit ? station.hit.geometry.getAttribute('position').count / 3 : 0,
+                }
               : null,
             // Hands on the sheet (§5.6): the handles' client points, what is hot, the drag.
             grip: gripState(),
             // HO-2 (§6.4): what is lit, the fingers and the offered edges on the canvas.
             reach: reachState(),
+            // The flange gap marked (corner gaps §3.3): its two points in the machine frame, mm apart.
+            gap: gapPoints && gapLine.visible ? gapState() : null,
           }
         : null,
     }),
@@ -2048,6 +2221,10 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
       lights.dispose();
       punchLine.geometry.dispose();
       punchLine.material.dispose();
+      for (const object of [gapLine, gapEnds]) {
+        object.geometry.dispose();
+        object.material.dispose();
+      }
       ctx.scene.remove(stationRoot);
       ctx.scene.remove(root);
       markMaterials.up.dispose();

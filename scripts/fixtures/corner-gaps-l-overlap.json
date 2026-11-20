@@ -1,0 +1,270 @@
+{
+  "kind": "sketchstudio-workspace",
+  "version": 2,
+  "document": {
+    "version": 4,
+    "id": "cg3-l-corner",
+    "name": "L corner overlap",
+    "units": "mm",
+    "metadata": {
+      "authoringApp": "SketchStudio"
+    },
+    "objectDefinition": {
+      "category": null,
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": []
+    },
+    "variables": [],
+    "joints": [],
+    "layers": [
+      {
+        "visible": true,
+        "locked": false,
+        "id": "default",
+        "name": "Default"
+      },
+      {
+        "visible": true,
+        "locked": false,
+        "id": "dimensions",
+        "name": "Dimensions"
+      },
+      {
+        "visible": true,
+        "locked": false,
+        "id": "furniture",
+        "name": "Furniture"
+      }
+    ],
+    "entities": [],
+    "model": {
+      "version": 1,
+      "parameters": [],
+      "sketches": [
+        {
+          "id": "sketch-l-corner",
+          "name": "L corner",
+          "plane": "XY",
+          "origin": [0, 0, 0],
+          "profile": {
+            "type": "path",
+            "start": [0, 0],
+            "segments": [
+              {
+                "type": "line",
+                "end": [120, 0]
+              },
+              {
+                "type": "line",
+                "end": [120, 100]
+              },
+              {
+                "type": "line",
+                "end": [103, 100]
+              },
+              {
+                "type": "line",
+                "end": [103, 77]
+              },
+              {
+                "type": "line",
+                "end": [97, 77]
+              },
+              {
+                "type": "line",
+                "end": [97, 83]
+              },
+              {
+                "type": "line",
+                "end": [100.169425, 83]
+              },
+              {
+                "type": "line",
+                "end": [100.169425, 100]
+              },
+              {
+                "type": "line",
+                "end": [0, 100]
+              },
+              {
+                "type": "line",
+                "end": [0, 0]
+              }
+            ],
+            "closed": true
+          },
+          "entities": [
+            {
+              "id": "e1",
+              "type": "line",
+              "a": [0, 0],
+              "b": [120, 0]
+            },
+            {
+              "id": "e2",
+              "type": "line",
+              "a": [120, 0],
+              "b": [120, 100]
+            },
+            {
+              "id": "e3",
+              "type": "line",
+              "a": [120, 100],
+              "b": [103, 100]
+            },
+            {
+              "id": "e4",
+              "type": "line",
+              "a": [103, 100],
+              "b": [103, 77]
+            },
+            {
+              "id": "e5",
+              "type": "line",
+              "a": [103, 77],
+              "b": [97, 77]
+            },
+            {
+              "id": "e6",
+              "type": "line",
+              "a": [97, 77],
+              "b": [97, 83]
+            },
+            {
+              "id": "e7",
+              "type": "line",
+              "a": [97, 83],
+              "b": [100.16942489853818, 83]
+            },
+            {
+              "id": "e8",
+              "type": "line",
+              "a": [100.16942489853818, 83],
+              "b": [100.16942489853818, 100]
+            },
+            {
+              "id": "e9",
+              "type": "line",
+              "a": [100.16942489853818, 100],
+              "b": [0, 100]
+            },
+            {
+              "id": "e10",
+              "type": "line",
+              "a": [0, 100],
+              "b": [0, 0]
+            }
+          ],
+          "support": {
+            "type": "plane",
+            "plane": "XY",
+            "offset": 0
+          },
+          "primitives": [],
+          "constrained": false
+        }
+      ],
+      "parts": [
+        {
+          "id": "part-l-corner",
+          "name": "L corner",
+          "material": "SPCC cold-rolled steel",
+          "features": [
+            {
+              "id": "feature-l-corner",
+              "type": "sheetmetal",
+              "sketchId": "sketch-l-corner",
+              "thickness": 1.2,
+              "stock": "spcc",
+              "kFactor": null,
+              "base": null,
+              "marks": [],
+              "bends": [
+                {
+                  "id": "bend-rear",
+                  "a": [-1, 80],
+                  "b": [96, 80],
+                  "angle": 90,
+                  "direction": "up",
+                  "radius": null,
+                  "punch": "a102",
+                  "die": "v8-88"
+                },
+                {
+                  "id": "bend-right",
+                  "a": [100, -1],
+                  "b": [100, 76],
+                  "angle": 90,
+                  "direction": "up",
+                  "radius": null,
+                  "punch": "a102",
+                  "die": "v8-88"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "instances": [
+        {
+          "id": "instance-l-corner",
+          "partId": "part-l-corner",
+          "name": "",
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0],
+          "visible": true
+        }
+      ],
+      "connections": [],
+      "marks": [],
+      "groups": [],
+      "finishes": [],
+      "prints": [],
+      "sheets": [
+        {
+          "id": "assembly-sheet",
+          "title": "Assembly",
+          "size": "A3",
+          "units": "mm",
+          "scaleMode": "fit",
+          "scale": 0.05,
+          "revision": "A",
+          "tolerance": "±0.5 mm",
+          "views": ["front", "top", "right", "isometric"],
+          "annotations": []
+        }
+      ],
+      "fabrication": {
+        "kerf": 3,
+        "allowance": 0,
+        "stockLength": 6000,
+        "sheetWidth": 2440,
+        "sheetHeight": 1220,
+        "shop": {
+          "machine": "brake-50-2000",
+          "laser": "fiber-2kw",
+          "sheet": "1219x2438"
+        }
+      }
+    }
+  },
+  "objectDraft": null,
+  "viewport": {
+    "zoom": 1,
+    "panX": 0,
+    "panY": 0
+  },
+  "ui": {
+    "activeLayerId": "default",
+    "snapEnabled": true,
+    "orthoEnabled": true,
+    "viewMode": "plan",
+    "isometricPlane": "top",
+    "craftsmanMode": false,
+    "workspaceMode": "model"
+  },
+  "savedAt": "2026-11-18T12:00:00.000Z"
+}

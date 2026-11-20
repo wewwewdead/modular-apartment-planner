@@ -237,3 +237,18 @@ it('words several tooling runs as sections, the field the trim per end', () => {
   expect(note('Punch length note').textContent).toBe('at each end · 2 sections');
   expect(fit('punch')).not.toBeNull();
 });
+
+it('with no line picked and a held length, shows it "kept for the next bend" (brake tool length §9.4, TL-2)', () => {
+  panel(session({ mode: 'gauge', points: [], edge: null, punchTrim: 5.9, punchHold: 380 }));
+  expect(field('Punch length').disabled).toBe(true);
+  expect(field('Punch length').value).toBe('380');
+  expect(note('Punch length note').textContent).toBe('kept for the next bend');
+  // The die not held: as before.
+  expect(field('Die length').value).toBe('');
+  expect(note('Die length note').textContent).toBe('fitted to the bend');
+  cleanup();
+  // With a line, as before: the length on that line.
+  panel(session({ punchTrim: 5.9, punchHold: 380 }));
+  expect(field('Punch length').value).toBe('380');
+  expect(note('Punch length note').textContent).toBe('5.9 mm short at each end');
+});

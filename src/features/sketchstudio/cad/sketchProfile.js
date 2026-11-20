@@ -4,6 +4,14 @@
 //   rect   { id, type: 'rect', a, b }          opposite corners, axis aligned
 //   circle { id, type: 'circle', c, r }
 //   arc    { id, type: 'arc', a, b, m }        start, end, a point on the arc
+// and from HD-3 (docs/sketch-studio-hand-drawing.md §7.1, sketchShapes.js):
+//   rect    { …, r }                          a corner radius (absent: sharp)
+//   slot    { id, type: 'slot', c, length, width, angle }
+//   polygon { id, type: 'polygon', c, sides, af, angle }
+// Every reader that needs primitives goes through `explode`, every one that
+// needs a polyline through `entityPolyline`.
+import { fromZero } from './sketchZero.js';
+import { isShapeLoop, polygonName, rectBounds, shapeKeyPoints, shapePieces } from './sketchShapes.js';
 
 const EPS = 1e-6;
 export const samePoint = (p, q, tolerance = EPS) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= tolerance;
@@ -62,9 +70,62 @@ const rectCorners = ({ a, b }) => {
   ];
 };
 
+/**
+ * The lines and arcs of any entity, in drawing order, counter-clockwise for a
+ * closed one, no zero-length piece (docs/sketch-studio-hand-drawing.md §7.1):
+ * a line or an arc is itself; a sharp rectangle its four sides from the
+ * lower-left corner; a circle two half circles from its rightmost point; a
+ * slot, a polygon or a rounded rectangle its pieces (sketchShapes.js). A
+ * piece keeps the entity's other keys (construction) and, when `ids`, takes
+ * the id "{id}.{n}" (a tool that keeps the pieces renumbers them from
+ * nextId). [] for an unknown type or a refused size.
+ */
+export function explode(entity, { ids = false } = {}) {
+  if (entity.type === 'line' || entity.type === 'arc') return [entity];
+  let pieces;
+  if (isShapeLoop(entity)) pieces = shapePieces(entity);
+  else if (entity.type === 'rect') {
+    const corners = rectCorners(entity);
+    pieces = corners.map((a, i) => ({ type: 'line', a, b: corners[(i + 1) % 4] }));
+  } else if (entity.type === 'circle') {
+    const [x, y] = entity.c,
+      r = entity.r;
+    const at = (dx, dy) => roundPoint([x + dx, y + dy]);
+    pieces = [
+      { type: 'arc', a: at(r, 0), b: at(-r, 0), m: at(0, r) },
+      { type: 'arc', a: at(-r, 0), b: at(r, 0), m: at(0, -r) },
+    ];
+  } else return [];
+  const {
+    id,
+    type: _type,
+    a: _a,
+    b: _b,
+    c: _c,
+    r: _r,
+    length: _l,
+    width: _w,
+    angle: _t,
+    sides: _s,
+    af: _f,
+    ...rest
+  } = entity;
+  return pieces.map((piece, n) => ({ ...rest, ...(ids ? { id: `${id}.${n + 1}` } : {}), ...piece }));
+}
+// A run of lines and arcs as one polyline, each arc sampled.
+function piecesPolyline(pieces, steps) {
+  if (!pieces.length) return [];
+  const points = [pieces[0].a];
+  for (const piece of pieces)
+    points.push(...(piece.type === 'arc' ? sampleArc(piece.a, piece.m, piece.b, steps).slice(1) : [piece.b]));
+  return points;
+}
+
 // Polyline used for drawing an entity in the viewport and for containment tests.
 export function entityPolyline(entity, steps = 64) {
   if (entity.type === 'line') return [entity.a, entity.b];
+  // A slot, a polygon, a rounded rectangle: closed, its arcs sampled.
+  if (isShapeLoop(entity)) return piecesPolyline(shapePieces(entity), steps);
   if (entity.type === 'rect') {
     const corners = rectCorners(entity);
     return [...corners, corners[0]];
@@ -78,8 +139,11 @@ export function entityPolyline(entity, steps = 64) {
   return [];
 }
 
-// Snap targets an entity offers: ends, midpoints, centres.
+// Snap targets an entity offers: ends, midpoints, centres. A slot's, a
+// polygon's and a rounded rectangle's in sketchShapes.js's documented order
+// (followDimensions reads them by index).
 export function entityKeyPoints(entity) {
+  if (isShapeLoop(entity)) return shapeKeyPoints(entity);
   if (entity.type === 'line')
     return [
       { point: entity.a, kind: 'endpoint' },
@@ -147,6 +211,21 @@ const signedArea = (polygon) =>
     return sum + p[0] * q[1] - q[0] * p[1];
   }, 0) / 2;
 
+// A loop with a coordinate that is not finite gets the whole plane: `inside`
+// is then always asked, as before.
+const BOX = 1e-5;
+const polygonBox = (polygon) => {
+  const box = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const [x, y] of polygon) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return [-Infinity, -Infinity, Infinity, Infinity];
+    if (x < box[0]) box[0] = x;
+    if (y < box[1]) box[1] = y;
+    if (x > box[2]) box[2] = x;
+    if (y > box[3]) box[3] = y;
+  }
+  return box;
+};
+
 // Loop A lies inside loop B when none of A's samples is outside B and at least
 // one is clearly inside (samples on B's boundary are ignored, so touching
 // loops are still classified).
@@ -161,14 +240,27 @@ function inside(inner, outer) {
   return any;
 }
 
-// Group line/arc entities into chains by shared endpoints.
+// Group line/arc entities into chains by shared endpoints. Nodes are found
+// through a grid of cells no smaller than the samePoint tolerance: a node
+// within it lies in the point's cell or a neighbour, and the lowest index
+// among those wins, the node a scan in creation order would find first.
+const CELL = 1e-3;
 function chains(pieces) {
   const nodes = [];
+  const grid = new Map();
   const node = (p) => {
-    let index = nodes.findIndex((n) => samePoint(n.point, p));
+    const i = Math.floor(p[0] / CELL),
+      j = Math.floor(p[1] / CELL);
+    let index = -1;
+    for (let di = -1; di <= 1; di++)
+      for (let dj = -1; dj <= 1; dj++)
+        for (const k of grid.get(`${i + di},${j + dj}`) || [])
+          if ((index < 0 || k < index) && samePoint(nodes[k].point, p)) index = k;
     if (index < 0) {
-      nodes.push({ point: p, edges: [] });
-      index = nodes.length - 1;
+      index = nodes.push({ point: p, edges: [] }) - 1;
+      const key = `${i},${j}`;
+      if (grid.has(key)) grid.get(key).push(index);
+      else grid.set(key, [index]);
     }
     return index;
   };
@@ -244,19 +336,41 @@ function loopProfile(loop) {
   }
   if (loop.kind === 'circle')
     return { type: 'circle', radius: round(loop.entity.r), center: roundPoint(loop.entity.c) };
+  if (loop.kind === 'shape') return shapeProfile(loop.entity);
   return chainPath(loop.chain, true);
+}
+// A polygon is the kernel's polygon; a slot or a rounded rectangle a closed
+// path of its lines and exact 3-point arcs from the first line's start (the
+// first piece's when it has no line), ending exactly on its start.
+function shapeProfile(entity) {
+  const pieces = shapePieces(entity);
+  if (entity.type === 'polygon') return { type: 'polygon', points: pieces.map((piece) => roundPoint(piece.a)) };
+  const first = Math.max(
+    0,
+    pieces.findIndex((piece) => piece.type === 'line'),
+  );
+  const walk = [...pieces.slice(first), ...pieces.slice(0, first)];
+  const start = roundPoint(walk[0].a);
+  const segments = walk.map((piece, index) => {
+    const end = index === walk.length - 1 ? start : roundPoint(piece.b);
+    return piece.type === 'arc' ? { type: 'arc', end, mid: roundPoint(piece.m) } : { type: 'line', end };
+  });
+  return { type: 'path', start, segments, closed: true };
 }
 
 // The closed loops of drawn entities (rectangles, circles, line / arc chains
 // that close), each with its polygon, area and the loops it lies inside, plus
 // the open chains and the problems found joining them. Construction entities
-// take no part.
-function profileLoops(entities) {
+// take no part. Exported for the bend relief's corners (sketchRelief.js).
+export function profileLoops(entities) {
   const drawn = entities.filter((e) => !e.construction);
   const problems = [];
   const loops = [];
   for (const entity of drawn) {
-    if (entity.type === 'rect') {
+    // A slot, a polygon, a rounded rectangle: one closed loop of its own (a refused size none).
+    if (isShapeLoop(entity)) {
+      if (shapePieces(entity).length) loops.push({ kind: 'shape', entity });
+    } else if (entity.type === 'rect') {
       const [min, , max] = rectCorners(entity);
       if (max[0] - min[0] > EPS && max[1] - min[1] > EPS) loops.push({ kind: 'rect', entity });
     } else if (entity.type === 'circle') {
@@ -275,10 +389,21 @@ function profileLoops(entities) {
   }
   for (const loop of loops) {
     loop.polygon =
-      loop.kind === 'chain' ? chainPolygon(loop.chain) : entityPolyline(loop.entity, loop.kind === 'circle' ? 96 : 4);
+      loop.kind === 'chain'
+        ? chainPolygon(loop.chain)
+        : entityPolyline(loop.entity, loop.kind === 'circle' ? 96 : loop.kind === 'shape' ? 48 : 4);
     loop.area = Math.abs(signedArea(loop.polygon.slice(0, -1)));
   }
-  for (const loop of loops) loop.parents = loops.filter((other) => other !== loop && inside(loop, other));
+  // A loop can lie inside another only when the other's box holds its box
+  // (to past the boundary tolerance): a sample beyond that box is off the
+  // boundary and outside the loop, so `inside` would say no.
+  const boxes = new Map(loops.map((loop) => [loop, polygonBox(loop.polygon)]));
+  const holds = (outer, inner) => {
+    const [a, b] = [boxes.get(outer), boxes.get(inner)];
+    return b[0] >= a[0] - BOX && b[1] >= a[1] - BOX && b[2] <= a[2] + BOX && b[3] <= a[3] + BOX;
+  };
+  for (const loop of loops)
+    loop.parents = loops.filter((other) => other !== loop && holds(other, loop) && inside(loop, other));
   const outers = loops.filter((l) => !l.parents.length).sort((a, b) => b.area - a.area);
   return { drawn, loops, outers, open, problems, branching: grouped.problems.length > 0 };
 }
@@ -378,13 +503,23 @@ export function profileToEntities(profile) {
 }
 
 const fmt = (value) => Number(value.toFixed(2)).toString();
-export function describeEntity(entity) {
+// "Circle Ø12 at (50, 60)": where it is, X and Y from `zero` (docs/sketch-studio-hand-drawing.md §6.1).
+export function describeEntity(entity, zero = null) {
+  const at = (point) => {
+    const [x, y] = fromZero(point, zero);
+    return `(${fmt(x)}, ${fmt(y)})`;
+  };
   if (entity.type === 'line') return `Line ${fmt(distance(entity.a, entity.b))} mm`;
   if (entity.type === 'rect') {
-    const [min, , max] = rectCorners(entity);
-    return `Rectangle ${fmt(max[0] - min[0])} × ${fmt(max[1] - min[1])} at (${fmt(min[0])}, ${fmt(min[1])})`;
+    const [x0, y0, x1, y1] = rectBounds(entity);
+    // "Rectangle 100 × 60, corners R5 at (0, 0)" (§7.1); a sharp one as before.
+    const corners = isShapeLoop(entity) ? `, corners R${fmt(entity.r)}` : '';
+    return `Rectangle ${fmt(x1 - x0)} × ${fmt(y1 - y0)}${corners} at ${at([x0, y0])}`;
   }
-  if (entity.type === 'circle') return `Circle Ø${fmt(entity.r * 2)} at (${fmt(entity.c[0])}, ${fmt(entity.c[1])})`;
+  if (entity.type === 'slot') return `Slot ${fmt(entity.length)} × ${fmt(entity.width)} at ${at(entity.c)}`;
+  if (entity.type === 'polygon')
+    return `${polygonName(entity.sides)} ${fmt(entity.af)} across flats at ${at(entity.c)}`;
+  if (entity.type === 'circle') return `Circle Ø${fmt(entity.r * 2)} at ${at(entity.c)}`;
   if (entity.type === 'arc') {
     const geometry = arcGeometry(entity.a, entity.m, entity.b);
     return `Arc R${geometry ? fmt(geometry.radius) : '?'}`;
@@ -412,3 +547,13 @@ export function hitEntity(entities, point, tolerance) {
   return best?.id || null;
 }
 export { distanceToSegment };
+// The shapes' rules, for the pure modules that read entities through this one only (sketchEdit.js, sketchCheck.js).
+export {
+  cornerRadiusMax,
+  cornerRadiusRefusal,
+  isRounded,
+  isShapeLoop,
+  polygonName,
+  polygonRefusal,
+  slotRefusal,
+} from './sketchShapes.js';

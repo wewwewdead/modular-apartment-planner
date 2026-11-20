@@ -7,11 +7,12 @@
 // on the punch or the die opens that picker and no other, focused; and
 // nothing is offered in points mode, a scrub, a stroke or the replay. The
 // kernel hook and the 3D viewport are stand-ins.
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useImperativeHandle } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import CadWorkspace from './CadWorkspace.jsx';
+import { forgetPunch } from './brakeMemory.js';
 import { emptyModel } from './model.js';
 import { sheetMetalPart } from './ShopPanels.jsx';
 import { LIVE_DEBOUNCE_MS } from './liveField.js';
@@ -60,6 +61,8 @@ vi.mock('./CadViewport.jsx', () => ({
     return <div aria-label="Solid model viewport" />;
   },
 }));
+// The punch stays in the machine (docs/sketch-studio-shop-punches.md §5.5): each test starts from the default.
+beforeEach(() => forgetPunch());
 afterEach(() => {
   cleanup();
   viewport.dragging = false;
@@ -183,12 +186,12 @@ it('puts the line back as it was when Esc lets go of the fingers', () => {
   openBrake();
   act(() => viewport.props.onBrakeEdge(1));
   fill('Backgauge L (mm)', 200);
-  // Turned with its own flag and a shorter punch: a new L would reset both.
+  // Turned with its own flag and a shorter punch: a new L resets the turn; the punch keeps its length (TL-2).
   fill('Punch length', 80);
   const before = { L: 200, punch: within(panel()).getByLabelText('Punch length').value, pose: pose() };
   act(() => viewport.props.onBrakeFingers({ start: true }));
   for (const distance of [195, 190, 185]) act(() => viewport.props.onBrakeFingers({ distance }));
-  expect(within(panel()).getByLabelText('Punch length').value).not.toBe(before.punch);
+  expect(within(panel()).getByLabelText('Punch length').value).toBe(before.punch);
   act(() => viewport.props.onBrakeFingers({ cancel: true }));
   expect(within(panel()).getByLabelText('Backgauge L (mm)').value).toBe('200');
   expect(within(panel()).getByLabelText('Punch length').value).toBe(before.punch);

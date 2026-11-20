@@ -11,6 +11,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { useImperativeHandle } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import CadWorkspace from './CadWorkspace.jsx';
+import { forgetPunch } from './brakeMemory.js';
 import { emptyModel } from './model.js';
 import { sheetMetalPart } from './ShopPanels.jsx';
 // The whole workspace renders in each test: under the full suite’s parallel load
@@ -67,6 +68,8 @@ beforeEach(() => {
   vi.stubGlobal('requestAnimationFrame', () => 0);
   vi.stubGlobal('cancelAnimationFrame', () => {});
 });
+// The punch stays in the machine (docs/sketch-studio-shop-punches.md §5.5): each test starts from the default.
+beforeEach(() => forgetPunch());
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -114,6 +117,12 @@ const rectangle = (x, y, width, height) => {
   tool('Rectangle');
 };
 const finish = () => act(() => fireEvent.click(within(toolbar()).getByRole('button', { name: 'Finish sketch' })));
+// HD-1 (docs/sketch-studio-hand-drawing.md §5.2): Undo last has nothing to undo in a sketch just
+// reopened, so the old outline is cleared the way a user would: Ctrl+A, then Delete selected.
+const clearDrawing = () => {
+  act(() => fireEvent.keyDown(window, { key: 'a', ctrlKey: true }));
+  act(() => fireEvent.click(screen.getByRole('button', { name: 'Delete selected' })));
+};
 const drawTheOutline = () =>
   act(() => fireEvent.click(within(region('Draw')).getByRole('button', { name: /^Draw the outline/ })));
 // A 100 × 60 blank cut as the part "Tray"; `bend`: one bend 20 mm in from its left edge.
@@ -270,8 +279,7 @@ it('comes back to Cut from sheet from its Edit outline, with the stock chosen', 
   act(() => fireEvent.click(within(toolbar()).getByRole('button', { name: 'Cancel sketch' })));
   expect(region('Cut from sheet')).toBeTruthy();
   act(() => fireEvent.click(within(region('Cut from sheet')).getByRole('button', { name: 'Edit outline' })));
-  act(() => fireEvent.click(within(toolbar()).getByRole('button', { name: 'Undo last' })));
-  act(() => fireEvent.click(within(toolbar()).getByRole('button', { name: 'Undo last' })));
+  clearDrawing();
   tool('Line');
   typeStep({ x: 0, y: 0 });
   typeStep({ length: 50, angle: 0 });
@@ -291,7 +299,7 @@ it('comes back to the laser on its part, ready, with the new blank size', () => 
   expect(toolbar()).toBeTruthy();
   expect(screen.queryByRole('figure', { name: 'Laser bed' })).toBe(null);
   // A larger blank: the rectangle replaced.
-  act(() => fireEvent.click(within(toolbar()).getByRole('button', { name: 'Undo last' })));
+  clearDrawing();
   rectangle(0, 0, 140, 80);
   finish();
   harness.rerender();
@@ -316,7 +324,7 @@ it('brings the sheet-metal form and the Tree back to the part, and refuses an ou
   const form = () => screen.getByLabelText('Sheet metal');
   act(() => fireEvent.click(within(form()).getByRole('button', { name: 'Edit outline' })));
   expect(toolbar()).toBeTruthy();
-  act(() => fireEvent.click(within(toolbar()).getByRole('button', { name: 'Undo last' })));
+  clearDrawing();
   // Shrunk so the bend line (x = 20) is off it.
   rectangle(40, 0, 60, 60);
   const commits = harness.setCadModel.mock.calls.length;
@@ -335,7 +343,7 @@ it('brings the sheet-metal form and the Tree back to the part, and refuses an ou
 
   // A larger outline takes the bend: back to the part with its feature open.
   act(() => fireEvent.click(within(form()).getByRole('button', { name: 'Edit outline' })));
-  act(() => fireEvent.click(within(toolbar()).getByRole('button', { name: 'Undo last' })));
+  clearDrawing();
   rectangle(0, 0, 140, 60);
   finish();
   harness.rerender();

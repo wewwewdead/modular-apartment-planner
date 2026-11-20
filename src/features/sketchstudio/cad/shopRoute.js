@@ -2,9 +2,10 @@
 // stations in shop order, where a product and each of its parts stand on it
 // (the job sheet's rules, jobSheet.js, so the route bar and the job sheet
 // never disagree), and what a station opens on. Pure: model in, plain data out.
-import { foldSheet, polygonBounds, profilePolygon, sheetMetalFeature } from './sheetMetal.js';
+import { crossingText, foldSheet, polygonBounds, profilePolygon, sheetMetalFeature } from './sheetMetal.js';
 import { jobProducts, stepStatus, strokeHits } from './jobSheet.js';
 import { nodeName } from './groups.js';
+import { numeric } from './model.js';
 import { isClosedProfile } from './operations.js';
 import { sketchConsumer } from './sketchPlane.js';
 import { sketchEditProblem } from './sketchOperations.js';
@@ -103,12 +104,15 @@ export function readyOutlines(model, params = {}) {
 }
 
 /**
- * What the 3D view draws of the outlines while Draw is open (§3.5): [{ id,
- * ready, chosen, rings: [{ points, closed }] }] on the XY plane, in model
- * millimetres. A ready outline is its blank's outline and cut-outs; one that
- * is not, the lines it was drawn with (or its profile's, when it was made by data).
+ * What the 3D view draws of the outlines while Draw or Cut's picker is open
+ * (§3.5; docs/sketch-studio-cut-pick.md §4.2): [{ id, ready, chosen, rings:
+ * [{ points, closed }] }] on the XY plane, in model millimetres. A ready
+ * outline is its blank's outline and cut-outs (the outer ring first); one
+ * that is not, the lines it was drawn with (or its profile's, when it was
+ * made by data). `chosen`: Draw's one sketch id, or the picker's selected ids.
  */
 export function shopOutlineView(model, params = {}, chosen = null) {
+  const picked = new Set(Array.isArray(chosen) ? chosen : chosen ? [chosen] : []);
   return model.sketches
     .filter((s) => isShopOutline(model, s))
     .map((s) => {
@@ -126,7 +130,7 @@ export function shopOutlineView(model, params = {}, chosen = null) {
           .map((e) => ({ points: shift(entityPolyline(e, 48)), closed: false }))
           .filter((r) => r.points.length > 1);
       }
-      return { id: s.id, ready, chosen: s.id === chosen, rings };
+      return { id: s.id, ready, chosen: picked.has(s.id), rings };
     })
     .filter((row) => row.rings.length);
 }
@@ -134,7 +138,8 @@ export function shopOutlineView(model, params = {}, chosen = null) {
 /**
  * Finishing an edit of an outline that sheet-metal parts are cut from
  * (§3.6, the guard): '' when every one of them still folds on the new
- * profile, else why not — nothing is committed then.
+ * profile, else why not — nothing is committed then. A crossing at a corner
+ * carries the relief hint (docs/sketch-studio-corner-gaps.md §4.2).
  */
 export function outlineEditRefusal(model, sketchId, profile, params = {}) {
   for (const part of model.parts)
@@ -144,7 +149,8 @@ export function outlineEditRefusal(model, sketchId, profile, params = {}) {
       try {
         foldSheet(feature, profile, params);
       } catch (e) {
-        return `This outline no longer takes the bends of ${part.name}: ${e.message || String(e)} Fix the outline, or remove that bend first.`;
+        // Two bends crossing at a corner say how far the relief must reach (corner gaps §4.2).
+        return `This outline no longer takes the bends of ${part.name}: ${crossingText(e)} Fix the outline, or remove that bend first.`;
       }
     }
   return '';
@@ -296,31 +302,73 @@ export function bendQueue(model, { params = {} } = {}) {
   });
 }
 
+/**
+ * Cut's picker, Already cut (docs/sketch-studio-cut-pick.md §4.2): one row
+ * per sheet-metal part that has a blank, in model order: [{ partId,
+ * instanceId (its first blank), name, copies, sheet ("t 1.5 SPCC"), profile }].
+ */
+export function cutParts(model, params = {}) {
+  return model.parts.flatMap((part) => {
+    const feature = sheetMetalFeature(part);
+    const blanks = feature ? model.instances.filter((i) => i.partId === part.id) : [];
+    if (!blanks.length) return [];
+    let thickness = null;
+    try {
+      thickness = numeric(feature.thickness, params, 'Sheet thickness');
+    } catch {
+      thickness = null;
+    }
+    return [
+      {
+        partId: part.id,
+        instanceId: blanks[0].id,
+        name: nodeName(model, blanks[0].id),
+        copies: blanks.length,
+        sheet: `t ${fmt(thickness)} ${stockOf(feature.stock).key.toUpperCase()}`,
+        profile: model.sketches.find((s) => s.id === feature.sketchId)?.profile || null,
+      },
+    ];
+  });
+}
+
 const VERBS = { paint: 'paint', print: 'print on' };
 /**
  * What a station opens on (§4.3) for `subject` ({ productId, instanceId } or
  * null): { open: { instanceId } } (Cut / Bend on a part; Paint, Print with
- * the subject's part when it has one), { open: { outline } } (Cut with no
- * blank yet: on the one outline ready to cut, or on the batch of all of them,
- * docs/sketch-studio-outline-edit-sheet-nest.md §4.8), { open: {} } (Draw), {
- * pick: [instanceId…] } (Cut / Bend with several sheet-metal parts and none
- * chosen), or { blocked: { message, go } } (nothing to work on: `go` is the
- * earliest station that makes it, in one hop — Cut whenever an outline is
- * ready to cut, else Draw).
+ * the subject's part when it has one), { open: { outline } } (Cut: the
+ * picker, `{ kind: 'pick', selected: [] }`, or the one outline ready to cut
+ * with no part yet, docs/sketch-studio-cut-pick.md §4.1), { open: {} }
+ * (Draw), { pick: [instanceId…] } (Cut / Bend with several sheet-metal parts
+ * and none chosen), or { blocked: { message, go } } (nothing to work on: `go`
+ * is the earliest station that makes it, in one hop — Cut whenever an
+ * outline is ready to cut, else Draw). `fromSelection`: the subject's part is
+ * only the selection (the route bar), not a part the route was sent to (a
+ * job board row, a gate, Back / Next, Open on the laser): at Cut the picker
+ * then comes first while outlines wait, the part is under its Already cut.
  */
-export function stationEntry(model, { station, subject = null, params = {} }) {
+export function stationEntry(model, { station, subject = null, params = {}, fromSelection = false }) {
   if (station === 'draw') return { open: {} };
   const product = subject?.productId ? jobProducts(model).find((p) => p.id === subject.productId) : null;
   const scope = product ? product.instanceIds : model.instances.map((i) => i.id);
   const chosen =
     subject?.instanceId && model.instances.some((i) => i.id === subject.instanceId) ? subject.instanceId : null;
   // With no part, the earliest station that makes one, in one hop: Cut opens
-  // on the outlines ready to cut (one, or the batch of all, SN-1 §4.8); with
+  // on the outlines ready to cut (one, or the picker, cut-pick §4.1); with
   // none it would only send the user on to Draw, so the card points at Draw.
   const outlines = readyOutlines(model, params);
   const maker = outlines.length ? 'cut' : 'draw';
   if (station === 'cut' || station === 'bend') {
-    if (chosen && sheetPartOf(model, chosen)) return { open: { instanceId: chosen } };
+    const sheetChosen = chosen && sheetPartOf(model, chosen);
+    // Cut, cut-pick §4.1: a part the route was sent to; else the picker when
+    // an outline waits beside another or beside a cut part; else as before.
+    if (sheetChosen && !(station === 'cut' && fromSelection)) return { open: { instanceId: chosen } };
+    if (
+      station === 'cut' &&
+      outlines.length &&
+      (outlines.length > 1 || model.instances.some((i) => sheetPartOf(model, i.id)))
+    )
+      return { open: { outline: { kind: 'pick', selected: [] } } };
+    if (sheetChosen) return { open: { instanceId: chosen } };
     const candidates = scope.filter((id) => sheetPartOf(model, id));
     if (candidates.length === 1) return { open: { instanceId: candidates[0] } };
     if (candidates.length > 1) return { pick: candidates };
@@ -332,10 +380,6 @@ export function stationEntry(model, { station, subject = null, params = {} }) {
             : { message: 'Nothing to bend yet: draw the outline first.', go: 'draw' },
       };
     if (outlines.length === 1) return { open: { outline: { kind: 'sketch', sketchId: outlines[0].id } } };
-    if (outlines.length > 1)
-      return {
-        open: { outline: { kind: 'batch', items: outlines.map((o) => ({ kind: 'sketch', sketchId: o.id })) } },
-      };
     return { blocked: { message: 'Nothing to cut yet: draw the outline first.', go: 'draw' } };
   }
   if (!model.instances.length) {

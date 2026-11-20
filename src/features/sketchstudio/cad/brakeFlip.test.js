@@ -335,7 +335,8 @@ describe('Turn sheet around (§5.2)', () => {
     expect(pending.collision.turnedClears).toBe(true);
     expect(pending.collision.turn).toEqual({
       label: 'Turn the sheet around',
-      session: { edge: LEFT, distance: 95, turned: false },
+      // Past the made bend from the left edge: a flat distance, named so (skin gauge §4.5 step 1).
+      session: { edge: LEFT, distance: 95, turned: false, stop: null },
     });
     const turned = brakeStation({
       model: channel,
@@ -371,12 +372,13 @@ describe('a side that hangs down from a back-to-back pair (§5.4)', () => {
     });
     // Tight bends TB-2 (docs/sketch-studio-tight-bends.md §5.2): after the hanging side's own
     // remedies, the brake tried bend 1 part-way first and it passes: offered, as its button says.
+    // 45° since docs/sketch-studio-shop-punches.md §6.4 (PART_WAY tries 45° first; 60° passes too).
     expect(pending.collision.hit.message).toBe(
-      'Bend 2: the 100 mm side hangs down beside the die and meets the bed (the V10 88° die stands 80 mm above it). Neither order clears: shorten the side that hangs to 79.9 mm or less, or make the step at least 30.6 mm so it hangs clear of the bed. Or bend 1 to 60° first, finish it after this hit.',
+      'Bend 2: the 100 mm side hangs down beside the die and meets the bed (the V10 88° die stands 80 mm above it). Neither order clears: shorten the side that hangs to 79.9 mm or less, or make the step at least 30.6 mm so it hangs clear of the bed. Or bend 1 to 45° first, finish it after this hit.',
     );
     expect(pending.collision.ways).toMatchObject({
       first: null,
-      partway: { label: 'Bend 1 to 60° first, finish it after this hit' },
+      partway: { label: 'Bend 1 to 45° first, finish it after this hit' },
     });
     expect(pending.collision.hit.hanging).toMatchObject({ tool: 'bed', otherFirst: false, shorten: 79.9 });
     // No "flip the sheet", no "bend this one before bend 1".
@@ -525,19 +527,28 @@ describe('the collision advice says what was tried (BT-2 follow-up)', () => {
   const channel = (width = 115) => modelOf(width, [{ a: [45, -1], b: [45, 61], punch: 'straight-88' }], 60);
   const pending = (model, patch) => brakeStation({ model, session: session(patch) }).pending.collision;
   it('names no remedy that was tried and does not clear, and says what was tried', () => {
-    for (const patch of [
-      { edge: RIGHT, distance: 215 },
-      { edge: LEFT, distance: 85 },
+    // docs/sketch-studio-shop-punches.md §5.4: the whole rack is tried, in order; the A 102
+    // (its room toward the operator, or reversed from the other end) is the first that clears,
+    // and what was tried before it is said.
+    for (const [patch, fix, said] of [
+      [
+        { edge: RIGHT, distance: 215 },
+        'Use the A 102 punch',
+        'Use the A 102 punch. Turning the sheet around, bending this one earlier, a part-way bend first and the A 101 punch either way round were tried: none clears.',
+      ],
+      [
+        { edge: LEFT, distance: 85 },
+        'Use the A 102 punch, reversed',
+        'Use the A 102 punch, reversed. Turning the sheet around, bending this one earlier, a part-way bend first, the A 102 punch and the A 101 punch either way round were tried: none clears.',
+      ],
     ]) {
       const collision = pending(flange45, patch);
-      expect(collision.fix).toBeUndefined();
+      expect(collision.fix.label).toBe(fix);
       expect(collision.turn).toBeUndefined();
       // Tight bends TB-2 (§5.2): the order and a part-way bend are tried too; neither clears, so
-      // "bend this one earlier" is not said and the card ends with try 3's words.
+      // "bend this one earlier" is not said.
       expect(collision.ways).toBeUndefined();
-      expect(collision.hit.message).toMatch(
-        /^Bend 2: the part hits the punch at [\d.]+°\. Turning the sheet around and the gooseneck punch either way round were tried: neither clears\. No order and no part-way bend clears it with this punch either: the shape cannot be closed with the tools in this rack\. Make the web wider or the flange shorter, or use tooling this rack does not hold\.$/,
-      );
+      expect(collision.hit.message.replace(/^Bend 2: the part hits the punch at [\d.]+°\. /, '')).toBe(said);
     }
   });
   it('names the turn alone when only the turn clears', () => {
@@ -546,25 +557,28 @@ describe('the collision advice says what was tried (BT-2 follow-up)', () => {
     const collision = pending(channel(715), { edge: RIGHT, distance: 620, punch: 'gooseneck-88', reverse: true });
     expect(collision.turn).toEqual({
       label: 'Turn the sheet around',
-      session: { edge: LEFT, distance: 95, turned: false },
+      // Past the made bend from the left edge: a flat distance, named so (skin gauge §4.5 step 1).
+      session: { edge: LEFT, distance: 95, turned: false, stop: null },
     });
     expect(collision.fix).toBeUndefined();
     // Tight bends TB-2 (§5.2): the order and a part-way bend were tried and do not clear: said so.
     expect(collision.hit.message).toMatch(
-      /^Bend 2: the part hits the punch at [\d.]+°\. Turn the sheet around\. Bending this one earlier, a part-way bend first and turning the punch round were tried: none clears\.$/,
+      // Shop punches §5.4: past two punches the tried list says "every other punch in the rack".
+      /^Bend 2: the part hits the punch at [\d.]+°\. Turn the sheet around\. Bending this one earlier, a part-way bend first, turning the punch round and every other punch in the rack, either way round, were tried: none clears\.$/,
     );
   });
   it('names the punch alone when only the punch clears, worded as its button', () => {
+    // Shop punches §5.4: the first punch in the rack that clears, the A 101.
     const collision = pending(channel(), { edge: RIGHT, distance: 20 });
-    expect(collision.fix.label).toBe('Use the gooseneck punch');
+    expect(collision.fix.label).toBe('Use the A 101 punch');
     expect(collision.turn).toBeUndefined();
     expect(collision.hit.message).toMatch(
-      /^Bend 2: the part hits the punch at [\d.]+°\. Bend this one earlier \(before the flange in the way\), or use the gooseneck punch\. Turning the sheet around was tried: it does not clear\.$/,
+      /^Bend 2: the part hits the punch at [\d.]+°\. Bend this one earlier \(before the flange in the way\), or use the A 101 punch\. Turning the sheet around was tried: it does not clear\.$/,
     );
-    // The holders: the tall punch, with why.
+    // The holders: a taller punch (the A 101, 95 mm), with why.
     const box = modelOf(128, [{ a: [48, -1], b: [48, 61] }], 60);
     expect(pending(box, { edge: RIGHT, distance: 20 }).hit.message).toMatch(
-      /^Bend 2: the part hits the punch holder at [\d.]+°\. Bend this one earlier \(before the flange that swings over the punch\), or use the tall straight punch: it holds the clamps higher\. Turning the sheet around was tried: it does not clear\.$/,
+      /^Bend 2: the part hits the punch holder at [\d.]+°\. Bend this one earlier \(before the flange that swings over the punch\), or use the A 101 punch: it holds the clamps higher\. Turning the sheet around was tried: it does not clear\.$/,
     );
   });
   it('with the gooseneck in, reversed: turning the punch round, not "use the gooseneck punch"', () => {

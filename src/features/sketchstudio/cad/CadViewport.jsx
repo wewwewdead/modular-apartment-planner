@@ -152,6 +152,10 @@ export default function CadViewport({
   // clicked or dragged past 90°: the act, exactly as the panel makes it.
   brakeGrip = null,
   onBrakeGrip,
+  // Flange gaps (docs/sketch-studio-corner-gaps.md §3.3): null, or the row
+  // hovered in the press brake's card, { at, flat ([P, Q] in each piece's flat
+  // frame), overlap }: a marker between its two points on the part.
+  brakeGap = null,
   // A handle approached whose outcome is not worked out yet (a heavy part, §5.4): the workspace works it out now.
   onBrakeGripWant,
   // HO-2 (§6): onBrakeEdge(index) an edge of the sheet clicked (the flat-blank
@@ -179,8 +183,12 @@ export default function CadViewport({
   // and the camera (the press brake's saved one too) put back as it ends.
   film = null,
   // Draw's outlines (shopRoute.js shopOutlineView: [{ id, ready, chosen,
-  // rings }]) while the Draw station is open, else null.
+  // rings }]) while the Draw station or Cut's picker is open, else null.
   shopOutlines = null,
+  // Cut's picker (docs/sketch-studio-cut-pick.md §4.2): onPickOutline(sketchId)
+  // for a click inside a ready outline that no part in front takes; null
+  // (Draw) leaves the outlines unclickable and every click as before.
+  onPickOutline = null,
 }) {
   const host = useRef(null),
     hudRef = useRef(null),
@@ -277,6 +285,10 @@ export default function CadViewport({
         ctx.syncSketchDimLabels?.();
         ctx.render();
       },
+      // `watcher()` after every camera change (a frame at most), until the returned function is called.
+      watchView(watcher) {
+        return sceneRef.current?.watchView?.(watcher) || (() => {});
+      },
       // Measure: the first picked point (world) while the second is awaited.
       measureState: () => ({ first: sceneRef.current?.measureFirst?.point || null }),
       cancelMeasure: () => sceneRef.current?.cancelMeasure(),
@@ -302,6 +314,12 @@ export default function CadViewport({
   useEffect(() => {
     selectionCallback.current = onSelect;
   }, [onSelect]);
+  const outlineCallback = useRef(onPickOutline);
+  useEffect(() => {
+    outlineCallback.current = onPickOutline;
+    // Off: the cursor this viewport set over an outline goes too.
+    if (!onPickOutline) sceneRef.current?.clearOutlineHover?.();
+  }, [onPickOutline]);
   useEffect(() => {
     moveCallback.current = onMove;
   }, [onMove]);
@@ -485,8 +503,11 @@ export default function CadViewport({
       programs: renderer.info?.programs?.length ?? 0,
       materials: ctx.materials.size(),
       lastRenderMs: ctx.lastRenderMs,
-      // Draw's outlines on show in the view (§3.5 of the outline-edit spec).
+      // Draw's outlines on show in the view (§3.5 of the outline-edit spec), the
+      // chosen ones (Cut's picker: those selected) and whether a click picks them.
       shopOutlines: ctx.shopOutlineCount,
+      shopOutlinesChosen: ctx.shopOutlinesChosen || [],
+      shopOutlinesPickable: Boolean(outlineCallback.current),
       bodies: group.children.map((g) => {
         const [mesh, edges] = g.children;
         const box = new THREE.Box3().setFromObject(g);
@@ -616,6 +637,73 @@ export default function CadViewport({
         };
       });
     };
+    // Browser checks (docs/sketch-studio-hand-drawing.md §5.5): the selection,
+    // the box being dragged and the construction lines, as drawn.
+    element.cadSketchOverlay = () => {
+      const overlay = sketchLayer.userData.overlay;
+      const drawn = (name) => sketchLayer.children.filter((o) => o.name === name);
+      const look = (o) => ({
+        ids: o.userData.entityIds || (o.userData.entityId ? [o.userData.entityId] : []),
+        dashed: Boolean(o.material.isLineDashedMaterial),
+        color: `#${o.material.color.getHexString()}`,
+      });
+      const [box] = drawn('sketch-box');
+      // HD-2 (§6.1, §6.5): the zero's marker and Check's, as drawn.
+      const [zero] = drawn('sketch-zero');
+      // HD-3 (§7.3, §7.4): an action's ghost and a drag's offset, as drawn.
+      const [ghost] = drawn('sketch-ghost');
+      const [moved] = drawn('sketch-entity').filter((o) => !o.userData.batch);
+      // HD-4 (§8.1): the red cut an Edit tool previews (its piece count and colour), and the preview's count.
+      const [cut] = drawn('sketch-cut');
+      return {
+        ghost: ghost ? ghost.userData.count : 0,
+        cut: cut ? cut.userData.count : 0,
+        cutColor: cut ? `#${cut.material.color.getHexString()}` : null,
+        preview: drawn('sketch-preview').length,
+        dragOffset: moved?.userData.offset || null,
+        markerSize: overlay?.markerSize ?? null,
+        selectedIds: overlay?.selectedIds || [],
+        selected: drawn('sketch-entity')
+          .filter((o) => !o.userData.batch)
+          .map(look),
+        box: box ? { mode: box.userData.mode, ...look(box) } : null,
+        construction: drawn('sketch-construction').map(look),
+        zero: zero ? { at: zero.userData.at, color: `#${zero.material.color.getHexString()}` } : null,
+        problems: drawn('sketch-problem').map((o) => ({
+          id: o.userData.problemId,
+          at: o.userData.at,
+          radius: o.userData.radius,
+          focused: o.userData.focused,
+          color: `#${o.material.color.getHexString()}`,
+        })),
+      };
+    };
+    // The camera as a key (where it is, how it looks, the canvas's size): a
+    // render with a new one tells the view's watchers, once a frame
+    // (docs/sketch-studio-hand-drawing.md §7.0: the sketcher's marker sizes).
+    ctx.viewWatchers = new Set();
+    const viewKey = () => {
+      const camera = ctx.camera;
+      return [
+        ...camera.position.toArray(),
+        ...camera.quaternion.toArray(),
+        camera.zoom,
+        ...camera.projectionMatrix.elements,
+        renderer.domElement.width,
+        renderer.domElement.height,
+      ].join(',');
+    };
+    let viewTold = null,
+      viewTelling = false;
+    const tellView = () => {
+      viewTelling = false;
+      for (const watcher of [...ctx.viewWatchers]) watcher();
+    };
+    ctx.watchView = (watcher) => {
+      ctx.viewWatchers.add(watcher);
+      viewTold = viewKey();
+      return () => ctx.viewWatchers.delete(watcher);
+    };
     const render = () => {
       const start = performance.now();
       // The press brake's grip keeps its size on screen and its place on the sheet.
@@ -626,6 +714,14 @@ export default function CadViewport({
       placeSketchDimLabels();
       ctx.placePlaneLabels?.();
       ctx.shopLayer?.placeLabels();
+      if (ctx.viewWatchers.size) {
+        const key = viewKey();
+        if (key !== viewTold && !viewTelling) {
+          viewTold = key;
+          viewTelling = true;
+          (typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (fn) => setTimeout(fn, 16))(tellView);
+        }
+      }
     };
     ctx.render = render;
     controls.addEventListener('change', render);
@@ -1714,6 +1810,48 @@ export default function CadViewport({
       if (ctx.shopHover) showShopHover(null);
     };
     renderer.domElement.addEventListener('pointerleave', shopLeave);
+    // ------------------------------------------------ Cut's picker (docs/sketch-studio-cut-pick.md §4.2)
+    // A click inside a ready outline on the ground (z = 0) toggles it, unless
+    // a part in front of that point takes the ray; only while the workspace
+    // hands onPickOutline (the picker open), so Draw's outlines stay unclickable.
+    const ground = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    const outlineTarget = (caster, hit = modelHit(caster)) => {
+      if (!outlineCallback.current || !ctx.outlinePick?.length) return null;
+      const point = caster.ray.intersectPlane(ground, new THREE.Vector3());
+      if (!point || (hit && hit.distance <= caster.ray.origin.distanceTo(point))) return null;
+      return outlineAt(ctx.outlinePick, point.x, point.y);
+    };
+    // The cursor says an outline can be clicked; only the cursor this sets is put back.
+    ctx.outlineHover = false;
+    const showOutlineHover = (on) => {
+      if (on === ctx.outlineHover) return;
+      ctx.outlineHover = on;
+      renderer.domElement.style.cursor = on ? 'pointer' : '';
+    };
+    ctx.clearOutlineHover = () => showOutlineHover(false);
+    let outlineFrame = 0,
+      outlinePointer = null;
+    const runOutlineHover = () => {
+      outlineFrame = 0;
+      const pointer = outlinePointer;
+      outlinePointer = null;
+      if (pointer) showOutlineHover(Boolean(outlineTarget(rayAt(pointer))));
+    };
+    const outlineMove = (event) => {
+      if (event.buttons || !outlineCallback.current) return;
+      outlinePointer = { clientX: event.clientX, clientY: event.clientY };
+      if (!outlineFrame) outlineFrame = requestAnimationFrame(runOutlineHover);
+    };
+    const outlineLeave = () => {
+      if (outlineFrame) cancelAnimationFrame(outlineFrame);
+      outlineFrame = 0;
+      outlinePointer = null;
+      showOutlineHover(false);
+    };
+    renderer.domElement.addEventListener('pointermove', outlineMove);
+    renderer.domElement.addEventListener('pointerleave', outlineLeave);
+    // Browser checks: the outline a click at a client point would toggle, or null.
+    element.cadOutlineAt = (clientX, clientY) => outlineTarget(rayAt({ clientX, clientY }));
     // A print dragged on its face (the print station): capture phase, so the
     // press never reaches OrbitControls; a press without travel selects it.
     let printDrag = null;
@@ -2112,12 +2250,18 @@ export default function CadViewport({
       });
     };
     // The readout by the cursor: L and the flange the station reads for it (the panel's own figure).
+    // Dragged onto a made bend's line, or seated on it (tight bends §7.4 (f)): the L the fingers
+    // stand at and the bend, "L 29 mm · on bend 1".
     const fingerReadout = () => {
       const press = fingerPress;
       if (!press?.dragging) return;
       const offer = ctx.brakeGrip?.fingers;
-      const flange = offer?.L != null && Math.abs(offer.L - press.L) < 1e-9 ? offer.flange : null;
-      const words = fingerReadoutWords(press.L, flange);
+      const at = (L) => L != null && Math.abs(L - press.L) < 1e-9;
+      const on = offer?.on != null && (at(offer.L) || at(offer.from)) ? offer.on : null;
+      const flange = on == null && at(offer?.L) ? offer.flange : null;
+      // Gauged off a made flange (skin gauge §4.7): the stop the fingers stand against.
+      const off = at(offer?.L) ? (offer.off ?? null) : null;
+      const words = fingerReadoutWords(on != null ? offer.L : press.L, flange, on, off);
       writeChip(
         words,
         press.typed ? `${press.typed} mm · Enter applies · Esc cancels` : 'Type L · Enter applies',
@@ -2490,6 +2634,16 @@ export default function CadViewport({
       }
       // A ring click that missed the part keeps the selection.
       if (ringClick) return;
+      // Cut's picker (cut-pick §4.2): a click inside an outline toggles it; a
+      // part in front takes it as below; a miss keeps the picker open.
+      if (outlineCallback.current) {
+        const outline = outlineTarget(ray, hit);
+        if (outline) {
+          outlineCallback.current(outline);
+          return;
+        }
+        if (!hit && !ctx.shopLayer.pick(ray)) return;
+      }
       ctx.selectClick = true;
       // Shift / Ctrl / Cmd+click adds or removes the part's group or the
       // part (the workspace resolves groups, §3.3). An unfolded sheet-metal
@@ -2560,6 +2714,10 @@ export default function CadViewport({
       if (shopFrame) cancelAnimationFrame(shopFrame);
       renderer.domElement.removeEventListener('pointermove', shopMove);
       renderer.domElement.removeEventListener('pointerleave', shopLeave);
+      if (outlineFrame) cancelAnimationFrame(outlineFrame);
+      renderer.domElement.removeEventListener('pointermove', outlineMove);
+      renderer.domElement.removeEventListener('pointerleave', outlineLeave);
+      delete element.cadOutlineAt;
       renderer.domElement.removeEventListener('pointerdown', printDown, true);
       renderer.domElement.removeEventListener('pointermove', printMove, true);
       renderer.domElement.removeEventListener('pointerup', printUp, true);
@@ -2897,6 +3055,10 @@ export default function CadViewport({
     // An outcome arriving while a handle is lit: its chip says it now.
     ctx.refreshGrip?.();
   }, [brakeGrip, brakeView]);
+  // The hovered flange gap's marker, after the station above (a new station clears it).
+  useEffect(() => {
+    sceneRef.current?.shopLayer.setGap(brakeView && brakeGap ? brakeGap : null);
+  }, [brakeGap, brakeView]);
   // The shop's records (SM-3): print decals on the parts as shown, after the
   // poses, the unfold view and the station above (each hides parts).
   useEffect(() => {
@@ -2949,6 +3111,9 @@ export default function CadViewport({
     if (!ctx) return;
     drawShopOutlines(ctx.outlineLayer, shopOutlines);
     ctx.shopOutlineCount = shopOutlines?.length || 0;
+    ctx.shopOutlinesChosen = (shopOutlines || []).filter((o) => o.chosen).map((o) => o.id);
+    // What a click can pick under Cut's picker (cut-pick §4.2), built here, once per list.
+    ctx.outlinePick = outlinePickAreas(shopOutlines);
     ctx.render();
   }, [shopOutlines]);
   useEffect(() => {
@@ -3126,6 +3291,8 @@ export default function CadViewport({
     const target = new THREE.Vector3(...focusTarget.position);
     const normal = new THREE.Vector3(...focusTarget.normal).normalize();
     ctx.span = focusTarget.span;
+    // A wheel zoom of an orthographic camera is its `zoom`: back to 1, so the span is what is framed.
+    if (ctx.camera.isOrthographicCamera && ctx.camera.zoom !== 1) ctx.camera.zoom = 1;
     // An explicit up (a sketch's +v axis) makes the view square to the sketch.
     if (focusTarget.up) ctx.camera.up.set(...focusTarget.up);
     else ctx.camera.up.set(0, Math.abs(normal.z) > 0.999 ? 1 : 0, Math.abs(normal.z) > 0.999 ? 0 : 1);
@@ -3592,7 +3759,49 @@ const SKETCH_COLORS = {
   preview: '#2f9be6',
   snap: '#e2541c',
   free: '#6c7c8c',
+  // The selection box (docs/sketch-studio-hand-drawing.md §5.1): inside, touching.
+  boxInside: '#1f6fd1',
+  boxTouching: '#2f8f3f',
+  // Check's markers (docs/sketch-studio-hand-drawing.md §6.5).
+  problem: '#d22f27',
 };
+// A closed ring of `steps` chords round `center` (plane mm).
+const circlePoints = ([u, v], radius, steps) =>
+  Array.from({ length: steps + 1 }, (_, i) => [
+    u + radius * Math.cos((i / steps) * Math.PI * 2),
+    v + radius * Math.sin((i / steps) * Math.PI * 2),
+  ]);
+// Every entity's polyline as LineSegments pairs.
+function polylineSegments(entities) {
+  const segments = [];
+  for (const entity of entities) {
+    const points = entityPolyline(entity);
+    for (let i = 1; i < points.length; i++) segments.push(points[i - 1], points[i]);
+  }
+  return segments;
+}
+// LineSegments pairs drawn dashed (`dash` mm on, about two thirds of it off), on top like lineObject's.
+function dashedSegments(points, color, dash, order = 30) {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute(
+      points.flatMap((p) => [p[0], p[1], 0]),
+      3,
+    ),
+  );
+  const material = new THREE.LineDashedMaterial({
+    color,
+    dashSize: dash,
+    gapSize: dash * 0.6,
+    transparent: true,
+    depthTest: false,
+  });
+  const line = new THREE.LineSegments(geometry, material);
+  line.computeLineDistances();
+  line.renderOrder = order;
+  return line;
+}
 // Explicit draw order (depth testing is off): grid and axes, then model
 // edges, then the sketch, the rubber band and the snap marker on top.
 function lineObject(points, color, opacity = 1, segments = false, order = 30) {
@@ -3658,17 +3867,82 @@ function drawShopOutlines(layer, outlines) {
   }
 }
 
-// Rebuild the sketch overlay: grid, plane axes, snappable model edges, the
-// drawn entities, the rubber-band preview and the snap marker.
-function drawSketchOverlay(layer, overlay) {
-  layer.traverse((obj) => {
-    if (obj === layer) return;
-    obj.geometry?.dispose();
-    obj.material?.dispose();
+// Cut's picker (docs/sketch-studio-cut-pick.md §4.2): what a click on the
+// ground can pick, built once per outline list (never per pointer move). A
+// ready outline is the whole drawing inside its outer ring (cut-outs
+// included: a one-pixel line is hard to hit); one that is not ready is not
+// picked. [{ id, ring, box, area }].
+function outlinePickAreas(outlines) {
+  return (outlines || []).flatMap((outline) => {
+    const ring = outline.ready && outline.rings[0]?.closed ? outline.rings[0].points : null;
+    if (!ring || ring.length < 3) return [];
+    const xs = ring.map((p) => p[0]),
+      ys = ring.map((p) => p[1]);
+    const box = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+    return [{ id: outline.id, ring, box, area: (box[2] - box[0]) * (box[3] - box[1]) }];
   });
-  layer.clear();
-  layer.userData.overlay = overlay || null;
-  if (!overlay) return;
+}
+// The outline under a ground point: the smallest one holding it (an outline
+// drawn inside another's cut-out is the one meant), or null.
+function outlineAt(areas, x, y) {
+  let best = null;
+  for (const area of areas) {
+    const [x0, y0, x1, y1] = area.box;
+    if (x < x0 || x > x1 || y < y0 || y > y1 || (best && best.area <= area.area)) continue;
+    let inside = false;
+    const ring = area.ring;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i],
+        [xj, yj] = ring[j];
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    if (inside) best = area;
+  }
+  return best?.id || null;
+}
+
+// The sketch overlay: grid, plane axes, snappable model edges, the drawn
+// entities, the rubber-band preview and the snap marker. Each piece is kept
+// while what it was drawn from is unchanged (docs/sketch-studio-drawing-
+// table.md §3.2 item 3; the sketcher hands an overlay on every pointer move):
+// the drawn entities are ONE LineSegments batch, the selection its own line
+// (one entity) or batch (several), rebuilt for a new entity array, selection
+// array or frame; the construction entities one dashed batch on the same key
+// plus the dash size (docs/sketch-studio-hand-drawing.md §5.4); the grid and
+// axes for new bounds or step; the model edges and mark points for a new array
+// or marker size; the zero's marker for a new zero or size step and Check's
+// markers for a new problems array, focused row or size step (HD-2, §6.1,
+// §6.5); an Edit tool's red cut for a new array (HD-4, §8.1); preview,
+// dimensions, the selection box and cursor on every call.
+// What is replaced is disposed; on null everything is.
+const sameKey = (a, b) => a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
+function drawSketchOverlay(layer, overlay) {
+  if (!overlay) {
+    layer.traverse((obj) => {
+      if (obj === layer) return;
+      obj.geometry?.dispose();
+      obj.material?.dispose();
+    });
+    layer.clear();
+    layer.userData.slots = new Map();
+    layer.userData.overlay = null;
+    return;
+  }
+  layer.userData.overlay = overlay;
+  const slots = (layer.userData.slots ||= new Map());
+  // `key` null: rebuilt every call.
+  const piece = (name, key, build) => {
+    const slot = slots.get(name);
+    if (slot && key && slot.key && sameKey(slot.key, key)) return;
+    for (const obj of slot?.objects || []) {
+      layer.remove(obj);
+      obj.geometry?.dispose();
+      obj.material?.dispose();
+    }
+    const objects = build().filter(Boolean);
+    if (objects.length) layer.add(...objects);
+    slots.set(name, { key, objects });
+  };
   const { frame } = overlay;
   layer.matrix.makeBasis(
     new THREE.Vector3(...frame.x),
@@ -3679,75 +3953,221 @@ function drawSketchOverlay(layer, overlay) {
   layer.matrixWorldNeedsUpdate = true;
   const [[u0, v0], [u1, v1]] = overlay.gridBounds;
   const step = overlay.gridStep;
-  if (step > 0 && (u1 - u0) / step <= 400 && (v1 - v0) / step <= 400) {
-    const lines = [];
-    for (let u = Math.ceil(u0 / step) * step; u <= u1; u += step) lines.push([u, v0], [u, v1]);
-    for (let v = Math.ceil(v0 / step) * step; v <= v1; v += step) lines.push([u0, v], [u1, v]);
-    const grid = lineObject(lines, SKETCH_COLORS.grid, 0.45, true, 28);
-    grid.name = 'sketch-grid';
-    layer.add(grid);
-  }
-  const axisU = lineObject(
-    [
-      [u0, 0],
-      [u1, 0],
-    ],
-    SKETCH_COLORS.axisU,
-    0.7,
-    false,
-    29,
-  );
-  const axisV = lineObject(
-    [
-      [0, v0],
-      [0, v1],
-    ],
-    SKETCH_COLORS.axisV,
-    0.7,
-    false,
-    29,
-  );
-  axisU.name = axisV.name = 'sketch-axis';
-  layer.add(axisU, axisV);
-  if (overlay.boundary?.length) {
+  piece('grid', [u0, v0, u1, v1, step], () => {
+    const objects = [];
+    if (step > 0 && (u1 - u0) / step <= 400 && (v1 - v0) / step <= 400) {
+      const lines = [];
+      for (let u = Math.ceil(u0 / step) * step; u <= u1; u += step) lines.push([u, v0], [u, v1]);
+      for (let v = Math.ceil(v0 / step) * step; v <= v1; v += step) lines.push([u0, v], [u1, v]);
+      const grid = lineObject(lines, SKETCH_COLORS.grid, 0.45, true, 28);
+      grid.name = 'sketch-grid';
+      objects.push(grid);
+    }
+    const axisU = lineObject(
+      [
+        [u0, 0],
+        [u1, 0],
+      ],
+      SKETCH_COLORS.axisU,
+      0.7,
+      false,
+      29,
+    );
+    const axisV = lineObject(
+      [
+        [0, v0],
+        [0, v1],
+      ],
+      SKETCH_COLORS.axisV,
+      0.7,
+      false,
+      29,
+    );
+    axisU.name = axisV.name = 'sketch-axis';
+    return [...objects, axisU, axisV];
+  });
+  piece('boundary', [overlay.boundary], () => {
+    if (!overlay.boundary?.length) return [];
     const boundary = lineObject(overlay.boundary.flat(), SKETCH_COLORS.boundary, 0.9, true);
     boundary.name = 'sketch-boundary';
-    layer.add(boundary);
-  }
-  for (const entity of overlay.entities || []) {
-    const line = lineObject(
-      entityPolyline(entity),
-      entity.id === overlay.selectedId ? SKETCH_COLORS.selected : SKETCH_COLORS.entity,
-      1,
-      false,
-      31,
+    return [boundary];
+  });
+  // The selection (docs/sketch-studio-hand-drawing.md §5.1): `selectedIds`, an
+  // array the sketcher keeps while it does not change (`selectedId`, one id,
+  // is still read). One selected entity is its own line, several one batch.
+  const selection = overlay.selectedIds ?? overlay.selectedId ?? null;
+  const frameKey = [...frame.origin, ...frame.x, ...frame.y, ...frame.normal];
+  piece('entities', [overlay.entities, selection, ...frameKey], () => {
+    const chosen = new Set(Array.isArray(selection) ? selection : selection ? [selection] : []);
+    const segments = [];
+    for (const entity of overlay.entities || []) {
+      if (entity.construction || chosen.has(entity.id)) continue;
+      const points = entityPolyline(entity);
+      for (let i = 1; i < points.length; i++) segments.push(points[i - 1], points[i]);
+    }
+    if (!segments.length) return [];
+    const batch = lineObject(segments, SKETCH_COLORS.entity, 1, true, 31);
+    batch.name = 'sketch-entity';
+    batch.userData.batch = true;
+    return [batch];
+  });
+  // The selection (its own piece: a drag rebuilds it alone, offset by
+  // `dragOffset`, HD-3 §7.3, while the batch of the rest is kept).
+  const offset = overlay.dragOffset || null;
+  piece('selected', [overlay.entities, selection, offset?.[0], offset?.[1], ...frameKey], () => {
+    const chosen = new Set(Array.isArray(selection) ? selection : selection ? [selection] : []);
+    if (!chosen.size) return [];
+    const selected = (overlay.entities || []).filter((e) => !e.construction && chosen.has(e.id));
+    const shift = (points) => (offset ? points.map(([u, v]) => [u + offset[0], v + offset[1]]) : points);
+    const objects = [];
+    if (selected.length === 1) {
+      const line = lineObject(shift(entityPolyline(selected[0])), SKETCH_COLORS.selected, 1, false, 31);
+      line.name = 'sketch-entity';
+      line.userData.entityId = selected[0].id;
+      objects.push(line);
+    } else if (selected.length) {
+      const line = lineObject(shift(polylineSegments(selected)), SKETCH_COLORS.selected, 1, true, 31);
+      line.name = 'sketch-entity';
+      line.userData.entityIds = selected.map((e) => e.id);
+      objects.push(line);
+    }
+    for (const object of objects) object.userData.offset = offset;
+    return objects;
+  });
+  // An action's ghost (HD-3, §7.3 – §7.4): the selection where the next click
+  // puts it, or every copy Pattern would add, one batch in the preview colour.
+  piece('ghost', [overlay.ghost, ...frameKey], () => {
+    if (!overlay.ghost?.length) return [];
+    const ghost = lineObject(polylineSegments(overlay.ghost), SKETCH_COLORS.preview, 0.75, true, 32);
+    ghost.name = 'sketch-ghost';
+    ghost.userData.count = overlay.ghost.length;
+    return [ghost];
+  });
+  // What an Edit tool's click would take away (HD-4, §8.1): one batch in
+  // Check's red, kept while the sketcher hands the same array (one per hover).
+  piece('cut', [overlay.cut, ...frameKey], () => {
+    if (!overlay.cut?.length) return [];
+    const cut = lineObject(polylineSegments(overlay.cut), SKETCH_COLORS.problem, 1, true, 33);
+    cut.name = 'sketch-cut';
+    cut.userData.count = overlay.cut.length;
+    return [cut];
+  });
+  // Construction entities (§5.4): dashed, in the model-edge colour (the
+  // selected ones in the selected colour), the dash about 8 px on screen. The
+  // dash steps in powers of two of the marker size, so a pointer move does not
+  // rebuild them; a zoom by a factor of two does.
+  const dash = 2 ** Math.round(Math.log2(Math.max(1e-6, (overlay.markerSize || 2) * 2)));
+  piece('construction', [overlay.entities, selection, dash, ...frameKey], () => {
+    const chosen = new Set(Array.isArray(selection) ? selection : selection ? [selection] : []);
+    const marked = (overlay.entities || []).filter((e) => e.construction);
+    return [
+      [marked.filter((e) => !chosen.has(e.id)), SKETCH_COLORS.boundary],
+      [marked.filter((e) => chosen.has(e.id)), SKETCH_COLORS.selected],
+    ].flatMap(([entities, color]) => {
+      if (!entities.length) return [];
+      const line = dashedSegments(polylineSegments(entities), color, dash, 31);
+      line.name = 'sketch-construction';
+      line.userData.entityIds = entities.map((e) => e.id);
+      return [line];
+    });
+  });
+  // The box being dragged (§5.1), in the plane between its two corners: to the
+  // right solid blue, taking what is inside; to the left dashed green, taking
+  // what it touches; a faint fill of the same colour.
+  piece('box', null, () => {
+    const box = overlay.box;
+    if (!box?.from || !box?.to) return [];
+    const [[x0, y0], [x1, y1]] = [box.from, box.to];
+    const corners = [
+      [x0, y0],
+      [x1, y0],
+      [x1, y1],
+      [x0, y1],
+    ];
+    const inside = box.mode === 'inside';
+    const color = inside ? SKETCH_COLORS.boxInside : SKETCH_COLORS.boxTouching;
+    const ring = corners.flatMap((p, i) => [p, corners[(i + 1) % 4]]);
+    const edge = inside ? lineObject(ring, color, 1, true, 34) : dashedSegments(ring, color, dash, 34);
+    edge.name = 'sketch-box';
+    edge.userData.mode = box.mode;
+    const fill = new THREE.Mesh(
+      new THREE.ShapeGeometry(new THREE.Shape(corners.map(([x, y]) => new THREE.Vector2(x, y)))),
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.08,
+        depthTest: false,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
     );
-    line.name = 'sketch-entity';
-    line.userData.entityId = entity.id;
-    layer.add(line);
-  }
-  for (const entity of overlay.preview || []) {
-    const line = lineObject(entityPolyline(entity), SKETCH_COLORS.preview, 0.9, false, 32);
-    line.name = 'sketch-preview';
-    layer.add(line);
-  }
+    fill.name = 'sketch-box-fill';
+    fill.renderOrder = 34;
+    return [fill, edge];
+  });
+  // The zero (docs/sketch-studio-hand-drawing.md §6.1) while it is not the
+  // origin: a small crossed circle in the snap colour, its size the dash's
+  // power-of-two step of the marker size, so a pointer move never rebuilds it.
+  const zero = overlay.zero || null;
+  piece('zero', [zero?.[0], zero?.[1], dash, ...frameKey], () => {
+    if (!zero) return [];
+    const [u, v] = zero;
+    const ring = circlePoints(zero, dash, 32);
+    const cross = [
+      [u - dash * 1.6, v],
+      [u + dash * 1.6, v],
+      [u, v - dash * 1.6],
+      [u, v + dash * 1.6],
+    ];
+    return [lineObject(ring, SKETCH_COLORS.snap, 1, false, 33), lineObject(cross, SKETCH_COLORS.snap, 1, true, 33)].map(
+      (line) => {
+        line.name = 'sketch-zero';
+        line.userData.at = zero;
+        return line;
+      },
+    );
+  });
+  // Check's markers while its list is open (§6.5): a red ring on each
+  // problem, the one under the pointer or with the focus larger. Kept for one
+  // problems array, focused row and marker size step.
+  piece('problems', [overlay.problems, overlay.problemFocus, dash, ...frameKey], () =>
+    (overlay.problems || []).map((problem) => {
+      const focus = overlay.problemFocus || {};
+      const focused = problem.id === focus.pointer || problem.id === focus.focus;
+      const radius = dash * (focused ? 2.6 : 1.5);
+      const ring = lineObject(circlePoints(problem.at, radius, 32), SKETCH_COLORS.problem, 1, false, 35);
+      ring.name = 'sketch-problem';
+      Object.assign(ring.userData, { problemId: problem.id, at: problem.at, radius, focused });
+      return ring;
+    }),
+  );
+  piece('preview', null, () =>
+    (overlay.preview || []).map((entity) => {
+      const line = lineObject(entityPolyline(entity), SKETCH_COLORS.preview, 0.9, false, 32);
+      line.name = 'sketch-preview';
+      return line;
+    }),
+  );
   // Reference dimensions (docs/sketch-studio-sketch-dimensions.md §3.4): drawn
   // as handed over (segments in plane mm), in the mark colours, above the
   // entities; the one waiting for its place click faded.
-  for (const dimension of overlay.dimensions || []) {
-    const line = lineObject(
-      dimension.segments.flat(),
-      dimension.selected ? MARK_SELECTED_COLOR : MARK_COLOR,
-      dimension.preview ? 0.6 : 1,
-      true,
-      32,
-    );
-    line.name = 'sketch-dimension';
-    line.userData.dimensionId = dimension.id;
-    layer.add(line);
-  }
+  piece('dimensions', null, () =>
+    (overlay.dimensions || []).map((dimension) => {
+      const line = lineObject(
+        dimension.segments.flat(),
+        dimension.selected ? MARK_SELECTED_COLOR : MARK_COLOR,
+        dimension.preview ? 0.6 : 1,
+        true,
+        32,
+      );
+      line.name = 'sketch-dimension';
+      line.userData.dimensionId = dimension.id;
+      return line;
+    }),
+  );
   // Measure mark points projected onto the plane: small purple diamonds.
-  if (overlay.markPoints?.length) {
+  piece('marks', [overlay.markPoints, overlay.markerSize], () => {
+    if (!overlay.markPoints?.length) return [];
     const r = overlay.markerSize || 2;
     const diamonds = overlay.markPoints.flatMap(([u, v]) => [
       [u - r, v],
@@ -3761,9 +4181,10 @@ function drawSketchOverlay(layer, overlay) {
     ]);
     const marks = lineObject(diamonds, MARK_COLOR, 1, true, 30);
     marks.name = 'sketch-marks';
-    layer.add(marks);
-  }
-  if (overlay.cursor) {
+    return [marks];
+  });
+  piece('cursor', null, () => {
+    if (!overlay.cursor) return [];
     const [u, v] = overlay.cursor,
       r = overlay.markerSize || 2;
     const marker = lineObject(
@@ -3780,6 +4201,6 @@ function drawSketchOverlay(layer, overlay) {
       33,
     );
     marker.name = 'sketch-cursor';
-    layer.add(marker);
-  }
+    return [marker];
+  });
 }

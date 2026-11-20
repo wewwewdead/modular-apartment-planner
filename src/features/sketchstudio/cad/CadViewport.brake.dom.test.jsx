@@ -328,7 +328,7 @@ it('draws a collision red at the angle it happens, on the part and the tool it h
   expect(tone('press-brake-holders')).not.toBe('#e03131');
   // Posed at the hit, the ram where it would be then.
   expect(shop().station.angle).toBeCloseTo(71, 9);
-  expect(shop().station.collision).toEqual({ tool: 'ram', angle: 71 });
+  expect(shop().station.collision).toEqual({ tool: 'ram', angle: 71, marked: 1 });
   expect(shop().station.tipZ).toBeLessThan(1.5);
   rerender(<CadViewport {...props({ brakeView: setupView })} />);
   expect(named('press-brake-collision')).toBeUndefined();
@@ -407,6 +407,57 @@ it('draws the side view of the very pose the 3D scene shows, frame by frame', ()
   expect(side().dataset.state).toBe('rest');
   rerender(<CadViewport {...props({ brakeView: null })} />);
   expect(side()).toBeNull();
+});
+
+it('slides the part along Y while the ram lifts when the stroke takes it off along a slant (shop punches §5.3)', () => {
+  const ended = vi.fn();
+  const { rerender } = render(<CadViewport {...props({ brakeView: setupView, onBrakeStrokeEnd: ended })} />);
+  const timeline = strokeTimeline('brake-50-2000', 3.9);
+  const view = { ...setupView, angles: {} };
+  const bottom = brakeFrame(poseFold(strokeFold, { hit: 90 }), 'hit', { die: 'v10-88', gaugePoint: [0, 30] }).tipZ;
+  // The same stroke lifted straight (no takeOff) and taken off at −15° (toward the operator), read mid-return.
+  const midReturn = (token, takeOff) => {
+    rerender(
+      <CadViewport
+        {...props({
+          brakeView: { ...view, stroke: { token, bendId: 'hit', target: 90, timeline, commit: false, takeOff } },
+          onBrakeStrokeEnd: ended,
+        })}
+      />,
+    );
+    step(timeline.approach + timeline.bend + timeline.return / 2);
+    const station = shop().station;
+    expect(station.phase).toBe('return');
+    const at = {
+      corners: corners(),
+      slide: station.slide,
+      tipZ: station.tipZ,
+      takeOff: station.takeOff,
+      sheet: side().querySelector('[aria-label="Sheet section"]').getAttribute('transform'),
+    };
+    step(timeline.return);
+    expect(ended).toHaveBeenCalledWith(token);
+    return at;
+  };
+  const straight = midReturn('s1', null);
+  expect(straight).toMatchObject({ slide: 0, takeOff: null, sheet: null });
+  const slanted = midReturn('s2', -15);
+  expect(slanted.takeOff).toBe(-15);
+  expect(slanted.tipZ).toBeCloseTo(straight.tipZ, 9);
+  // tan(−15°) × the ram's lift so far: toward the operator (−Y), a few mm.
+  const lift = slanted.tipZ - bottom;
+  expect(lift).toBeGreaterThan(10);
+  expect(slanted.slide).toBeCloseTo(Math.tan((-15 * Math.PI) / 180) * lift, 9);
+  slanted.corners.forEach((p, i) => {
+    expect(p[0]).toBeCloseTo(straight.corners[i][0], 6);
+    expect(p[1]).toBeCloseTo(straight.corners[i][1] + slanted.slide, 6);
+    expect(p[2]).toBeCloseTo(straight.corners[i][2], 6);
+  });
+  // The side view slides the sheet with it.
+  expect(slanted.sheet).toBe(`translate(${Number(slanted.slide.toFixed(3))} 0)`);
+  // Done: the part at rest in the die as before (view only; the committed pose is today's).
+  expect(shop().station.slide).toBe(0);
+  expect(side().querySelector('[aria-label="Sheet section"]').hasAttribute('transform')).toBe(false);
 });
 
 it('shows a collision on the side view: the tool hit red, the pose at the hit', () => {

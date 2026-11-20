@@ -13,33 +13,59 @@ import { bendLabel, bendNumber, foldedBounds, hitSequence, isRoundBend, stepFold
 import {
   DEFAULT_PUNCH,
   DIES,
+  HORNS,
+  HORN_KEYS,
   MACHINES,
   MACHINE_KEYS,
   PUNCHES,
+  PUNCH_GROUPS,
   RADIUS_PUNCHES,
   dieSection,
+  hornOf,
+  hornWords,
   nearestRadiusPunch,
   punchSection,
   punchSymmetric,
   stockOf,
   suggestedDie,
 } from './shopCatalog.js';
-import { punchChoice, turnAround } from './brakeStation.js';
+import { hornSetting, punchChangeWords, punchChoice, turnAround } from './brakeStation.js';
 import { toolLengths } from './pressBrake.js';
 import { ValueField } from './CadEditors.jsx';
 import { ParameterContext } from './ExpressionInput.jsx';
 import { MachineNumbers, PrimaryButton, ProblemCard, Readout, Result, StationShell } from './ShopFloor.jsx';
 import { hitVerdict, legsText } from './brakeHands.js';
 import NumericInput from '../components/NumericInput.jsx';
+import FlangeGaps from './FlangeGaps.jsx';
 
 const fmt = (value, digits = 2) => (Number.isFinite(value) ? Number(value.toFixed(digits)).toString() : '—');
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const NONE = [];
+const NO_PARAMS = {};
 // Hits of the machine made on a part: one per step, a round bend's each (docs/sketch-studio-round-bend.md §7);
 // a bend-on step is one hit (docs/sketch-studio-tight-bends.md §4.4).
 const hitsMade = (fold, strokes) =>
   strokes.reduce((sum, s) => sum + (s.again ? 1 : fold.bends.find((b) => b.id === s.bendIds[0])?.steps || 1), 0);
 const fmtAngle = (value) => `${fmt(value, 1)}°`;
+// The Backgauge L readout (docs/sketch-studio-skin-gauge.md §4.7): what the
+// fingers read and what they stop on; with an armed try whose order reads
+// otherwise than the field, that order's reading and why.
+function gaugeWords(station, session, armed) {
+  const gauge = station.gauge;
+  if (gauge?.distance == null) return 'no straight gauge';
+  const off = gauge.stop ? ` · off bend ${gauge.stop.number}'s flange` : '';
+  const differs = armed && Math.abs(gauge.distance - Number(session.distance)) > 1e-6;
+  const why = !differs
+    ? ''
+    : armed.kind === 'partway'
+      ? ` · bend ${armed.number} at ${fmtAngle(armed.angle)} then`
+      : ` · made before bend ${armed.number}: the sheet is still flat there`;
+  return `${fmt(gauge.distance)} mm${off}${why}`;
+}
+const gaugeTitle = (station) =>
+  station.gauge?.stop
+    ? `The fingers stop on the outside face of bend ${station.gauge.stop.number}'s flange, not on the blank's edge`
+    : station.gauge?.reason || '';
 // A step's row (tight bends §4.4): a bend's first step its label at the angle that step makes; a
 // bend-on step "bend {n} on: {from}° → {to}°" (n: the step that first made the bend).
 const stepText = (fold, step) => {
@@ -51,17 +77,22 @@ const stepText = (fold, step) => {
     Math.abs(step.to[bend.id] - bend.angle) > 1e-9 ? bendLabel({ ...bend, angle: step.to[bend.id] }) : bend.label;
   return `${label}${count > 1 ? ` · ${count} flanges` : ''}`;
 };
-// An armed try's words (docs/sketch-studio-tight-bends.md §5.2): where the hit goes in, and what the view shows.
+// An armed try's words (docs/sketch-studio-tight-bends.md §5.2): where the hit goes in, and what the view shows;
+// the earlier bends made with another punch (docs/sketch-studio-shop-punches.md §6.2) said with it.
 const armedText = (armed) =>
   armed.kind === 'partway'
     ? `Bend ${armed.number} goes to ${fmtAngle(armed.angle)} first and is finished after this hit: the view shows bend ${armed.number} at ${fmtAngle(armed.angle)}.`
-    : `This hit goes in before ${armed.again ? 'step' : 'bend'} ${armed.number}: the view shows the sheet as it is then.`;
+    : `This hit goes in before ${armed.again ? 'step' : 'bend'} ${armed.number}${armed.changes ? `, and ${punchChangeWords(armed.changes, 'is')}` : ''}: the view shows the sheet as it is then.`;
+// The line an armed try's commit leaves (§5.2): a step opened part-way, or (shop punches §6.2) a punch changed.
+const noticeName = (notice) =>
+  / is now made with | are now made with /.test(notice) ? 'Punch changed' : 'Part-way bend';
 // A step's tooling line: its die, and the punch when it is a radius punch (round-bend spec §12.6);
 // a punch or die set to its own length names it (docs/sketch-studio-brake-tool-length.md §3.4).
+// A step made with horn sections says so last (docs/sketch-studio-punch-library.md §4.4).
 const toolingLine = (bend, die, lengths = null) => {
   const punch = PUNCHES[bend.punch];
   const named = punch?.round || lengths?.punch;
-  return `${named ? `${punch?.name || bend.punch} punch${lengths?.punch ? `, ${lengths.punch}` : ''} · ` : ''}${die}${lengths?.die ? ` die, ${lengths.die}` : ''}`;
+  return `${named ? `${punch?.name || bend.punch} punch${lengths?.punch ? `, ${lengths.punch}` : ''} · ` : ''}${die}${lengths?.die ? ` die, ${lengths.die}` : ''}${hornWords(bend.horns) ? ` · ${hornWords(bend.horns)}` : ''}`;
 };
 // A step's custom lengths (pressBrake.js toolLengths), only when its record has a trim.
 const lengthsOf = (fold, stroke, bed = null) =>
@@ -150,36 +181,43 @@ const verdictOf = hitVerdict;
  */
 function BladePicker({ kind, session, auto, options, onChoose, onClose }) {
   const verdicts = new Map((options || NONE).map((o) => [o.key, verdictOf(o)]));
-  const cards =
+  const punchCard = (p) => ({
+    key: p.key,
+    name: p.name,
+    ring: punchRing(p),
+    numbers: punchNumbers(p),
+    use: p.use,
+    chosen: session.punch === p.key,
+    patch: punchChoice(session, p.key),
+  });
+  // The punches in their two groups, the shop's own first (docs/sketch-studio-shop-punches.md §5.2).
+  const groups =
     kind === 'punch'
-      ? Object.values(PUNCHES).map((p) => ({
-          key: p.key,
-          name: p.name,
-          ring: punchRing(p),
-          numbers: punchNumbers(p),
-          use: p.use,
-          chosen: session.punch === p.key,
-          patch: punchChoice(session, p.key),
-        }))
+      ? PUNCH_GROUPS.map((g) => ({ name: g.name, cards: g.keys.map((key) => punchCard(PUNCHES[key])) }))
       : [
           {
-            key: null,
-            name: `Automatic (${auto.die.name})`,
-            ring: dieSection(auto.die),
-            numbers: dieNumbers(auto.die),
-            use: 'Chosen for you: the narrowest V the sheet thickness (or a radius punch) asks for.',
-            chosen: !session.die,
-            patch: { die: null },
+            name: null,
+            cards: [
+              {
+                key: null,
+                name: `Automatic (${auto.die.name})`,
+                ring: dieSection(auto.die),
+                numbers: dieNumbers(auto.die),
+                use: 'Chosen for you: the narrowest V the sheet thickness (or a radius punch) asks for.',
+                chosen: !session.die,
+                patch: { die: null },
+              },
+              ...Object.values(DIES).map((d) => ({
+                key: d.key,
+                name: d.name,
+                ring: dieSection(d),
+                numbers: dieNumbers(d),
+                use: d.use,
+                chosen: session.die === d.key,
+                patch: { die: d.key },
+              })),
+            ],
           },
-          ...Object.values(DIES).map((d) => ({
-            key: d.key,
-            name: d.name,
-            ring: dieSection(d),
-            numbers: dieNumbers(d),
-            use: d.use,
-            chosen: session.die === d.key,
-            patch: { die: d.key },
-          })),
         ];
   const title = kind === 'punch' ? 'Choose the punch' : 'Choose the die';
   return (
@@ -191,42 +229,67 @@ function BladePicker({ kind, session, auto, options, onChoose, onClose }) {
         </button>
       </header>
       {!options && <p className="cad-help">Pick the punch line and each card says whether this hit clears with it.</p>}
-      <ul className="cad-blade-cards">
-        {cards.map((card) => {
-          const verdict = verdicts.get(card.key);
-          return (
-            <li key={card.key ?? 'auto'}>
-              <button
-                type="button"
-                className="cad-blade-card"
-                aria-label={card.name}
-                aria-pressed={card.chosen}
-                onClick={() => onChoose(card.patch)}
-              >
-                <BladeShape ring={card.ring} box={kind === 'punch' ? PUNCH_BOX : DIE_BOX} />
-                <span className="cad-blade-card-text">
-                  <strong>
-                    {card.name}
-                    {card.chosen ? <small className="cad-blade-in-use"> · in use</small> : null}
-                  </strong>
-                  <small>{card.numbers}</small>
-                  <span className="cad-blade-use">{card.use}</span>
-                  {verdict && (
-                    <span className={`cad-blade-verdict ${verdict.ok ? 'is-ok' : 'is-refused'}`}>
-                      {verdict.ok ? verdict.text : `Refused: ${verdict.text}`}
+      {groups.map((group) => (
+        <BladeGroup key={group.name || 'all'} name={group.name}>
+          <ul className="cad-blade-cards" aria-label={group.name || undefined}>
+            {group.cards.map((card) => {
+              const verdict = verdicts.get(card.key);
+              return (
+                <li key={card.key ?? 'auto'}>
+                  <button
+                    type="button"
+                    className="cad-blade-card"
+                    aria-label={card.name}
+                    aria-pressed={card.chosen}
+                    onClick={() => onChoose(card.patch)}
+                  >
+                    <BladeShape ring={card.ring} box={kind === 'punch' ? PUNCH_BOX : DIE_BOX} />
+                    <span className="cad-blade-card-text">
+                      <strong>
+                        {card.name}
+                        {card.chosen ? <small className="cad-blade-in-use"> · in use</small> : null}
+                      </strong>
+                      <small>{card.numbers}</small>
+                      <span className="cad-blade-use">{card.use}</span>
+                      {verdict && (
+                        <span className={`cad-blade-verdict ${verdict.ok ? 'is-ok' : 'is-refused'}`}>
+                          {verdict.ok ? verdict.text : `Refused: ${verdict.text}`}
+                        </span>
+                      )}
                     </span>
-                  )}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </BladeGroup>
+      ))}
     </section>
+  );
+}
+// A group of the picker's cards under its heading (§5.2), or the cards alone.
+function BladeGroup({ name, children }) {
+  if (!name) return children;
+  return (
+    <div className="cad-blade-group">
+      <h5>{name}</h5>
+      {children}
+    </div>
   );
 }
 
 const exactTrim = (value) => Math.round(value * 1e6) / 1e6;
+/**
+ * The take-off note (docs/sketch-studio-shop-punches.md §5.3) for a pending
+ * hit that clears with the part drawn off the punch along a slant (an
+ * offset's: either of its hits), or null.
+ */
+function takeOffNote(pending) {
+  const slants = pending?.pair ? pending.pair.map((h) => h?.collision?.takeOff) : [pending?.collision?.takeOff];
+  const slant = slants.find((s) => s != null && s !== 0);
+  if (slant == null) return null;
+  return `Comes off the punch toward ${slant < 0 ? 'you' : 'the backgauge'}: the part is drawn off along the nose as the ram lifts.`;
+}
 /**
  * A blade's length (docs/sketch-studio-brake-tool-length.md §3.4), one line
  * under its button, always in view: with one tooling run, `Length [391.8] mm`
@@ -236,9 +299,11 @@ const exactTrim = (value) => Math.round(value * 1e6) / 1e6;
  * sections`, the trim itself (the column is too narrow for the words on one
  * line). `tooling`: the pending hit's (brakeStation.js
  * `pending.tooling`), null with no line picked. The note and Fit to bend keep
- * their place, so the row never moves.
+ * their place, so the row never moves. `hold` (brake tool length §9.4): the
+ * length the tool is held at; with no line picked the field shows it, "kept
+ * for the next bend".
  */
-function BladeLength({ kind, tooling, trim, bed, disabled, onTrim }) {
+function BladeLength({ kind, tooling, trim, hold = null, bed, disabled, onTrim }) {
   const label = kind === 'punch' ? 'Punch length' : 'Die length';
   const Kind = kind === 'punch' ? 'Punch' : 'Die';
   const fitted = tooling?.fitted || null;
@@ -247,8 +312,11 @@ function BladeLength({ kind, tooling, trim, bed, disabled, onTrim }) {
   const span = fitted && !several ? fitted[0][1] - fitted[0][0] : null;
   const custom = Boolean(fitted) && t !== 0;
   // Several runs: the field is the trim itself, "Shorter [5] mm" over "at each end · 2 sections".
+  const held = !fitted && Number.isFinite(hold) ? hold : null;
   const note = !fitted
-    ? 'fitted to the bend'
+    ? held != null
+      ? 'kept for the next bend'
+      : 'fitted to the bend'
     : several
       ? `at each end · ${fitted.length} sections${t ? (t < 0 ? ', past the bend' : '') : ', fitted'}`
       : !t
@@ -272,7 +340,9 @@ function BladeLength({ kind, tooling, trim, bed, disabled, onTrim }) {
           allowEmpty
           disabled={disabled || !fitted}
           placeholder="fitted"
-          value={fitted ? (several ? t : Number((span - 2 * t).toFixed(1))) : ''}
+          value={
+            fitted ? (several ? t : Number((span - 2 * t).toFixed(1))) : held != null ? Number(held.toFixed(1)) : ''
+          }
           onCommit={commit}
         />
         mm
@@ -292,6 +362,55 @@ function BladeLength({ kind, tooling, trim, bed, disabled, onTrim }) {
       >
         Fit to bend
       </button>
+    </div>
+  );
+}
+
+/**
+ * Horn sections at the ends (docs/sketch-studio-punch-library.md §4.4), under
+ * the punch's length: a checkbox (off and disabled with a radius punch, which
+ * has none) and, on, what they are for and their rating, half the punch's.
+ * Horn lengths (§4.8): with the box on, the Horn length select beside it;
+ * ticking the box chooses the standard. `horns`: the session's value.
+ */
+const hornOption = (horn) =>
+  `${horn.reach} mm · ${horn.tip} high${horn === HORNS[20] ? ' (standard)' : /^Special/.test(horn.name) ? ' (special)' : ''}`;
+function HornSections({ punch, horns, disabled, onSession }) {
+  const round = Boolean(punch.round);
+  const horn = round ? null : hornOf(horns);
+  const checked = Boolean(horn);
+  return (
+    <div className="cad-blade-horns">
+      <label className="cad-check" title={round ? 'A radius punch has no horn sections' : undefined}>
+        <input
+          type="checkbox"
+          aria-label="Horn sections at the ends"
+          checked={checked}
+          disabled={disabled || round}
+          onChange={(e) => onSession({ horns: e.target.checked, scrub: null })}
+        />
+        Horn sections at the ends
+      </label>
+      {checked && (
+        <select
+          aria-label="Horn length"
+          value={horn.reach}
+          disabled={disabled}
+          onChange={(e) => onSession({ horns: hornSetting(HORNS[e.target.value]), scrub: null })}
+        >
+          {HORN_KEYS.map((key) => (
+            <option key={key} value={key}>
+              {hornOption(HORNS[key])}
+            </option>
+          ))}
+        </select>
+      )}
+      {checked && (
+        <small className="cad-help" role="note" aria-label="Horn sections">
+          The tip runs {horn.reach} mm past the punch body at each end, {horn.tip} mm high: it reaches under a lip. Half
+          the punch&apos;s load ({fmt(punch.load * horn.load)} kN/m).
+        </small>
+      )}
     </div>
   );
 }
@@ -337,10 +456,12 @@ function Blades({ session, auto, bladeOptions, disabled, onSession, tooling = nu
             kind="punch"
             tooling={tooling}
             trim={session.punchTrim}
+            hold={session.punchHold ?? null}
             bed={bed}
             disabled={disabled}
             onTrim={(punchTrim) => onSession({ punchTrim, scrub: null })}
           />
+          <HornSections punch={punch} horns={session.horns} disabled={disabled} onSession={onSession} />
         </div>
         <div className="cad-blade-column">
           <button
@@ -363,6 +484,7 @@ function Blades({ session, auto, bladeOptions, disabled, onSession, tooling = nu
             kind="die"
             tooling={tooling}
             trim={session.dieTrim}
+            hold={session.dieHold ?? null}
             bed={bed}
             disabled={disabled}
             onTrim={(dieTrim) => onSession({ dieTrim, scrub: null })}
@@ -572,6 +694,10 @@ export function PressBrakePanel({
   // step key) and onReorder(bends), the new order committed as a move of the made steps.
   rowTries = null,
   onReorder = null,
+  // Flange gaps (docs/sketch-studio-corner-gaps.md §3.3): onGapHover(row | null), a row of the card hovered.
+  onGapHover = null,
+  // What the shop holds (§6.1, shopCatalog.js shopTolerance): each gap row's band on the bench; null: none.
+  tolerance = null,
 }) {
   const { values } = useContext(ParameterContext);
   const [pickerOwn, setPickerOwn] = useState(null);
@@ -597,6 +723,14 @@ export function PressBrakePanel({
   }, [focus?.token]);
   const stroking = session.stage === 'stroke';
   const { pending, fold, feature, part } = station;
+  // The part as made so far (every stored bend at its made angle: brakeStation's
+  // fold, never the scrubbed or pending pose), read again only when the bends or
+  // the blank change, not on every pick.
+  const madeFold = useMemo(
+    () => fold,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [feature, station.profile],
+  );
   const t = fold.thickness;
   // A radius punch (round-bend spec §12.6) is Round · Radius punch: the punch is the one source of truth.
   const radiusPunch = PUNCHES[session.punch]?.round ? PUNCHES[session.punch] : null;
@@ -626,6 +760,20 @@ export function PressBrakePanel({
   const strokes = hitSequence(fold);
   // A made bend's line (§4.4): this hit bends it on.
   const again = pending?.again || null;
+  // The line seated on a made bend (tight bends §7.3), and the way on from a line that did not (§7.4 (c)).
+  const seated = session.seated || null;
+  const seat = onBendOn && pending?.seat ? pending.seat : null;
+  const seatButton = seat ? (
+    <button
+      type="button"
+      className="cad-problem-fix"
+      title={`Set the punch line on bend ${seat.number}, to bend it further`}
+      disabled={stroking}
+      onClick={() => onBendOn(seat.key)}
+    >
+      {seat.label}
+    </button>
+  ) : null;
   // An armed try (tight bends §5.2), as the station resolved it.
   const armed = pending && !pending.error ? pending.armed || null : null;
   const skippedCount = (station.segments || NONE).filter((s) => s.skipped).length;
@@ -682,12 +830,55 @@ export function PressBrakePanel({
                   : 'Click a straight outline edge on the flat blank'}
               </Readout>
             </dl>
+            {station.edge && (station.stops || NONE).length > 0 && (
+              // Gauging off a flange (docs/sketch-studio-skin-gauge.md §4.6): what L is read from,
+              // only while the edge has made bends in front of it. The L stays, the line moves.
+              <label className="cad-field">
+                Gauge off
+                <select
+                  aria-label="Gauge off"
+                  value={session.stopHold ?? 'auto'}
+                  title="What the backgauge fingers stop on: the blank's edge, or the outside face of a flange already bent"
+                  onChange={(e) =>
+                    onSession({
+                      stopHold: e.target.value === 'auto' ? null : e.target.value,
+                      distance: session.distance,
+                      scrub: null,
+                    })
+                  }
+                >
+                  <option value="auto">Automatic</option>
+                  <option value="edge">The edge</option>
+                  {station.stops.map((s) => (
+                    <option key={s.bendId} value={s.bendId}>
+                      Bend {s.number}&apos;s flange
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <ValueField
               key={`distance-${session.edge}`}
               label="Backgauge L (mm)"
               value={session.distance}
               onChange={number((distance) => onSession({ distance, scrub: null }))}
             />
+            {station.gaugeHint && (
+              // The same L would also make a line off a flange (§4.6): said, with the one click that does it.
+              <p className="cad-help cad-brake-hint" role="note" aria-label="Gauge off a flange">
+                {station.gaugeHint.words}{' '}
+                <button
+                  type="button"
+                  className="cad-problem-fix"
+                  title={`L ${fmt(station.gaugeHint.L)} from the outside face of bend ${station.gaugeHint.number}'s flange`}
+                  onClick={() =>
+                    onSession({ stopHold: station.gaugeHint.bendId, distance: station.gaugeHint.L, scrub: null })
+                  }
+                >
+                  {station.gaugeHint.label}
+                </button>
+              </p>
+            )}
           </>
         ) : (
           <>
@@ -750,6 +941,13 @@ export function PressBrakePanel({
         {again && (
           <p className="cad-help cad-brake-hint" role="note" aria-label="Bend on">
             This is bend {again.number}&apos;s line: it stands at {fmtAngle(again.from)}. This hit bends it on.
+          </p>
+        )}
+        {again && seated?.number === again.number && (
+          // A bent line seats itself in the die (tight bends §7.3): where the line was set, and why it moved.
+          <p className="cad-help cad-brake-hint" role="note" aria-label="Seated on the bend">
+            {seated.from != null ? `L ${fmt(seated.from)} is` : 'The line you set is'} {fmt(seated.off)} mm from bend{' '}
+            {again.number}&apos;s line. A bent line seats itself in the die, so the line is on bend {again.number}.
           </p>
         )}
         <div className="cad-inline cad-brake-angle">
@@ -914,10 +1112,15 @@ export function PressBrakePanel({
               // the die goes back to automatic: brakeStation.js punchChoice, the rule the blade picker shares.
               onChange={(e) => onSession(punchChoice(session, e.target.value))}
             >
-              {Object.values(PUNCHES).map((p) => (
-                <option key={p.key} value={p.key}>
-                  {p.name} · tip R{p.radius} · {p.load} kN/m
-                </option>
+              {/* The two groups of the rack, the shop's own first (shop punches §5.2). */}
+              {PUNCH_GROUPS.map((g) => (
+                <optgroup key={g.rack} label={g.name}>
+                  {g.keys.map((key) => (
+                    <option key={key} value={key}>
+                      {PUNCHES[key].name} · tip R{PUNCHES[key].radius} · {PUNCHES[key].load} kN/m
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </label>
@@ -938,14 +1141,17 @@ export function PressBrakePanel({
           </label>
         </details>
       </fieldset>
-      {pending?.error && <ProblemCard message={pending.error} />}
+      {pending?.error && <ProblemCard message={pending.error}>{seatButton}</ProblemCard>}
       {refusals.map((r, i) => (
         <ProblemCard
           key={`${r.code}-${i}`}
           message={r.message}
           fix={r.fix}
           onFix={r.fix ? () => onSession({ ...r.fix.session, scrub: null }) : null}
-        />
+        >
+          {/* The made bend the line lies along, bent on instead (§7.4 (d)): on the first short-leg card. */}
+          {r.code === 'short-leg' && refusals.findIndex((o) => o.code === 'short-leg') === i ? seatButton : null}
+        </ProblemCard>
       ))}
       {collision && (
         // Advice that names a punch is a button when the hit clears with it (brake blades §4.3);
@@ -966,6 +1172,18 @@ export function PressBrakePanel({
               {hit.collision.turn.label}
             </button>
           )}
+          {hit.collision.horn && (
+            // Horn sections at the ends (docs/sketch-studio-punch-library.md §4.4): tried, the hit
+            // clears with the corners pressed; before "Shorten the punch", which stays true.
+            <button
+              type="button"
+              className="cad-problem-fix"
+              title="Tried with horn sections, the hit clears: the corners are pressed"
+              onClick={() => onSession({ ...hit.collision.horn.session, scrub: null })}
+            >
+              {hit.collision.horn.label}
+            </button>
+          )}
           {hit.collision.length && (
             // The punch or die fitted or shorter (brake tool length §3.5): tried, it clears.
             <button
@@ -977,19 +1195,21 @@ export function PressBrakePanel({
               {hit.collision.length.label}
             </button>
           )}
-          {[hit.collision.ways?.first, hit.collision.ways?.partway].filter(Boolean).map((way) => (
-            // The brake finds the way (docs/sketch-studio-tight-bends.md §5.2): tried armed, it
-            // passes; one click arms it, the pedal makes it.
-            <button
-              key={way.label}
-              type="button"
-              className="cad-problem-fix"
-              title="Tried in that order, every hit clears: the view then shows the sheet as it is at this hit"
-              onClick={() => onSession({ ...way.session, scrub: null })}
-            >
-              {way.label}
-            </button>
-          ))}
+          {[hit.collision.ways?.first, hit.collision.ways?.partway, hit.collision.ways?.compound]
+            .filter(Boolean)
+            .map((way) => (
+              // The brake finds the way (docs/sketch-studio-tight-bends.md §5.2): tried armed, it
+              // passes; one click arms it, the pedal makes it.
+              <button
+                key={way.label}
+                type="button"
+                className="cad-problem-fix"
+                title="Tried in that order, every hit clears: the view then shows the sheet as it is at this hit"
+                onClick={() => onSession({ ...way.session, scrub: null })}
+              >
+                {way.label}
+              </button>
+            ))}
         </ProblemCard>
       )}
       {armed && (
@@ -1007,7 +1227,7 @@ export function PressBrakePanel({
         </div>
       )}
       {session.notice && !armed && (
-        <p className="cad-help cad-brake-armed-done" role="status" aria-label="Part-way bend">
+        <p className="cad-help cad-brake-armed-done" role="status" aria-label={noticeName(session.notice)}>
           {session.notice}
         </p>
       )}
@@ -1110,15 +1330,27 @@ export function PressBrakePanel({
             : 'Clear through the stroke: no part of the sheet meets the punch, ram, die, bed or itself.'}
         </p>
       )}
+      {!collision && hit && !refusals.length && takeOffNote(hit) && (
+        // Taken off the punch along a slant (docs/sketch-studio-shop-punches.md §5.3).
+        <p className="cad-help" role="note" aria-label="Take-off">
+          {takeOffNote(hit)}
+        </p>
+      )}
       {readouts && (
         <MachineNumbers station="bend">
           <dl className="cad-brake-readouts" aria-label="Hit readouts">
             <Readout label="Inside radius">R{fmt(readouts.radius)} mm</Readout>
             <Readout label="Bend allowance">{fmt(readouts.allowance)} mm</Readout>
             <Readout label="Bend deduction">{fmt(readouts.deduction)} mm</Readout>
-            <Readout label="Backgauge L" title={station.gauge?.reason || undefined}>
-              {station.gauge?.distance != null ? `${fmt(station.gauge.distance)} mm` : 'no straight gauge'}
+            <Readout label="Backgauge L" title={gaugeTitle(station) || undefined}>
+              {gaugeWords(station, session, armed)}
             </Readout>
+            {station.stop != null && station.flat != null && station.edge && (
+              // Off a flange L is not the flat distance (skin gauge §4.7): where the line lies on the blank.
+              <Readout label="Line on the flat blank">
+                {fmt(station.flat)} mm from edge {station.edge.index + 1}
+              </Readout>
+            )}
             {readouts.hits > 1 && (
               <Readout label="Backgauge per hit" title="The first hit (farthest from the gauge edge) to the last">
                 {readouts.gaugeFirst != null
@@ -1140,6 +1372,20 @@ export function PressBrakePanel({
           return `Folded ${min.map((v, i) => fmt(max[i] - v)).join(' × ')} mm (X × Y × Z, part coordinates)`;
         })()}
       </p>
+      <FlangeGaps
+        fold={madeFold}
+        profile={station.profile}
+        params={values || NO_PARAMS}
+        onHover={stroking ? null : onGapHover}
+        // The sequence follows: the rows stay closed until asked for (or two flanges overlap).
+        station="gaps-brake"
+        openNear={false}
+        // What the shop holds (corner gaps §6.1): the band, read only here.
+        tolerance={tolerance}
+      >
+        {/* Read-only here (corner gaps §4.3): a gap is set on the outline, in the part's own panel. */}
+        <p className="cad-help">To change a gap, set it in the part&apos;s Sheet metal panel.</p>
+      </FlangeGaps>
       {!bends.length && <p className="cad-help">No hits yet: the part is the flat blank.</p>}
       <ol className="cad-brake-sequence" aria-label="Sequence">
         {strokes.map((stroke, index) => {
@@ -1176,23 +1422,32 @@ export function PressBrakePanel({
                   {check.collision ? check.collision.message : check.refusals[0].message}
                 </p>
               )}
-              {failing && check.collision && (rowTries?.[stroke.key]?.move || rowTries?.[stroke.key]?.partway) && (
-                // The stored sequence's remedies (tight bends §5.2): tried on the new order, committed as a move.
-                <div className="cad-inline cad-brake-row-fix">
-                  {[rowTries[stroke.key].move, rowTries[stroke.key].partway].filter(Boolean).map((way) => (
-                    <button
-                      key={way.label}
-                      type="button"
-                      className="cad-problem-fix"
-                      disabled={stroking}
-                      title="Tried in that order: this step clears and no other step is refused"
-                      onClick={() => onReorder?.(way.bends)}
-                    >
-                      {way.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {failing &&
+                check.collision &&
+                (rowTries?.[stroke.key]?.move || rowTries?.[stroke.key]?.partway || rowTries?.[stroke.key]?.punch) && (
+                  // The stored sequence's remedies (tight bends §5.2): tried on the new order, committed as a move;
+                  // or the step made with another punch (docs/sketch-studio-shop-punches.md §6.3).
+                  <div className="cad-inline cad-brake-row-fix">
+                    {[rowTries[stroke.key].move, rowTries[stroke.key].partway, rowTries[stroke.key].punch]
+                      .filter(Boolean)
+                      .map((way) => (
+                        <button
+                          key={way.label}
+                          type="button"
+                          className="cad-problem-fix"
+                          disabled={stroking}
+                          title={
+                            way === rowTries[stroke.key].punch
+                              ? 'Tried with that punch: this step clears and no other step is refused'
+                              : 'Tried in that order: this step clears and no other step is refused'
+                          }
+                          onClick={() => onReorder?.(way.bends)}
+                        >
+                          {way.label}
+                        </button>
+                      ))}
+                  </div>
+                )}
               <div className="cad-inline">
                 <span className="cad-segmented" role="group" aria-label={`Step ${index + 1} view`}>
                   <button

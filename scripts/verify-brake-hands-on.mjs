@@ -439,11 +439,18 @@ try {
   await page.mouse.click(...(await s.grip()).handles.turn.press);
   await expect(again.panel.getByRole('alert', { name: 'Collision' })).toHaveCount(0);
   await expect(again.panel.getByLabel('Gauge edge', { exact: true })).toHaveText('Edge 4 · 60 mm');
-  await expect(again.panel.getByLabel('Backgauge L (mm)', { exact: true })).toHaveValue('95');
+  // The same line, 95 from edge 4 on the flat blank. Since SG-1 (docs/sketch-studio-skin-gauge.md
+  // §4.5) L is what the backgauge reads: past the 45 flange from edge 4, off that flange's skin
+  // (the field read 95, the flat distance, before).
+  await expect(again.panel.locator('dd[aria-label="Line on the flat blank"]')).toHaveText('95 mm from edge 4');
+  const turnedL = await again.panel.getByLabel('Backgauge L (mm)', { exact: true }).inputValue();
+  await expect(again.panel.locator('dd[aria-label="Backgauge L"]')).toHaveText(
+    `${Number(Number(turnedL).toFixed(2))} mm · off bend 1's flange`,
+  );
   await s.stationWhen('!s.turning', 5000);
   await s.shot('09-channel-turned');
   checks.push(
-    `channel 115 × 60, gooseneck reversed: turn chip "${channelChip.replace(/\s+/g, ' ')}", flip chip "${flipped.replace(/\s+/g, ' ')}"; the ring's click → Edge 4, L 95, no collision`,
+    `channel 115 × 60, gooseneck reversed: turn chip "${channelChip.replace(/\s+/g, ' ')}", flip chip "${flipped.replace(/\s+/g, ' ')}"; the ring's click → Edge 4, the line 95 from it, L ${turnedL} off bend 1's flange, no collision`,
   );
   console.log(checks.at(-1));
 

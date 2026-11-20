@@ -82,8 +82,16 @@ const lines = async (start, steps) => {
   for (const [length, angle] of steps) await typeAt('length', length, angle);
   await page.keyboard.press('Escape');
 };
-const undoLast = async (times) => {
-  for (let i = 0; i < times; i++) await tool('Undo last');
+// HD-1 (docs/sketch-studio-hand-drawing.md §5.2): Undo last has nothing to undo in a sketch just
+// reopened, so the outline it opens with is cleared the way a user would: Ctrl+A, Delete selected.
+const clearDrawing = async () => {
+  await page.mouse.move(5, 600);
+  await page.keyboard.press('Control+a');
+  await page
+    .getByRole('group', { name: 'Selection' })
+    .getByRole('button', { name: 'Delete selected', exact: true })
+    .click();
+  await expect(status).toContainText('0 items · no profile yet');
 };
 const finish = () => tool('Finish sketch');
 const sketchNamed = (model, name) => model.sketches.find((s) => s.name === name);
@@ -176,7 +184,7 @@ try {
   await page.setViewportSize({ width: 1366, height: 768 });
   await readyList.getByRole('button', { name: 'Edit Sketch 2 · 2', exact: true }).click();
   await toolbar.waitFor();
-  await undoLast(1);
+  await clearDrawing();
   await rectangle(260, 0, 300, 150);
   await finish();
   const second = readyList.getByRole('listitem').filter({ hasText: 'Sketch 2 · 2' });
@@ -265,10 +273,16 @@ try {
   measured.bendLine = model.parts[0].features[0].bends[0];
   await modelCurrent();
   await route.getByRole('button', { name: 'Cut', exact: true }).click();
+  // Another outline waits, so the route's Cut opens the picker (docs/sketch-studio-cut-pick.md §4.1):
+  // the bent part is under Already cut, one click from the laser.
+  await properties
+    .getByRole('list', { name: 'Already cut' })
+    .getByRole('button', { name: /^Open .+ on the laser$/ })
+    .click();
   await expect(laser).toBeVisible();
   await laser.getByRole('button', { name: 'Edit outline', exact: true }).click();
   await toolbar.waitFor();
-  await undoLast(5);
+  await clearDrawing();
   await rectangle(40, 0, 60, 14);
   await circle(70, 7, 4);
   await circle(88, 7, 3);

@@ -8,8 +8,10 @@
 // the card's Fit the punch to the bend → type 380: the note (5.9 mm short at
 // each end), the punch drawn shorter than the die (screenshot) → Bend → the
 // sequence names the 380 mm punch → reload: still there. Then a fresh 200 mm
-// tray: hit 3 meets the ram, the card with its facts (screenshot). No page
-// errors.
+// tray: hit 3 meets the ram, the card with its facts (screenshot). TL-2 (§9.5):
+// two plain blanks in the bend queue, the punch set to 380 → a new L, the
+// opposite edge, the next part: 380 each time; Fit to bend, a new L: fitted.
+// No page errors.
 //   CAD_VERIFY_URL=http://localhost:5180/sketch node scripts/verify-brake-tool-length.mjs
 // Screenshots: artifacts/sketch-cad/brake-tool-length (or TL1_SHOTS).
 import { chromium, expect } from '@playwright/test';
@@ -239,10 +241,11 @@ try {
   await expect(ram).toContainText('No punch in the list holds the ram high enough', { timeout: 10000 });
   measured.ramCard = await ram.innerText();
   // Tight bends TB-2 (docs/sketch-studio-tight-bends.md §5.2): no order and no part-way bend clears it
-  // either, and nothing else is offered, so the card ends with try 3's words.
+  // either, and nothing else is offered, so the card ends with try 3's words (reworded by
+  // docs/sketch-studio-shop-punches.md §5.4, then §6.2: no other punch for the earlier bends either).
   assert.match(
     measured.ramCard.replace(/\s+/g, ' '),
-    /^Bend 3: the part hits the ram as the ram comes down\. This punch and its holder stand the ram 166\.5 mm above the tip\. No punch in the list holds the ram high enough \(the tallest gives 245 mm\): this bend needs about \d+ mm\. Turning the sheet around was tried: it does not clear\. No order and no part-way bend clears it with this punch either: the shape cannot be closed with the tools in this rack\. Make the web wider or the flange shorter, or use tooling this rack does not hold\.$/,
+    /^Bend 3: the part hits the ram as the ram comes down\. This punch and its holder stand the ram 166\.5 mm above the tip\. No punch in the list holds the ram high enough \(the tallest gives 245 mm\): this bend needs about \d+ mm\. Turning the sheet around was tried: it does not clear\. No order, no part-way bend and no other punch for the earlier bends clears it\. Make the web wider or the flange shorter, or use tooling this rack does not hold\.$/,
   );
   await expect(
     deep.brake.getByRole('button', { name: /^Make this hit before|first, finish it after this hit$/ }),
@@ -252,6 +255,79 @@ try {
   await page.waitForTimeout(400);
   await shot('07-ram-200');
   checks.push(`200 mm tray, hit 3: "${measured.ramCard.replace(/\s+/g, ' ')}"; no fix button`);
+
+  // 7. TL-2 (§9.5): the lengths stay as set. Two plain blanks cut, 605.4 × 420.4 and 300 × 200: the
+  // first, right edge L 29, the punch set to 380 → L 30, the left edge, the next part of the
+  // queue: 380 each time; Fit to bend, a new L: fitted.
+  await page.goto(URL);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.getByRole('button', { name: '3D Model & workshop', exact: true }).click();
+  await current();
+  await page.getByRole('button', { name: 'Shop', exact: true }).click();
+  const cutRectangle = async (width, height, count) => {
+    await shopStation('Draw');
+    const draw = properties.getByRole('region', { name: 'Draw' });
+    await draw.getByRole('button', { name: /^Rectangle/ }).click();
+    await fill(draw, 'Width W (mm)', width);
+    await fill(draw, 'Height H (mm)', height);
+    await draw.getByRole('button', { name: 'Cut this rectangle', exact: true }).click();
+    const cut = properties.getByRole('region', { name: 'Cut from sheet' });
+    await cut.getByLabel('Sheet stock', { exact: true }).selectOption('spcc');
+    await fill(cut, 'Custom thickness (mm)', 1.2);
+    await cut.getByRole('button', { name: 'Cut on the laser', exact: true }).click();
+    await expect(bed).toHaveAttribute('data-state', 'cut', { timeout: 30000 });
+    await expect(footer).toContainText('Model current', { timeout: 60000 });
+    await savedWhen((m) => m.parts.filter((p) => p.features[0]?.type === 'sheetmetal').length === count, 'the blanks');
+  };
+  await cutRectangle(605.4, 420.4, 1);
+  await cutRectangle(300, 200, 2);
+  await shopStation('Bend');
+  const held = properties.getByRole('region', { name: 'Press brake' });
+  const strip = held.getByRole('region', { name: 'Bend queue' });
+  const queueRows = strip.getByRole('list', { name: 'Parts to bend' }).getByRole('button');
+  await expect(queueRows).toHaveCount(2);
+  await queueRows.nth(0).click();
+  const heldMap = page.getByRole('figure', { name: 'Flat blank' });
+  const heldLength = held.getByRole('spinbutton', { name: 'Punch length', exact: true });
+  const heldNote = held.getByLabel('Punch length note', { exact: true });
+  const tl2 = [];
+  const read = async (what) => {
+    await expect(held.getByRole('status', { name: 'Collision check' })).toContainText('Clear through the stroke', {
+      timeout: 15000,
+    });
+    tl2.push(`${what}: ${await heldLength.inputValue()} (${await heldNote.innerText()})`);
+    return heldLength.inputValue();
+  };
+  await heldMap.getByRole('button', { name: 'Gauge edge 2', exact: true }).click();
+  await fill(held, 'Backgauge L (mm)', 29);
+  assert.equal(await read('right edge, L 29'), '420.4');
+  await typeLength(held, 'Punch length', 380);
+  await expect(heldNote).toHaveText('20.2 mm short at each end');
+  assert.equal(await read('380 typed'), '380');
+  await fill(held, 'Backgauge L (mm)', 30);
+  assert.equal(await read('L 30'), '380');
+  await heldMap.getByRole('button', { name: 'Gauge edge 4', exact: true }).click();
+  await fill(held, 'Backgauge L (mm)', 29);
+  assert.equal(await read('the left edge, L 29'), '380');
+  await shot('08-tl2-held-380');
+  await strip.getByRole('button', { name: 'Next part', exact: true }).click();
+  await expect(heldNote).toHaveText('kept for the next bend', { timeout: 15000 });
+  tl2.push(`next part, no line: ${await heldLength.inputValue()} (${await heldNote.innerText()})`);
+  assert.equal(await heldLength.inputValue(), '380');
+  await shot('09-tl2-next-part-kept');
+  await heldMap.getByRole('button', { name: 'Gauge edge 2', exact: true }).click();
+  await fill(held, 'Backgauge L (mm)', 29);
+  assert.equal(await read('next part (300 × 200), right edge, L 29'), '380');
+  await expect(heldNote).toHaveText('90 mm past each end');
+  await held.getByRole('button', { name: 'Fit the punch to the bend', exact: true }).first().click();
+  assert.equal(await read('Fit to bend'), '200');
+  await fill(held, 'Backgauge L (mm)', 40);
+  assert.equal(await read('L 40'), '200');
+  await expect(heldNote).toHaveText('fitted');
+  measured.tl2 = tl2;
+  await shot('10-tl2-fitted');
+  checks.push(`TL-2, the lengths stay as set: ${tl2.join(' → ')}`);
 
   if (errors.length) throw new Error(errors.join('\n'));
   await writeFile(

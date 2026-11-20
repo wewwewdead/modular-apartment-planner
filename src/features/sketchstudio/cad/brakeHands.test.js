@@ -161,14 +161,15 @@ describe('the turn rule (§5.3)', () => {
 });
 
 describe('the shared session patch (§5.4)', () => {
-  // The three rules it replaces, as they stood before HO-1.
+  // The three rules it replaces, as they stood before HO-1; since TL-2
+  // (docs/sketch-studio-brake-tool-length.md §9.4) a new line keeps the trims.
   const oldChangeBrake = (s, patch) => {
     const newLine = ['edge', 'distance', 'points', 'mode'].some((k) => k in patch) && !('skip' in patch);
-    return { ...s, ...(newLine ? { skip: [], turned: false, punchTrim: null, dieTrim: null } : {}), ...patch };
+    return { ...s, ...(newLine ? { skip: [], turned: false } : {}), ...patch };
   };
   const oldTrial = (s, patch) => ({
     ...s,
-    ...('edge' in patch ? { skip: [], punchTrim: null, dieTrim: null } : {}),
+    ...('edge' in patch ? { skip: [] } : {}),
     ...patch,
   });
   const busy = session({ edge: RIGHT, distance: 200, skip: [1], turned: true, punchTrim: 5, dieTrim: 3, flip: true });
@@ -623,9 +624,10 @@ describe('the backgauge in the hand (§6.2)', () => {
     expect(typedL('0')).toBe(0);
     for (const bad of ['', '-2', '1e', 'abc', '.']) expect(typedL(bad)).toBe(null);
     const before = session({ edge: 1, distance: 200, skip: [1], turned: true, punchTrim: 5, dieTrim: -3 });
-    // A drag's changes go through the card's own path: a new L resets the segments, the turn and the trims.
+    // A drag's changes go through the card's own path: a new L resets the segments and the turn; the
+    // trims stay (brake tool length §9.3, TL-2).
     const dragged = [190, 187].reduce((s, distance) => brakePatch(s, { distance, scrub: null }), before);
-    expect(dragged).toMatchObject({ distance: 187, skip: [], turned: false, punchTrim: null, dieTrim: null });
+    expect(dragged).toMatchObject({ distance: 187, skip: [], turned: false, punchTrim: 5, dieTrim: -3 });
     expect(brakePatch(dragged, fingerRestore(before))).toEqual(before);
   });
   it('offers the fingers only where a millimetre of drag is a millimetre of L, and says why elsewhere', () => {

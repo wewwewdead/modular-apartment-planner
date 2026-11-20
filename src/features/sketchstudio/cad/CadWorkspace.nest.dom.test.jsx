@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 // SN-1 in the workspace (docs/sketch-studio-outline-edit-sheet-nest.md §4):
-// Draw's Cut all, Cut from sheet on a batch (Quantity per outline, Leave out,
-// one commit), the laser on the job (This cut, the lead, Quantity as model
+// Draw's Cut all, Cut from sheet on a batch (Quantity per outline, a row
+// unticked — Leave out until docs/sketch-studio-cut-pick.md —, one commit),
+// the laser on the job (This cut, the lead, Quantity as model
 // instances, the copies that stay), the route's Cut on several outlines. The
 // kernel hook and the 3D viewport are stand-ins.
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -9,6 +10,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { useImperativeHandle } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import CadWorkspace from './CadWorkspace.jsx';
+import { forgetPunch } from './brakeMemory.js';
 import { emptyModel } from './model.js';
 // The whole workspace renders in each test: allow for the full suite's load.
 vi.setConfig({ testTimeout: 15000 });
@@ -66,6 +68,8 @@ beforeEach(() => {
   vi.stubGlobal('requestAnimationFrame', (callback) => frames.push(callback));
   vi.stubGlobal('cancelAnimationFrame', () => {});
 });
+// The punch stays in the machine (docs/sketch-studio-shop-punches.md §5.5): each test starts from the default.
+beforeEach(() => forgetPunch());
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -117,7 +121,9 @@ const commitNumber = (field, value) => {
 };
 const overlap = (a, b) => a[0][0] < b[1][0] && b[0][0] < a[1][0] && a[0][1] < b[1][1] && b[0][1] < a[1][1];
 
-it('cuts every outline in one go: Cut all, a quantity each, Leave out, one commit, the laser on the job', () => {
+// Cut all opens Cut's picker with every outline ticked (docs/sketch-studio-cut-pick.md §4.1);
+// unticking a row is what Leave out was.
+it('cuts every outline in one go: Cut all, a quantity each, a row unticked, one commit, the laser on the job', () => {
   const harness = setup(outlines());
   shopStation('Draw');
   const draw = screen.getByRole('region', { name: 'Draw' });
@@ -125,15 +131,16 @@ it('cuts every outline in one go: Cut all, a quantity each, Leave out, one commi
   expect(cutAll.textContent).toMatch(/^Cut all 3 outlines/);
   act(() => fireEvent.click(cutAll));
   let cut = screen.getByRole('region', { name: 'Cut from sheet' });
-  expect(within(cut).getByText('Choose the sheet stock, then cut these blanks on the laser.')).toBeTruthy();
+  expect(within(cut).getByText('Choose the outlines to cut, then the sheet stock.')).toBeTruthy();
   const rows = () => within(screen.getByRole('list', { name: 'Outlines to cut' })).getAllByRole('listitem');
   expect(rows().map((li) => li.querySelector('strong').textContent)).toEqual(['Big', 'Small', 'Tab']);
   expect(rows()[1].textContent).toContain('200 × 100 mm');
+  expect(within(cut).getByLabelText('Selected outlines').textContent).toBe('3 of 3 selected');
   commitNumber(within(cut).getByLabelText('Quantity of Small'), 2);
   expect(within(cut).getByLabelText('Batch').textContent).toBe('4 blanks from 3 outlines');
-  // Leave out the third, then back to Draw and Cut all again: all three are back.
-  act(() => fireEvent.click(within(cut).getByRole('button', { name: 'Leave out Tab' })));
-  expect(rows()).toHaveLength(2);
+  // Untick the third, then back to Draw and Cut all again: all three are ticked again.
+  act(() => fireEvent.click(within(cut).getByRole('checkbox', { name: 'Select Tab' })));
+  expect(rows()).toHaveLength(3);
   expect(within(cut).getByLabelText('Batch').textContent).toBe('3 blanks from 2 outlines');
   act(() => fireEvent.click(within(cut).getByRole('button', { name: 'Back: Draw' })));
   act(() =>
@@ -142,7 +149,7 @@ it('cuts every outline in one go: Cut all, a quantity each, Leave out, one commi
     ),
   );
   cut = screen.getByRole('region', { name: 'Cut from sheet' });
-  expect(rows()).toHaveLength(3);
+  expect(within(cut).getByLabelText('Selected outlines').textContent).toBe('3 of 3 selected');
   commitNumber(within(cut).getByLabelText('Quantity of Small'), 2);
 
   // Cut on the laser: one commit, 3 parts named after their outlines, 4 instances, none overlapping.
@@ -249,6 +256,7 @@ it('keeps a painted copy when Quantity goes down, and says so', () => {
   ).toContain('1 copy is painted, printed or grouped: delete it in the view if you mean to.');
 });
 
+// Since docs/sketch-studio-cut-pick.md §4.1 the route's Cut opens the picker with nothing ticked.
 it('opens Cut from sheet on every ready outline from the route, with no "Several outlines" card', () => {
   setup(outlines());
   shopStation('Cut');
@@ -258,6 +266,7 @@ it('opens Cut from sheet on every ready outline from the route, with no "Several
       .getAllByRole('listitem')
       .map((li) => li.querySelector('strong').textContent),
   ).toEqual(['Big', 'Small', 'Tab']);
+  expect(within(cut).getByLabelText('Selected outlines').textContent).toBe('0 of 3 selected');
   expect(screen.queryByText(/Several outlines/)).toBe(null);
   // Bend with no part points at Cut.
   shopStation('Bend');

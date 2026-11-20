@@ -6,11 +6,12 @@
 // Remove and the Earlier refusal, the pedal committing the bend-on entry, and
 // the part form's "Bend {n} on to" row. The kernel hook and the 3D viewport
 // are stand-ins.
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useImperativeHandle } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import CadWorkspace from './CadWorkspace.jsx';
+import { forgetPunch } from './brakeMemory.js';
 import { PressBrakePanel } from './PressBrakePanel.jsx';
 import { SheetMetalForm, sheetMetalPart } from './ShopPanels.jsx';
 import { brakeSessionDefaults, brakeStation, sequenceChecks } from './brakeStation.js';
@@ -55,6 +56,8 @@ vi.mock('./CadViewport.jsx', () => ({
     return <div aria-label="Solid model viewport" />;
   },
 }));
+// The punch stays in the machine (docs/sketch-studio-shop-punches.md §5.5): each test starts from the default.
+beforeEach(() => forgetPunch());
 afterEach(() => cleanup());
 
 // The user's tray (spec §1): 605.4 × 420.4, t 1.2 SPCC; the inner bend 29 mm

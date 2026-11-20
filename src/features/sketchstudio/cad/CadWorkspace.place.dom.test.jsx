@@ -5,11 +5,12 @@
 // isolation), Enter finishes a path or applies, choosing Operation stops the
 // inference, and R / M switch a boolean tool gizmo. Kernel hook and viewport
 // are stand-ins.
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useImperativeHandle } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import CadWorkspace from './CadWorkspace.jsx';
+import { forgetPunch } from './brakeMemory.js';
 import { createPart, emptyModel } from './model.js';
 import { LIVE_DEBOUNCE_MS } from './liveField.js';
 // The whole workspace renders in each test: under the full suite’s parallel load
@@ -83,6 +84,8 @@ vi.mock('./CadViewport.jsx', () => ({
   },
 }));
 
+// The punch stays in the machine (docs/sketch-studio-shop-punches.md §5.5): each test starts from the default.
+beforeEach(() => forgetPunch());
 afterEach(() => {
   cleanup();
   viewport.dragging = false;

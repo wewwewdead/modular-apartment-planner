@@ -1,6 +1,7 @@
 import { createPart, uid } from './model.js';
 import { entitiesToProfile, profileToEntities, splitOutlines } from './sketchProfile.js';
 import { splitDimensions } from './sketchDimensions.js';
+import { storedZero } from './sketchZero.js';
 import {
   frameToInstance,
   frameToSketchFields,
@@ -16,14 +17,27 @@ import {
 // (it may already be in a part's coordinates), only the drawing changes.
 // `dimensions` (docs/sketch-studio-sketch-dimensions.md §3.1): the key is
 // there only when there are any, so an edit that removes the last one drops it.
-export function sketchFromSession({ session, entities, existing, name, dimensions = [] }) {
+// `zero` (docs/sketch-studio-hand-drawing.md §6.1): the point X, Y were
+// measured from, sketch-plane mm, kept only when it is not the origin (null:
+// none); not given, an edited sketch keeps its own.
+export function sketchFromSession({ session, entities, existing, name, dimensions = [], zero }) {
   const { profile, problems, closed } = entitiesToProfile(entities);
   if (!profile) throw new Error(problems[0] || 'Draw a closed outline first.');
   const kept = dimensions.length ? { dimensions } : {};
+  const at = storedZero(zero === undefined ? existing?.zero : zero);
+  const zeroKept = at ? { zero: at } : {};
   if (existing) {
-    const { dimensions: _stored, ...rest } = existing;
+    const { dimensions: _stored, zero: _zero, ...rest } = existing;
     return {
-      sketch: { ...rest, profile, entities, ...kept, primitives: existing.primitives || [], constrained: false },
+      sketch: {
+        ...rest,
+        profile,
+        entities,
+        ...kept,
+        ...zeroKept,
+        primitives: existing.primitives || [],
+        constrained: false,
+      },
       problems,
       closed,
     };
@@ -36,6 +50,7 @@ export function sketchFromSession({ session, entities, existing, name, dimension
       profile,
       entities,
       ...kept,
+      ...zeroKept,
       support: session.support,
       primitives: [],
       constrained: false,
@@ -54,9 +69,9 @@ export function sketchFromSession({ session, entities, existing, name, dimension
 // group holding most of the entities it was opened with comes first, so a
 // larger outline drawn beside a cut part's blank never becomes that part.
 // Each sketch keeps the dimensions that hang on its own outline
-// (splitDimensions; one hanging on none stays with the first).
-// Returns sketchFromSession's result plus `extras`.
-export function outlineSketches({ session, entities, existing, name, taken = [], dimensions = [] }) {
+// (splitDimensions; one hanging on none stays with the first); every one keeps
+// the same zero. Returns sketchFromSession's result plus `extras`.
+export function outlineSketches({ session, entities, existing, name, taken = [], dimensions = [], zero }) {
   const groups = splitOutlines(entities);
   if (existing && groups.length > 1) {
     const opened = new Set((session.entities || []).map((e) => e.id));
@@ -65,7 +80,7 @@ export function outlineSketches({ session, entities, existing, name, taken = [],
     if (own) groups.unshift(...groups.splice(own, 1));
   }
   const lists = splitDimensions(groups, dimensions);
-  const first = sketchFromSession({ session, entities: groups[0], existing, name, dimensions: lists[0] });
+  const first = sketchFromSession({ session, entities: groups[0], existing, name, dimensions: lists[0], zero });
   const base = first.sketch.name;
   const used = new Set([...taken, base]);
   let n = 2;
@@ -84,6 +99,7 @@ export function outlineSketches({ session, entities, existing, name, taken = [],
       profile: entitiesToProfile(group).profile,
       entities: group,
       dimensions: lists[index + 1].length ? lists[index + 1] : undefined,
+      zero: first.sketch.zero,
       support,
       primitives: [],
       constrained: false,
@@ -266,6 +282,18 @@ export function mergeSegments(segments) {
     seen.add(key);
     return true;
   });
+}
+
+// A camera square to the sketch framing `points` with their surroundings (a
+// Check row's place, docs/sketch-studio-hand-drawing.md §6.5, §7.0): the
+// points' extent grown `grow` times, never under `least` mm across, so a
+// 0.3 mm gap is seen with the corner it is in, not filling the view.
+export function placeFocus(frame, points = [], least = 10, grow = 4) {
+  const us = points.map((p) => p[0]),
+    vs = points.map((p) => p[1]);
+  const center = [(Math.min(...us) + Math.max(...us)) / 2, (Math.min(...vs) + Math.max(...vs)) / 2];
+  const size = Math.max(Math.max(...us) - Math.min(...us), Math.max(...vs) - Math.min(...vs));
+  return { position: toWorld(frame, center), normal: frame.normal, up: frame.y, span: Math.max(size * grow, least) };
 }
 
 // Camera target, grid extent and span for a sketch: the face outline when

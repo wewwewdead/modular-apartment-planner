@@ -8,8 +8,9 @@
 // gooseneck: the selects, the side view and the 3D scene follow → Reverse punch
 // (drawn mirrored) and back → Bend: the 90° hit made with the gooseneck. Then a
 // U channel (115 × 60): the 45 flange, then the line 20 in from the right end:
-// the standing flange hits the straight punch, the card offers "Use the
-// gooseneck punch", one click clears it and the hit is made. The die picker
+// the standing flange hits the straight punch, the card offers the first rack
+// punch that clears ("Use the A 101 punch" since docs/sketch-studio-shop-
+// punches.md §5.4), one click clears it and the hit is made. The die picker
 // too. No page errors.
 //   CAD_VERIFY_URL=http://localhost:5180/sketch node scripts/verify-brake-blades-bt1.mjs
 // Screenshots: artifacts/sketch-cad/brake-blades-bt1 (or BT1_SHOTS).
@@ -251,8 +252,9 @@ try {
   await fill(again.panel, 'Backgauge L (mm)', 20);
   const collision = again.panel.getByRole('alert', { name: 'Collision' });
   await expect(collision).toContainText('the part hits the punch at');
-  await expect(collision).toContainText('use the gooseneck punch');
-  const fix = again.panel.getByRole('button', { name: 'Use the gooseneck punch', exact: true });
+  // Shop punches §5.4: the rack is tried in order, the shop's A 101 first.
+  await expect(collision).toContainText('use the A 101 punch');
+  const fix = again.panel.getByRole('button', { name: 'Use the A 101 punch', exact: true });
   await expect(fix).toBeVisible();
   await expect(again.panel.getByRole('button', { name: 'Bend', exact: true })).toBeDisabled();
   measured.collision = await collision.innerText();
@@ -260,19 +262,19 @@ try {
   await shot('09-channel-collision-fix');
   await fix.click();
   await expect(collision).toHaveCount(0);
-  await expect(again.panel.getByLabel('Punch', { exact: true })).toHaveValue('gooseneck-88');
+  await expect(again.panel.getByLabel('Punch', { exact: true })).toHaveValue('a101');
   await expect(again.panel.getByRole('status', { name: 'Collision check' })).toContainText('Clear through the stroke');
   await page.waitForTimeout(300);
   await shot('10-channel-fixed');
-  const second = await bendMade(again.panel, 2, 'the channel hit with the gooseneck');
-  assert.deepEqual([second.punch, second.die], ['gooseneck-88', 'v10-88'], JSON.stringify(second));
+  const second = await bendMade(again.panel, 2, 'the channel hit with the A 101');
+  assert.deepEqual([second.punch, second.die], ['a101', 'v10-88'], JSON.stringify(second));
   const steps = again.panel.getByRole('list', { name: 'Sequence' }).getByRole('listitem');
   await expect(steps.nth(1).locator('.cad-brake-check')).toHaveText('ok');
   await page.waitForTimeout(300);
   await shot('11-channel-made');
   await page.locator('.cad-viewport').screenshot({ path: `${directory}/12-channel-3d.png` });
   checks.push(
-    `channel 115 × 60: "${measured.collision}" → Use the gooseneck punch → clear; made ${JSON.stringify({ punch: second.punch, die: second.die })}, both steps ok`,
+    `channel 115 × 60: "${measured.collision}" → Use the A 101 punch → clear; made ${JSON.stringify({ punch: second.punch, die: second.die })}, both steps ok`,
   );
 
   if (errors.length) throw new Error(errors.join('\n'));

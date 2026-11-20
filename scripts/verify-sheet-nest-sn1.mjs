@@ -12,7 +12,8 @@
 //
 // Part B, the batch on an empty workspace (§4.7 steps 10, 9, 7, 8): two
 // outlines in one sketch → the route's Cut opens Cut from sheet on both →
-// a third outline → Cut all 3 outlines → Quantity, Leave out, Back to Draw,
+// a third outline → Cut all 3 outlines → Quantity, a row unticked (Leave out
+// until docs/sketch-studio-cut-pick.md), Back to Draw,
 // Cut all again → Cut on the laser: one commit, the cut through all four
 // blanks, This cut, the job board, no overlaps → a This cut row moves the lead
 // → Next: Bend opens the brake on the lead → two bends → Undo / Redo of the
@@ -318,17 +319,22 @@ try {
   await shots('07-draw-cut-all', [cutAll]);
   await cutAll.click();
   await expect(toCut.getByRole('listitem').locator('strong')).toHaveText(['Sketch 1', 'Sketch 1 · 2', third]);
+  // Cut all opens Cut's picker with every outline ticked (docs/sketch-studio-cut-pick.md §4.1):
+  // unticking a row is what Leave out was.
+  const selected = cutPanel.getByLabel('Selected outlines', { exact: true });
+  await expect(selected).toHaveText('3 of 3 selected');
   await fill(cutPanel, 'Quantity of Sketch 1 · 2', 2);
-  await cutPanel.getByRole('button', { name: `Leave out ${third}`, exact: true }).click();
-  await expect(toCut.getByRole('listitem')).toHaveCount(2);
+  await cutPanel.getByRole('checkbox', { name: `Select ${third}`, exact: true }).uncheck();
+  await expect(toCut.getByRole('listitem')).toHaveCount(3);
+  await expect(selected).toHaveText('2 of 3 selected');
   await expect(cutPanel.getByLabel('Batch', { exact: true })).toHaveText('3 blanks from 2 outlines');
   await cutPanel.getByRole('button', { name: 'Back: Draw', exact: true }).click();
   await cutAll.click();
-  await expect(toCut.getByRole('listitem')).toHaveCount(3);
+  await expect(selected).toHaveText('3 of 3 selected');
   await fill(cutPanel, 'Quantity of Sketch 1 · 2', 2);
   await expect(cutPanel.getByLabel('Batch', { exact: true })).toHaveText('4 blanks from 3 outlines');
   await shots('08-batch-panel', [
-    cutPanel.getByRole('button', { name: `Leave out ${third}`, exact: true }),
+    cutPanel.getByRole('checkbox', { name: `Select ${third}`, exact: true }),
     cutPanel.getByLabel('Batch', { exact: true }),
     cutPanel.getByRole('button', { name: 'Cut on the laser', exact: true }),
   ]);
@@ -395,7 +401,7 @@ try {
   await jobList.getByRole('button').first().click();
   await expect(laser.getByLabel('Quantity', { exact: true })).toHaveValue('1');
   checks.push(
-    'Cut all 3 → Quantity, Leave out, Back to Draw, Cut all again → one commit: 3 parts named after their outlines, 4 instances, Whole sheet with Blank 1 … Blank 4, the HUD through blank 1–4 of 4, "Cut 4 blanks…", This cut (3 rows), 4 job-board rows, no overlaps; a This cut row moves Quantity, the blank and Edit outline to that part (its Cancel comes back to the same job)',
+    'Cut all 3 → the picker, 3 of 3 ticked → Quantity, one unticked (Leave out until cut-pick), Back to Draw, Cut all again → one commit: 3 parts named after their outlines, 4 instances, Whole sheet with Blank 1 … Blank 4, the HUD through blank 1–4 of 4, "Cut 4 blanks…", This cut (3 rows), 4 job-board rows, no overlaps; a This cut row moves Quantity, the blank and Edit outline to that part (its Cancel comes back to the same job)',
   );
 
   // 10b. Next: Bend opens the press brake on the lead (Sketch 1); two bends on its 200 mm edges.

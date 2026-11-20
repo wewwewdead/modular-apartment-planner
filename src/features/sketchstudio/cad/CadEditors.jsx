@@ -233,6 +233,9 @@ export function FeatureForm({
   // Sheet metal: Edit outline (docs/sketch-studio-outline-edit-sheet-nest.md §3.6) and what its last finish did.
   onEditOutline = null,
   editNotice = '',
+  // Sheet metal: set flange gaps (docs/sketch-studio-corner-gaps.md §4.3), and what the shop holds (§6.1).
+  onSetGaps = null,
+  onShopTolerance = null,
 }) {
   // Parameter values, for an angle's automatic radii when a leg is an =expression.
   const { values } = useContext(ParameterContext);
@@ -246,6 +249,8 @@ export function FeatureForm({
         addBendFocus={addBendFocus}
         onEditOutline={onEditOutline}
         editNotice={editNotice}
+        onSetGaps={onSetGaps}
+        onShopTolerance={onShopTolerance}
       />
     );
   if (['hole', 'pocket'].includes(feature.type))

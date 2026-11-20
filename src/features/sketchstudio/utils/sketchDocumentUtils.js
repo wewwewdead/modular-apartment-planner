@@ -1,5 +1,11 @@
 import sampleDocument from '../data/sampleDocument';
-import { normalizeModel, pruneGroups, removeEmptyParts, removeOrphanedConnections } from '../cad/model';
+import {
+  normalizeModel,
+  pruneGroups,
+  removeBlanklessParts,
+  removeEmptyParts,
+  removeOrphanedConnections,
+} from '../cad/model';
 import { cloneJoint as cloneJoineryJoint } from '../joinery';
 import { normalizeEntityGroupMemberships } from './groupUtils';
 
@@ -127,10 +133,14 @@ export function normalizeSketchDocument(document) {
         : (sampleDocument.layers || []).map(cloneLayer),
     entities: normalizedEntities,
     // Load-time recovery, in order: links to deleted instances, then parts
-    // that have no enabled feature (see removeEmptyParts). Part groups are
-    // repaired before validation (a dangling groupId or parent is dropped, not
-    // refused) and pruned again after parts were removed (pruneGroups).
-    model: pruneGroups(removeEmptyParts(removeOrphanedConnections(normalizeModel(pruneGroups(source.model))))),
+    // that have no enabled feature (see removeEmptyParts), then sheet-metal
+    // parts left with no blank (removeBlanklessParts, docs/sketch-studio-cut-pick.md
+    // §3: their outlines come back). Part groups are repaired before
+    // validation (a dangling groupId or parent is dropped, not refused) and
+    // pruned again after parts were removed (pruneGroups).
+    model: pruneGroups(
+      removeBlanklessParts(removeEmptyParts(removeOrphanedConnections(normalizeModel(pruneGroups(source.model))))),
+    ),
   };
 }
 

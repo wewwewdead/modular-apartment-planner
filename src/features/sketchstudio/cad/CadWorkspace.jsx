@@ -73,12 +73,14 @@ import {
   failingSteps,
   finishedHere,
   needsAdvice,
+  punchReversed,
   sequenceTries,
   rerunStroke,
   sequenceChecks,
   shopOrderBlock,
   startStroke,
 } from './brakeStation.js';
+import { rememberPunch, rememberedPunch } from './brakeMemory.js';
 import {
   GRIP_KEYS,
   HANDS_BUDGET_MS,
@@ -103,10 +105,13 @@ import {
 import {
   DEFAULT_LASER_SHEET,
   DEFAULT_MACHINE,
+  DEFAULT_STOCK,
   MACHINES,
   PRINT_METHOD_NAMES,
   SHEET_STOCK,
+  SHOP_TOLERANCE,
   machineOf,
+  shopTolerance,
 } from './shopCatalog.js';
 import { sheetMetalControlBox, sheetMetalKiosk, sheetMetalPumpBracket } from './shopExamples.js';
 import MaterialSelect from './MaterialSelect.jsx';
@@ -185,6 +190,7 @@ import {
   normalizeModel,
   numeric,
   removeInstance,
+  removeInstances,
   removePart,
   removeSheets,
   resolveParameters,
@@ -197,9 +203,14 @@ import { sectionLabel } from './stockSections.js';
 import CadSketcher from './CadSketcher.jsx';
 import { ExtrudeSummary, SketchOperationPanel, SketchSummary } from './SketchPanels.jsx';
 import { SKETCH_PLANES, planeFrame, sketchConsumer, sketchWorldFrame, toPlane } from './sketchPlane.js';
+import { storedZero } from './sketchZero.js';
+import { HELP_SECTIONS, helpKeys, sketchHelp } from './sketchHelp.js';
+import { SKETCH_COMMAND_KEYS, SKETCH_KEYS, SKETCH_TOOLS } from './sketchTools.js';
 import { PLANE_NAMES } from './originPlanes.js';
 import { anchorWorld, formatMm, markOffset, markValue, modelPoses } from './marks.js';
-import { entityPolyline } from './sketchProfile.js';
+import { entityPolyline, profileToEntities } from './sketchProfile.js';
+import { setGaps } from './cornerGaps.js';
+import { carryDimensions, carryEntities } from './outlineMove.js';
 import { mateInstance, mateNodes } from './mate.js';
 import { BRAKE, FILM, LASER, MATE, PAINT, PDF_RUN, PRINT, activeTool } from './toolSession.js';
 import {
@@ -225,6 +236,7 @@ import {
   editableEntities,
   mergeSegments,
   outlineSketches,
+  placeFocus,
   sketchEditProblem,
   sketchFromSession,
   sketchOperationDraft,
@@ -581,6 +593,20 @@ export default function CadWorkspace({
   // plane tiles in the view (docs/sketch-studio-start-sketch.md §4.2).
   const [planeDraft, setPlaneDraft] = useState({ plane: 'XY', offset: 0 });
   const [sketchSnap, setSketchSnap] = useState(1);
+  // The sketcher's Relief tool (docs/sketch-studio-bend-relief.md §3.4): its
+  // shape, typed sizes (null = automatic) and the sheet they are sized for, so
+  // the next sketch starts with them. Session-only, never saved in the file.
+  const [sketchRelief, setSketchRelief] = useState(() => ({
+    shape: 'square',
+    sizes: {},
+    sheet: { thickness: 1.5, stock: DEFAULT_STOCK },
+  }));
+  // The shape tools' options (docs/sketch-studio-hand-drawing.md §7.2: the
+  // slot's width, the polygon's sides, the corner radius …), kept the same way
+  // for the next sketch. Session-only.
+  const [sketchShapes, setSketchShapes] = useState(null);
+  // What the sketcher has in hand (a tool, an action, a selection: sketchHelp.js), for the Sketching panel.
+  const [sketchHand, setSketchHand] = useState(null);
   const [finishedSketch, setFinishedSketch] = useState(null);
   // Face-to-face mate: { stage: 'moving' | 'target' | 'placed', ... }.
   const [mateSession, setMateSession] = useState(null);
@@ -800,7 +826,12 @@ export default function CadWorkspace({
   const brakeChecks = useMemo(() => {
     if (!brakeFeature || !brakeMachine || !sheetParameters) return [];
     try {
-      return sequenceChecks({ fold: foldSheet(brakeFeature, brakeProfile, sheetParameters), machine: brakeMachine });
+      return sequenceChecks({
+        fold: foldSheet(brakeFeature, brakeProfile, sheetParameters),
+        machine: brakeMachine,
+        profile: brakeProfile,
+        params: sheetParameters,
+      });
     } catch {
       return [];
     }
@@ -835,6 +866,38 @@ export default function CadWorkspace({
   const rowTries = brakeRowsCollide && brakeRowTries?.checks === brakeChecks ? brakeRowTries.tries : null;
   // The viewport poses from the facts: the advice arriving changes no pose.
   const brakeView = brakeFacts && !brakeFacts.closed && !brakeFacts.error ? brakeFacts.view : null;
+  // A flange gap row hovered in the press brake's card (docs/sketch-studio-
+  // corner-gaps.md §3.3): its marker in the 3D view (by its own prop, never
+  // inside brakeView: a new view re-poses the station) and its edges on the
+  // flat-blank map. Kept with the part it was read on: it goes as soon as the
+  // bends or the blank change, the station closes or a stroke runs.
+  const [brakeGapHover, setBrakeGapHover] = useState(null);
+  const hoverBrakeGap = useCallback(
+    (row) =>
+      setBrakeGapHover(
+        row && brakeFacts?.feature
+          ? {
+              feature: brakeFacts.feature,
+              profile: brakeFacts.profile,
+              instanceId: brakeSession?.instanceId ?? null,
+              at: row.at,
+              flat: row.flatAt,
+              overlap: row.overlap,
+              edges: [row.a.flat, ...(row.b.flat ? [row.b.flat] : [])],
+            }
+          : null,
+      ),
+    [brakeFacts?.feature, brakeFacts?.profile, brakeSession?.instanceId],
+  );
+  const brakeGap =
+    brakeGapHover &&
+    brakeView &&
+    brakeSession?.stage === 'setup' &&
+    brakeSession.instanceId === brakeGapHover.instanceId &&
+    brakeFacts.feature === brakeGapHover.feature &&
+    brakeFacts.profile === brakeGapHover.profile
+      ? brakeGapHover
+      : null;
   // Hands on the sheet (docs/sketch-studio-brake-hands-on.md §5.4): what
   // Flip sheet and Turn sheet around would leave, worked out as the advice is
   // (once the session has been still for LIVE_DEBOUNCE_MS, in setup with no
@@ -1243,8 +1306,9 @@ export default function CadWorkspace({
     commit(next);
     selectNodes(nodeIds, nodeParent(next, nodeIds[0]));
   };
+  // A sheet-metal part goes with its last blank (docs/sketch-studio-cut-pick.md §3): its outline is back in Draw and Cut.
   const removeBody = () => {
-    commit(selectionMembers.reduce((next, id) => removeInstance(next, id), model));
+    commit(removeInstances(model, selectionMembers));
     select(null);
   };
   const renameGroup = (id, name) => {
@@ -1621,7 +1685,8 @@ export default function CadWorkspace({
   // shows it under "Not ready to cut"); `notice`: what the finish did.
   const returnFromSketch = (back, { sketchId = null, ready = true, notice = '' } = {}) => {
     const to = back?.panel || null;
-    if (to === 'shop-draw' || (to === 'shop-cut' && !ready)) {
+    // Cut's picker always takes its Edit back (cut-pick §4.2): an outline no longer ready leaves its list.
+    if (to === 'shop-draw' || (to === 'shop-cut' && !ready && back.outline?.kind !== 'pick')) {
       if (sketchId) setDrawnSketch(sketchId);
       return setPanel('shop-draw');
     }
@@ -1672,6 +1737,24 @@ export default function CadWorkspace({
   }) => {
     const edges = mergeSegments([...boundary, ...(viewport.current?.planeEdges(frame) || [])]);
     const view = sketchView(frame, boundary.length ? boundary : [], runtime.snapshot);
+    // The sheet the Relief tool sizes for (bend relief §3.4): a cut part's own
+    // (fixed), else what Cut from sheet handed over with Edit outline, else the
+    // remembered one.
+    const consumer = sketch ? sketchConsumer(model, sketch.id) : null;
+    const handed = returnTo?.outline;
+    let sheet = sketchRelief.sheet;
+    if (consumer?.feature.type === 'sheetmetal') {
+      try {
+        sheet = {
+          thickness: numeric(consumer.feature.thickness, sheetParameters || {}, 'Sheet thickness'),
+          stock: consumer.feature.stock || DEFAULT_STOCK,
+          fixed: true,
+        };
+      } catch {
+        /* a thickness that does not resolve now: the remembered sheet */
+      }
+    } else if (handed?.thickness != null || handed?.stock)
+      sheet = { thickness: handed.thickness ?? sheet.thickness, stock: handed.stock || sheet.stock };
     resetModesForSketch();
     setSketchSession({
       stage: 'draw',
@@ -1683,6 +1766,8 @@ export default function CadWorkspace({
       entities,
       // Its reference dimensions (docs/sketch-studio-sketch-dimensions.md), kept beside the entities.
       dimensions,
+      // The point X, Y are measured from (docs/sketch-studio-hand-drawing.md §6.1): a reopened sketch's own.
+      zero: storedZero(sketch?.zero),
       parameters: parameterContext.values,
       name: sketch?.name || `Sketch ${model.sketches.length + 1}`,
       span: view.span,
@@ -1696,14 +1781,21 @@ export default function CadWorkspace({
       // Where the finished (or cancelled) sketch goes back to (returnFromSketch);
       // null for the Sketch tab's own flow.
       returnTo,
+      sheet,
     });
     setFocusTarget(view.focus);
     setPanel('sketching');
   };
   // Look at: square to the plane, framing the face outline and the sketch
-  // (`points`: its dimensions' line ends and label points).
-  const lookAtSketch = (entities = [], points = []) => {
+  // (`points`: its dimensions' line ends and label points). `place`: a Check
+  // row's place, `points` only, the camera alone moving (the view's extent
+  // stays, so the sketcher's refit for a shape off the view does not undo it).
+  const lookAtSketch = (entities = [], points = [], { place = false } = {}) => {
     if (!sketchSession?.frame) return;
+    if (place) {
+      if (points.length) setFocusTarget(placeFocus(sketchSession.frame, points));
+      return;
+    }
     const drawn = entities.flatMap((entity) => {
       const points = entityPolyline(entity, 16);
       return points.slice(1).map((p, i) => [points[i], p]);
@@ -1803,7 +1895,63 @@ export default function CadWorkspace({
     commit({ ...model, sketches: model.sketches.filter((s) => s.id !== sketchId) });
     if (drawnSketch === sketchId) setDrawnSketch(null);
   };
-  const finishSketch = (entities, dimensions = []) =>
+  // Set flange gaps from the Sheet metal panel (docs/sketch-studio-corner-gaps.md
+  // §4.3): setGaps moves the part's outline (every bend kept on the metal it
+  // bends); every part cut from that outline must still fold on it (the outline
+  // edit's guard, which names the part); then ONE commit, through perform,
+  // replaces the sketch's profile and entities and the feature's bends: one
+  // Undo takes the whole set back. A refusal is thrown back to the panel (its
+  // error line) and nothing is committed. Returns setGaps' result and
+  // `committed` (the profile as stored).
+  const setFlangeGaps = (partId, featureId, { target, keys = null, styles = {} }) => {
+    const owner = model.parts.find((p) => p.id === partId);
+    const feature = owner?.features.find((f) => f.id === featureId);
+    const sketch = feature ? model.sketches.find((s) => s.id === feature.sketchId) : null;
+    if (!sketch) throw new Error('The blank sketch is gone.');
+    const problem = sketchEditProblem(sketch);
+    if (problem) throw new Error(problem);
+    const params = sheetParameters || {};
+    const result = setGaps({ feature, profile: sketch.profile, params, target, keys, styles });
+    if (!result.moved.length) return { ...result, committed: sketch.profile };
+    const parts = model.parts.map((p) =>
+      p.id === partId
+        ? { ...p, features: p.features.map((f) => (f.id === featureId ? { ...f, bends: result.bends } : f)) }
+        : p,
+    );
+    const refusal = outlineEditRefusal({ ...model, parts }, sketch.id, result.profile, params);
+    if (refusal) throw new Error(refusal);
+    // The sketcher's copy: the same entities, moved (ids kept), while they were in step; else rebuilt.
+    const entities = sketch.entities?.length
+      ? carryEntities(sketch.entities, sketch.profile, result.profile, result.trace) ||
+        profileToEntities(result.profile)
+      : sketch.entities;
+    const next = {
+      ...sketch,
+      profile: result.profile,
+      ...(entities ? { entities } : {}),
+      // Reference dimensions on a corner that moved go with it (outlineMove.js carryDimensions).
+      ...(sketch.dimensions ? { dimensions: carryDimensions(sketch.dimensions, result.trace) } : {}),
+    };
+    let committed = null,
+      failure = null;
+    perform(() => {
+      try {
+        const stored = commit({
+          ...model,
+          parts,
+          sketches: model.sketches.map((s) => (s.id === sketch.id ? next : s)),
+        });
+        committed = stored?.sketches.find((s) => s.id === sketch.id)?.profile ?? result.profile;
+      } catch (e) {
+        failure = e;
+        throw e;
+      }
+    });
+    if (failure) throw failure;
+    return { ...result, committed };
+  };
+  // `zero` (docs/sketch-studio-hand-drawing.md §6.1): handed over only when it was moved or the sketch had one.
+  const finishSketch = (entities, dimensions = [], { zero } = {}) =>
     perform(() => {
       const session = sketchSession;
       if (!entities.length) {
@@ -1823,8 +1971,9 @@ export default function CadWorkspace({
             name: session.name,
             taken: model.sketches.map((s) => s.name),
             dimensions,
+            zero,
           })
-        : { ...sketchFromSession({ session, entities, existing, name: session.name, dimensions }), extras: [] };
+        : { ...sketchFromSession({ session, entities, existing, name: session.name, dimensions, zero }), extras: [] };
       const params = sheetParameters || {};
       // The guard (§3.6): an outline sheet-metal parts are cut from must still
       // fold for each of them, or nothing is committed and the sketcher stays.
@@ -1850,8 +1999,14 @@ export default function CadWorkspace({
         const split = created.extras.length
           ? `${created.sketch.name} held ${created.extras.length + 1} separate outlines: each is its own blank.`
           : '';
-        setOutlineNotice(split ? { text: split, model: next } : null);
         const ready = readyOutlines(next, params).some((o) => o.id === created.sketch.id);
+        // Back at Cut's picker, an outline no longer ready has left its list: say where it went.
+        const gone =
+          !ready && back.panel === 'shop-cut' && back.outline?.kind === 'pick'
+            ? `${created.sketch.name} is not ready to cut now: Draw lists it with why.`
+            : '';
+        const text = [split, gone].filter(Boolean).join(' ');
+        setOutlineNotice(text ? { text, model: next } : null);
         let notice = '';
         if (back.panel === 'shop-laser') {
           const flat = foldOf(next, back.instanceId, params)?.flat;
@@ -2112,7 +2267,9 @@ export default function CadWorkspace({
     setSheetFlat(null);
     setBrakeSession({
       ...brakeSessionDefaults(),
-      ...(carry || {}),
+      // The punch stays in the machine (docs/sketch-studio-shop-punches.md §5.5): a visit
+      // with nothing carried starts with the last hit's punch on this computer.
+      ...(carry || rememberedPunch() || {}),
       stage: BRAKE.next(BRAKE.initial, 'START'),
       key: uid('brake'),
       instanceId,
@@ -2134,8 +2291,8 @@ export default function CadWorkspace({
   };
   // The operator's picks: session state only (a new pick drops a scrub and the last refusal).
   // A new line (edge, distance, points, mode) puts every segment back in the hit (§6.2) and
-  // starts the right way round (Turn sheet around, docs/sketch-studio-brake-flip-tooling.md §5.2)
-  // with the punch and die fitted to it (docs/sketch-studio-brake-tool-length.md §3.1).
+  // starts the right way round (Turn sheet around, docs/sketch-studio-brake-flip-tooling.md §5.2);
+  // the punch and die keep their lengths (docs/sketch-studio-brake-tool-length.md §9.3, TL-2).
   const changeBrake = (patch) => {
     setBrakeProblem('');
     // The one rule (brakeStation.js brakePatch): the collision card's trial and the grip's outcomes apply it too.
@@ -2156,11 +2313,14 @@ export default function CadWorkspace({
   // (these two are its onPickEdge and onDistance). A finger drag keeps the
   // line as it was when it started, for Esc (brakeHands.js fingerRestore).
   const pickBrakeEdge = (edge) => changeBrake({ mode: 'gauge', edge, scrub: null });
-  const brakeDistance = (distance) => changeBrake({ distance, scrub: null });
+  // `more`: the flat-blank card's drag names `stop: null` (a flat distance, skin gauge §4.5 step 1).
+  const brakeDistance = (distance, more = null) => changeBrake({ distance, scrub: null, ...more });
   const fingersFrom = useRef(null);
   const brakeFingers = ({ start = false, distance = null, cancel = false, end = false }) => {
     if (start) fingersFrom.current = brakeSession ? fingerRestore(brakeSession) : null;
-    else if (distance != null) brakeDistance(distance);
+    // A finger drag stays on the stop it started on while that stop makes the line (§4.5).
+    else if (distance != null)
+      brakeDistance(distance, fingersFrom.current ? { dragStop: fingersFrom.current.stop ?? null } : null);
     else if (cancel && fingersFrom.current) changeBrake(fingersFrom.current);
     if (cancel || end) fingersFrom.current = null;
   };
@@ -2236,12 +2396,16 @@ export default function CadWorkspace({
           p.id === brake.part.id ? { ...p, features: p.features.map((f) => (f.id === feature.id ? feature : f)) } : p,
         ),
       });
+      // The punch and its way round, for the next visit (shop punches §5.5).
+      rememberPunch({ punch: stroke.bend.punch, reverse: punchReversed(session) });
       Object.assign(next, {
         lastHit: { bendId: stroke.bend.id, gaugePoint: stroke.gaugePoint, punch: stroke.bend.punch },
         edge: null,
         points: [],
         // The angle the hit was made at is the operator's now (tight bends §4.4: brakePatch `arrived`).
         ...(next.arrived ? { arrived: null } : {}),
+        // The line it seated on is spent with it (§7.4 (f)).
+        ...(next.seated ? { seated: null } : {}),
         // The try is spent (§5.2); a step opened part-way says where it is finished.
         armed: null,
         notice: stroke.notice || null,
@@ -2255,7 +2419,12 @@ export default function CadWorkspace({
     const feature = { ...brake.feature, bends };
     const problem = foldProblem(feature, brake.profile, sheetParameters);
     if (problem) throw new Error(problem);
-    const checks = sequenceChecks({ fold: foldSheet(feature, brake.profile, sheetParameters), machine: brake.machine });
+    const checks = sequenceChecks({
+      fold: foldSheet(feature, brake.profile, sheetParameters),
+      machine: brake.machine,
+      profile: brake.profile,
+      params: sheetParameters,
+    });
     if (failingSteps(checks) > failingSteps(brakeChecks)) {
       const step = checks.find((c) => c.refusals.length || c.collision);
       throw new Error(
@@ -2558,6 +2727,25 @@ export default function CadWorkspace({
     );
   const changeLaserSheet = (key) =>
     commit({ ...model, fabrication: { ...model.fabrication, shop: { ...model.fabrication.shop, sheet: key } } });
+  // What the shop holds (docs/sketch-studio-corner-gaps.md §6.1): one tolerance
+  // of fabrication.shop.tolerance per settled field, one commit (one Undo);
+  // null takes the model's own away (back to the catalogue's), and with none
+  // left the key goes, so the shop settings read as a file without it did.
+  // The catalogue's own figure is no value of the model's: typed into a field
+  // it takes the model's own away (none held: nothing to commit, no Undo entry).
+  const changeShopTolerance = (key, typed) => {
+    const shop = model.fabrication.shop;
+    const own = shop.tolerance || {};
+    const value = typed === SHOP_TOLERANCE[key] ? null : typed;
+    if (value == null ? !(key in own) : own[key] === value) return;
+    const { [key]: _old, ...rest } = own;
+    const next = value == null ? rest : { ...own, [key]: value };
+    const { tolerance: _tolerance, ...plain } = shop;
+    commit({
+      ...model,
+      fabrication: { ...model.fabrication, shop: Object.keys(next).length ? { ...plain, tolerance: next } : plain },
+    });
+  };
   // Etch bend lines: the bends' punch lines become the blank's marks (one
   // commit; the solid is rebuilt once, unchanged: the kernel ignores marks).
   const changeLaserMarks = (marks) => {
@@ -3912,7 +4100,8 @@ export default function CadWorkspace({
       setCutOutline(outline);
       return setPanel('shop-cut');
     }
-    const entry = stationEntry(model, { station: key, subject, params: shopParams });
+    // The route bar's own button: the subject's part is only the selection (cut-pick §4.1).
+    const entry = stationEntry(model, { station: key, subject, params: shopParams, fromSelection: !instanceId });
     if (entry.blocked || entry.pick) {
       setShopGate(
         entry.pick
@@ -4126,12 +4315,35 @@ export default function CadWorkspace({
   // (docs/sketch-studio-outline-edit-sheet-nest.md §3.5): built only then,
   // once per outline set and chosen row; null on every other panel, so
   // nothing is drawn or computed there.
-  const outlinesShown = panel === 'shop-draw' && !sketchSession && !film && shopSession?.station !== 'laser';
+  // Cut's picker shows them too (docs/sketch-studio-cut-pick.md §4.2), its
+  // selection chosen, and a click inside one toggles it (`toggleCutOutline`).
+  const atRest = !sketchSession && !film && shopSession?.station !== 'laser';
+  const pickShown = panel === 'shop-cut' && cutOutline?.kind === 'pick' && atRest;
+  const outlinesShown = (panel === 'shop-draw' && atRest) || pickShown;
+  const outlineChosen = pickShown ? cutOutline.selected : drawnSketch;
   const outlineView = useMemo(
-    () => (outlinesShown ? shopOutlineView(model, sheetParameters || {}, drawnSketch) : null),
+    () => (outlinesShown ? shopOutlineView(model, sheetParameters || {}, outlineChosen) : null),
     // The outlines read the sketches, and the parts only to leave out the cut ones.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [outlinesShown, model.sketches, model.parts, sheetParameters, drawnSketch],
+    [outlinesShown, model.sketches, model.parts, sheetParameters, outlineChosen],
+  );
+  const toggleCutOutline = (sketchId) =>
+    setCutOutline((old) =>
+      old?.kind === 'pick'
+        ? {
+            ...old,
+            selected: old.selected.includes(sketchId)
+              ? old.selected.filter((id) => id !== sketchId)
+              : [...old.selected, sketchId],
+          }
+        : old,
+    );
+  // Outlines waiting at Cut, for the laser's Cut another outline (§4.3): only while the laser is on show.
+  const laserShown = panel === 'shop-laser' && shopSession?.station === 'laser';
+  const waitingOutlines = useMemo(
+    () => (laserShown ? readyOutlines(model, sheetParameters || {}).length : 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [laserShown, model.sketches, model.parts, sheetParameters],
   );
   const commands = [
     { tab: 'Sketch', label: 'New sketch', run: startSketchPick },
@@ -4554,9 +4766,11 @@ export default function CadWorkspace({
     };
   });
   const pickingFace = sketchSession?.stage === 'pick' || (mateSession && mateSession.stage !== 'placed');
-  // Origin plane tiles: on an empty model at rest, and while picking where a new sketch goes.
+  // Origin plane tiles: on an empty model at rest, and while picking where a
+  // new sketch goes. Never under Cut's picker: its clicks pick outlines on XY.
   const planesShown =
     (model.parts.length === 0 &&
+      !pickShown &&
       !sketchSession &&
       !operationDraft &&
       !measureSession &&
@@ -5782,6 +5996,7 @@ export default function CadWorkspace({
                   brakeView={film ? filmSceneView?.brake || null : brakeView}
                   onBrakeStrokeEnd={brakeStrokeEnd}
                   brakeGrip={film ? null : brakeGrip}
+                  brakeGap={film ? null : brakeGap}
                   onBrakeGrip={brakeAct}
                   onBrakeGripWant={wantBrakeHand}
                   onBrakeEdge={pickBrakeEdge}
@@ -5792,6 +6007,7 @@ export default function CadWorkspace({
                   onShopPrintMove={(id, origin) => perform(() => movePrint(id, origin))}
                   filmHidden={filmHidden}
                   shopOutlines={outlineView}
+                  onPickOutline={pickShown && !routeBusy ? toggleCutOutline : null}
                 />
                 {film && filmSceneView?.laser && (
                   <LaserBed
@@ -5821,6 +6037,9 @@ export default function CadWorkspace({
                     disabled={brakeSession.stage !== 'setup'}
                     onPickEdge={pickBrakeEdge}
                     onDistance={brakeDistance}
+                    // A made bend's line clicked: bend it on (tight bends §7.4 (e)).
+                    onBendOn={bendOnBrakeStep}
+                    gapEdges={brakeGap?.edges || null}
                     onPoints={(points) => changeBrake({ points, scrub: null })}
                     onMark={(mark) =>
                       changeBrake({
@@ -5863,6 +6082,11 @@ export default function CadWorkspace({
                     onFinish={finishSketch}
                     onCancel={cancelSketch}
                     onLookAt={lookAtSketch}
+                    relief={sketchRelief}
+                    onReliefChange={(next) => setSketchRelief((r) => ({ ...r, ...next }))}
+                    shapes={sketchShapes}
+                    onShapeOptionsChange={setSketchShapes}
+                    onHandChange={setSketchHand}
                   />
                 )}
                 {/*
@@ -6394,19 +6618,43 @@ export default function CadWorkspace({
               ) : panel === 'sketching' && sketchSession?.stage === 'draw' ? (
                 <>
                   <h3>Sketching · {sketchSession.name}</h3>
-                  <p className="cad-help">
-                    Pick a tool in the sketch bar. After the first click, type values in the box by the cursor: Tab
-                    switches field, Enter applies. Points snap to the grid, to sketch ends, midpoints and centres, and
-                    to the model edges in this plane (orange). Hold Shift to lock horizontal or vertical.
-                  </p>
-                  <p className="cad-help">
-                    Esc ends the current tool; Esc again finishes the sketch. Lines and arcs must join end to end to
-                    make a closed profile; closed shapes inside the outline become holes.
-                  </p>
-                  <p className="cad-help">
-                    Dimension (D): click two points, or a line, circle or arc, then click where the dimension goes. Esc
-                    before the last click only measures. Dimensions are kept with the sketch and never change the part.
-                  </p>
+                  {/* docs/sketch-studio-hand-drawing.md §8.0 item 3: what is in hand now, then three closed sections. */}
+                  {(() => {
+                    const now = sketchHelp(sketchHand || {}, { keys: SKETCH_KEYS, commands: SKETCH_COMMAND_KEYS });
+                    return (
+                      <section className="cad-sketch-now" aria-label="Now">
+                        <h4>Now · {now.title}</h4>
+                        <ul>
+                          {now.lines.map((line) => (
+                            <li key={line}>{line}</li>
+                          ))}
+                        </ul>
+                      </section>
+                    );
+                  })()}
+                  <details className="cad-sketch-help">
+                    <summary>Keys</summary>
+                    <dl className="cad-sketch-keys">
+                      {helpKeys({ tools: SKETCH_TOOLS, keys: SKETCH_KEYS, commands: SKETCH_COMMAND_KEYS }).map(
+                        ([key, words]) => (
+                          <div key={`${key} ${words}`}>
+                            <dt>{key}</dt>
+                            <dd>{words}</dd>
+                          </div>
+                        ),
+                      )}
+                    </dl>
+                  </details>
+                  {HELP_SECTIONS.map((section) => (
+                    <details key={section.id} className="cad-sketch-help">
+                      <summary>{section.title}</summary>
+                      <ul>
+                        {section.lines.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  ))}
                 </>
               ) : panel === 'sketch-finished' && model.sketches.some((s) => s.id === finishedSketch?.sketchId) ? (
                 (() => {
@@ -6599,6 +6847,7 @@ export default function CadWorkspace({
               ) : panel === 'press-brake' && brakeView ? (
                 <PressBrakePanel
                   station={brake}
+                  tolerance={shopTolerance(model.fabrication?.shop)}
                   session={brakeSession}
                   checks={brakeChecks}
                   problem={brakeProblem}
@@ -6619,6 +6868,7 @@ export default function CadWorkspace({
                   onBendOn={bendOnBrakeStep}
                   rowTries={rowTries}
                   onReorder={(bends) => perform(() => changeBrakeBends(bends, 'That order is'))}
+                  onGapHover={hoverBrakeGap}
                 />
               ) : panel === 'shop-paint' && paintView ? (
                 <PaintPanel
@@ -6670,6 +6920,20 @@ export default function CadWorkspace({
                   onQuantity={(quantity) => perform(() => changeLaserQuantity(quantity))}
                   onLead={leadLaser}
                   onDraw={() => perform(() => goStation('draw'))}
+                  waiting={waitingOutlines}
+                  // Cut's picker, nothing selected, on this cut's sheet (cut-pick §4.3).
+                  onCutAnother={() =>
+                    perform(() =>
+                      goStation('cut', {
+                        outline: {
+                          kind: 'pick',
+                          selected: [],
+                          stock: laserView.stock,
+                          thickness: laserView.thickness,
+                        },
+                      }),
+                    )
+                  }
                   onCut={laserCut}
                   onStop={laserStop}
                   onEtch={() => perform(() => changeLaserMarks(etchBendMarks(laserView.fold)))}
@@ -6760,12 +7024,17 @@ export default function CadWorkspace({
                       ? cutOutline.blank.id
                       : cutOutline.kind === 'batch'
                         ? cutOutline.items.map((item) => item.sketchId || item.blank?.id)
-                        : cutOutline,
+                        : // The picker is controlled (its state is cutOutline): one mount while it is open.
+                          cutOutline.kind === 'pick'
+                          ? 'pick'
+                          : cutOutline,
                   )}
                   model={model}
                   outline={cutOutline}
                   shell={shellFor('cut')}
                   onCreate={(created) => perform(() => cutFromSheet(created))}
+                  onOutline={setCutOutline}
+                  onOpenPart={(instanceId) => perform(() => goStation('cut', { instanceId }))}
                   editNotice={outlineNotice?.model === model ? outlineNotice.text : ''}
                   onEditOutline={
                     cutOutline.kind === 'sketch'
@@ -6776,7 +7045,10 @@ export default function CadWorkspace({
                               outline: { ...cutOutline, ...stock },
                             }),
                           )
-                      : null
+                      : cutOutline.kind === 'pick'
+                        ? // Back to the picker with its selection, quantities and sheet (cut-pick §4.2).
+                          (sketchId) => perform(() => editOutline(sketchId, { panel: 'shop-cut', outline: cutOutline }))
+                        : null
                   }
                 />
               ) : panel === 'import-drafting' ? (
@@ -7366,6 +7638,16 @@ export default function CadWorkspace({
                                 : null
                             }
                             editNotice={outlineNotice?.model === model ? outlineNotice.text : ''}
+                            onSetGaps={
+                              feature.type === 'sheetmetal'
+                                ? (request) => setFlangeGaps(part.id, feature.id, request)
+                                : null
+                            }
+                            onShopTolerance={
+                              feature.type === 'sheetmetal'
+                                ? (key, value) => perform(() => changeShopTolerance(key, value))
+                                : null
+                            }
                             cutBounds={(() => {
                               const previous = part.features
                                 .slice(0, part.features.indexOf(feature))
@@ -7475,7 +7757,8 @@ export default function CadWorkspace({
                       perform(() => {
                         // The last instance of an Add-hardware part takes its
                         // definition with it, unless another part uses it as a
-                        // Boolean tool (docs/sketch-studio-remove-part.md §3.3).
+                        // Boolean tool (docs/sketch-studio-remove-part.md §3.3);
+                        // a sheet-metal part with its last blank (cut-pick §3).
                         const lastHardware =
                           part &&
                           part.features.length === 1 &&
@@ -7484,7 +7767,7 @@ export default function CadWorkspace({
                           !model.parts.some(
                             (p) => p.id !== part.id && p.features.some((f) => f.toolPartId === part.id),
                           );
-                        commit(lastHardware ? removePart(model, part.id) : removeInstance(model, instance.id));
+                        commit(lastHardware ? removePart(model, part.id) : removeInstances(model, [instance.id]));
                         select(null);
                       })
                     }

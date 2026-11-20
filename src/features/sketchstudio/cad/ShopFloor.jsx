@@ -679,7 +679,9 @@ function Tile({ id, title, text, expanded, disabled = false, onClick, children }
  * onEdit(id) reopens one in the sketcher, onDelete(id) removes it.
  * onOutline(outline) goes to Cut with { kind: 'rectangle', width,
  * height } | { kind: 'sketch', sketchId } | { kind: 'drawing', blank } | {
- * kind: 'batch', items } (Cut all, docs/sketch-studio-outline-edit-sheet-nest.md §4.8);
+ * kind: 'batch', items } (the drawing's Cut all, docs/sketch-studio-outline-edit-sheet-nest.md
+ * §4.8) | { kind: 'pick', selected } (Cut all outlines: Cut's picker with every
+ * ready outline selected, docs/sketch-studio-cut-pick.md §4.1);
  * onSketch() starts the sketcher on XY at the origin. SF-3 (§6.3): the
  * Flanged panel tile holds `panelForm` (the workspace's PanelMakerForm);
  * onPanelTile(open) says when it opens or closes (its preview shows meanwhile);
@@ -900,12 +902,12 @@ export function DrawPanel({
             ))}
           </ul>
         )}
-        {/* SN-1 §4.8: several outlines cut in one go, every ready row in list order, one sheet. */}
+        {/* SN-1 §4.8: several outlines cut in one go, one sheet: Cut's picker with every ready row selected (cut-pick §4.1). */}
         {ready.length > 1 && (
           <PrimaryButton
             className="cad-cut-all"
             aria-label="Cut all outlines"
-            onClick={() => onOutline({ kind: 'batch', items: ready.map((o) => ({ kind: 'sketch', sketchId: o.id })) })}
+            onClick={() => onOutline({ kind: 'pick', selected: ready.map((o) => o.id) })}
           >
             Cut all {ready.length} outlines <span aria-hidden="true">→</span>
           </PrimaryButton>

@@ -449,8 +449,12 @@ describe('the station (§4.4)', () => {
   it('arriving with an angle not above the bend’s sets it to 90° (180° from 90° on); typed lower it is refused', () => {
     const model = twoMade();
     const station = brakeStation({ model, session: session({ distance: 50, angle: 20 }) });
-    expect(brakePatch(session({ distance: 50, angle: 20 }), { distance: 29 }, station).angle).toBe(90);
-    expect(brakePatch(session({ distance: 50, angle: 120 }), { distance: 29 }, station).angle).toBe(120);
+    // Bend 1's line lies behind the lip (bend 2, 11 from the right edge): the L the fingers read
+    // for it is off the lip's skin (docs/sketch-studio-skin-gauge.md §4.4), 29 − (11 + BA/2 − (r + t)).
+    const L29 = brakeStation({ model, session: session({ distance: 29 }) }).gauge.distance;
+    expect(L29).toBeCloseTo(19.0694, 3);
+    expect(brakePatch(session({ distance: 50, angle: 20 }), { distance: L29 }, station).angle).toBe(90);
+    expect(brakePatch(session({ distance: 50, angle: 120 }), { distance: L29 }, station).angle).toBe(120);
     // Without the station (the old rule's callers) nothing changes.
     expect(brakePatch(session({ distance: 50, angle: 20 }), { distance: 29 }).angle).toBe(20);
     // A bend at 90° or more: on to 180°.
@@ -460,7 +464,7 @@ describe('the station (§4.4)', () => {
     // the angle is touched puts the operator's angle back; once typed, it stays.
     const over = brakePatch(session({ distance: 50, angle: 90 }), { distance: 11 }, lip);
     expect([over.angle, over.arrived]).toEqual([180, { from: 90, set: 180 }]);
-    const on29 = brakePatch(over, { distance: 29 }, lip);
+    const on29 = brakePatch(over, { distance: L29 }, lip);
     expect([on29.angle, on29.arrived]).toEqual([90, null]);
     const away = brakePatch(over, { distance: 60 }, lip);
     expect(away.angle).toBe(90);
@@ -480,9 +484,9 @@ describe('the station (§4.4)', () => {
       edge: RIGHT,
       distance: 29,
       skip: [],
+      // A flat distance, named so (skin gauge §4.5 step 1): the edge has made bends in front of it.
+      stop: null,
       turned: false,
-      punchTrim: null,
-      dieTrim: null,
       scrub: null,
     });
     expect(bendOnPatch(station, 'nothing')).toBe(null);

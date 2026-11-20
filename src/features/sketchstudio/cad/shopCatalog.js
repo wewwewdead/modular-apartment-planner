@@ -163,7 +163,140 @@ export const RADIUS_HOLDERS = Object.freeze({
     ),
   }),
 });
+// docs/sketch-studio-shop-punches.md §5.1 (SP-1): the shop's own punches,
+// A 101, A 102, A 103 and A 108, from the tool chart taped to the user's press
+// brake ("… SPECIAL KNIVES CO., LTD", sheet 27), read from a photo (§2: one
+// homography fitted on the four 60 × 50 grids, 0.05 – 0.09 mm rms, 0.30 on the
+// A 102; the outline about ±0.3 mm in the grid's reach, ±1 mm above it). Each
+// is 125 overall, its Promecam tang (13 wide, 30 high) left out as for the
+// catalogue goosenecks: `height` is tip to clamp shoulder, 125 − 30 = 95, and
+// the clamps stand centred on the punch line (the shoulder bears over the
+// tip). Outlines in punchSection's frame (mm from the tip, +y the backgauge
+// side): the body stands behind the tip, the room for a return is in front.
+// Assumed (not readable on the photo, §8 asks): the tip angle of the three
+// goosenecks (their flanks measure 42° – 46°: the standard 88°), the tip radii
+// (0.8; the A 103 0.6) and the load (500 kN/m, as Tecnostamp rates such tools).
+// `rack: 'shop'` marks them; every other punch is the catalogue's.
+const shopPunch = (key, name, angle, radius, use, outline) =>
+  Object.freeze({
+    key,
+    name,
+    angle,
+    radius,
+    height: 95,
+    load: 500,
+    rack: 'shop',
+    use,
+    outline: freezeOutline(outline),
+  });
+const SHOP_PUNCHES = [
+  shopPunch('a101', 'A 101', 88, 0.8, 'Channels and return flanges: a return as long as its web, from a 10 mm web.', {
+    flank: { back: 5.4, front: 3.85 },
+    back: [
+      [5.4, 7.0],
+      [14.9, 18.2],
+      [14.9, 79.7],
+      [20.0, 84.8],
+      [20.0, 95],
+    ],
+    front: [
+      [-6.5, 95],
+      [-7.1, 94.4],
+      [-7.1, 81.0],
+      [2.8, 75.6],
+      [2.8, 15.0],
+      [-3.85, 5.0],
+    ],
+  }),
+  shopPunch(
+    'a102',
+    'A 102',
+    88,
+    0.8,
+    'Tighter returns: a return up to 5 mm longer than its web, from a 10 mm web. A thinner blade than the A 101.',
+    {
+      flank: { back: 5.6, front: 2.3 },
+      back: [
+        [5.6, 7.0],
+        [14.9, 18.0],
+        [14.9, 79.7],
+        [20.0, 84.8],
+        [20.0, 95],
+      ],
+      front: [
+        [-6.5, 95],
+        [-7.1, 94.4],
+        [-7.1, 81.0],
+        [4.6, 74.6],
+        [4.6, 14.4],
+        [-2.3, 4.2],
+      ],
+    },
+  ),
+  shopPunch(
+    'a103',
+    'A 103',
+    30,
+    0.6,
+    'A slim 30° blade: bends past 90° in a 30° die, and narrow parts with a return shorter than the web.',
+    {
+      flank: { back: 5.8, front: 5.3 },
+      back: [
+        [5.6, 23.2],
+        [20.0, 73.9],
+        [20.0, 95],
+      ],
+      front: [
+        [-6.5, 95],
+        [-7.1, 94.4],
+        [-7.1, 68.5],
+        [-6.1, 65],
+        [-3.9, 60],
+        [-2.15, 55],
+        [-1.0, 50],
+        [-0.35, 45],
+        [-0.3, 40],
+        [-0.9, 35],
+        [-1.95, 30],
+        [-2.85, 26],
+        [-3.6, 24],
+        [-4.5, 22],
+        [-5.3, 20.2],
+      ],
+    },
+  ),
+  shopPunch('a108', 'A 108', 88, 0.8, 'A heavy swan neck: a return up to 5 mm longer than its web, from a 20 mm web.', {
+    flank: { back: 7.5, front: 4.5 },
+    back: [
+      [7.4, 9.5],
+      [20.0, 25.6],
+      [20.0, 95],
+    ],
+    front: [
+      [-6.5, 95],
+      [-7.0, 94.4],
+      [-7.0, 73.5],
+      [-5.3, 70],
+      [-2.4, 65],
+      [-0.1, 60],
+      [1.6, 55],
+      [3.0, 50],
+      [3.8, 45],
+      [4.2, 40],
+      [4.2, 35],
+      [3.9, 30],
+      [3.3, 26],
+      [2.3, 22],
+      [1.2, 18],
+      [-0.4, 14],
+      [-2.0, 10],
+      [-3.2, 8],
+      [-4.5, 5.6],
+    ],
+  }),
+];
 export const PUNCHES = Object.freeze({
+  ...Object.fromEntries(SHOP_PUNCHES.map((p) => [p.key, p])),
   'straight-88': Object.freeze({
     key: 'straight-88',
     name: 'Straight 88°',
@@ -314,6 +447,32 @@ export const PUNCHES = Object.freeze({
   ),
 });
 export const DEFAULT_PUNCH = 'straight-88';
+/**
+ * The rack (docs/sketch-studio-shop-punches.md §5.1): every punch key, the
+ * shop's own first (as listed), then the catalogue's in their order. The
+ * picker, the Punch select and the card's punch tries (§5.2, §5.4) read it.
+ */
+export const RACK_ORDER = Object.freeze([
+  ...Object.values(PUNCHES)
+    .filter((p) => p.rack === 'shop')
+    .map((p) => p.key),
+  ...Object.values(PUNCHES)
+    .filter((p) => p.rack !== 'shop')
+    .map((p) => p.key),
+]);
+/** The rack in its two groups (§5.2): { rack, name, keys }, the shop's punches first. */
+export const PUNCH_GROUPS = Object.freeze([
+  Object.freeze({
+    rack: 'shop',
+    name: "Your shop's punches",
+    keys: Object.freeze(RACK_ORDER.filter((key) => PUNCHES[key].rack === 'shop')),
+  }),
+  Object.freeze({
+    rack: 'catalogue',
+    name: 'Catalogue punches',
+    keys: Object.freeze(RACK_ORDER.filter((key) => PUNCHES[key].rack !== 'shop')),
+  }),
+]);
 /** The radius punches (§12.3), narrowest first. */
 export const RADIUS_PUNCHES = Object.freeze(
   Object.values(PUNCHES)
@@ -470,6 +629,10 @@ export const FINISH_ROUGHNESS = Object.freeze({ matte: 0.9, satin: 0.6, gloss: 0
 // #43000: 130 overall, 100 useful, 1000 kN/m). Width across the bed (Y) is
 // an assumption (no catalogue states it): the punch's 26 mm clamp shoulder.
 export const BACKGAUGE = Object.freeze({ min: 5, max: 600 });
+// The backgauge finger's stop face (docs/sketch-studio-skin-gauge.md §4.2):
+// mm below and above the die top. One source for the reading off a standing
+// flange (pressBrake.js skinReach), the 3D fingers and the side view.
+export const FINGER_FACE = Object.freeze({ below: 8, above: 12 });
 export const PUNCH_HOLDER = Object.freeze({ height: 100, width: 26 });
 const brake = (tonnes, metres, bed) =>
   Object.freeze({
@@ -490,6 +653,37 @@ export const MACHINES = Object.freeze(
 );
 export const MACHINE_KEYS = Object.freeze(Object.keys(MACHINES));
 export const DEFAULT_MACHINE = 'brake-50-2000';
+
+/**
+ * What the shop holds on the bench (docs/sketch-studio-corner-gaps.md §6):
+ * how far a bent part may be off what was drawn, for the flange gaps' "± on
+ * the bench" band. `flange`: a flange's place after bending, ± mm (the
+ * fabricators' ± 0.2 – 0.5 mm, ± 0.1 on a good CNC brake with a servo back
+ * gauge: ADH, Durma; ± 0.25 mm promised by Protocase); `cut`: a laser-cut
+ * edge, ± mm (about ± 0.1: common practice, no source found that states it);
+ * `angle`: the bend angle, ± degrees (± 0.5 – 1°, ± 1° promised: Durma,
+ * SendCutSend, Protocase). Indicative, read 2026-11-18:
+ * https://www.adhmt.com/how-accurate-is-a-press-brake/,
+ * https://durmapress.com/sheet-metal-tolerances-a-practical-guide-to-accuracy,
+ * https://www.durmapress.com/press-brake-back-gauge-guide/,
+ * https://www.protocase.com/resources/tolerances/bending.php,
+ * https://sendcutsend.com/faq/what-are-your-tolerances-for-bending/,
+ * https://fabcon.com/articles/?p=1518 (an angle off at a flange's tip:
+ * height × tan(error)). A model may carry its own in
+ * `fabrication.shop.tolerance` (any of the three).
+ */
+export const SHOP_TOLERANCE = Object.freeze({ flange: 0.2, cut: 0.1, angle: 1 });
+export const TOLERANCE_KEYS = Object.freeze(['flange', 'cut', 'angle']);
+// A tolerance the model may hold: a finite number of 0 or more.
+export const toleranceValue = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+/** The tolerances the shop holds: the model's own (`shop.tolerance`, any of the three) over SHOP_TOLERANCE. */
+export function shopTolerance(shop) {
+  const own = shop?.tolerance;
+  if (!own || typeof own !== 'object') return SHOP_TOLERANCE;
+  const out = { ...SHOP_TOLERANCE };
+  for (const key of TOLERANCE_KEYS) if (toleranceValue(own[key])) out[key] = own[key];
+  return out;
+}
 export function machineOf(key) {
   const found = MACHINES[key ?? DEFAULT_MACHINE];
   if (!found) throw new Error(`Unknown press brake: ${key}`);
@@ -528,6 +722,104 @@ export const toolingLimit = (punch, dieEntry, length, dieLength = length) =>
 // 150, 400 = 800 mm"; AccurTool's 835 mm sectioned set (100, 10, 15, 20, 40,
 // 50, 200, 300, 100) agrees on 10.
 export const SHORTEST_SECTION = 10;
+
+// Horn (ear) sections (docs/sketch-studio-punch-library.md §4.1): the end
+// pieces of a sectioned punch, whose tip runs on past the body to reach under
+// what stands over the ends of a bend (an inward lip, a hem, a closed box).
+// Tecnostamp "Red Line – Amada-Promecam Style" catalogue
+// (pilses.com/image/catalog/catalogos-pdf/utillaje-amada-promecam.pdf),
+// printed p. 13: the tip runs 20 mm past the body (`reach`), 10 mm high at its
+// end (`tip`; 15 on some profiles, not modelled), the body above relieved on
+// an R 25 arc (`radius`); "the max load of the horn extensions is 50% of the
+// max load of the punch" (`load`, the share of the punch's kN/m).
+//
+// Horn lengths (§4.8, PL-1.1), keyed by the reach in mm; `section`: the
+// length of the end section that carries the horn. A horn is a cantilever, so
+// a longer one is made taller. `top` (where given): the horn's top as points
+// [mm in from its end, height above the tip], straight between them (the
+// slope, then the fillet taken as a step up to its top: never under the
+// drawing); else the arc of `radius` from the tip's height up to the body.
+//  20: the standard (Tecnostamp p. 13; Selmach "milled horn" p. 4, 9 high).
+//  25, 30: AccurTool Horn A and B (catalogue p. 4): 10 high at the end, a
+//      straight slope to 25 at the body, R 10 fillet.
+//  55: Selmach "special horn", on request (p. 6): 45 high, a flat top, an
+//      R 20 fillet to the body, on a 150 mm section.
+// None of these catalogues rates a horn: Tecnostamp's 50 % is taken for all four.
+export const HORNS = Object.freeze({
+  20: Object.freeze({ reach: 20, tip: 10, radius: 25, section: 100, load: 0.5, name: 'Standard 20 mm' }),
+  25: Object.freeze({
+    reach: 25,
+    tip: 10,
+    top: Object.freeze([Object.freeze([0, 10]), Object.freeze([20, 22]), Object.freeze([25, 35])]),
+    section: 100,
+    load: 0.5,
+    name: '25 mm',
+  }),
+  30: Object.freeze({
+    reach: 30,
+    tip: 10,
+    top: Object.freeze([Object.freeze([0, 10]), Object.freeze([25, 22.5]), Object.freeze([30, 35])]),
+    section: 100,
+    load: 0.5,
+    name: '30 mm',
+  }),
+  55: Object.freeze({ reach: 55, tip: 45, radius: 20, section: 150, load: 0.5, name: 'Special 55 mm' }),
+});
+/** The standard horn (§4.1): HORNS[20]. */
+export const HORN = HORNS[20];
+/** The horns, shortest first (the card tries them in this order, §4.8). */
+export const HORN_KEYS = Object.freeze(
+  Object.keys(HORNS)
+    .map(Number)
+    .sort((a, b) => a - b),
+);
+/**
+ * A session's or record's `horns` (§4.8): true (records saved before horn
+ * lengths) → the standard; a key (20, 25, 30, 55, or its string) → its entry;
+ * anything else → null (no horns).
+ */
+export function hornOf(value) {
+  if (value === true) return HORNS[20];
+  if (value == null || value === false || value === '') return null;
+  return Object.hasOwn(HORNS, value) ? HORNS[value] : null;
+}
+/**
+ * A step's horn sections in words (§4.8): "horn sections" for the standard,
+ * "30 mm horn sections" for another, null without.
+ */
+export function hornWords(value) {
+  const horn = hornOf(value);
+  if (!horn) return null;
+  return horn === HORNS[20] ? 'horn sections' : `${horn.reach} mm horn sections`;
+}
+/** The horn's top above the punch tip where the R 25 arc meets the body's end face (it stands vertical there): 34.49 mm. */
+export const hornRise = HORN.tip + Math.sqrt(HORN.radius ** 2 - (HORN.radius - HORN.reach) ** 2);
+/**
+ * The height of the horn's top above the punch tip `s` mm in from the horn's
+ * end (0 ≤ s ≤ reach, clamped). The standard: the R 25 arc from the end (10
+ * high) to the body's end face (§4.1): s = 0 → 10, 5 → 11.58, 15 → 19.49,
+ * 20 → 34.49. A horn with `top`: the height on that line (§4.8). Else the arc
+ * generalised so a flat top holds: d = reach − s, rise = tip + √(r² −
+ * max(0, r − reach)²); `tip` where d ≥ r, else rise − √(r² − (r − d)²).
+ */
+export function hornProfile(s, horn = HORN) {
+  const { reach } = horn;
+  const at = Math.max(0, Math.min(reach, s));
+  if (horn.top) {
+    const top = horn.top;
+    for (let i = 1; i < top.length; i++) {
+      const [s0, z0] = top[i - 1],
+        [s1, z1] = top[i];
+      if (at <= s1 + 1e-12) return s1 > s0 ? z0 + ((z1 - z0) * (at - s0)) / (s1 - s0) : z1;
+    }
+    return top.at(-1)[1];
+  }
+  const { tip, radius } = horn;
+  const rise = tip + Math.sqrt(radius ** 2 - Math.max(0, radius - reach) ** 2);
+  const d = reach - at;
+  if (d >= radius) return tip;
+  return rise - Math.sqrt(Math.max(0, radius ** 2 - (radius - d) ** 2));
+}
 
 // Section polygons (y across the bed, z up; counter-clockwise; no repeated
 // end point), generated from the numbers above. Punches: tip at the origin,

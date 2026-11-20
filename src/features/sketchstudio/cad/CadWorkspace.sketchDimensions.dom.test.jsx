@@ -153,10 +153,12 @@ it('keeps a dimension with a finished sketch, lists it, and brings it back on Ed
   expect(toolbar()).toBeTruthy();
   expect(statusLine()).toContain('1 item · closed profile · 1 dimension');
   expect(shown()).toEqual([['d1', '200']]);
-  // Deleting the side's rectangle takes its dimension; Undo last brings the
-  // rectangle back (the dimension went with it), and an edit without any
-  // dimension drops the key.
-  act(() => fireEvent.click(within(toolbar()).getByRole('button', { name: 'Undo last' })));
+  // Deleting the side's rectangle takes its dimension, and an edit without
+  // any dimension drops the key. HD-1 (docs/sketch-studio-hand-drawing.md
+  // §5.2): Undo last has nothing to undo in a sketch just reopened, so the
+  // rectangle goes by Ctrl+A and Delete selected.
+  act(() => fireEvent.keyDown(window, { key: 'a', ctrlKey: true }));
+  act(() => fireEvent.click(screen.getByRole('button', { name: 'Delete selected' })));
   expect(shown()).toEqual([]);
   rectangle(0, 0, 200, 100);
   finish();

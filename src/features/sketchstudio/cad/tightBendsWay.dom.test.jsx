@@ -5,11 +5,12 @@
 // Esc, Cancel and a new line disarming it), the pedal committing the try —
 // try 2 in one commit, so one Undo — and a stored row's Move button. The
 // kernel hook and the 3D viewport are stand-ins.
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useImperativeHandle } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import CadWorkspace from './CadWorkspace.jsx';
+import { forgetPunch } from './brakeMemory.js';
 import { PressBrakePanel } from './PressBrakePanel.jsx';
 import { sheetMetalPart } from './ShopPanels.jsx';
 import { brakeSessionDefaults, brakeStation, sequenceChecks } from './brakeStation.js';
@@ -54,6 +55,8 @@ vi.mock('./CadViewport.jsx', () => ({
     return <div aria-label="Solid model viewport" />;
   },
 }));
+// The punch stays in the machine (docs/sketch-studio-shop-punches.md §5.5): each test starts from the default.
+beforeEach(() => forgetPunch());
 afterEach(() => cleanup());
 
 // The screenshot's tray (spec §1): 605.4 × 420.4, t 1.2 SPCC; the right edge is edge 2.
@@ -137,17 +140,18 @@ it('the card offers "Make this hit before bend 1"; one click arms it', () => {
   panelOf(sheetModel([line('inner', W - 29, H)]), session({ distance: 11 }), { onSession });
   const card = within(region()).getByRole('alert', { name: 'Collision' });
   expect(card.textContent).toMatch(/^Bend 2: the part hits the ram as the ram comes down\./);
-  expect(button('Bend 1 to 60° first, finish it after this hit')).toBe(null);
+  expect(button('Bend 1 to 45° first, finish it after this hit')).toBe(null);
   act(() => fireEvent.click(button('Make this hit before bend 1')));
   expect(onSession).toHaveBeenCalledWith({ armed: { kind: 'before', key: 'inner' }, scrub: null });
 });
 
-it('the card offers "Bend 1 to 60° first, finish it after this hit" (no "Make this hit before"); one click arms it', () => {
+// 45° since docs/sketch-studio-shop-punches.md §6.4 (PART_WAY tries 45° first; it was 60°).
+it('the card offers "Bend 1 to 45° first, finish it after this hit" (no "Make this hit before"); one click arms it', () => {
   const onSession = vi.fn();
   panelOf(sheetModel([line('b1', 150, ZH)], ZW, ZH), session({ distance: 150, flip: true }), { onSession });
   expect(within(region()).queryByRole('button', { name: /^Make this hit before/ })).toBe(null);
-  act(() => fireEvent.click(button('Bend 1 to 60° first, finish it after this hit')));
-  expect(onSession).toHaveBeenCalledWith({ armed: { kind: 'partway', key: 'b1', angle: 60 }, scrub: null });
+  act(() => fireEvent.click(button('Bend 1 to 45° first, finish it after this hit')));
+  expect(onSession).toHaveBeenCalledWith({ armed: { kind: 'partway', key: 'b1', angle: 45 }, scrub: null });
 });
 
 it('armed, the card reads where the hit goes in, the pedal is on, and Cancel disarms it', () => {
@@ -165,10 +169,19 @@ it('armed, the card reads where the hit goes in, the pedal is on, and Cancel dis
   expect(onSession).toHaveBeenCalledWith({ armed: null });
 });
 
-it('nothing passes (lip 15 / web 15): no button, try 3’s words', () => {
+// docs/sketch-studio-shop-punches.md §6.2 (SP-2): lip 15 / web 15, inner first, now has a way — this
+// hit before bend 1 and bend 1 with the A 101 punch — so the card offers it and does not end with
+// NO_WAY; lip 20 / web 10 (shop punches §5.8 item 8) is where nothing passes.
+it('lip 15 / web 15: the earlier bend with another punch is offered, not try 3’s words', () => {
   panelOf(sheetModel([line('inner', W - 30, H)]), session({ distance: 15 }));
   const card = within(region()).getByRole('alert', { name: 'Collision' });
-  expect(card.textContent).toMatch(/No order and no part-way bend clears it with this punch/);
+  expect(card.textContent).not.toMatch(/No order/);
+  expect(button('Make this hit before bend 1, and bend 1 with the A 101 punch')).not.toBe(null);
+});
+it('nothing passes (lip 20 / web 10): no button, try 3’s words', () => {
+  panelOf(sheetModel([line('inner', W - 30, H)]), session({ distance: 20 }));
+  const card = within(region()).getByRole('alert', { name: 'Collision' });
+  expect(card.textContent).toMatch(/No order, no part-way bend and no other punch for the earlier bends clears it\./);
   expect(within(region()).queryByRole('button', { name: /^Make this hit|first, finish it/ })).toBe(null);
 });
 
@@ -277,31 +290,31 @@ it('try 1 at the station: armed, the view flat at the inner line; Esc and a new 
   expect(within(region()).queryByRole('status', { name: 'Bend order' })).toBe(null);
 });
 
-it('try 2 at the station: bend 1 shown at 60°; the pedal is one commit (one Undo) of three changes', async () => {
+it('try 2 at the station: bend 1 shown at 45° (shop punches §6.4); the pedal is one commit (one Undo) of three changes', async () => {
   const harness = setup(sheetModel([line('b1', 150, ZH)], ZW, ZH));
   openBrake();
   pick(150);
   act(() => fireEvent.click(within(region()).getByLabelText('Flip sheet')));
   await settle();
-  act(() => fireEvent.click(button('Bend 1 to 60° first, finish it after this hit')));
+  act(() => fireEvent.click(button('Bend 1 to 45° first, finish it after this hit')));
   expect(within(region()).getByRole('status', { name: 'Bend order' }).querySelector('p').textContent).toBe(
-    'Bend 1 goes to 60° first and is finished after this hit: the view shows bend 1 at 60°.',
+    'Bend 1 goes to 45° first and is finished after this hit: the view shows bend 1 at 45°.',
   );
-  expect(viewport.props.brakeView.angles).toMatchObject({ b1: 60 });
+  expect(viewport.props.brakeView.angles).toMatchObject({ b1: 45 });
   const commits = harness.setCadModel.mock.calls.length;
   pedal();
   expect(harness.setCadModel.mock.calls.length).toBe(commits + 1);
   const bends = bendsOf(harness);
   expect(bends.map((b) => [b.again ?? null, b.angle, b.direction ?? null])).toEqual([
-    [null, 60, 'up'],
+    [null, 45, 'up'],
     [null, 90, 'down'],
     ['b1', 90, null],
   ]);
   harness.rerender();
-  expect(rowTexts()).toEqual(['1 · UP 60° R1.28', '2 · DOWN 90° R1.28', '3 · bend 1 on: 60° → 90°']);
+  expect(rowTexts()).toEqual(['1 · UP 45° R1.28', '2 · DOWN 90° R1.28', '3 · bend 1 on: 45° → 90°']);
   expect([...steps().querySelectorAll('.cad-brake-check')].map((c) => c.textContent)).toEqual(['ok', 'ok', 'ok']);
   expect(within(region()).getByRole('status', { name: 'Part-way bend' }).textContent).toBe(
-    'Bend 1 now stands at 60° and is finished in step 3.',
+    'Bend 1 now stands at 45° and is finished in step 3.',
   );
   // One Undo takes the three changes back.
   harness.undo();

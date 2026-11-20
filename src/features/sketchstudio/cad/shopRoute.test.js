@@ -2,17 +2,19 @@
 // stations in shop order, where a product and a part stand on it (always the
 // job sheet's statuses), and what each station opens on.
 import { describe, expect, it } from 'vitest';
-import { emptyModel, normalizeModel } from './model.js';
+import { emptyModel, normalizeModel, removeInstances } from './model.js';
 import { jobProducts, jobSheet } from './jobSheet.js';
 import { sheetMetalControlBox, sheetMetalPumpBracket } from './shopExamples.js';
 import { sheetMetalPart } from './ShopPanels.jsx';
 import {
   ROUTE,
+  cutParts,
   partProgress,
   readyOutlines,
   routeNeighbour,
   routeProgress,
   sheetPartOf,
+  shopOutlineView,
   stationEntry,
 } from './shopRoute.js';
 
@@ -172,20 +174,11 @@ describe('entering a station', () => {
     });
     for (const station of ['paint', 'print'])
       expect(stationEntry(outlined, { station }).blocked).toMatchObject({ go: 'cut' });
-    // Several outlines (docs/sketch-studio-outline-edit-sheet-nest.md §4.8): Cut opens on the
-    // batch of all of them, so the later stations point at Cut too (no "Several outlines…" card).
+    // Several outlines (docs/sketch-studio-outline-edit-sheet-nest.md §4.8): Cut opens on them
+    // all — since cut-pick §4.1 the picker, nothing selected — so the later stations point at
+    // Cut too (no "Several outlines…" card).
     const two = { ...outlined, sketches: [...outlined.sketches, { ...outlined.sketches[0], id: 't' }] };
-    expect(stationEntry(two, { station: 'cut' })).toEqual({
-      open: {
-        outline: {
-          kind: 'batch',
-          items: [
-            { kind: 'sketch', sketchId: 's' },
-            { kind: 'sketch', sketchId: 't' },
-          ],
-        },
-      },
-    });
+    expect(stationEntry(two, { station: 'cut' })).toEqual({ open: { outline: { kind: 'pick', selected: [] } } });
     expect(stationEntry(two, { station: 'bend' })).toEqual({
       blocked: { message: 'Nothing to bend yet: cut a blank first.', go: 'cut' },
     });
@@ -193,13 +186,84 @@ describe('entering a station', () => {
       blocked: { message: 'Nothing to paint yet: cut a blank first.', go: 'cut' },
     });
     expect(stationEntry(two, { station: 'print' }).blocked).toMatchObject({ go: 'cut' });
-    // A part that is not sheet metal does not stop the batch: Cut has no blank to open.
+    // A part that is not sheet metal does not stop the picker: Cut has no blank to open.
     const board = {
       ...two,
       parts: [{ id: 'b', name: 'Board', features: [{ id: 'bf', type: 'box', width: 1, depth: 1, height: 1 }] }],
       instances: [{ id: 'ib', partId: 'b', position: [0, 0, 0], rotation: [0, 0, 0] }],
     };
-    expect(stationEntry(board, { station: 'cut' }).open.outline.kind).toBe('batch');
+    expect(stationEntry(board, { station: 'cut' }).open.outline.kind).toBe('pick');
+    // …nor does it make one outline a picker: Cut from sheet on it, as before.
+    expect(stationEntry({ ...board, sketches: outlined.sketches }, { station: 'cut' })).toEqual({
+      open: { outline: { kind: 'sketch', sketchId: 's' } },
+    });
+  });
+
+  // docs/sketch-studio-cut-pick.md §4.1: Cut's four rows, in order.
+  it('opens Cut on the picker whenever an outline waits beside another or beside a cut part', () => {
+    const floor = floorModel(); // one loose outline (s3), sheet-metal parts ia / ib / id
+    const pick = { open: { outline: { kind: 'pick', selected: [] } } };
+    // 1. A part the route was sent to: the laser on it, outline or not.
+    expect(stationEntry(floor, { station: 'cut', subject: { productId: 'g', instanceId: 'ib' } })).toEqual({
+      open: { instanceId: 'ib' },
+    });
+    // The same part as the selection only (the route bar): the picker first.
+    expect(
+      stationEntry(floor, { station: 'cut', subject: { productId: 'g', instanceId: 'ib' }, fromSelection: true }),
+    ).toEqual(pick);
+    // 2. One outline and a cut part, with or without a product chosen: the picker.
+    expect(stationEntry(floor, { station: 'cut' })).toEqual(pick);
+    expect(stationEntry(floor, { station: 'cut', subject: { productId: 'g' } })).toEqual(pick);
+    // Five outlines and no part: the picker.
+    const five = {
+      ...emptyModel(),
+      sketches: [1, 2, 3, 4, 5].map((n) => ({ id: `s${n}`, name: `Plate ${n}`, plane: 'XY', profile: rect(50, 40) })),
+    };
+    expect(stationEntry(five, { station: 'cut' })).toEqual(pick);
+    // 3. One outline alone: Cut from sheet on it (the "turns an empty workspace" test above).
+    // 4. No outline ready: as before — one part the laser, several the gate, the selection's part the laser.
+    const cut = { ...floor, sketches: floor.sketches.filter((s) => s.id !== 's3') };
+    expect(stationEntry(cut, { station: 'cut' })).toEqual({ pick: ['ia', 'ib', 'id'] });
+    expect(
+      stationEntry(cut, { station: 'cut', subject: { productId: 'g', instanceId: 'ib' }, fromSelection: true }),
+    ).toEqual({ open: { instanceId: 'ib' } });
+    // Bend never opens the picker.
+    expect(stationEntry(floor, { station: 'bend', subject: { productId: 'g' } })).toEqual({ pick: ['ia', 'ib'] });
+  });
+
+  it('gives a removed sheet-metal part’s outline back to Cut (RC-1)', () => {
+    const floor = floorModel();
+    // Part b's one blank (ib) goes: b goes with it, its outline s2 is ready again.
+    const next = removeInstances(floor, ['ib']);
+    expect(next.parts.map((p) => p.id)).toEqual(['a', 'c']);
+    expect(readyOutlines(next).map((o) => o.id)).toEqual(['s2', 's3']);
+    // One of part a's two blanks: a stays, s1 is still cut.
+    expect(readyOutlines(removeInstances(floor, ['id'])).map((o) => o.id)).toEqual(['s3']);
+  });
+
+  it('lists the cut parts for Already cut, one row per part with a blank', () => {
+    expect(cutParts(floorModel())).toEqual([
+      { partId: 'a', instanceId: 'ia', name: 'Angle', copies: 2, sheet: 't 1.5 SPCC', profile: rect(100, 60) },
+      { partId: 'b', instanceId: 'ib', name: 'Plate', copies: 1, sheet: 't 1.5 SPCC', profile: rect(200, 120) },
+    ]);
+    expect(cutParts(emptyModel())).toEqual([]);
+  });
+
+  it('draws the picker’s selected outlines chosen, several at once', () => {
+    const five = {
+      ...emptyModel(),
+      sketches: [1, 2, 3].map((n) => ({ id: `s${n}`, name: `Plate ${n}`, plane: 'XY', profile: rect(50, 40) })),
+    };
+    expect(shopOutlineView(five, {}, ['s1', 's3']).map((o) => [o.id, o.chosen])).toEqual([
+      ['s1', true],
+      ['s2', false],
+      ['s3', true],
+    ]);
+    // Draw's one id, and none.
+    expect(shopOutlineView(five, {}, 's2').map((o) => o.chosen)).toEqual([false, true, false]);
+    expect(shopOutlineView(five, {}, null).some((o) => o.chosen)).toBe(false);
+    // The outer ring first: the view's click test reads it.
+    expect(shopOutlineView(five)[0].rings[0].closed).toBe(true);
   });
 
   it('counts as ready to cut only closed XY outlines no part is made from', () => {

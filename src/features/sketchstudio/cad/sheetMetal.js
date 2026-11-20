@@ -20,6 +20,7 @@ import {
   defaultDie,
   dieOf,
   distortionDistance,
+  hornOf,
   kFactorFor,
   minLeg,
   punchOf,
@@ -37,6 +38,16 @@ const PROBE = 0.01;
 const SQUARE_TOLERANCE = 1e-4;
 
 const fmt = (value) => Number(value.toFixed(2)).toString();
+// A record's horn sections (docs/sketch-studio-punch-library.md §4.8): true
+// (the standard, as records were saved before horn lengths) or a horn's key
+// (its reach, a number); null for absent or false. An unknown one is refused by name.
+function hornsOf(value, name) {
+  if (value == null || value === false || value === '') return null;
+  if (value === true) return true;
+  const horn = hornOf(value);
+  if (!horn) throw new Error(`${name}: there are no ${value} mm horn sections in the rack.`);
+  return horn.reach;
+}
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1];
 const along = (a, u, s, n, v) => [a[0] + u[0] * s + n[0] * v, a[1] + u[1] * s + n[1] * v];
@@ -541,6 +552,8 @@ function bendOnHits(records, params, thickness) {
       punch: punchEntry.key,
       die: record.die ? dieOf(record.die).key : defaultDie(thickness, punchEntry).key,
       ...trims,
+      // Horn sections (docs/sketch-studio-punch-library.md §4.1): a bend-on record carries its own.
+      ...(hornsOf(record.horns, `Step ${step}`) != null ? { horns: hornsOf(record.horns, `Step ${step}`) } : {}),
       ...(record.stroke ? { stroke: String(record.stroke) } : {}),
     });
     later.set(record.again, hits);
@@ -568,12 +581,13 @@ function resolveBends(feature, params, thickness, stock) {
     const last = later.at(-1) || null;
     // The bend as its last hit leaves it (§4.2): every number below is that hit's.
     const bend = last
-      ? (({ punchTrim: _p, dieTrim: _d, ...own }) => ({
+      ? (({ punchTrim: _p, dieTrim: _d, horns: _h, ...own }) => ({
           ...own,
           punch: last.punch,
           die: last.die,
           ...(last.punchTrim != null ? { punchTrim: last.punchTrim } : {}),
           ...(last.dieTrim != null ? { dieTrim: last.dieTrim } : {}),
+          ...(last.horns != null ? { horns: last.horns } : {}),
         }))(record)
       : record;
     const angle = last ? last.angle : first;
@@ -622,12 +636,21 @@ function resolveBends(feature, params, thickness, stock) {
       ['dieTrim', 'die length'],
     ])
       if (!(bend[key] == null || bend[key] === '')) trims[key] = n(bend[key], `${name} ${label}`);
+    // Horn sections at the punch's ends (docs/sketch-studio-punch-library.md
+    // §4.1): `horns: true` only when set, so a record without them is as
+    // before; a radius punch has none.
+    const hornValue = hornsOf(bend.horns, name);
+    if (hornValue != null && PUNCHES[numbers.punch]?.round)
+      throw new Error(`${name}: a radius punch has no horn sections.`);
+    const horns = hornValue != null ? { horns: hornValue } : {};
     const u = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
     // The bend's first hit, its own record (§4.2): its angle, tooling and lengths.
     const ownTrims = last ? {} : trims;
     if (last)
       for (const key of ['punchTrim', 'dieTrim'])
         if (!(record[key] == null || record[key] === '')) ownTrims[key] = n(record[key], `${name} ${key}`);
+    const ownValue = last ? hornsOf(record.horns, name) : null;
+    const ownHorns = last ? (ownValue != null ? { horns: ownValue } : {}) : horns;
     const ownPunch = last ? punchOf(record.punch || DEFAULT_PUNCH) : null;
     const hit = {
       id: bend.id,
@@ -636,12 +659,14 @@ function resolveBends(feature, params, thickness, stock) {
       punch: last ? ownPunch.key : numbers.punch,
       die: last ? (record.die ? dieOf(record.die).key : defaultDie(thickness, ownPunch).key) : numbers.die,
       ...ownTrims,
+      ...ownHorns,
       ...(bend.stroke ? { stroke: String(bend.stroke) } : {}),
     };
     return {
       id: bend.id,
       ...(bend.stroke ? { stroke: String(bend.stroke) } : {}),
       ...trims,
+      ...horns,
       index,
       name,
       a,
@@ -971,7 +996,7 @@ function cutBlank(feature, profile, params, { skip = null } = {}) {
       for (const a of bends[i].strips)
         for (const b of bends[j].strips) {
           const overlap = polygonClipping.intersection(materialPolygon, [closedRing(a)], [closedRing(b)]);
-          if (multiArea(overlap) > 1e-6) throw new Error(`Bend ${j + 1} crosses bend ${i + 1}.`);
+          if (multiArea(overlap) > 1e-6) throw crossingError(bends, j, i);
         }
   // Step 4: the rigid pieces between the strips.
   const strips = bends.flatMap((bend) => bend.strips.map((ring) => [closedRing(ring)]));
@@ -989,6 +1014,48 @@ function cutBlank(feature, profile, params, { skip = null } = {}) {
       centroid: polygonCentroid(piece.outer, piece.holes),
     }));
   return { thickness, stock, material, flat, bends, pieces };
+}
+
+// Two strips overlap (§5.3 step 3): the fold's words, and for the brake
+// (docs/sketch-studio-tight-bends.md §7.4 (a)) `crossing` { bend: j, other: i
+// (places in the resolved bends), along: every end of bend i's material lies
+// within the two half zones of bend j's line, so the lines run together;
+// false: they cross }.
+function crossingError(bends, j, i) {
+  const [bend, other] = [bends[j], bends[i]];
+  const reach = (other.allowance + bend.allowance) / 2 + 1e-6;
+  const off = (s) => {
+    const p = [other.a[0] + other.u[0] * s, other.a[1] + other.u[1] * s];
+    return Math.abs((p[0] - bend.a[0]) * bend.n[0] + (p[1] - bend.a[1]) * bend.n[1]);
+  };
+  const error = new Error(`Bend ${j + 1} crosses bend ${i + 1}.`);
+  error.crossing = {
+    bend: j,
+    other: i,
+    along: other.intervals.every((interval) => interval.every((s) => off(s) <= reach)),
+  };
+  // Half of each bend zone, [bend, other] (crossingText words the relief with them).
+  error.halfZones = [bend.allowance / 2, other.allowance / 2];
+  return error;
+}
+
+/**
+ * A fold refusal in the shop's words (docs/sketch-studio-corner-gaps.md §4.2):
+ * two bends that cross at a corner (`crossing`, not running together) get how
+ * far the relief must reach; any other refusal is its own message. The fold's
+ * message itself stays as it is.
+ */
+export function crossingText(error) {
+  const message = error?.message || String(error);
+  const crossing = error?.crossing;
+  if (!crossing || crossing.along || !error.halfZones) return message;
+  const [own, other] = error.halfZones;
+  const mm = (value) => `${value.toFixed(2)} mm`;
+  const reach =
+    Math.abs(own - other) < 0.005
+      ? `${mm(own)} (half the bend zone) past each bend line`
+      : `${mm(own)} past bend ${crossing.bend + 1}'s line and ${mm(other)} past bend ${crossing.other + 1}'s (half of each bend zone)`;
+  return `${message.replace(/\.$/, '')}: their bend zones would share metal at the corner. The relief must reach ${reach}: cut it wider, or ask for a wider gap.`;
 }
 
 // §5.3 step 5 to §5.5: root, orientation, paths, legs and warnings.
@@ -1145,6 +1212,8 @@ function finishFold({ feature, params, thickness, stock, material, flat, bends, 
       // Brake tool length (§3.1): the trims per end, only when set.
       ...(bend.punchTrim != null ? { punchTrim: bend.punchTrim } : {}),
       ...(bend.dieTrim != null ? { dieTrim: bend.dieTrim } : {}),
+      // Horn sections (docs/sketch-studio-punch-library.md §4.1), only when set.
+      ...(bend.horns != null ? { horns: bend.horns } : {}),
       // A round bend's hits (docs/sketch-studio-round-bend.md §5.1); absent on an ordinary bend.
       ...(bend.steps ? { steps: bend.steps, stepAngle: bend.stepAngle, pitch: bend.pitch, flat: bend.flat } : {}),
       intervals: bend.intervals,
@@ -1273,7 +1342,10 @@ export function bendStrokes(bends = []) {
 export const strokeOf = (bends, bendId) => bendStrokes(bends).find((s) => s.bendIds.includes(bendId)) || null;
 
 // ---------------------------------------------------------------- the order made (tight bends §4.2)
-const TRIM_KEYS = ['punchTrim', 'dieTrim'];
+// A step's own tooling beside its punch and die: the lengths (brake tool
+// length §3.1) and horn sections (docs/sketch-studio-punch-library.md §4.1,
+// `horns: true` only when set), each carried only when the record has it.
+const TRIM_KEYS = ['punchTrim', 'dieTrim', 'horns'];
 // A fold bend's hits; a fold made without them (a hand-built test fold) is one hit per bend.
 const hitsOfBend = (bend) =>
   bend.hits || [
@@ -1295,7 +1367,7 @@ const hitsOfBend = (bend) =>
  * step's first record's), key (its first record's id), recordIds, bendIds,
  * start, end (indexes into `feature.bends`), index, again (a bend-on step),
  * from, to (bend id → angle before and after it), punch, die, punchTrim?,
- * dieTrim? (its first record's) }]. With no bend-on entry it is bendStrokes'
+ * dieTrim?, horns? (its first record's) }]. With no bend-on entry it is bendStrokes'
  * list step for step (the same id, key, bendIds, start, end and index).
  */
 export function hitSequence(fold) {

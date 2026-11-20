@@ -6,11 +6,12 @@
 // bend; Esc clears then leaves; a painted or printed part is refused with a
 // one-click remedy; every "another tool is active" site sees the station.
 // The kernel hook and the 3D viewport are stand-ins.
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useImperativeHandle } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import CadWorkspace from './CadWorkspace.jsx';
+import { BRAKE_PUNCH_KEY, forgetPunch } from './brakeMemory.js';
 import { emptyModel } from './model.js';
 import { bendNumbers } from './sheetMetal.js';
 import { sheetMetalPart } from './ShopPanels.jsx';
@@ -56,6 +57,8 @@ vi.mock('./CadViewport.jsx', () => ({
     return <div aria-label="Solid model viewport" />;
   },
 }));
+// The punch stays in the machine (docs/sketch-studio-shop-punches.md §5.5): each test starts from the default.
+beforeEach(() => forgetPunch());
 afterEach(() => {
   cleanup();
   Object.assign(kernel, { status: 'ready', ready: true });
@@ -226,6 +229,32 @@ it('gauges, reads out, refuses, strokes and commits a hit, then stays open for t
   // A long workspace test: under the full suite’s load it outruns the default 5 s.
 }, 15000);
 
+it('keeps the punch in the machine: a new visit starts with the last hit’s punch and its way round (shop punches §5.5)', () => {
+  const harness = setup(sheetModel({ width: 100 }));
+  openBrake();
+  // Nothing stored: the station's default.
+  expect(within(panel()).getByLabelText('Punch').value).toBe('straight-88');
+  act(() => fireEvent.change(within(panel()).getByLabelText('Punch'), { target: { value: 'a101' } }));
+  act(() => fireEvent.click(within(panel()).getByRole('checkbox', { name: 'Reverse punch' })));
+  act(() => fireEvent.click(within(map()).getByRole('button', { name: 'Gauge edge 2' })));
+  fill('Backgauge L (mm)', 20);
+  // A punch chosen is not remembered until a hit is made with it.
+  expect(localStorage.getItem(BRAKE_PUNCH_KEY)).toBe(null);
+  key(' ');
+  act(() => viewport.props.onBrakeStrokeEnd(viewport.props.brakeView.stroke.token));
+  harness.rerender();
+  expect(harness.model().parts[0].features[0].bends[0]).toMatchObject({ punch: 'a101' });
+  expect(JSON.parse(localStorage.getItem(BRAKE_PUNCH_KEY))).toEqual({ punch: 'a101', reverse: true });
+  // Leave the station (Esc, Esc) and come back: the A 101, still reversed.
+  key('Escape');
+  key('Escape');
+  expect(screen.queryByRole('region', { name: 'Press brake' })).toBe(null);
+  openBrake();
+  expect(within(panel()).getByLabelText('Punch').value).toBe('a101');
+  expect(within(panel()).getByRole('checkbox', { name: 'Reverse punch' }).checked).toBe(true);
+  expect(viewport.props.brakeView).toMatchObject({ punch: 'a101', reverse: true });
+});
+
 it('shows a collision red at its angle and clears it with the gooseneck punch', () => {
   // A U channel: the 45 flange made first; gauging the short side puts the
   // 50 web and the tall flange in front, where the flange swings back into the
@@ -254,7 +283,7 @@ it('shows a collision red at its angle and clears it with the gooseneck punch', 
     .filter((a) => !a.getAttribute('aria-label'))
     .map((a) => a.textContent);
   expect(said.at(-1)).toMatch(
-    /^Bend 2: the part hits the punch at [\d.]+°\. Bend this one earlier \(before the flange in the way\), or use the gooseneck punch\. Turning the sheet around was tried: it does not clear\.$/,
+    /^Bend 2: the part hits the punch at [\d.]+°\. Bend this one earlier \(before the flange in the way\), or use the A 101 punch\. Turning the sheet around was tried: it does not clear\.$/,
   );
   // The card shows that advice too: it is the very session's.
   expect(within(panel()).getByRole('alert', { name: 'Collision' }).textContent).toBe(said.at(-1));
@@ -266,7 +295,8 @@ it('shows a collision red at its angle and clears it with the gooseneck punch', 
 });
 
 it('chooses the blades from the picker and clears a collision with its punch fix (brake blades BT-1)', async () => {
-  // The same U channel: the card offers the gooseneck, one click makes the hit pass.
+  // The same U channel: the card offers the first rack punch that clears (the A 101, docs/
+  // sketch-studio-shop-punches.md §5.4), one click makes the hit pass.
   setup(
     sheetModel({
       width: 115,
@@ -280,21 +310,21 @@ it('chooses the blades from the picker and clears a collision with its punch fix
   // The fact at once; the remedies tried arrive once the pick has been still (BT-2 follow-up).
   const card = () => within(panel()).getByRole('alert', { name: 'Collision' });
   expect(card().textContent).toMatch(/^Bend 2: the part hits the punch at [\d.]+°\.$/);
-  expect(within(panel()).queryByRole('button', { name: 'Use the gooseneck punch' })).toBeNull();
+  expect(within(panel()).queryByRole('button', { name: 'Use the A 101 punch' })).toBeNull();
   await act(() => new Promise((resolve) => setTimeout(resolve, LIVE_DEBOUNCE_MS + 30)));
   expect(card().textContent).toMatch(
-    /^Bend 2: the part hits the punch at [\d.]+°\. Bend this one earlier \(before the flange in the way\), or use the gooseneck punch\. Turning the sheet around was tried: it does not clear\.$/,
+    /^Bend 2: the part hits the punch at [\d.]+°\. Bend this one earlier \(before the flange in the way\), or use the A 101 punch\. Turning the sheet around was tried: it does not clear\.$/,
   );
-  act(() => fireEvent.click(within(panel()).getByRole('button', { name: 'Use the gooseneck punch' })));
+  act(() => fireEvent.click(within(panel()).getByRole('button', { name: 'Use the A 101 punch' })));
   expect(within(panel()).queryByRole('alert', { name: 'Collision' })).toBe(null);
-  expect(within(panel()).getByLabelText('Punch').value).toBe('gooseneck-88');
-  expect(viewport.props.brakeView).toMatchObject({ punch: 'gooseneck-88', reverse: false, collision: null });
+  expect(within(panel()).getByLabelText('Punch').value).toBe('a101');
+  expect(viewport.props.brakeView).toMatchObject({ punch: 'a101', reverse: false, collision: null });
   expect(within(panel()).getByRole('button', { name: 'Bend' }).disabled).toBe(false);
   // The picker: the deep gooseneck, then the V8 die; the selects follow, the viewport draws them.
   const blades = within(panel()).getByRole('group', { name: 'Blades' });
   act(() => fireEvent.click(within(blades).getByRole('button', { name: /^Top: punch/ })));
   const punches = within(panel()).getByRole('region', { name: 'Punches' });
-  expect(within(punches).getByRole('button', { name: 'Gooseneck 88°' }).getAttribute('aria-pressed')).toBe('true');
+  expect(within(punches).getByRole('button', { name: 'A 101' }).getAttribute('aria-pressed')).toBe('true');
   act(() => fireEvent.click(within(punches).getByRole('button', { name: 'Gooseneck 88° deep' })));
   expect(within(panel()).getByLabelText('Punch').value).toBe('gooseneck-88-deep');
   act(() => fireEvent.click(within(blades).getByRole('button', { name: /^Bottom: die/ })));
@@ -495,7 +525,7 @@ it('makes an offset in one press of Bend: two hits in one stroke, two ordinary r
   expect([...steps.querySelectorAll('.cad-brake-check')].map((c) => c.textContent)).toEqual(['ok', 'ok']);
 });
 
-it('keeps a set punch length on the hit made; a new line puts the tooling back to fitted (brake tool length §3.1)', () => {
+it('keeps a set punch length on the hit made and on a new line (brake tool length §3.1, §9.3)', () => {
   const harness = setup(sheetModel({ width: 100 }));
   openBrake();
   act(() => fireEvent.click(within(map()).getByRole('button', { name: 'Gauge edge 4' })));
@@ -507,10 +537,10 @@ it('keeps a set punch length on the hit made; a new line puts the tooling back t
   act(() => fireEvent.keyDown(length(), { key: 'Enter' }));
   expect(length().value).toBe('50');
   expect(within(panel()).getByLabelText('Punch length note').textContent).toBe('5 mm short at each end');
-  // A new L is a new line: the punch is fitted to it again.
+  // A new L is a new line: the punch keeps its length (TL-2, §9.3).
   fill('Backgauge L (mm)', 25);
-  expect(length().value).toBe('60');
-  expect(within(panel()).getByLabelText('Punch length note').textContent).toBe('fitted');
+  expect(length().value).toBe('50');
+  expect(within(panel()).getByLabelText('Punch length note').textContent).toBe('5 mm short at each end');
   fill('Backgauge L (mm)', 20);
   act(() => fireEvent.keyDown(length(), { key: '5' }));
   act(() => fireEvent.change(length(), { target: { value: '50' }, nativeEvent: { inputType: 'insertText' } }));

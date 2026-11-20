@@ -10,7 +10,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { PressBrakePanel } from './PressBrakePanel.jsx';
 import { bladeOptions, brakeSessionDefaults, brakeStation } from './brakeStation.js';
 import { emptyModel } from './model.js';
-import { DIES, PUNCHES } from './shopCatalog.js';
+import { DIES, PUNCHES, RACK_ORDER } from './shopCatalog.js';
 
 afterEach(() => cleanup());
 
@@ -188,21 +188,71 @@ it('shows Reverse punch for the gooseneck: the silhouette and the summary turn r
   expect(onSession).toHaveBeenLastCalledWith({ punch: 'gooseneck-88', reverse: false, scrub: null });
 });
 
-it('offers the gooseneck on the collision card when this hit clears with it', () => {
+it('offers the first punch in the rack that clears on the collision card', () => {
+  // docs/sketch-studio-shop-punches.md §5.4: the rack is tried in order, the shop's A 101 first.
   const onSession = vi.fn();
   panel(session(), modelWith([FLANGE]), onSession);
   expect(within(region()).getByRole('alert', { name: 'Collision' }).textContent).toMatch(
-    /^Bend 2: the part hits the punch at [\d.]+°\. Bend this one earlier \(before the flange in the way\), or use the gooseneck punch\. Turning the sheet around was tried: it does not clear\.$/,
+    /^Bend 2: the part hits the punch at [\d.]+°\. Bend this one earlier \(before the flange in the way\), or use the A 101 punch\. Turning the sheet around was tried: it does not clear\.$/,
   );
   expect(within(region()).getByRole('button', { name: 'Bend' }).disabled).toBe(true);
-  act(() => fireEvent.click(within(region()).getByRole('button', { name: 'Use the gooseneck punch' })));
-  expect(onSession).toHaveBeenLastCalledWith({ punch: 'gooseneck-88', reverse: false, scrub: null });
+  act(() => fireEvent.click(within(region()).getByRole('button', { name: 'Use the A 101 punch' })));
+  expect(onSession).toHaveBeenLastCalledWith({ punch: 'a101', reverse: false, scrub: null });
   cleanup();
-  // With the gooseneck the hit clears: no card, the pedal ready.
-  panel(session({ punch: 'gooseneck-88' }), modelWith([FLANGE]), onSession);
+  // With the A 101 the hit clears: no card, the pedal ready.
+  panel(session({ punch: 'a101' }), modelWith([FLANGE]), onSession);
   expect(within(region()).queryByRole('alert', { name: 'Collision' })).toBeNull();
   expect(within(region()).getByRole('status', { name: 'Collision check' }).textContent).toMatch(/^Clear through/);
   expect(within(region()).getByRole('button', { name: 'Bend' }).disabled).toBe(false);
+});
+
+it("lists the shop's punches first, then the catalogue's, in the picker and the Punch select", () => {
+  // docs/sketch-studio-shop-punches.md §5.2: two groups, the rack's order (RACK_ORDER).
+  panel(session(), modelWith([FLANGE]));
+  act(() => fireEvent.click(top()));
+  const picker = within(region()).getByRole('region', { name: 'Punches' });
+  expect([...picker.querySelectorAll('h5')].map((h) => h.textContent)).toEqual([
+    "Your shop's punches",
+    'Catalogue punches',
+  ]);
+  const names = (list) =>
+    within(list)
+      .getAllByRole('button')
+      .map((b) => b.getAttribute('aria-label'));
+  expect(names(within(picker).getByRole('list', { name: "Your shop's punches" }))).toEqual([
+    'A 101',
+    'A 102',
+    'A 103',
+    'A 108',
+  ]);
+  expect(names(within(picker).getByRole('list', { name: 'Catalogue punches' }))).toEqual(
+    RACK_ORDER.filter((key) => PUNCHES[key].rack !== 'shop').map((key) => PUNCHES[key].name),
+  );
+  const a101 = within(picker).getByRole('button', { name: 'A 101' });
+  expect(a101.textContent).toContain('88° · tip R0.8 · H 95 · 500 kN/m');
+  expect(a101.textContent).toContain('Channels and return flanges: a return as long as its web, from a 10 mm web.');
+  expect(a101.querySelector('.cad-blade-verdict').textContent).toBe('Clears this hit');
+  const select = within(region()).getByLabelText('Punch');
+  expect([...select.querySelectorAll('optgroup')].map((g) => g.label)).toEqual([
+    "Your shop's punches",
+    'Catalogue punches',
+  ]);
+  expect([...select.querySelectorAll('option')].map((o) => o.value)).toEqual([...RACK_ORDER]);
+});
+
+it('says when the part comes off the punch along a slant (shop punches §5.3)', () => {
+  // The deep channel (brakeBlades.test.js): a 60 flange deep in the deep gooseneck's throat.
+  const deep = modelWith([{ ...FLANGE, a: [60, -1], b: [60, 61] }], 130);
+  panel(session({ punch: 'gooseneck-88-deep' }), deep);
+  expect(within(region()).getByRole('status', { name: 'Collision check' }).textContent).toMatch(/^Clear through/);
+  expect(within(region()).getByRole('note', { name: 'Take-off' }).textContent).toBe(
+    'Comes off the punch toward you: the part is drawn off along the nose as the ram lifts.',
+  );
+  cleanup();
+  // Lifted straight off (the gooseneck's own throat): no note.
+  panel(session({ punch: 'gooseneck-88' }), deep);
+  expect(within(region()).getByRole('status', { name: 'Collision check' }).textContent).toMatch(/^Clear through/);
+  expect(within(region()).queryByRole('note', { name: 'Take-off' })).toBeNull();
 });
 
 it('offers no punch when the hit does not clear with it', () => {

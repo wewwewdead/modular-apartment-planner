@@ -250,7 +250,14 @@ try {
   await turnFix.click();
   await expect(collision).toHaveCount(0);
   await expect(again.panel.getByLabel('Gauge edge', { exact: true })).toHaveText('Edge 4 · 60 mm');
-  await expect(again.panel.getByLabel('Backgauge L (mm)', { exact: true })).toHaveValue('95');
+  // The same line, 95 from edge 4 on the flat blank. Since SG-1 (docs/sketch-studio-skin-gauge.md
+  // §4.5) L is what the backgauge reads: past the 45 flange from edge 4, off that flange's skin
+  // (it read 95, the flat distance, before).
+  await expect(again.panel.locator('dd[aria-label="Line on the flat blank"]')).toHaveText('95 mm from edge 4');
+  await expect(again.panel.locator('dd[aria-label="Backgauge L"]')).toHaveText(/ mm · off bend 1's flange$/);
+  measured.turnedL = await again.panel.getByLabel('Backgauge L (mm)', { exact: true }).inputValue();
+  const turnedReads = (await again.panel.locator('dd[aria-label="Backgauge L"]').textContent()).trim();
+  assert.equal(turnedReads, `${Number(Number(measured.turnedL).toFixed(2))} mm · off bend 1's flange`, turnedReads);
   await expect(again.panel.getByRole('status', { name: 'Collision check' })).toContainText('Clear through the stroke');
   await page.waitForTimeout(300);
   await shot('12-turned-around-clear');
@@ -262,7 +269,7 @@ try {
   await page.waitForTimeout(300);
   await shot('13-channel-made');
   checks.push(
-    `channel 115 × 60, gooseneck reversed: "${measured.collision.replace(/\s+/g, ' ')}" → Turn the sheet around → Edge 4, L 95, clear; made, both steps ok`,
+    `channel 115 × 60, gooseneck reversed: "${measured.collision.replace(/\s+/g, ' ')}" → Turn the sheet around → Edge 4, the line 95 from it, L ${measured.turnedL} off bend 1's flange, clear; made, both steps ok`,
   );
 
   // 6. Dragging line A of an offset (BT-2 follow-up): the station's facts on

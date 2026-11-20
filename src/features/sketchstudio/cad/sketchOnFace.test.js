@@ -330,7 +330,8 @@ describe('sketch snapping', () => {
 describe('sketch tools', () => {
   it('draws a typed rectangle: first corner, then width Tab height Enter', () => {
     let state = run(createSketchState(), { type: 'tool', tool: 'rect' }, { type: 'click', point: [0, 0] });
-    expect(sketchFields(state)).toEqual(['Width', 'Height']);
+    // HD-2 (docs/sketch-studio-hand-drawing.md §6.2): the second corner takes X, Y as well.
+    expect(sketchFields(state)).toEqual(['Width', 'Height', 'X', 'Y']);
     state = run(
       state,
       { type: 'move', point: [30, 20] },
@@ -428,8 +429,9 @@ describe('sketch tools', () => {
     expect(state.points).toEqual([]);
     state = run(state, { type: 'select', id: 'e1' }, { type: 'delete' });
     expect(state.entities.map((e) => e.id)).toEqual(['e2']);
+    // HD-1: a delete is a history step, so Undo last brings e1 back in place.
     state = sketchReducer(state, { type: 'undo' });
-    expect(state.entities).toEqual([]);
+    expect(state.entities.map((e) => e.id)).toEqual(['e1', 'e2']);
     // Ids continue after reopening a sketch.
     expect(createSketchState([{ id: 'e7', type: 'circle', c: [0, 0], r: 1 }]).nextId).toBe(8);
     expect(hitEntity([{ id: 'c', type: 'circle', c: [0, 0], r: 10 }], [10.2, 0], 0.5)).toBe('c');

@@ -10,6 +10,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { useImperativeHandle } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import CadWorkspace from './CadWorkspace.jsx';
+import { forgetPunch } from './brakeMemory.js';
 import { emptyModel } from './model.js';
 import { sheetMetalPart } from './ShopPanels.jsx';
 // The whole workspace renders in each test: allow for the full suite's load.
@@ -60,6 +61,8 @@ beforeEach(() => {
   vi.stubGlobal('requestAnimationFrame', (callback) => frames.push(callback));
   vi.stubGlobal('cancelAnimationFrame', () => {});
 });
+// The punch stays in the machine (docs/sketch-studio-shop-punches.md §5.5): each test starts from the default.
+beforeEach(() => forgetPunch());
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -222,15 +225,17 @@ it('lists every part to bend under the head, steps through them and keeps the pu
   expect(viewport.props.brakeView).toMatchObject({ instanceId: 'small-1' });
   expect(punch()).toBe('gooseneck-88');
 
-  // Leave press brake, Bend again: the defaults (the carry ended with the station).
+  // Leave press brake, Bend again: the carry ended with the station, but the punch stays in the
+  // machine (docs/sketch-studio-shop-punches.md §5.5): the visit starts with the last hit's punch.
   act(() => fireEvent.click(within(brake()).getByRole('button', { name: 'Leave press brake' })));
   station('Bend');
-  expect(punch()).toBe('straight-88');
+  expect(punch()).toBe('gooseneck-88');
 });
 
 it('starts from the defaults after another station in between, and shows no queue for one part', () => {
   const harness = setup(cutParts(), 'big-1');
   station('Bend');
+  // A punch chosen with no hit made is not remembered (shop punches §5.5: written when a hit is committed).
   act(() => fireEvent.change(within(brake()).getByLabelText('Punch'), { target: { value: 'gooseneck-88' } }));
   // Back to Cut, then the job board's Bend on another part: a real leave in between.
   act(() => fireEvent.click(within(brake()).getByRole('button', { name: 'Back: Cut' })));

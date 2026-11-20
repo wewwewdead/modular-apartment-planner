@@ -11,9 +11,11 @@ import {
   distanceToSegment,
   entityKeyPoints,
   entitySegments,
+  explode,
   roundPoint,
   samePoint,
 } from './sketchProfile.js';
+import { distanceToPrimitive, primitives } from './sketchIntersect.js';
 import { createLinearDimension, createRadialDimension, linearLine, linearValue } from './sheetAnnotations.js';
 import { formatMm } from './marks.js';
 
@@ -34,16 +36,20 @@ const unit = (a) => {
   const l = len(a);
   return l > 1e-12 ? scale(a, 1 / l) : null;
 };
-const sidesOf = (entity) => entitySegments(entity);
+// An entity's straight pieces (sketchProfile.js explode): a line itself, a
+// rectangle's sides, a slot's or a polygon's or a rounded rectangle's sides.
+const sidesOf = (entity) =>
+  entity.type === 'circle'
+    ? []
+    : explode(entity)
+        .filter((piece) => piece.type === 'line')
+        .map((piece) => [piece.a, piece.b]);
 
-// The straight pieces a second click can read square to: lines, rectangle
-// sides and the model edges in the plane (never a circle or an arc).
+// The straight pieces a second click can read square to: lines, the sides of
+// rectangles, slots and polygons, and the model edges in the plane (never a
+// circle or an arc).
 function straightSegments(entities, boundary) {
-  return [
-    ...entities.filter((e) => e.type === 'line').map((e) => [e.a, e.b]),
-    ...entities.filter((e) => e.type === 'rect').flatMap(sidesOf),
-    ...boundary,
-  ];
+  return [...entities.flatMap(sidesOf), ...boundary];
 }
 
 // Foot of the perpendicular from `p` onto segment ab, or null when it falls off the segment.
@@ -65,17 +71,32 @@ function circleOf(entity) {
   }
   return null;
 }
+// Every circle an entity's round parts lie on: a circle's, an arc's, a slot's
+// two ends, a rounded rectangle's corners (HD-3, §7.1).
+const circlesOf = (entity) =>
+  entity.type === 'circle' || entity.type === 'arc'
+    ? [circleOf(entity)].filter(Boolean)
+    : explode(entity)
+        .filter((piece) => piece.type === 'arc')
+        .map(circleOf)
+        .filter(Boolean);
 const sameCircle = (circle, dimension) =>
   samePoint(circle.center, dimension.center, ATTACH_MM) && Math.abs(circle.radius - dimension.radius) <= ATTACH_MM;
 
 // What a click on an entity's body dimensions: a line its length, a
-// rectangle the side under the cursor, a circle its diameter, an arc its radius.
+// rectangle's, a slot's or a polygon's side under the cursor, a circle its
+// diameter, an arc (a slot's end, a rounded corner too) its radius.
 function wholeEntity(entity, raw) {
   if (entity.type === 'line') return { type: 'span', source: 'line', from: entity.a, to: entity.b };
-  if (entity.type === 'rect') {
-    const sides = sidesOf(entity);
-    const side = sides.reduce((best, s) => (distanceToSegment(raw, s) < distanceToSegment(raw, best) ? s : best));
-    return { type: 'span', source: 'side', from: roundPoint(side[0]), to: roundPoint(side[1]) };
+  if (entity.type !== 'circle' && entity.type !== 'arc') {
+    const pieces = explode(entity);
+    if (!pieces.length) return null;
+    const near = (piece) =>
+      piece.type === 'line' ? distanceToSegment(raw, [piece.a, piece.b]) : arcDistance(raw, piece);
+    const piece = pieces.reduce((best, p) => (near(p) < near(best) ? p : best));
+    if (piece.type === 'line')
+      return { type: 'span', source: 'side', from: roundPoint(piece.a), to: roundPoint(piece.b) };
+    entity = piece;
   }
   const circle = circleOf(entity);
   if (!circle) return null;
@@ -86,6 +107,10 @@ function wholeEntity(entity, raw) {
     mode: entity.type === 'arc' ? 'radius' : 'diameter',
   };
 }
+
+// How far a point is from an arc piece (its exact curve).
+const arcDistance = (point, piece) =>
+  primitives(piece).reduce((d, p) => Math.min(d, distanceToPrimitive(point, p)), Infinity);
 
 /**
  * What a Dimension tool click takes (§3.2). `point` / `kind` are the snapped
@@ -207,16 +232,16 @@ export function hitDimension(dimensions = [], point, tolerance, size = 1) {
   return best?.id || null;
 }
 
-// An end hangs on an entity when it is one of its key points or lies on it.
+// An end hangs on an entity when it is one of its key points or lies on it
+// (its drawn polyline, or the exact curve of a round part).
 function attached(point, entity) {
   if (entityKeyPoints(entity).some((k) => samePoint(k.point, point, ATTACH_MM))) return true;
   if (entity.type === 'circle' && Math.abs(len(sub(point, entity.c)) - entity.r) <= ATTACH_MM) return true;
-  return entitySegments(entity).some((s) => distanceToSegment(point, s) <= ATTACH_MM);
+  if (entitySegments(entity).some((s) => distanceToSegment(point, s) <= ATTACH_MM)) return true;
+  return primitives(entity).some((p) => p.type !== 'segment' && distanceToPrimitive(point, p) <= ATTACH_MM);
 }
-const measures = (dimension, entity) => {
-  const circle = circleOf(entity);
-  return Boolean(circle) && sameCircle(circle, dimension);
-};
+// A radial dimension measures an entity when it reads one of its round parts.
+const measures = (dimension, entity) => circlesOf(entity).some((circle) => sameCircle(circle, dimension));
 
 /**
  * The dimensions left once `removed` (one entity) is gone from the drawing:

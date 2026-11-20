@@ -4,7 +4,8 @@
 //  1. control: the right edge, L 29, 90° → hit; L 11, 90° → refused (the ram,
 //     as the screenshot); Undo the first hit;
 //  2. L 29 at 30° → hit; L 11, 90° → clear → hit;
-//  3. L 29 again → the note "This is bend 1's line …", "Bend on to (°)" reads
+//  3. bend 1's line again, L 19.07 (since SG-1 read off the lip's skin; it was
+//     the flat 29) → the note "This is bend 1's line …", "Bend on to (°)" reads
 //     90, "now 30° · this hit adds 60°"; (4.) typed 20° → §4.1's refusal, nothing
 //     committed; back to 90° → the pedal: the stroke starts at 30° (side view),
 //     ends at 90°; three rows, the third a bend-on row; the folded size equals
@@ -190,10 +191,14 @@ try {
   assert.deepEqual(await rowTexts(panel), ['1 · UP 30° R1.28', '2 · UP 90° R1.28']);
   checks.push('L 29 at 30° → hit; L 11 at 90° → clear → hit: rows "1 · UP 30° R1.28", "2 · UP 90° R1.28"');
 
-  // 3. L 29 again: bend 1's line.
-  await pick(station, 29);
+  // 3. Bend 1's line again. The lip (bend 2, 11 from the right edge) now stands between the edge
+  // and it, so since SG-1 (docs/sketch-studio-skin-gauge.md §4.4) L is read off the lip's skin:
+  // 29 − (11 + BA/2 − (r + t)) = 19.07 (it was the flat 29 before; typed now, 29 is off the lip).
+  await pick(station, 19.07);
   const note = panel.getByRole('note', { name: 'Bend on', exact: true });
   await expect(note).toHaveText("This is bend 1's line: it stands at 30°. This hit bends it on.");
+  await expect(panel.locator('dd[aria-label="Backgauge L"]')).toHaveText("19.07 mm · off bend 2's flange");
+  await expect(panel.locator('dd[aria-label="Line on the flat blank"]')).toHaveText('29 mm from edge 2');
   const onTo = panel.getByLabel('Bend on to (°)', { exact: true });
   await expect(onTo).toHaveValue('90');
   await expect(panel.getByRole('note', { name: 'Bend on note', exact: true })).toHaveText(
@@ -210,7 +215,7 @@ try {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await sideView.screenshot({ path: `${directory}/03-side-view-at-30.png` });
   checks.push(
-    `L 29 again → note "${await note.innerText()}", "Bend on to (°)" 90, "now 30° · this hit adds 60°", Flip off; sheet in the die at 30°; Bend at y ${measured.reach1366.bend} of 768`,
+    `bend 1's line again, L 19.07 off the lip's skin (SG-1) → note "${await note.innerText()}", "Bend on to (°)" 90, "now 30° · this hit adds 60°", Flip off; sheet in the die at 30°; Bend at y ${measured.reach1366.bend} of 768`,
   );
 
   // 4. Bend on to 20° on a bend at 30°: refused, nothing committed.

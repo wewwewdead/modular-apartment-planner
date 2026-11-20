@@ -29,8 +29,11 @@ import {
   BACKGAUGE,
   DEFAULT_PUNCH,
   DIES,
+  FINGER_FACE,
   MACHINES,
   dieOf,
+  hornOf,
+  hornWords,
   machineOf,
   maxBendAngle,
   minLeg,
@@ -53,6 +56,10 @@ export const STROKE_GAP = 40;
 // Between the hits of one round bend the ram lifts only this far (round-bend
 // spec §6, its own choice): the sheet is slid one pitch on, not taken out.
 export const BUMP_GAP = 10;
+// Horn sections (docs/sketch-studio-punch-library.md §4.3): a horn stands under
+// what overhangs it, so the box is slid onto the horns with the punch held
+// only this far above the sheet, and off again along the punch.
+export const HORN_GAP = 5;
 // A bend phase never runs quicker than this, so the wings are seen rising.
 export const MIN_BEND_MS = 350;
 // The sheet turned over on the die (brake flip tooling §5.1, view only): about half a second.
@@ -201,6 +208,197 @@ export function gaugeReading(fold, bendId, edge) {
   return { distance: Math.abs(dot(sub(mid, bend.a), bend.n)), piece: piece.id };
 }
 
+// ---------------------------------------------------------------- gauging off a flange (docs/sketch-studio-skin-gauge.md)
+const SEPARATED = 'The gauge edge is on a face another bend separates from this one.';
+// How finely a bend zone's arc is walked for the reading (§4.2), before the extreme is refined.
+const ARC_SAMPLES = 24;
+const REFINE_STEPS = 40;
+
+/**
+ * The machine frame of a flat punch line (§4.2): the frame brakeFrame poses a
+ * flat bend in, built straight from the matrix of the face the line lies in.
+ * `matrix`: that face's flat → posed matrix; `point`: a flat point on the
+ * line; `back`: the flat unit normal toward the side that goes to the
+ * backgauge; `up`: the bend is made up (down: the sheet turned over).
+ * Returns the posed → machine matrix (column-major): X along the line, Y to
+ * the backgauge, Z up, the die top (the sheet's underside) at Z = 0.
+ */
+export function flatLineFrame(matrix, point, back, up, thickness) {
+  const P = transformPoint(matrix, [point[0], point[1], up ? 0 : thickness]);
+  const Y = unit3(turn(matrix, [back[0], back[1], 0]));
+  const Z = unit3(turn(matrix, [0, 0, up ? 1 : -1]));
+  const X = cross3(Y, Z);
+  return [X[0], Y[0], Z[0], 0, X[1], Y[1], Z[1], 0, X[2], Y[2], Z[2], 0, -dot3(X, P), -dot3(Y, P), -dot3(Z, P), 1];
+}
+
+/**
+ * How far back of the punch line the part reaches where the backgauge
+ * fingers stand (§4.2): the largest machine Y of its material with Z within
+ * the finger's stop face (−below … +above). `posed`: poseFold's result;
+ * `toMachine`: posed → machine (flatLineFrame, brakeFrame's matrix). The
+ * material: every piece's outline at both skins and its edge faces, clipped
+ * to the face's band (a leaning flange meets the finger's top corner part way
+ * along an edge), and every bend zone at both skins (bendArcPoint; a flange
+ * past 90° is stopped on its arc), refined to its extreme. Across the whole
+ * bed. The largest Y, or null when nothing behind the line is in the band.
+ */
+export function skinReach(posed, toMachine, { face = FINGER_FACE } = {}) {
+  const t = posed.thickness;
+  const lo = -face.below,
+    hi = face.above;
+  const inBand = (p) => p[2] >= lo - 1e-9 && p[2] <= hi + 1e-9;
+  let best = -Infinity;
+  const consider = (p) => {
+    if (inBand(p) && p[1] > best) best = p[1];
+  };
+  // A straight run p → q clipped to the band: its ends inside, or where it crosses a level.
+  const segment = (p, q) => {
+    consider(p);
+    consider(q);
+    for (const level of [lo, hi]) {
+      const dz = q[2] - p[2];
+      if (Math.abs(dz) < 1e-12) continue;
+      const f = (level - p[2]) / dz;
+      if (f > 0 && f < 1) consider([0, p[1] + (q[1] - p[1]) * f, level]);
+    }
+  };
+  for (const piece of posed.pieces) {
+    const M = multiplyMatrices(toMachine, piece.matrix);
+    const skins = [0, t].map((z) => piece.outer.map(([x, y]) => transformPoint(M, [x, y, z])));
+    const n = piece.outer.length;
+    for (let i = 0; i < n; i++) {
+      for (const ring of skins) segment(ring[i], ring[(i + 1) % n]);
+      segment(skins[0][i], skins[1][i]);
+    }
+  }
+  for (const bend of posed.bends) {
+    const tr = bend.transform;
+    const F = multiplyMatrices(toMachine, bend.fixedMatrix);
+    for (const interval of bend.intervals)
+      for (const s of interval)
+        for (const z of [0, t]) {
+          const at = (fraction) => transformPoint(F, bendArcPoint(bend, t, tr, s, fraction, z));
+          const fractions = Array.from({ length: ARC_SAMPLES + 1 }, (_, k) => k / ARC_SAMPLES);
+          const points = fractions.map(at);
+          points.forEach(consider);
+          for (let k = 0; k < ARC_SAMPLES; k++) {
+            // Where the arc crosses a level of the band, found on the arc itself.
+            for (const level of [lo, hi]) {
+              const [p, q] = [points[k], points[k + 1]];
+              if ((p[2] - level) * (q[2] - level) >= 0) continue;
+              let [a, b] = [fractions[k], fractions[k + 1]];
+              const below = p[2] < level;
+              for (let step = 0; step < REFINE_STEPS; step++) {
+                const middle = (a + b) / 2;
+                if (at(middle)[2] < level === below) a = middle;
+                else b = middle;
+              }
+              const crossing = at((a + b) / 2);
+              consider([crossing[0], crossing[1], level]);
+            }
+          }
+          // The arc's own extreme back (a flange past 90° reaches back on its arc): refined between its neighbours.
+          for (let k = 1; k < ARC_SAMPLES; k++) {
+            const [p, m, q] = [points[k - 1], points[k], points[k + 1]];
+            if (!(m[1] >= p[1] && m[1] >= q[1]) || !inBand(m)) continue;
+            let [a, b] = [fractions[k - 1], fractions[k + 1]];
+            for (let step = 0; step < REFINE_STEPS; step++) {
+              const c = a + (b - a) / 3,
+                d = b - (b - a) / 3;
+              if (at(c)[1] < at(d)[1]) a = c;
+              else b = d;
+            }
+            consider(at((a + b) / 2));
+          }
+        }
+  }
+  return best > 1e-9 ? best : null;
+}
+
+/**
+ * The made bends a gauge edge's fingers can stand against (§4.4): bends of
+ * `fold` parallel to `edge`, in front of it, whose material runs across the
+ * edge's span (those on the way from the edge's face inward), `exclude`
+ * (ids: a pending stroke's own) left out. Nearest the edge first: [{ bendId,
+ * d (flat mm from the edge to its line), half (its allowance / 2) }].
+ */
+export function gaugeStops(fold, edge, { exclude = [] } = {}) {
+  if (!fold?.bends?.length || !edge) return [];
+  const span = [dot(edge.a, edge.d), dot(edge.b, edge.d)].sort((p, q) => p - q);
+  return fold.bends
+    .filter((bend) => !exclude.includes(bend.id) && Math.abs(edge.d[0] * bend.u[1] - edge.d[1] * bend.u[0]) < 1e-6)
+    .map((bend) => ({ bend, d: dot(sub(bend.a, edge.a), edge.inward) }))
+    .filter(
+      ({ bend, d }) =>
+        d > 1e-6 &&
+        bend.intervals.some((interval) => {
+          const ends = interval.map((s) => dot([bend.a[0] + bend.u[0] * s, bend.a[1] + bend.u[1] * s], edge.d));
+          return Math.min(Math.max(...ends), span[1]) - Math.max(Math.min(...ends), span[0]) > 1e-6;
+        }),
+    )
+    .sort((p, q) => p.d - q.d)
+    .map(({ bend, d }) => ({ bendId: bend.id, d, half: bend.allowance / 2 }));
+}
+
+/**
+ * The backgauge reading for a hit (§4.2): gaugeReading's answer wherever it
+ * has one (the flat distance, the same code path); where the edge is on a
+ * face another bend separates from the line, the skin of the formed part:
+ * the part posed as it stands when the hit is made (`angles`, an armed try's
+ * other bends included; the stroke's own bends flat), in the machine frame of
+ * the flat line (the side holding the edge to the back), read by skinReach.
+ * { distance, stop: { bendId } (the nearest bend standing between the edge
+ * and the line: its flange is what the fingers stop), flat (the line's flat
+ * distance from the edge) } or gaugeReading's { distance: null, reason }.
+ */
+export function brakeReading(fold, bendId, edge, { angles = {}, face = FINGER_FACE } = {}) {
+  const own = gaugeReading(fold, bendId, edge);
+  if (own.distance != null || own.reason !== SEPARATED) return own;
+  const ids = Array.isArray(bendId) ? bendId : [bendId];
+  const posed = poseFold(fold, { ...angles, ...Object.fromEntries(ids.map((id) => [id, 0])) });
+  const bend = posed.bends.find((b) => b.id === ids[0]);
+  const flat = dot(sub(bend.a, edge.a), edge.inward);
+  // The line's own flat frame (the stroke's bends are flat: one plane), the edge's side to the back.
+  const back = dot(sub(edge.a, bend.a), bend.n) < 0 ? [-bend.n[0], -bend.n[1]] : bend.n;
+  const frame = flatLineFrame(bend.fixedMatrix, bend.a, back, bend.direction === 'up', posed.thickness);
+  const distance = skinReach(posed, frame, { face });
+  if (distance == null)
+    return { distance: null, reason: 'Nothing of the part stands where the backgauge fingers are.' };
+  const standing = gaugeStops(posed, edge, { exclude: ids }).filter(
+    (s) => s.d < flat - 1e-6 && posed.bends.find((b) => b.id === s.bendId).posedAngle > 1e-9,
+  );
+  return { distance, stop: standing.length ? { bendId: standing.at(-1).bendId } : null, flat };
+}
+
+/**
+ * The take-up of a stop (§4.3): how much farther the punch line lies from
+ * the gauge edge on the flat blank than the backgauge reads, for a line in
+ * the face just beyond the made bend `bendId` (the part as made, every step
+ * done; `up`: which side up the hit is made). flat − reads, the same
+ * anywhere in that face. 0 when the face or the reading is not there.
+ */
+export function stopTakeUp(fold, edge, bendId, { up = true, face = FINGER_FACE } = {}) {
+  const bend = fold.bends.find((b) => b.id === bendId);
+  if (!bend || !edge) return 0;
+  const d = dot(sub(bend.a, edge.a), edge.inward);
+  // A point just past the zone, in the middle of the bend's longest run.
+  const [s0, s1] = bend.intervals.reduce((best, i) => (i[1] - i[0] > best[1] - best[0] ? i : best));
+  const s = (s0 + s1) / 2;
+  const sign = dot(bend.n, edge.inward) >= 0 ? 1 : -1;
+  const past = bend.allowance / 2 + Math.min(0.5, fold.thickness / 2);
+  const point = [
+    bend.a[0] + bend.u[0] * s + bend.n[0] * sign * past,
+    bend.a[1] + bend.u[1] * s + bend.n[1] * sign * past,
+  ];
+  const piece = fold.pieces.find((p) => pointInRing(point, p.outer) && !p.holes.some((h) => pointInRing(point, h)));
+  if (!piece) return 0;
+  const posed = poseFold(fold);
+  const matrix = posed.pieces.find((p) => p.id === piece.id).matrix;
+  const frame = flatLineFrame(matrix, point, [-edge.inward[0], -edge.inward[1]], up, posed.thickness);
+  const reads = skinReach(posed, frame, { face });
+  return reads == null ? 0 : d + past - reads;
+}
+
 // ---------------------------------------------------------------- the hit's checks
 const dieName = (d) => `${d.name} die`;
 // The largest catalogue die of the same angle whose minimum leg a flat leg
@@ -339,7 +537,14 @@ export function assessBend(fold, bendId, { machine, gauge = null, dieAuto = fals
   const under = cover
     ? { punch: (cover.punch.length / cover.bend) * length, die: (cover.die.length / cover.bend) * length }
     : null;
-  const limit = under ? toolingLimit(punch, die, under.punch, under.die) : toolingLimit(punch, die, length);
+  // Horn sections (docs/sketch-studio-punch-library.md §4.3): the punch with
+  // them is rated at HORN.load of its own kN/m (the catalogue's 50 %).
+  // A horn of another length (§4.8) is read by hornOf and named by its words.
+  const horn = punch.round ? null : hornOf(resolved.horns);
+  const horns = Boolean(horn);
+  const rated = horns ? { ...punch, load: punch.load * horn.load } : punch;
+  const punchName = horns ? `${punch.name} punch with ${hornWords(resolved.horns)}` : `${punch.name} punch`;
+  const limit = under ? toolingLimit(rated, die, under.punch, under.die) : toolingLimit(rated, die, length);
   // A round bend (round-bend spec §5.4) is checked per hit: one hit's angle
   // for the die and the legs, one hit's ram depth with the springback shared
   // equally (the springback readout stays the whole bend's).
@@ -360,17 +565,18 @@ export function assessBend(fold, bendId, { machine, gauge = null, dieAuto = fals
   // `fix` (docs/sketch-studio-shop-floor.md §4.6): when the remedy is one
   // station field, { label, session } — the brake session patch that applies it.
   const refuse = (code, message, fix = null) => refusals.push(fix ? { code, message, fix } : { code, message });
+  // Both 30° punches named (docs/sketch-studio-shop-punches.md §5.6): the shop's A 103 and the catalogue's.
   const widest = maxBendAngle(die);
   if (hitAngle > widest + 1e-9)
     refuse(
       'angle',
-      `The ${dieName(die)} bends to at most ${fmt(widest)}° (180° − its ${die.angle}° V). For ${fmt(resolved.angle)}° fit an acute 30° die (V8, V12 or V16) and the acute punch.`,
+      `The ${dieName(die)} bends to at most ${fmt(widest)}° (180° − its ${die.angle}° V). For ${fmt(resolved.angle)}° fit an acute 30° die (V8, V12 or V16) and a 30° punch (the A 103 or the Acute 30°).`,
     );
   // A radius punch's round nose has no flank angle to compare (round-bend spec §12.4).
   if (!punch.round && punch.angle > die.angle + 1e-9)
     refuse(
       'punch-angle',
-      `The ${punch.name} punch does not go into the ${dieName(die)}: a punch may not be blunter than its die. Use the Acute 30° punch.`,
+      `The ${punch.name} punch does not go into the ${dieName(die)}: a punch may not be blunter than its die. Use a 30° punch: the A 103 or the Acute 30°.`,
     );
   const inLine = ids.length > 1 && angles ? strokeInLine(fold, ids, angles) : null;
   if (inLine) refuse('not-in-line', inLine);
@@ -426,23 +632,32 @@ export function assessBend(fold, bendId, { machine, gauge = null, dieAuto = fals
       wider ? { label: `Use the ${dieName(wider)}`, session: { die: wider.key } } : null,
     );
   }
+  // Horn sections the weaker tool (punch library §4.3): named, and the punch without them is the remedy.
+  const half = (punchWeaker) => (horns && punchWeaker ? " (half the punch's)" : '');
+  const otherPunch = (punchWeaker) =>
+    horns && punchWeaker
+      ? ', or bend it without horn sections'
+      : punch.load < 1000
+        ? ' or the straight punch (1000 kN/m)'
+        : '';
   if (force > limit + 1e-9 && !under) {
-    const weaker = punch.load <= die.load ? `${punch.name} punch` : dieName(die);
+    const punchWeaker = rated.load <= die.load;
+    const weaker = punchWeaker ? punchName : dieName(die);
     refuse(
       'tooling-load',
-      `This hit needs ${fmt(force)} kN; the ${weaker} is rated ${Math.min(punch.load, die.load)} kN/m, ${fmt(limit)} kN over ${fmt(length)} mm. Use a wider die${punch.load < 1000 ? ' or the straight punch (1000 kN/m)' : ''}.`,
+      `This hit needs ${fmt(force)} kN; the ${weaker} is rated ${Math.min(rated.load, die.load)} kN/m${half(punchWeaker)}, ${fmt(limit)} kN over ${fmt(length)} mm. Use a wider die${otherPunch(punchWeaker)}.`,
     );
   } else if (force > limit + 1e-9) {
     // A shortened tool carries the same force on less of it (§3.3): the one that gives way first.
-    const punchFirst = punch.load * under.punch <= die.load * under.die;
+    const punchFirst = rated.load * under.punch <= die.load * under.die;
     const [weaker, load, over, key] = punchFirst
-      ? [`${punch.name} punch`, punch.load, under.punch, 'punchTrim']
+      ? [punchName, rated.load, under.punch, 'punchTrim']
       : [dieName(die), die.load, under.die, 'dieTrim'];
     const shortened = (resolved[key] || 0) > 0;
     const tool = punchFirst ? 'punch' : 'die';
     refuse(
       'tooling-load',
-      `This hit needs ${fmt(force)} kN; the ${weaker} is rated ${load} kN/m, ${fmt(limit)} kN over the ${fmt(over)} mm of it under the bend. ${shortened ? `Make the ${tool} longer (fit it to the bend) or use a wider die` : `Use a wider die${punch.load < 1000 ? ' or the straight punch (1000 kN/m)' : ''}`}.`,
+      `This hit needs ${fmt(force)} kN; the ${weaker} is rated ${load} kN/m${half(punchFirst)}, ${fmt(limit)} kN over the ${fmt(over)} mm of it under the bend. ${shortened ? `Make the ${tool} longer (fit it to the bend) or use a wider die` : `Use a wider die${otherPunch(punchFirst)}`}.`,
       shortened ? { label: `Fit the ${tool} to the bend`, session: { [key]: null } } : null,
     );
   }
@@ -474,6 +689,20 @@ export function assessBend(fold, bendId, { machine, gauge = null, dieAuto = fals
           fit,
         );
     }
+  // Horn sections stand at both ends of every run (punch library §4.1): a run
+  // shorter than two horns and the shortest section between them has no room.
+  if (horns) {
+    const runs = cover ? cover.punch.runs : strokeTooling(fold, ids, { bed: press.bed }).punch;
+    // Per horn (§4.8): 50, 60, 70, 120 mm; "Horn sections" for the standard, "30 mm horn sections" else.
+    const least = 2 * horn.reach + SHORTEST_SECTION;
+    const shortest = runs.length ? Math.min(...runs.map(([a, b]) => b - a)) : 0;
+    const words = hornWords(resolved.horns);
+    if (runs.length && shortest < least - 1e-9)
+      refuse(
+        'horn-short',
+        `${words[0].toUpperCase()}${words.slice(1)} need a bend of at least ${least} mm: this one is ${fmt(shortest)} mm.`,
+      );
+  }
   if (span > press.bed + 1e-9) {
     const bigger = Object.values(MACHINES).find((m) => m.bed >= span);
     refuse(
@@ -718,6 +947,9 @@ export function brakeFrame(
     span: [s0 - sMid, s1 - sMid],
     ranges: trimRuns(fitted, bend.punchTrim, half),
     dieRanges: trimRuns(fitted, bend.dieTrim, half),
+    // Horn sections at the ends of the punch's runs (punch library §4.2), only when set.
+    // The record's own value (§4.8): true (the standard) or a horn's key.
+    ...(hornOf(bend.horns) ? { horns: bend.horns } : {}),
     // A round bend: its hit in the die, and the flat s its section is cut at (sheetSection).
     ...(mini ? { hit: mini.hit, hits: bend.steps, s: sMid } : {}),
   };
@@ -839,6 +1071,32 @@ export function strokeTooling(fold, bendIds, { bed = null } = {}) {
       m.intervals.map((iv) => iv.map((s) => along(m, s) - sMid).sort((p, q) => p - q)).sort((p, q) => p[0] - q[0]),
     ),
   };
+}
+
+/**
+ * The fitted tooling runs of a punch line before it is folded (brake tool
+ * length §9.4, TL-2): `toolingRuns` on the line's own frame (`line.a`, along
+ * a → b) with the segments it keeps (lineSegments of `polygon`, less the
+ * indexes `skip`), measured from the middle of them as strokeTooling's
+ * `fitted` is, so the lengths are the ones the hit has once folded. `fold`:
+ * the part's fold (its `blank`, else `polygon`, is the material the runs
+ * read). [[x0, x1], …] in order; [] when the line keeps no material.
+ */
+export function lineTooling(fold, polygon, line, skip = []) {
+  if (!line) return [];
+  const length = Math.hypot(line.b[0] - line.a[0], line.b[1] - line.a[1]);
+  if (!(length > 1e-6)) return [];
+  const u = [(line.b[0] - line.a[0]) / length, (line.b[1] - line.a[1]) / length];
+  const kept = lineSegments(polygon, line)
+    .filter((s) => !skip.includes(s.index))
+    .map(({ s0, s1 }) => [s0, s1]);
+  if (!kept.length) return [];
+  const s0 = Math.min(...kept.map((i) => i[0])),
+    s1 = Math.max(...kept.map((i) => i[1]));
+  const sMid = (s0 + s1) / 2;
+  return toolingRuns({ blank: fold?.blank || polygon }, { a: line.a, u }, kept)
+    .map(([a, b]) => [a - sMid, b - sMid])
+    .sort((p, q) => p[0] - q[0]);
 }
 
 /**

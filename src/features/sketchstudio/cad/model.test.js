@@ -6,7 +6,9 @@ import {
   emptyModel,
   findSheetFor,
   normalizeModel,
+  removeBlanklessParts,
   removeInstance,
+  removeInstances,
   removeEmptyParts,
   removePart,
   removeSheets,
@@ -14,6 +16,7 @@ import {
   validateReferences,
 } from './model.js';
 import { sheetSubject } from './groups.js';
+import { normalizeSketchDocument } from '../utils/sketchDocumentUtils.js';
 
 const mark = (id, from = 'a', to = 'b') => ({
   id,
@@ -211,6 +214,106 @@ it('removeEmptyParts keeps an empty part that another part still uses as a Boole
     ),
   };
   expect(removeEmptyParts(model)).toBe(model);
+});
+
+// RC-1 (docs/sketch-studio-cut-pick.md §3): a bent tray cut from its outline,
+// two blanks of it, a board grouped with the first blank, the tray's flat
+// pattern sheet.
+function trayOnBoard() {
+  const assembly = emptyModel().sheets[0];
+  const tray = {
+    id: 'tray',
+    name: 'Tray',
+    features: [
+      {
+        id: 'sm',
+        type: 'sheetmetal',
+        sketchId: 'blank',
+        thickness: 1.5,
+        stock: 'spcc',
+        bends: [{ id: 'b1', edge: 'front', distance: 20, angle: 90, direction: 'up' }],
+      },
+    ],
+  };
+  return normalizeModel({
+    ...emptyModel(),
+    sketches: [
+      { id: 'blank', name: 'Tray outline', plane: 'XY', profile: { type: 'rectangle', width: 200, height: 100 } },
+    ],
+    parts: [
+      tray,
+      { id: 'board', name: 'Board / plate', features: [{ id: 'box', type: 'box', width: 6, depth: 4, height: 1 }] },
+    ],
+    instances: [
+      { id: 't1', partId: 'tray', name: '', groupId: 'g', position: [0, 0, 0], rotation: [0, 0, 0] },
+      { id: 't2', partId: 'tray', name: '', position: [300, 0, 0], rotation: [0, 0, 0] },
+      { id: 'w', partId: 'board', name: '', groupId: 'g', position: [0, 0, 0], rotation: [0, 0, 0] },
+    ],
+    groups: [{ id: 'g', name: 'Kiosk', parentId: null }],
+    sheets: [assembly, { ...assembly, id: 'tray-flat', title: 'Tray', partId: 'tray', views: ['flat'] }],
+  });
+}
+
+it('removeInstances takes a sheet-metal part with its last blank, and only then', () => {
+  const model = trayOnBoard();
+  // One of two blanks: the part stays.
+  const one = removeInstances(model, ['t2']);
+  expect(one.parts.map((p) => p.id)).toEqual(['tray', 'board']);
+  expect(one.instances.map((i) => i.id)).toEqual(['t1', 'w']);
+  // The last blank: the part and its flat sheet go, the group of one is dissolved, the sketch stays.
+  const none = removeInstances(one, ['t1']);
+  expect(none.parts.map((p) => p.id)).toEqual(['board']);
+  expect(none.instances.map((i) => [i.id, i.groupId ?? null])).toEqual([['w', null]]);
+  expect(none.groups).toEqual([]);
+  expect(none.sheets.map((s) => s.id)).toEqual(['assembly-sheet']);
+  expect(none.sketches).toBe(model.sketches);
+  expect(validateReferences(none)).toEqual([]);
+  // Both at once: the same result in one call (one commit, one Undo).
+  expect(removeInstances(model, ['t1', 't2'])).toEqual(none);
+  // Pure: the input is unchanged.
+  expect(model.parts).toHaveLength(2);
+  expect(model.instances).toHaveLength(3);
+});
+
+it('removeInstances keeps every other part, and a sheet-metal part another part uses as a Boolean tool', () => {
+  const base = trayOnBoard();
+  // A board with no instance keeps its definition, as removeInstance always did.
+  expect(removeInstances(base, ['w']).parts.map((p) => p.id)).toEqual(['tray', 'board']);
+  const tool = {
+    ...base,
+    parts: base.parts.map((p) =>
+      p.id === 'board' ? { ...p, features: [...p.features, { id: 'cut', type: 'subtract', toolPartId: 'tray' }] } : p,
+    ),
+  };
+  const next = removeInstances(tool, ['t1', 't2']);
+  expect(next.parts.map((p) => p.id)).toEqual(['tray', 'board']);
+  expect(next.instances.map((i) => i.id)).toEqual(['w']);
+  // Hardware is not this rule's (the Remove instance button keeps its own, remove-part §3.3).
+  const bolts = boltsOnBoard();
+  expect(removeInstances(bolts, ['bolt1', 'bolt2', 'bolt3']).parts.map((p) => p.id)).toEqual(['board', 'bolt']);
+});
+
+it('removeBlanklessParts drops a saved sheet-metal part with no blank on load, and gives the outline back', () => {
+  const base = trayOnBoard();
+  // A file saved with the bug: the tray's instances gone, its definition and flat sheet left.
+  const saved = { ...removeInstance(removeInstance(base, 't1'), 't2') };
+  expect(saved.parts.map((p) => p.id)).toEqual(['tray', 'board']);
+  const loaded = removeBlanklessParts(saved);
+  expect(loaded).toEqual(removePart(saved, 'tray'));
+  expect(loaded.sketches).toBe(saved.sketches);
+  // Through the document loader too.
+  const document = normalizeSketchDocument({ id: 'doc', name: 'Tray', entities: [], model: saved });
+  expect(document.model.parts.map((p) => p.id)).toEqual(['board']);
+  expect(document.model.sketches.map((s) => s.id)).toEqual(['blank']);
+  // Nothing to remove: the same object; a Boolean tool stays.
+  expect(removeBlanklessParts(base)).toBe(base);
+  const tool = {
+    ...saved,
+    parts: saved.parts.map((p) =>
+      p.id === 'board' ? { ...p, features: [...p.features, { id: 'cut', type: 'subtract', toolPartId: 'tray' }] } : p,
+    ),
+  };
+  expect(removeBlanklessParts(tool)).toBe(tool);
 });
 
 // Phase P (docs/sketch-studio-angle-bar.md §2.1, §2.3–2.5): the angle's

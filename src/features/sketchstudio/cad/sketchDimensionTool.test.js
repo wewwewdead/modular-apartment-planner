@@ -33,8 +33,11 @@ const dimensioning = (entities = [rect, hole], dimensions = []) =>
   sketchReducer(createSketchState(entities, {}, dimensions), { type: 'tool', tool: 'dimension' });
 
 describe('the Dimension tool', () => {
-  it('is the last sketch tool, with no HUD fields', () => {
-    expect(SKETCH_TOOLS.at(-1)).toEqual(['dimension', 'Dimension']);
+  // After 3-point arc (BR-1's Relief now follows it: docs/sketch-studio-bend-relief.md §3.2).
+  // HD-3 (docs/sketch-studio-hand-drawing.md §7.5): Slot and Polygon join Draw after 3-point arc.
+  // HD-4 (§8.1): the Edit tools (Trim … Offset) come after Polygon and before Dimension.
+  it('is the sketch tool after the Draw and Edit tools (… Polygon, then Trim … Offset), with no HUD fields', () => {
+    expect(SKETCH_TOOLS[SKETCH_TOOLS.findIndex(([tool]) => tool === 'offset') + 1]).toEqual(['dimension', 'Dimension']);
     expect(sketchFields(dimensioning())).toEqual([]);
   });
 
@@ -127,9 +130,10 @@ describe('the Dimension tool', () => {
   it('selects and deletes a dimension, one thing selected at a time', () => {
     const kept = { id: 'd4', type: 'linear', from: [0, 0], to: [300, 0], orientation: 'horizontal', offset: -20 };
     let state = run(createSketchState([rect], {}, [kept]), { type: 'select', id: 'e1' });
-    expect(state).toMatchObject({ selectedId: 'e1', selectedDimensionId: null });
+    // HD-1: the selection is a set of ids (`selectedIds`, docs/sketch-studio-hand-drawing.md §5.1).
+    expect(state).toMatchObject({ selectedIds: ['e1'], selectedDimensionId: null });
     state = sketchReducer(state, { type: 'select', dimensionId: 'd4' });
-    expect(state).toMatchObject({ selectedId: null, selectedDimensionId: 'd4' });
+    expect(state).toMatchObject({ selectedIds: [], selectedDimensionId: 'd4' });
     state = sketchReducer(state, { type: 'escape' });
     expect(state.selectedDimensionId).toBe(null);
     state = run(state, { type: 'select', dimensionId: 'd4' }, { type: 'delete' });
@@ -188,17 +192,15 @@ describe('the Dimension tool', () => {
     expect(undo(state)).toBe(state);
   });
 
-  it('undoes on a reopened sketch: the last entity, then the last dimension', () => {
+  // HD-1 (docs/sketch-studio-hand-drawing.md §5.2): Undo last steps back
+  // through this session's history only; on a sketch just reopened nothing
+  // has been done, so it changes nothing (it used to take the last entity).
+  it('does nothing on a reopened sketch until something is done', () => {
     const free = { id: 'd1', type: 'linear', from: [-50, -50], to: [-50, 250], orientation: 'vertical', offset: -20 };
-    let state = createSketchState([rect, hole], {}, [free]);
-    state = sketchReducer(state, { type: 'undo' });
-    expect(state.entities).toEqual([rect]);
-    state = sketchReducer(state, { type: 'undo' });
-    expect(state.entities).toEqual([]);
-    expect(state.dimensions).toEqual([free]);
-    state = sketchReducer(state, { type: 'undo' });
-    expect(state.dimensions).toEqual([]);
+    const state = createSketchState([rect, hole], {}, [free]);
     expect(sketchReducer(state, { type: 'undo' })).toBe(state);
+    expect(state.entities).toEqual([rect, hole]);
+    expect(state.dimensions).toEqual([free]);
   });
 
   it('refuses to finish dimensions with no drawing', () => {

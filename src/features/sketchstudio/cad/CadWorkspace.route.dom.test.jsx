@@ -11,6 +11,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { useImperativeHandle } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import CadWorkspace from './CadWorkspace.jsx';
+import { forgetPunch } from './brakeMemory.js';
 import { emptyModel, normalizeModel } from './model.js';
 import { sheetMetalPart } from './ShopPanels.jsx';
 import { sheetMetalControlBox } from './shopExamples.js';
@@ -77,6 +78,8 @@ beforeEach(() => {
     // No storage: the disclosure starts closed anyway.
   }
 });
+// The punch stays in the machine (docs/sketch-studio-shop-punches.md §5.5): each test starts from the default.
+beforeEach(() => forgetPunch());
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();

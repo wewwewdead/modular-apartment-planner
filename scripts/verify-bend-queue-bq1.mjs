@@ -10,7 +10,7 @@
 // "1 bend", "1 of 3 bent", Next part the accent → Next part: part 2 with the
 // punch still in, bent → both copies folded in the view → row 3, bent →
 // "Every part is bent." → part 1 painted: its Finished card with the strip
-// above it, Next part from there → Leave press brake, Bend again: the default
+// above it, Next part from there → Leave press brake, Bend again: the last hit's (shop punches §5.5), not the chosen
 // punch → the job sheet's Sheets to buy against the laser's Sheet use → the
 // replay's cut scenes read as sentences (§7.7) → a fresh workspace: one part,
 // no strip; a second single cut with the camera not moved lands clear of the
@@ -330,14 +330,18 @@ try {
     'Sketch 1 painted → Bend → row 1: its Finished card ("Bending is done…") with the strip above it, the row "1 bend · painted"; Next part → Sketch 1 · 2 on the brake',
   );
 
-  // 6. The carry ends with the station: a punch chosen, Leave press brake, Bend again → the default punch.
-  await choosePunch('gooseneck-88');
+  // 6. The carry ends with the station: a punch chosen, Leave press brake, Bend again → not that punch. Since
+  // docs/sketch-studio-shop-punches.md §5.5 the visit starts with the last hit's punch (the gooseneck, made above),
+  // remembered on this computer, rather than the default.
+  await choosePunch('straight-88-tall');
   await brake.getByRole('button', { name: 'Leave press brake', exact: true }).click();
   await shopStation('Bend');
   await onBrake('Sketch 1 · 2');
-  await expect(punch).toHaveValue(defaultPunch);
+  await expect(punch).toHaveValue('gooseneck-88');
   await brake.getByRole('button', { name: 'Leave press brake', exact: true }).click();
-  checks.push(`gooseneck chosen, Leave press brake, Bend again → the default punch (${defaultPunch}): the carry ended`);
+  checks.push(
+    `tall straight chosen (no hit), Leave press brake, Bend again → the last hit's punch (gooseneck-88, not ${defaultPunch}): the carry ended, the punch stays in the machine`,
+  );
 
   // 8. Job sheet: Sheets to buy reads the laser station's Sheet use.
   await shopMore('Job sheet');

@@ -470,15 +470,21 @@ export function typedL(text) {
 /**
  * Esc on a finger drag (§6.2, state-machines rule 4): the session patch that
  * puts the line back as it was before the drag. The drag's new L reset the
- * segments, the turn and the trims (brakeStation.js brakePatch: a new line);
+ * segments and the turn (brakeStation.js brakePatch: a new line; since TL-2
+ * the trims stay, re-derived from a held length);
  * a patch naming `skip` is not a new line, so this restores them exactly.
+ * `seated` (tight bends §7.4 (f)) goes back with the line, so the note
+ * does (undefined for a session that never seated). `stop` (skin gauge
+ * §4.5) goes back with L: the L is read off it.
  */
 export const fingerRestore = (session) => ({
   distance: session.distance,
+  stop: session.stop,
   skip: session.skip || [],
   turned: Boolean(session.turned),
   punchTrim: session.punchTrim ?? null,
   dieTrim: session.dieTrim ?? null,
+  seated: session.seated,
 });
 
 const fmtMm = (value, digits = 2) => Number(Number(value).toFixed(digits)).toString();
@@ -502,7 +508,11 @@ const lowerFirst = (text) => `${text[0].toLowerCase()}${text.slice(1)}`;
  * against its gauge edge. Elsewhere they are scenery and say why (a two-point
  * line, turned around with nothing to gauge, an offset's hit gauged for its
  * other line or off the opposite edge). `station`: brakeStation(). { offered,
- * L (the station's reading), flange (legsText of the hit, or null), why }.
+ * L (the station's reading), flange (legsText of the hit, or null), why };
+ * with a bend-on hit pending (tight bends §7.4 (f)) also `on` (its bend
+ * number) and, where the line seated, `from` (the L asked for, which the
+ * fingers were dragged to). Neither key is there otherwise. Gauged off a
+ * made flange (skin gauge §4.7): `off`, that bend's number (absent otherwise).
  */
 export function fingerOffer(station, session) {
   if (!station || station.error) return NO_FINGERS;
@@ -523,11 +533,27 @@ export function fingerOffer(station, session) {
         : `Set for ${lowerFirst(first?.line || 'the other line')} of the offset: type L in the panel`,
     };
   }
-  return { offered: true, L, flange: pending.offset ? null : legsText(pending.readouts, 'moving'), why: null };
+  const own = {
+    offered: true,
+    L,
+    flange: pending.offset ? null : legsText(pending.readouts, 'moving'),
+    why: null,
+    ...(station.gauge?.stop ? { off: station.gauge.stop.number } : {}),
+  };
+  if (!pending.again) return own;
+  const from = session?.seated?.number === pending.again.number ? session.seated.from : null;
+  return { ...own, on: pending.again.number, ...(from != null ? { from } : {}) };
 }
 
-/** The readout by the cursor while the fingers are dragged: `L 187 mm · flange 113.45`. */
-export const fingerReadout = (L, flange) => `L ${fmtMm(L, 1)} mm${flange ? ` · flange ${flange}` : ''}`;
+/**
+ * The readout by the cursor while the fingers are dragged: `L 187 mm ·
+ * flange 113.45`; with `on` (a bend number, tight bends §7.4 (f): the line
+ * seated on that bend) `L 29 mm · on bend 1`, L where the fingers stand;
+ * with `off` (skin gauge §4.7: gauged off that bend's flange) `L 30 mm · off
+ * bend 1 · flange 51.07`.
+ */
+export const fingerReadout = (L, flange, on = null, off = null) =>
+  `L ${fmtMm(L, 1)} mm${off != null ? ` · off bend ${off}` : ''}${on != null ? ` · on bend ${on}` : flange ? ` · flange ${flange}` : ''}`;
 
 // The machine's parts that name themselves on approach and do nothing else (§6.3).
 export const MACHINE_NAMES = Object.freeze({

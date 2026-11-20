@@ -103,7 +103,8 @@ describe('the gooseneck section (§4.2)', () => {
       Object.values(PUNCHES)
         .filter((p) => !punchSymmetric(p))
         .map((p) => p.key),
-    ).toEqual(['gooseneck-88', 'gooseneck-88-deep']);
+      // The shop's four (docs/sketch-studio-shop-punches.md §5.1) are asymmetric too.
+    ).toEqual(['a101', 'a102', 'a103', 'a108', 'gooseneck-88', 'gooseneck-88-deep']);
     const tools = toolingSections({
       machine,
       punch: punchOf('gooseneck-88'),
@@ -175,12 +176,15 @@ describe('a return flange only a gooseneck clears (§4.4 item 2)', () => {
       ]),
       rect(130, 60),
     );
-    // A 60 flange sits deeper in the deep gooseneck's throat: lifted by its neck within the 40 mm.
-    expect(check(deeper, 'b2', { punch: 'gooseneck-88-deep', gaugePoint: [130, 30] }).hit).toMatchObject({
-      tool: 'punch',
-      phase: 'return',
-    });
-    expect(check(deeper, 'b2', { punch: 'gooseneck-88', gaugePoint: [130, 30] }).hit).toBeNull();
+    // A 60 flange sits deeper in the deep gooseneck's throat: lifted straight, its neck would
+    // catch it within the 40 mm. Since docs/sketch-studio-shop-punches.md §5.3 the part is
+    // taken off along a slant when the straight lift is caught: it comes off toward the operator.
+    const deep = check(deeper, 'b2', { punch: 'gooseneck-88-deep', gaugePoint: [130, 30] });
+    expect(deep.hit).toBeNull();
+    expect(deep.takeOff).toBe(-15);
+    const goose = check(deeper, 'b2', { punch: 'gooseneck-88', gaugePoint: [130, 30] });
+    expect(goose.hit).toBeNull();
+    expect(goose.takeOff).toBeNull();
   });
 });
 
@@ -206,18 +210,23 @@ describe('the station: Reverse punch, the advice as a fix, the picker (§4.2, §
     expect(punchReversed(session({ reverse: true }))).toBe(false);
     expect(punchReversed(session({ punch: 'gooseneck-88', reverse: true }))).toBe(true);
   });
-  it('offers the gooseneck on the collision card, and one click makes the hit pass', () => {
+  it('offers the first punch in the rack that clears on the collision card, and one click makes the hit pass', () => {
+    // Shop punches §5.4: every sharp punch is tried in rack order, the shop's own first; the A 101 clears.
     const station = brakeStation({ model: channel, session: session() });
     expect(station.pending.collision.hit).toMatchObject({ tool: 'punch' });
     expect(station.pending.collision.fix).toEqual({
-      label: 'Use the gooseneck punch',
-      session: { punch: 'gooseneck-88', reverse: false },
+      label: 'Use the A 101 punch',
+      session: { punch: 'a101', reverse: false },
     });
     const fixed = brakeStation({ model: channel, session: session(station.pending.collision.fix.session) });
     expect(fixed.pending.refusals).toEqual([]);
     expect(fixed.pending.collision.hit).toBeNull();
     // The view draws the punch the session holds, the right way round.
-    expect(fixed.view).toMatchObject({ punch: 'gooseneck-88', reverse: false });
+    expect(fixed.view).toMatchObject({ punch: 'a101', reverse: false });
+    // The catalogue gooseneck clears it too, as before.
+    expect(
+      brakeStation({ model: channel, session: session({ punch: 'gooseneck-88' }) }).pending.collision.hit,
+    ).toBeNull();
   });
   it('turns a reversed gooseneck round when that is what clears, and says so', () => {
     const reversed = brakeStation({ model: channel, session: session({ punch: 'gooseneck-88', reverse: true }) });
@@ -234,15 +243,17 @@ describe('the station: Reverse punch, the advice as a fix, the picker (§4.2, §
       session: { punch: 'gooseneck-88-deep', reverse: false },
     });
   });
-  it('offers the tall straight punch when the flange swings into the punch holders and clears under its taller clamps', () => {
-    // A 48 flange on a 60 web: its edge rises into the holders over the straight punch.
+  it('offers a taller punch when the flange swings into the punch holders and clears under its taller clamps', () => {
+    // A 48 flange on a 60 web: its edge rises into the holders over the straight punch. Shop
+    // punches §5.4: the rack is tried in order and the A 101 (95 mm) clears first.
     const box = modelOf(128, [{ a: [48, -1], b: [48, 61] }]);
     const station = brakeStation({ model: box, session: session() });
     expect(station.pending.collision.hit).toMatchObject({ tool: 'holder' });
     expect(station.pending.collision.fix).toEqual({
-      label: 'Use the tall straight punch',
-      session: { punch: 'straight-88-tall', reverse: false },
+      label: 'Use the A 101 punch',
+      session: { punch: 'a101', reverse: false },
     });
+    expect(brakeStation({ model: box, session: session({ punch: 'a101' }) }).pending.collision.hit).toBeNull();
     expect(
       brakeStation({ model: box, session: session({ punch: 'straight-88-tall' }) }).pending.collision.hit,
     ).toBeNull();

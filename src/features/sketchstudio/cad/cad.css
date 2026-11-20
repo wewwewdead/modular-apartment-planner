@@ -635,6 +635,51 @@
   font-size: 11px;
   line-height: 1.6;
 }
+/* The Sketching panel (docs/sketch-studio-hand-drawing.md §8.0 item 3): what is
+   in hand now, then Keys, Points and numbers, Selecting and changing, closed. */
+.cad-workspace .cad-sketch-now h4 {
+  margin: 4px 0 3px;
+  color: #14558f;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.cad-sketch-now ul,
+.cad-sketch-help ul {
+  margin: 0;
+  padding-left: 16px;
+  color: #5b6c7c;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.cad-sketch-help {
+  margin-top: 6px;
+  font-size: 11px;
+}
+.cad-sketch-help summary {
+  cursor: pointer;
+  color: #2f4152;
+  font-weight: 600;
+  padding: 2px 0;
+}
+.cad-sketch-keys {
+  display: grid;
+  grid-template-columns: 6.5em 1fr;
+  gap: 1px 10px;
+  margin: 4px 0 0;
+}
+.cad-sketch-keys div {
+  display: contents;
+}
+.cad-sketch-keys dt {
+  color: #14558f;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.cad-sketch-keys dd {
+  margin: 0;
+  color: #5b6c7c;
+}
 .cad-json-editor label {
   font-size: 10px;
   color: #718091;
@@ -787,13 +832,13 @@
    at 1600 px too), so the note follows it instead of a fixed top. */
 .cad-sketch-top {
   position: absolute;
-  top: 10px;
+  top: 8px;
   left: 10px;
-  right: 130px;
+  right: 126px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
+  gap: 4px;
   pointer-events: none;
   z-index: 2;
 }
@@ -803,19 +848,22 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
+  gap: 3px 4px;
+  padding: 3px 8px;
   background: #ffffffe6;
   border: 1px solid #c9d3dd;
   border-radius: 5px;
   font-size: 11px;
+  /* Compact (docs/sketch-studio-hand-drawing.md §3.3): the bar wraps to two
+     rows at 1366 × 768, and with its row it stays within a fifth of the view. */
+  line-height: 1.2;
 }
 .cad-sketch-toolbar strong {
   margin-right: 6px;
   color: #14558f;
 }
 .cad-sketch-toolbar button {
-  padding: 4px 8px;
+  padding: 3px 7px;
 }
 .cad-sketch-toolbar button[aria-pressed='true'] {
   background: #d7e8f5;
@@ -825,6 +873,50 @@
 .cad-sketch-toolbar input {
   width: 58px;
   padding: 3px 5px;
+}
+/* The bar's groups (docs/sketch-studio-hand-drawing.md §3.3): each wraps as
+   one piece, its small label first, a hairline before it. */
+.cad-sketch-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 6px;
+  border-left: 1px solid #dbe3ea;
+}
+.cad-sketch-group small {
+  color: #6a7b8b;
+  font-size: 10px;
+  margin-right: 1px;
+}
+/* The Relief tool's options under the bar (docs/sketch-studio-bend-relief.md
+   §3.3): the bar's look, one short row that wraps with it. */
+.cad-sketch-options {
+  pointer-events: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 3px 8px;
+  line-height: 1.2;
+  background: #ffffffe6;
+  border: 1px solid #c9d3dd;
+  border-radius: 5px;
+  font-size: 11px;
+}
+.cad-sketch-options label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cad-sketch-options input {
+  width: 58px;
+  padding: 3px 5px;
+}
+.cad-sketch-options select {
+  padding: 2px 4px;
+}
+.cad-sketch-options-sheet {
+  color: #2f4152;
 }
 .cad-sketch-status {
   position: absolute;
@@ -859,7 +951,8 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  max-width: 260px;
+  /* Two boxes and the line under an "=" or "@" entry (HD-2's pairs, §6.2). */
+  max-width: 320px;
   padding: 6px 8px;
   background: #ffffff;
   border: 1px solid #246e9a;
@@ -880,13 +973,107 @@
 .cad-sketch-hud input.is-active {
   border-color: #246e9a;
 }
+/* The HUD's pairs (docs/sketch-studio-hand-drawing.md §6.2): one row each; the
+   pair not typed in is greyed, showing what the typed one gives. */
+.cad-sketch-hud-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  flex-basis: 100%;
+}
+/* A pair's two boxes side by side: each box the HUD's box width (the
+   expression wrapper would otherwise size the box to its text). */
+.cad-sketch-hud-row .cad-expression {
+  width: 74px;
+}
+.cad-sketch-hud input.is-derived {
+  background: #eef1f4;
+  color: #6a7b8b;
+}
+/* The status line's counts with something to fix: a button that opens Check (§6.5). */
+.cad-sketch-status .cad-sketch-status-check {
+  pointer-events: auto;
+  padding: 2px 6px;
+  font: inherit;
+  color: #a33b12;
+  background: #fff2ea;
+  border: 1px solid #e2a07f;
+  border-radius: 3px;
+  cursor: pointer;
+}
+/* Check (§6.5): lower left over the view, above the status line, at most 40 %
+   of the view's height; its list scrolls. */
+.cad-sketch-check {
+  position: absolute;
+  left: 10px;
+  bottom: 60px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(440px, calc(100% - 20px));
+  max-height: 40%;
+  padding: 6px 8px;
+  background: #ffffff;
+  border: 1px solid #c9d3dd;
+  border-radius: 5px;
+  box-shadow: 0 3px 10px #1b2b3a2e;
+  font-size: 11px;
+  color: #2f4152;
+}
+.cad-sketch-check-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cad-sketch-check-head button,
+.cad-sketch-check li button {
+  padding: 2px 6px;
+}
+.cad-sketch-check ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  min-height: 0;
+}
+.cad-sketch-check li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  border-top: 1px solid #edf1f4;
+}
+.cad-sketch-check li.is-focused {
+  background: #fdf0ee;
+}
+.cad-sketch-check .cad-sketch-check-place {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: #a3271f;
+  cursor: pointer;
+}
+.cad-sketch-check p {
+  margin: 0;
+  color: #4d5f70;
+}
 .cad-sketch-hud small {
   flex-basis: 100%;
   color: #6a7b8b;
 }
+/* A refused slot, polygon or corner radius, by the cursor (HD-3, §7.2). */
+.cad-sketch-hud small.cad-sketch-hud-refusal {
+  color: #a33b12;
+}
 /* The Dimension tool's box (docs/sketch-studio-sketch-dimensions.md §3.4): a
    readout in the mark purple, never in the way of the click it describes. */
 .cad-sketch-hud.is-readout {
+  /* CadSketcher.jsx READOUT_ROOM reckons with this width. */
+  max-width: 260px;
   pointer-events: none;
   border-color: #8a3fc6;
   gap: 2px 6px;
@@ -902,6 +1089,46 @@
   border: 1px solid #e2a07f;
   border-radius: 4px;
   font-size: 11px;
+}
+/* The selection's row (§5.3): the note, one entity's numbers, Delete selected;
+   an edit's refusal or note stands in it. */
+/* Narrower than the Relief row: a line's six boxes, its note and Delete
+   selected stay on one line at 1366 × 768. */
+.cad-sketch-selection-row {
+  gap: 4px 5px;
+  padding: 3px 6px;
+}
+.cad-sketch-selection-row label {
+  gap: 2px;
+}
+.cad-sketch-selection-row input {
+  width: 50px;
+  padding: 3px 4px;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.cad-sketch-selection-row input::-webkit-inner-spin-button,
+.cad-sketch-selection-row input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.cad-sketch-selection-row .cad-sketch-selection {
+  padding: 2px 6px;
+}
+.cad-sketch-selection-row .cad-sketch-message {
+  color: #a33b12;
+}
+.cad-sketch-selection-row button {
+  padding: 3px 6px;
+}
+/* The action on the selection under way (HD-3, §7.3): its row button pressed, as the bar's tools. */
+.cad-sketch-selection-row button[aria-pressed='true'] {
+  background: #d7e8f5;
+  border-color: #246e9a;
+  color: #14558f;
+}
+.cad-sketch-selection-row input[type='checkbox'] {
+  width: auto;
 }
 .cad-sketch-summary dl,
 .cad-feature-summary {
@@ -2125,6 +2352,23 @@
 .cad-map-segment {
   cursor: pointer;
 }
+/* A made bend's line to bend it on (tight bends §7.4 (e)): the drawn bend line shows through, lit on hover. */
+.cad-map-bend-on {
+  cursor: pointer;
+}
+.cad-map-bend-on .cad-map-hit {
+  fill: transparent;
+  stroke: none;
+}
+.cad-map-bend-on line {
+  stroke: transparent;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+.cad-map-bend-on:hover line,
+.cad-map-bend-on:focus-visible line {
+  stroke: var(--shop-accent, #287fb3);
+}
 .cad-map-segment line {
   stroke: #2b8a3e;
   stroke-width: 4;
@@ -2552,6 +2796,50 @@
 }
 .cad-workspace .cad-draw .cad-cut-all {
   margin-top: 6px;
+}
+/* Cut's picker (docs/sketch-studio-cut-pick.md §4.2): ticks, Select all /
+   none and the count; a ticked row carries the accent, as Draw's chosen one. */
+.cad-cut-pick-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 2px;
+}
+.cad-workspace .cad-cut-pick-bar button {
+  min-height: 28px;
+  padding: 0 10px;
+}
+.cad-cut-pick-count {
+  margin-left: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--shop-quiet);
+}
+.cad-pick-check {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.cad-pick-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--shop-accent);
+}
+.cad-pick-outlines li.is-picked {
+  background: color-mix(in srgb, var(--shop-accent) 10%, var(--shop-card));
+}
+.cad-pick-outlines li.is-problem small {
+  color: var(--shop-warn);
+}
+.cad-pick-outlines li.is-problem .cad-pick-check {
+  cursor: not-allowed;
+}
+.cad-laser-waiting .cad-link {
+  padding: 0;
 }
 /* The job sheet (JobSheetPanel.jsx, SM-4). */
 .cad-job-product {
@@ -3143,6 +3431,19 @@
   margin-top: 4px;
   font-size: 12px;
 }
+/* Horn sections at the ends (docs/sketch-studio-punch-library.md §4.4), under the punch's length. */
+.cad-blade-horns {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 11px;
+}
+.cad-blade-horns .cad-help {
+  margin: 0;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
 /* A blade's length under its button (docs/sketch-studio-brake-tool-length.md
    §3.4): the field, the note, then Fit to bend, each line of fixed height and
    Fit to bend only hidden while fitted, so a note or the button appearing
@@ -3217,6 +3518,16 @@
   border-color: #c4d0da;
   background: var(--shop-card);
   font-size: 12px;
+}
+/* The picker's two groups of punches (docs/sketch-studio-shop-punches.md §5.2). */
+.cad-blade-group + .cad-blade-group {
+  margin-top: 8px;
+}
+.cad-blade-group h5 {
+  margin: 0 0 4px;
+  color: var(--shop-quiet);
+  font-size: 12px;
+  font-weight: 600;
 }
 .cad-blade-cards {
   display: grid;
@@ -4068,4 +4379,135 @@
   border-color: #c4d0da;
   background: var(--shop-card);
   color: var(--shop-ink);
+}
+/* Flange gaps (docs/sketch-studio-corner-gaps.md §3.2, FlangeGaps.jsx): the
+   summary line, the rows (label, then the figure) and a small flat blank with
+   every row's edge marked, the hovered row's in the accent. The thumbnail
+   keeps inside the sidebar: at most 180 px wide, no fixed grid tracks. */
+.cad-gaps {
+  margin: 8px 0;
+}
+.cad-gaps .cad-gaps-line {
+  margin: 4px 0;
+}
+.cad-gaps-map {
+  display: block;
+  width: 100%;
+  max-width: 180px;
+  max-height: 120px;
+  margin: 4px auto 6px;
+}
+.cad-gaps-blank {
+  fill: #e8edf1;
+  stroke: #6a7b8b;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.cad-gaps-bend {
+  stroke: #9aa8b5;
+  stroke-width: 0.75;
+  stroke-dasharray: 3 2;
+  vector-effect: non-scaling-stroke;
+}
+.cad-gaps-edge line {
+  stroke: var(--shop-warn);
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+.cad-gaps-edge circle {
+  fill: var(--shop-warn);
+}
+.cad-gaps-edge.is-overlap line {
+  stroke: var(--shop-stop);
+}
+.cad-gaps-edge.is-overlap circle {
+  fill: var(--shop-stop);
+}
+.cad-gaps-edge.is-hot line {
+  stroke: var(--shop-accent);
+  stroke-width: 3.5;
+}
+.cad-gaps-edge.is-hot circle {
+  fill: var(--shop-accent);
+}
+.cad-gaps-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cad-gaps-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 6px;
+  border-left: 3px solid transparent;
+  border-radius: 3px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--shop-ink);
+  cursor: default;
+}
+.cad-gaps-list li span {
+  color: var(--shop-quiet);
+  font-size: 11px;
+}
+.cad-gaps-list li strong {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.cad-gaps-list li.is-overlap strong {
+  color: var(--shop-stop);
+}
+.cad-gaps-list li:hover,
+.cad-gaps-list li.is-hot {
+  border-left-color: var(--shop-accent);
+  background: color-mix(in srgb, var(--shop-accent) 8%, var(--shop-card));
+}
+.cad-gaps-list li:focus-visible {
+  outline: 2px solid var(--shop-accent);
+  outline-offset: -2px;
+}
+/* Setting a gap (§4.3, the Sheet metal panel only): each row's way and its
+   Set under the figure, then the Gap field and Set all. Wraps; no grid tracks. */
+.cad-gaps-set {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+.cad-gaps-set select {
+  flex: 1 1 8em;
+  min-width: 0;
+  font-size: 11px;
+}
+.cad-gaps-set button {
+  padding: 1px 8px;
+  font-size: 11px;
+}
+.cad-gaps-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+.cad-gaps-controls .cad-field {
+  flex: 1 1 7em;
+  min-width: 0;
+}
+/* The hovered row's edge(s) on the press brake's flat-blank map. */
+.cad-map-gap {
+  pointer-events: none;
+}
+.cad-map-gap line {
+  stroke: var(--shop-accent, #287fb3);
+  stroke-width: 4;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.cad-map-gap circle {
+  fill: none;
+  stroke: var(--shop-accent, #287fb3);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
 }

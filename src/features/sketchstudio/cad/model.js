@@ -313,6 +313,19 @@ function validateShopRecords(model) {
   const shop = model.fabrication.shop;
   if (!shop || typeof shop !== 'object' || !Object.keys(DEFAULT_SHOP).every((key) => typeof shop[key] === 'string'))
     throw new Error('Invalid shop settings: machine, laser and sheet must be names.');
+  // What the shop holds (docs/sketch-studio-corner-gaps.md §6.1): absent (the
+  // catalogue's), or any of flange / cut / angle as a number of 0 or more.
+  const tolerance = shop.tolerance;
+  if (
+    tolerance !== undefined &&
+    (!tolerance ||
+      typeof tolerance !== 'object' ||
+      Array.isArray(tolerance) ||
+      ['flange', 'cut', 'angle'].some(
+        (key) => key in tolerance && !(Number.isFinite(tolerance[key]) && tolerance[key] >= 0),
+      ))
+  )
+    throw new Error('Invalid shop settings: the tolerances must be numbers of 0 or more.');
 }
 
 // Older saves can retain connections after an instance was deleted. Recover
@@ -478,6 +491,35 @@ export function removePart(model, partId) {
   };
 }
 
+// A sheet-metal part is its blanks on the floor (docs/sketch-studio-cut-pick.md
+// §3, RC-1): with none left it is no part, and while its definition stays the
+// sketch it is cut from is no outline (Draw and Cut never show it again).
+// Any sheet-metal feature makes it one; a part another part uses as a Boolean
+// tool is kept (removePart would refuse it).
+const isSheetPart = (part) => (part?.features || []).some((f) => f.type === 'sheetmetal');
+const isToolPart = (model, partId) =>
+  model.parts.some((p) => p.id !== partId && (p.features || []).some((f) => f.toolPartId === partId));
+function removeBlanklessSheetParts(model, partIds) {
+  return [...partIds].reduce((next, partId) => {
+    const part = next.parts.find((p) => p.id === partId);
+    if (!isSheetPart(part) || next.instances.some((i) => i.partId === partId) || isToolPart(next, partId)) return next;
+    return removePart(next, partId);
+  }, model);
+}
+
+// Removing instances by hand (RC-1 §3: the Remove buttons): each goes
+// through removeInstance, then a sheet-metal part left with no instance goes
+// with its drawing sheets (removePart). Every other part keeps its
+// definition. One result, so the caller's one commit is one Undo.
+export function removeInstances(model, ids) {
+  const gone = new Set(ids);
+  const touched = new Set(model.instances.filter((i) => gone.has(i.id)).map((i) => i.partId));
+  return removeBlanklessSheetParts(
+    [...gone].reduce((next, id) => removeInstance(next, id), model),
+    touched,
+  );
+}
+
 // Drawing sheets (Phase S, docs/sketch-studio-sheet-manager.md §3). A model
 // always keeps one sheet (normalizeModel refuses none); callers disable the
 // action rather than rely on the throw.
@@ -549,6 +591,19 @@ export function removeEmptyParts(model) {
         return next;
       }
     }, model);
+}
+
+// Saves made before RC-1 (docs/sketch-studio-cut-pick.md §3) can hold a
+// sheet-metal part whose last blank was removed: the definition stayed and
+// kept its outline out of Draw and Cut. On load it goes (removePart: its
+// drawing sheets with it); the sketch stays, so the drawing is back. A part
+// that is another part's Boolean tool is kept. Returns the same object when
+// there is nothing to remove.
+export function removeBlanklessParts(model) {
+  return removeBlanklessSheetParts(
+    model,
+    model.parts.map((p) => p.id),
+  );
 }
 
 export function resolveParameters(parameters) {

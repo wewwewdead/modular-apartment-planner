@@ -78,6 +78,382 @@ made from yet, with its size.
 Leave the corner reliefs in the outline wherever two bends meet: the bend
 zones of two bends may not overlap (see the control box example's corners).
 
+### Changing what you drew
+
+Nothing you draw in the sketcher is final. The sketch bar is in groups:
+**Draw** (Line, Rectangle, Center rectangle, Circle, 3-point arc, Slot,
+Polygon: two of them show shorter words in the bar, "Center rect" and "Arc"),
+**Edit** (Trim, Extend, Fillet, Chamfer, Offset), **Mark** (Dimension, Relief,
+Construction), then **Undo last** and **Redo**, then Snap, **Zero**, Look at,
+**Check**, **Finish sketch** and **Cancel sketch** (four of these show shorter
+words to keep the bar to two rows: "Undo", "Snap", "Finish", "Cancel"). See
+"Typing where things go", "Checking the drawing", "Slots, polygons and rounded
+corners", "Moving, copying, mirroring", "Patterns", "Trimming and extending",
+"Rounding and cutting corners" and "Offsetting" below.
+
+The Properties panel says what you have in hand while you sketch: under
+**Now**, the tool, the action or the selection and what its clicks and keys
+do, a few short lines; under it **Keys** (every key of the sketcher), **Points
+and numbers** and **Selecting and changing**, closed until you open them.
+
+**Selecting.** With no tool on, click a line, circle or arc to select it;
+Shift+click (or Ctrl+click) adds another or takes one out again, and a click
+on empty paper clears. To take many at once, press on empty paper and drag a
+box:
+
+- dragged **to the right** (a solid blue box) it takes only what lies wholly
+  inside it;
+- dragged **to the left** (a dashed green box) it takes everything it
+  touches, so a thin box across a row of holes takes the whole row.
+
+Hold Shift while you drag to add to what is already selected. Esc before you
+let go drops the box. **Ctrl+A** selects everything. The note under the bar
+says what is selected ("5 selected: 3 lines, 2 circles"); Delete (or
+**Delete selected**) removes it all in one go, with the dimensions that hung
+on it. Esc clears the selection; with nothing selected Esc finishes the
+sketch, as before.
+
+**Undo and Redo.** **Undo last** (Ctrl+Z) steps back one thing you did: a
+shape drawn, a dimension, a relief, a delete, a changed number, a
+construction switch. **Redo** (Ctrl+Y or Ctrl+Shift+Z) steps forward again.
+Doing something new after an undo drops what you could have redone. Undo only
+goes back through what you did since the sketch opened: on an outline you
+just reopened with Edit, Undo last is greyed until you change something. To
+start an outline again, Ctrl+A and Delete. While a sketch is open these keys
+never undo or redo the model.
+
+**Changing a number.** Select one shape and its numbers stand in the row
+under the bar, X and Y measured from the zero (the sketch origin until you
+move it, see below):
+
+- a line: X1, Y1, X2, Y2, Length and Angle (Length and Angle move end 2;
+  end 1 stays);
+- a rectangle: X, Y of its lower-left corner, Width, Height and the corner
+  Radius (empty or 0: sharp corners);
+- a slot: X, Y of its centre, Length (overall), Width and Angle;
+- a polygon: X, Y of its centre, Sides, Across flats and Angle;
+- a circle: X, Y of its centre and Diameter;
+- an arc: its two ends and its Radius (the ends stay, and it bulges to the
+  same side).
+
+Type the new number and press Enter (or click away). A dimension on that
+shape follows it. A number that cannot be ("A rectangle needs a nonzero width
+and height.", or an arc radius under half the distance between its ends) is
+refused in words in the row and nothing changes. A line end moves on its own:
+the line that met it there stays where it was, and the row says so ("This
+end joins 1 other: it stays.") when that leaves the outline open. Move that
+end too, or Undo last.
+
+**Construction lines.** **Construction** (or the X key) makes guide lines:
+a centre line, a line to measure from. Select shapes and press X and they
+become construction; press X again and they are drawn shapes again. With
+nothing selected, X switches it on for what you draw next (the bar's
+Construction stays pressed and the hint starts "Construction ·"); X again
+switches it off. Construction lines are dashed and orange, snap like any
+other line, can be selected, changed and deleted, and are never part of the
+outline: the laser does not cut them, and the status line counts them apart
+("7 items · 1 construction · closed profile"). They are kept with the sketch:
+Edit brings them back.
+
+### Typing where things go
+
+Every point can be typed instead of clicked, read straight off a drawing.
+After a tool's first click the box by the cursor has two pairs, one row each:
+
+- a **Line**'s next point: **Length**, **Angle** · **X**, **Y**;
+- a **Rectangle**'s second corner: **Width**, **Height** · **X**, **Y** (for a
+  Center rectangle X, Y is the corner);
+- a **Circle**'s size: **Radius** · **Diameter**;
+- every first point, every point of a 3-point arc, and the zero: **X**, **Y**.
+
+Type in either pair: the other pair empties and shows, greyed, what yours
+gives (type X and Y, and Length and Angle show the line you are about to
+draw). A box of your pair left empty takes the cursor's value. Tab runs
+through all the boxes; Enter places the point. A hole is a Circle with its
+centre typed as X, Y and its **Diameter** typed, as a drawing gives it.
+
+**From the last point: @.** Put `@` before a number in X or Y and it is
+measured from the last point you placed, not from the zero: `@25` is 25 to
+the right, `@-5` five down, `@=pitch` a parameter's distance. Each box on its
+own: X `@25` with Y empty is 25 to the right at the cursor's height. The last
+point is the tool's own previous point (a line's last corner, a rectangle's
+first corner); for a new shape it is the last point any tool placed in this
+sketch (a circle's is its centre), so a row of holes is the first hole by X, Y
+and each next one by `@25`, `@0`. The line under the box says the X or Y it
+gives ("= 75"). With nothing placed yet the sketcher says "@ measures from the
+last point: place one first."
+
+**The zero.** **Zero** (the Z key) moves the point every X and Y is measured
+from: click any point the cursor snaps to (a corner, a hole centre, where two
+construction lines cross) or type its X, Y and press Enter. A small crossed
+circle marks it, the status line reads "X … · Y … mm from the zero", the
+selection row and its note ("Circle Ø12 at (10, 20)") are measured from it,
+and the Zero button stays pressed ("Zero at (80, 60): Z to move or reset it").
+Lengths, angles and dimensions never change with it; nothing drawn moves.
+Zero again shows where it is, with **Reset zero** to go back to the sketch
+origin. Moving the zero is not an Undo step. It is kept with the sketch, so
+Edit opens the outline with the zero where you left it.
+
+**Where two lines cross.** The cursor snaps to the exact point where two lines,
+arcs or circles cross ("intersection" in the status line), construction ones
+too: draw two construction lines and put a hole on their crossing.
+
+### Checking the drawing
+
+**Check** in the bar opens a list, at the lower left of the view, of what keeps
+the drawing from being a clean blank. When there is something on it the
+status line's counts become a button ("7 items · open outline · 2 to fix")
+that opens the same list. Each row says what and where (X, Y from the zero),
+and while the list is open a red ring marks each place in the view (larger
+for the row under the pointer or with the focus). Click a row (or press Enter
+on it) to look at its place and select what it is about.
+
+- **Open end**: a line or arc end that meets no other. The row gives the gap
+  to the nearest other end ("Open end at (0, 0.3): 0.3 mm from the nearest
+  other end"); under 0.5 mm, **Close it** moves the end onto the other (a
+  dimension on that end follows). Two open ends facing each other across one
+  gap are one row.
+- **Three or more lines at one corner**: an outline corner joins two.
+- **Two of the same on one place** (a copy drawn twice): **Remove the copy**.
+- **Two lines overlapping** along a stretch.
+- **A cut-out crossing the outline, two cut-outs crossing**, or an open line
+  crossing one; also **a cut-out touching the outline** or **two cut-outs
+  touching** (at a corner, or a circle just meeting a line or another
+  circle: no metal is left between them), and **the outline (or a cut-out)
+  crossing itself**: a figure of eight, or a corner lying on another of its
+  own sides.
+- **A tiny piece**: a line or arc under 0.01 mm, a circle under Ø0.01:
+  **Remove it**.
+- **A shape inside a cut-out**: it is left out of the blank.
+
+Under the rows stand notes: how many separate outlines a finish makes, or
+"Nothing to fix: a closed outline with 68 cut-outs." Every fix is one Undo
+step. Close shuts the list, so do Check again and Esc while you are in it.
+Construction lines are never a problem. Check only tells: Finish works as
+before (an outline that is not closed is kept, and Draw lists it with why).
+Pressing a row brings its place into view with what is around it (at least
+10 mm across), and the rings keep their size on the screen however far you
+zoom.
+
+### Slots, polygons and rounded corners
+
+Three shapes are one thing each, with their own numbers, so a slot stays a
+slot when you move or copy it and you change it by typing a number.
+
+- **Slot** (the S key): click its centre, then the far end's centre, or type
+  its **Length** and **Angle** (or the far end's X, Y). The row under the bar
+  holds its **Width** (5 to start), what **Length is** (overall, tip to tip,
+  or centre to centre) and what the **First click is** (the centre, or one
+  end: then the second click is the other end). A 22 × 5 slot at 30°: S,
+  type X, Y of its centre, then Length 22, Angle 30.
+- **Polygon** (P): click its centre, then the middle of a side, or type its
+  size and **Angle** (0 puts a side at the bottom). The row holds **Sides** (3
+  to 12, 6 to start) and whether the **Size is** across flats or across
+  corners. A hexagon 10 across flats: P, its centre, then 10 and 0.
+- **Rectangle** and Center rectangle: a **Corner radius** in their row rounds
+  all four corners (empty: sharp). It can be at most half the shorter side;
+  more is refused in words by the cursor ("The corner radius can be at most
+  half the shorter side: 12 mm here.").
+
+While you place the second point the shape itself is drawn; a size that
+cannot be (a slot no longer than its width) says why by the cursor and adds
+nothing. Construction (X) marks them like the other shapes. Snap finds a
+slot's centre, end centres, tips and side ends, a polygon's corners and side
+middles, a rounded rectangle's arc centres and where its arcs meet its sides.
+Dimension measures a slot's or polygon's side like a rectangle's, and a slot's
+end or a rounded corner as a radius. Relief on one of them first turns it into
+its lines and arcs, as it does a rectangle. The laser cuts them as drawn.
+
+### Moving, copying, mirroring
+
+Select first, then act: with something selected the row under the bar shows,
+after its numbers, **Move**, **Copy**, **Rotate**, **Mirror** and **Pattern**
+(keys M, K, Q, I and G). With nothing selected these keys say "Select what to
+move first." While one is on its button stays pressed, the row shows its
+options in place of the numbers, the status line says the next step, and Esc
+ends it (the selection stays). A tool's key or button ends it too, and Undo
+last drops it. Each one done is one Undo step.
+
+- **Move** (M): type **ΔX**, **ΔY** and press Enter, and it moves at once. Or
+  click a base point (a corner, a centre), then where it goes: the box by the
+  cursor shows ΔX, ΔY and the target's X, Y (from the zero), a light copy
+  follows the cursor, and Shift keeps the move level or plumb. It snaps to
+  everything that is not moving.
+- **Copy** (K): the same, the original stays; it stays on for more copies
+  from the same base until Esc, and then the copies are the selection. A copy
+  that would lie exactly on a shape already there is left out and counted.
+- **Rotate** (Q): click the centre (or type X, Y), then the angle: typed, or
+  from the cursor's direction about the centre in whole degrees (15° steps
+  with Shift). **Keep the original** turns a copy instead.
+- **Mirror** (I): **Left ↔ right about the zero** and **Top ↔ bottom about
+  the zero** mirror at once: draw a quarter of a part about its centre, mirror
+  it twice. Or move over a line (a construction line, say) and click: the
+  light copy shows the mirror about it. Or click two points for the axis. The
+  original stays unless **Remove the original** is ticked.
+
+What joined the moved shapes stays where it was: Check then shows the open
+ends. Dimensions on a moved shape go with it; copies carry none. A rectangle
+turned by anything but a quarter becomes its four lines (and arcs); slots,
+polygons and circles stay themselves.
+
+**Dragging.** Press on a shape that is already selected and drag: the
+selection goes with the pointer, held by the corner or centre nearest where
+you pressed, snapping to what is not moving (Shift keeps it level or plumb).
+Let go: one Undo step. Esc before you let go puts it all back. A press on a
+shape that is not selected only selects it.
+
+### Patterns
+
+**Pattern** (G) copies the selection in its row:
+
+- **Row**: **Count** (the original included), **Step X**, **Step Y**;
+- **Grid**: **Columns**, **Rows**, **Column step**, **Row step**, and
+  **Stagger every other row** (odd rows shift half a column);
+- **Circle**: the centre (click it in the view, or type its X, Y from the
+  zero; the zero until you do), **Count**, **Total angle** (360: evenly
+  round; less: from where it is to that angle, both ends included). The
+  copies turn with it.
+
+A light copy of every one is drawn while you change the numbers, and the row
+says what Apply will add ("adds 11", or "adds 22 · 2 left out: already
+there"). A count under 1 or a step of zero says why and Apply stays grey.
+**Apply** (or Enter, outside the row's boxes) adds them all as one Undo step;
+the selection stays the original. Over 2 000 new shapes Apply asks first
+("Add 2 400 shapes?": press it again).
+
+### Trimming and extending
+
+The **Edit** group's tools stay on after each click, so you can work along a
+drawing; Esc ends them. None has boxes by the cursor: what a click would do
+is drawn first, and a box by the cursor says it ("Trim 12.5 mm", or why not).
+
+- **Trim** (T): move over a line, arc or circle. The part between the two
+  nearest places where something crosses it (or ends on it) turns red; click
+  and it goes. A part at an end shortens the line; a part in the middle
+  leaves two lines. A circle cut twice or more keeps the rest as one arc. With
+  nothing crossing it the whole line goes ("Nothing crosses it: click removes
+  the whole line"). A rectangle, rounded rectangle, slot or polygon becomes
+  its lines and arcs first, then the side under the cursor is trimmed.
+- **Extend** (E): move near the end of a line or arc: the run to the next
+  line, arc or circle ahead of it is drawn, and the box says how long ("click
+  to extend 8 mm"). A line runs straight on, an arc round its own circle.
+  "Nothing ahead of this end to extend to." when nothing is there; a circle,
+  a rectangle, a slot or a polygon have no end to extend.
+
+Where trimmed pieces meet, their ends are the very same point, so a trimmed
+outline closes. A dimension on a part you trim away goes with it when
+nothing is left under it; every other stays. A dimension on an end you extend
+moves with that end. Construction lines trim and stop an extend like any
+other; the model's edges in the plane do neither.
+
+**A keyhole, worked.** A Ø12 hole with a 6 wide slot running down from it:
+Circle, X 50, Y 70, Diameter 12. Slot: in its row Width 6 and First click
+"one end", then X 50, Y 70, Length 30, Angle −90. Now T, and click four
+times: the circle's bottom between the slot's sides, the slot's round end
+inside the circle, and each of the slot's two sides inside the circle.
+Check reads "Nothing to fix: a closed outline with 1 cut-out." The four
+clicks can go in any order. Box-select the keyhole and Copy it (K, ΔX 100,
+Enter) for a second one.
+
+### Rounding and cutting corners
+
+- **Fillet** (F): its row holds the **Radius** (5 to start). Move to a corner
+  where two lines meet: the arc is drawn and the two short runs it cuts off
+  turn red; click to round it. Both lines are cut back and one arc, tangent to
+  both, joins them. A rectangle's or polygon's corner works too (it becomes its
+  lines first); for all four corners of a rectangle at once its own **Corner
+  radius** is quicker, and the row says so when you are over one.
+- **Chamfer** (H): its row holds the **Distance** (2 to start); both lines are
+  cut back by it and one straight line joins them.
+
+The box by the cursor says what a click does ("Fillet R5", "Chamfer 2") or why
+not, with the numbers: "Point at a corner where two lines meet.", "Fillet
+rounds a corner between two straight lines." (an arc ends there), "More than
+two lines meet here.", "These lines run straight on: there is no corner.",
+"R8 does not fit here: at most R5.19 (the shorter line is 6 mm).", "A 5 mm
+chamfer does not fit here: the shorter line is 4 mm." A line used up exactly
+by the cut goes. Dimensions stay as they were: a size over the sharp corners
+is how drawings give it.
+
+### Offsetting
+
+**Offset** (O): its row holds the **Distance** (5 to start). Click a line, an
+arc, a circle, a rectangle, a slot or a polygon: it is drawn as selected and
+the row names it. Then move to the side the copy goes on (it is drawn there,
+the box says "Offset 5 mm outward") and click. Esc lets go of the chosen one;
+Esc again ends the tool.
+
+- a line: a line of the same length, the distance to that side;
+- an arc: the arc on the same centre between the same angles, its radius
+  more or less by the distance; a circle the same;
+- a rectangle: each side out or in by the distance; sharp corners stay sharp,
+  a corner radius grows or shrinks with it (sharp once it would be nothing);
+- a slot: its width and length more or less by twice the distance; a polygon
+  its across flats the same.
+
+Each copy is one shape with its numbers, and one Undo step. Inward past
+nothing is refused with the numbers ("Offsetting inward by 5 leaves nothing of
+this Ø8 circle."). A run of separate lines is offset one line at a time; a
+whole loop at once is not there yet.
+
+### Bend reliefs
+
+A relief is a small cut where a bend ends beside flat metal. Without one the
+metal tears, bulges, or the flanges will not close. You need one:
+
+- **at an inside corner where two bends meet** (a tray, a box): the two bend
+  zones would share the metal at the corner, and the brake refuses the second
+  bend ("Bend 3 crosses bend 1 …");
+- **beside a tab** (a flange narrower than its edge): with no relief the bend
+  line has to sit exactly on the edge; a line even a little inside the edge
+  bends the whole strip, not the tab. With a slot each side, the line can sit
+  inside the edge and bends the tab alone.
+
+In the sketcher, **Relief** (or the B key) cuts one for you. Move to an
+inside corner of the outline: the relief shows where it will go and the box
+by the cursor says what it is ("Square 4 × 4"). Click, and it is cut into
+the outline's own lines; the tool stays on for the next corner. An outside
+corner needs none, and the box says so.
+
+The shapes, in the row under the sketch bar:
+
+- **Square** — a square centred on the corner, its sides along the edges. It
+  is what most of us draw by hand, and the bends ending on it stay square.
+- **Round** — a round hole centred on the corner. Kinder to the laser and to
+  the metal, but its edge is a curve: every bend that ends on it carries the
+  note "the blank outline crosses the bend zone at an angle …". That note is
+  expected here: the bend still folds.
+- **Obround** — a slot with a round end, continuing the edge you point at
+  (move a little along that edge before you click). It also goes on any
+  straight edge: click the point of the edge where the slot goes, beside a
+  tab.
+- **Rectangular** — the same slot with a square end.
+
+A slot relieves one bend: it is for a tab. At a corner where two bends meet
+use Square or Round; a slot there still leaves the two bend zones sharing
+metal, and the brake refuses the second bend as before.
+
+**Sizes.** Leave a size box empty and it is automatic for the sheet: the
+relief reaches half the bend zone past each bend line, plus 0.5 mm of
+clearance (the same 0.5 mm is how far your bend line may sit off the corner).
+At 1.2 mm SPCC that is a Ø4 round, a 4 × 4 square, a 1.2 × 2 slot or a 1.2 ×
+2.6 obround; the sheet thickness is in the same row (an outline that belongs
+to a cut part sizes for that part's own sheet, and says so: "1.2 mm SPCC
+(this part)"). Type a size to use your own; empty the box and it is
+automatic again. A relief that does not fit (an edge too short for it, a slot
+too near the end of an edge, a cut that would run into another edge) is
+refused in words and nothing changes.
+
+**Undo last** (Ctrl+Z) takes the last relief back and puts the corner as it was
+(**Redo** cuts it again). Once
+the sketch is finished the relief is ordinary lines and arcs of the outline:
+to remove it later, redraw that corner.
+
+Cut the relief before the second bend of a corner is made. A part already cut
+from the outline: **Edit outline** brings you back to the sketcher, cut the
+relief there and finish; the outline is checked against the part's bends as
+for any other edit.
+
 ### Flanged panel
 
 For face frames, covers and trays: you give the finished part, the maker
@@ -156,10 +532,51 @@ blank size, the laser cut length (outline plus every cut-out) and the pierces
 ground under the view centre — and opens the laser on it with the cut already
 running. (The search box's **Cut from sheet** opens Draw.)
 
+### Choosing what to cut
+
+**Cut** on the route bar shows every drawing that is ready to cut whenever
+there is a choice to make — two or more outlines, or one outline beside parts
+already cut. Nothing is ticked yet: you pick.
+
+- **In the list**: tick the outlines to cut. Each ticked row gets its own
+  **Quantity**; untick a row and its number is kept for when you tick it again.
+  **Select all** ticks every outline, **Select none** clears them, and the line
+  beside them counts them ("2 of 5 selected").
+- **In the view**: the drawings lie on the ground, the ticked ones filled. Click
+  anywhere inside a drawing to tick it — its outline and its cut-outs are one
+  thing — and click it again to leave it out. A part standing in front of a
+  drawing takes the click, as it always does. The camera does not move.
+- **Edit** on a row opens that outline in the sketcher; finishing or cancelling
+  brings you back to the list with your ticks, quantities and sheet as they were.
+  An outline the edit leaves open drops off the list (Draw says why).
+- Then choose the one stock and thickness they share and **Cut on the laser**.
+  An outline that makes no blank at that stock says why and cannot be ticked.
+- **Already cut** lists the parts cut so far, how many blanks of each, and their
+  sheet; **Open on the laser** opens the laser on that part.
+
+One outline and no part yet skips the list: Cut opens straight on it, as
+**Cut this** in Draw always does. **Cut all {n} outlines** in Draw opens the
+same list with every outline ticked. On the laser, "3 outlines waiting to be
+cut." with **Cut another outline** goes back to the list, on the sheet you are
+cutting.
+
+### Cutting a part again
+
+A sheet-metal part is its blanks. Remove its last blank (select it, then
+**Remove instance**, or **Remove N parts** for a selection) and the part goes
+with it, bends and all: its drawing is back under **Outlines ready to cut** and
+in Cut's list, ready to cut flat again. One Undo brings the part and its bends
+back. Removing one of several blanks keeps the part. To cut more of a part you
+still have, use **Quantity** on the laser. Files saved before this get their
+drawings back when they are opened.
+
 ### A blank: the laser station
 
 **Cut** on a part that is already a blank opens the laser on it (the search
-box's **Laser** works on the selected part). The laser bed covers the view: the stock
+box's **Laser** works on the selected part). While outlines wait to be cut,
+Cut on the route bar shows their list first and the part under **Already
+cut**; a job board row, **Back** from Bend and **Open on the laser** go
+straight to the laser on the part. The laser bed covers the view: the stock
 sheet at true scale with the blank nested on it in the sketch's own X and Y
 (+Y up, as in the flat DXF). Close-up frames the blanks; Whole sheet shows
 the sheet.
@@ -203,8 +620,9 @@ the sheet (less the 10 mm margin) is refused, naming a sheet that holds it.
 Draw as many outlines as the job needs — several in one sketch, or one
 sketch after another. Each closed outline is its own blank and shows under
 **Outlines ready to cut**. With two or more there, **Cut all {n} outlines**
-takes them all to Cut from sheet together: give each its **Quantity**, take
-out any you do not want now (**Leave out**), choose the one stock and
+takes them all to Cut's list with every one ticked (Cut on the route bar
+opens the same list with none ticked: see **Choosing what to cut**): give each
+its **Quantity**, untick any you do not want now, choose the one stock and
 thickness they share, and **Cut on the laser**. That is one job: every part is
 made at once (one Undo takes it all back), each named after its outline, and
 the laser cuts every blank on the same sheet, nested side by side. An outline
@@ -253,7 +671,9 @@ The punch and the die stay in the machine as you go from part to part, as on
 a real brake; the gauge edge, L, the angle and the rest are set again for
 each part. If the die does not suit the next part's thickness the brake says
 so. Leave the press brake (or go to another station) and the next visit
-starts with the standard tooling again.
+starts with the punch your last hit was made with on this computer, clamped
+the same way round (a radius punch is not kept: it belongs to its bend), and
+the die back on automatic. With no hit made yet it is the Straight 88°.
 
 **One stroke, several bends.** A punch line across several separate tabs (a
 flange notched where a crease crosses it, a comb) bends them all in one
@@ -283,7 +703,9 @@ Automatic first, as a card drawn at one common scale with its numbers
 is for, and — once a punch line is picked — whether this hit clears with it
 ("Clears this hit", or the refusal). A refused tool can still be chosen. The
 picker and the Punch and Die selects under Machine and tooling are the same
-choice; a radius punch is Round · Radius punch either way.
+choice; a radius punch is Round · Radius punch either way. The punches come
+in two groups: **Your shop's punches** (the A 101, A 102, A 103 and A 108,
+below) first, then **Catalogue punches**.
 
 - **Straight 88°** everyday bends; **sharp** thin sheet and a tight inside
   radius; **tall** (H 105) deep boxes, its holders 38.5 mm higher;
@@ -295,20 +717,21 @@ choice; a radius punch is Round · Radius punch either way.
   29 mm on the deep one), so the flange swings into the throat. A plain bend
   clears them too. **Reverse punch** turns a gooseneck round in its clamps,
   the throat to the backgauge (for a flange standing at the back).
-- **A collision card says what was tried.** When the part hits the punch,
-  its holders or the ram, the station tries turning the sheet around and the
-  punch that would make room (the gooseneck; the tall straight punch for the
-  holders) before it advises. The card names a remedy only when the hit
-  really clears with it, each as one click: **Turn the sheet around**, **Use
-  the gooseneck punch** (a reversed gooseneck is first offered **Turn the
-  punch round**). What was tried and does not clear is said plainly, so it
-  is not tried again: "Bend 2: the part hits the punch at 64°. Bend this one
-  earlier (before the flange in the way). Turning the sheet around and the
-  gooseneck punch either way round were tried: neither clears." (a web
-  between two standing flanges: one swings in from each side, a throat takes
-  one). "Bend this one earlier" is general advice, not tried. A step already
-  in the sequence is refused only when both ways round collide, so its card
-  never says to turn the sheet around.
+- **A collision card says what was tried.** When the part hits the punch
+  or its holders, the station tries turning the sheet around, the punch in
+  the machine turned round, then every other punch in the rack in its order
+  (your shop's first, then the catalogue's; each with its room toward you
+  first, then reversed; none blunter than the die), before it advises; for
+  the ram, every taller punch. The card names a remedy only when the hit
+  really clears with it, each as one click: **Turn the sheet around**, **Turn
+  the punch round**, **Use the A 101 punch** (or "…, reversed"). What was
+  tried and does not clear is said plainly, so it is not tried again; past
+  two punches as one item: "Bend 2: the part hits the punch at 34.5°.
+  Turning the sheet around and every other punch in the rack, either way
+  round, were tried: neither clears." (a 20 mm lip on a 10 mm web). "Bend
+  this one earlier" is general advice, said only where the brake found that
+  order. A step already in the sequence is refused only when both ways round
+  collide, so its card never says to turn the sheet around.
 - **The advice follows the line.** While you drag the punch line or type a
   number, the card shows the fact at once ("the part hits the punch at
   64°", an offset's hits and lines); the remedies, and an offset's smallest
@@ -325,8 +748,15 @@ choice; a radius punch is Round · Radius punch either way.
   so it really can meet the sides. Where the line bends several separate
   tabs, the line reads **2 sections · fitted** and the box is **Shorter at
   each end**. The length is kept with the hit made, so a step in the sequence
-  is checked, replayed and listed with it ("Straight 88° punch, 380 mm"); a
-  new line puts both back to fitted.
+  is checked, replayed and listed with it ("Straight 88° punch, 380 mm").
+  **The length stays as you set it**: a new L, the other edge, the fingers
+  dragged, Bend on or the next part in the queue leave the punch and die in
+  the machine at the length they have (380 mm stays 380 mm; on a bend of
+  another length the note says how far short of or past each end it now
+  stands). Only the Length box, **Fit to bend** or a card's button change
+  it, and **Fit to bend** keeps it fitted on the next bends too. With no line
+  picked the box shows the length held, "kept for the next bend". Where the
+  line bends several tabs, the shortening per end stays instead.
   - A tool shorter than the bend leaves the ends unpressed: a note, not a
     refusal ("The punch stops 5.9 mm short of each end of the bend: the ends
     are not pressed and come out a little open"). Refused: a tool under half
@@ -345,11 +775,22 @@ choice; a radius punch is Round · Radius punch either way.
   the ram high enough (the tallest gives 245 mm): this bend needs about 315
   mm" — a 600 × 400 tray with 200 mm sides).
 - **Limits.** The ram goes back up 40 mm above the sheet and the part is
-  taken off there: a flange in the throat higher than the neck rises in
-  those 40 mm is fine; one the neck would lift sooner is refused ("as the
-  ram goes back up"). A throat takes a flange only as deep as it reaches:
-  a U channel with a 50 mm web clears with the gooseneck up to a 60 mm
-  flange; deeper, the flange meets the punch or its holders.
+  taken off there. A return flange standing over a gooseneck's nose would be
+  caught by a straight lift, so the brake draws the part off along the nose
+  the way an operator does: when the straight lift meets the punch, its
+  holders or the ram, it tries the same 40 mm at a slant, 15°, 30° and 45°
+  each way (toward you first), and the first that is free clears the hit.
+  The panel then says "Comes off the punch toward you: the part is drawn off
+  along the nose as the ram lifts." ("… toward the backgauge …" the other
+  way), and the pedal's stroke shows the part sliding off as the ram rises
+  (the bend made is the same). Only when no slant is free is it refused ("as
+  the ram goes back up"). A round bend's hits before its last are lifted
+  straight (the part stays on the punch between them); the approach is
+  always straight down. Sliding a closed section off the punch's end is not
+  modelled. A throat takes a flange only as deep as it reaches: a U channel
+  with a 50 mm web clears with the gooseneck up to a 60 mm flange (with the
+  deep gooseneck too, drawn off toward you); deeper, the flange meets the
+  punch or its holders.
 
 **Flipping, turning and offset bends.** The machine always bends up, so a
 bend down is made with the sheet turned over.
@@ -477,6 +918,141 @@ whatever has been done to it.
 **Unfold** shows a bent part flat with its bend labels ("UP 90° R1.6") and
 folds it back; it is a view only.
 
+### Gauging off a flange
+
+**Backgauge L is what the backgauge reads**, as on the machine: the distance
+from the punch line to whatever of the part the fingers stop. With nothing
+bent between the gauge edge and the line that is the edge, as it always was.
+Once a flange stands between them, it is the **outside face (the skin) of that
+flange**, and the station works out where the line lies on the flat blank.
+
+The usual case: bend at L 20, then bend again on that side. Click the same
+edge and type **30**: the second bend lands 30 from the skin of the first
+flange, as it would at the brake with the flange standing against the
+fingers. Under Machine numbers **Backgauge L** reads "30 mm · off bend 1's
+flange" and **Line on the flat blank** "48.93 mm from edge 4"; the fingers in
+the 3D view and the side view stand against the flange. Typing the flat
+distance 50 (20 + 30) was 1.07 mm out for t 1.2 (the flange's skin is r + t
+from its bend zone, which starts half the allowance from its line): the part
+the simulator made was not the part the machine makes.
+
+Which stop a typed L means is worked out for you, the nearest one that can
+make the line: L 12 is 12 from the edge (a line inside the first flange), L
+20 is bend 1's own line (bend it on), L 22 seats on it (within half the V),
+and L 30 is off the flange. With the second bend made at L 30, L 30 is bend
+2's line again: the same edge and L bend it on, as before.
+
+**Gauge off** (under Gauge edge, while the edge has bends in front of it)
+says it yourself: **Automatic**, **The edge** or **Bend n's flange**. The L
+stays and the line moves. Use it for a reading short enough to also be a
+line inside the first flange: L 15 off bend 1's flange (flat 33.93) is not
+what Automatic takes, so the panel says "L 15 is from the edge, inside bend
+1's flange." with the one click **Gauge off bend 1's flange**. A new edge
+puts Gauge off back to Automatic. Held on a stop the line has left (the edge
+held while the line is past bend 1), the hit is refused: the fingers would
+read the flange there, and the card says what they would read, with the click
+that gauges off it.
+
+The fingers dragged in the 3D view stay on the stop they started on while it
+makes the line; Esc puts L and its stop back. The flat-blank card's punch
+line is where it lies on the blank, as ever. The stop face of a finger is 8
+mm below to 12 mm above the die top: a flange leaning back over the finger
+(bent less than 90°) reads where the finger's top corner meets it. Bend
+records are unchanged (they hold the line on the flat blank); only the
+reading changed.
+
+### Your shop's punches
+
+Your press brake's tool chart (sheet 27 of the knife maker's catalogue,
+taped to the machine) shows four punches; the brake has them in its rack
+with their real sections, first in the picker under **Your shop's punches**.
+Each is 95 mm from tip to clamp shoulder (125 overall with its tang), 500
+kN/m:
+
+| Punch     | Tip       | What it takes                                                                                       |
+| --------- | --------- | --------------------------------------------------------------------------------------------------- |
+| **A 101** | 88°, R0.8 | Channels and return flanges: a return as long as its web, from a 10 mm web.                         |
+| **A 102** | 88°, R0.8 | Tighter returns: a return up to 5 mm longer than its web, from a 10 mm web. A thinner blade.        |
+| **A 103** | 30°, R0.6 | A slim 30° blade: bends past 90° in a 30° die, and narrow parts with a return shorter than the web. |
+| **A 108** | 88°, R0.8 | A heavy swan neck: a return up to 5 mm longer than its web, from a 20 mm web.                       |
+
+**What the chart means.** Each drawing stands on a grid tilted 45° from the
+tip: at the bottom of a 90° bend both legs stand at 45°, so one grid axis
+(0 – 60) runs along the web and the other (0 – 50) square to it, along a
+return flange already bent at the web's end. A grid cell clear of the punch
+body means that return on that web closes round this punch. The brake agrees
+with the chart cell for cell (the lip made first, then the inner bend; a web
+of 10 – 60 mm, a return of 10 – 50 mm, 1.2 mm SPCC), because it takes the
+part off the nose the way you do (the Limits under Blades above); on the
+A 103 it passes two cells that lie within 0.3 mm of the outline.
+
+All four are gooseneck-shaped (not their own mirror image), so **Reverse
+punch** is offered: the room toward the backgauge, for a return standing at
+the back. When a hit with another punch collides, the card tries these four
+first. Bending 45° first and finishing to 90° later is the brake's part-way
+bend, and 45° is the angle it tries first (When a bend will not go in, below);
+with these punches a 15 mm lip on a 15 mm web goes in lip first in one go, and
+when the inner bend was already made with the straight punch the card offers
+to make the lip before it and the inner bend with the A 101.
+
+### Horn sections
+
+A sectioned punch's two end pieces can be **horn (ear) sections**: the tip
+runs on 20 mm past the punch body at each end, 10 mm high at its end and
+rising on an R 25 arc to the body (Tecnostamp's Amada-Promecam drawing). They
+are for the flange between two side walls that something stands over at the
+ends of the bend: an inward lip on each wall, a hem, a wall bent past 90°.
+A straight punch fitted to the bend meets the lips coming down; shortening
+it clears them but leaves the corners unpressed. The horn reaches under the
+lip and presses the bend to its ends.
+
+- **Horn sections at the ends**, under the punch's Length on the Blades row,
+  puts them on (both ends of every run of the punch). The note under it says
+  what they are and their rating: **half the punch's load** (500 kN/m on the
+  straight punch, 250 on the gooseneck), so a hit over that is refused with
+  "… the punch with horn sections is rated … (half the punch's) …" and the
+  remedy to bend it without them. A radius punch has none: the box is off
+  and disabled. A bend shorter than 50 mm (two horns and the shortest
+  section) is refused with horns. They stay on from line to line and go with
+  the punch to the next part, like the punch itself.
+- **Horn length.** With the box on, the **Horn length** select beside it
+  chooses the horn: **20 mm · 10 high (standard)** (ticking the box takes
+  it), **25 mm · 10 high** and **30 mm · 10 high** (AccurTool's Horn A and B:
+  a straight slope from the tip up to the body), and **55 mm · 45 high
+  (special)** (Selmach's special horn, made on request: it only goes under a
+  lip standing more than 50 mm over the sheet). A longer horn reaches further
+  under a wider lip; the punch body and its clamps stand back by the horn's
+  length. The note reads the chosen horn. A bend needs room for two horns
+  and a section: 50 mm with the standard, 60, 70 and 120 with the others.
+- **The collision card** tries them for you: when the punch meets the part
+  at its ends, it tries the horns shortest first and the first that clears
+  is the card's first button: **Use horn sections at the ends** for the
+  standard, **Use 25 mm horn sections at the ends** (30, 55) for the others,
+  before "Shorten the punch to …", which is still true but leaves the corners
+  open. With horns already on and the horn or the body still meeting the
+  part at its ends, it tries the longer ones. A button appears only when the
+  tried hit passes every check: 15 mm lips on 30 mm walls take the standard
+  horn, 19 mm lips the 25, 22 mm lips the 30, 40 mm lips on 60 mm walls the
+  55; 28 mm lips on 30 mm walls, or 40 mm lips on 30 mm walls, no horn clears.
+- **Sliding the box on and off.** A horn stands under what overhangs it, so
+  the box cannot come down onto it from above or be lifted 40 mm off it: you
+  slide it onto the horns with the punch held just over the sheet (the brake
+  checks the horns only 5 mm above the sheet coming down and going back up),
+  and off again along the punch, or spring it off. When that is so the hit
+  says "The part stands over the horns: slide it onto them under the punch,
+  and off again along the punch (or spring it off). The brake checks the
+  stroke, not that." The brake does not check the sliding itself.
+- A step made with them reads "… · horn sections" (with another horn "… ·
+  30 mm horn sections") in the sequence, on the job sheet and in the side
+  view's caption; the 3D view draws the horn to its shape (the arc, the slope
+  or the special's flat top) under the lips and the body standing back.
+- **Limits.** The horn is 10 mm high at its end (the special 45) and rises,
+  so a lip lower than that over the horn is still met ("the part hits the
+  punch's horn"): 15 mm lips on 20 mm walls are, by every horn. Horns at one
+  end only, the 15 mm high horn and moving horns are not in the rack. No
+  catalogue read states a longest horn or rates one: every horn is taken at
+  half the punch's load.
+
 ### Round bends
 
 A rounded corner (a large inside radius, R40 on 1.5 mm sheet) is not one hit
@@ -583,10 +1159,25 @@ lets you do exactly that (docs/sketch-studio-tight-bends.md §4).
 - **Make the first hit part-way.** Set its line and a small angle (30°, say)
   and Bend, as any hit.
 - **Make the tight hit** in between, as any hit.
-- **Come back to the first line.** Pick the same gauge edge and L you used (or
-  press **Bend on** on that bend's row of the sequence: it puts the line back
-  on the bend for you, gauged off the nearest parallel edge). The station
-  says **"This is bend 1's line: it stands at 30°. This hit bends it on."**
+- **Come back to the first line.** You do not need the exact L. A sheet with a
+  bend in it sits in the V with that bend on the punch line, so a line you set
+  within half the die's V of a made bend (4 mm with the automatic V8 die for
+  1.2 mm sheet) **is** that bend's line: the station moves the line onto it
+  (docs/sketch-studio-tight-bends.md §7). Type L 30 for a bend made at L 29,
+  drag the backgauge fingers past it (they stop at 29 while the chip by the
+  cursor reads "L 29 mm · on bend 1"), gauge it from the opposite edge with a
+  round figure (L 576 on a 605.4 mm blank goes to 576.4), or click two points
+  a little off it: each lands on the bend, and a second note says where you
+  set it and why it moved ("L 30 is 1 mm from bend 1's line. A bent line
+  seats itself in the die, so the line is on bend 1."). The L field keeps
+  what you are typing while you type and shows the bend's L after you leave
+  it. The ways to put it there exactly: click the **bend's line on the flat
+  blank** (in Backgauge edge mode each made bend that can be bent on is a
+  button, "Bend 1's line: bend it on"; the gauge edges and the punch line
+  keep their own clicks, the nearest line under the pointer wins), or press
+  **Bend on** on that bend's row of the sequence. Both gauge off the nearest
+  parallel edge. The station says **"This is bend 1's line: it stands at
+  30°. This hit bends it on."**
   The angle box now reads **Bend on to (°)**: the angle the bend has _after_
   this hit, as the brake's angle setting reads, not the amount added; under
   it "now 30° · this hit adds 60°". Arriving on the line with an angle not
@@ -610,6 +1201,18 @@ lets you do exactly that (docs/sketch-studio-tight-bends.md §4).
 - **Refused:** an angle not above the bend's ("Bend 1 is already at 30°: a
   hit only bends it further." — opening a bend back is not offered), over
   180°, a round bend (it is made in its own hits), and a radius punch.
+- **Near a bend but not on it.** A line a little further off than the seat
+  (L 34 for a bend at L 29) is a new bend whose flange is too short for the
+  die; its card keeps its own words and fix and adds **Bend 1 on instead**,
+  which puts the line on bend 1. Wherever the brake still refuses a line
+  because it lies along a made bend, the card says so by the bend's row
+  number ("This line is 1 mm from bend 1's line: too close for a new bend. To
+  bend bend 1 further, bend it on.") with the same button. A line that runs
+  across a made bend is refused in plain words ("This line runs across bend
+  1, which is already made: the brake cannot bend across a formed bend."),
+  with no button: there is nothing to bend on. A round bend, or one already
+  at 180°, gets the fact and no button. A line set up for a round bend (bump
+  hits or a radius punch) does not seat: its die and zone are another size.
 - **What the part becomes.** The finished part is the same whatever order made
   it: the user's tray, lip and inner flange both at 90°, folds to
   577.47 × 420.4 × 20.14 mm made lip first, or inner to 30°, lip, inner on to
@@ -646,27 +1249,44 @@ tried and seen clear (docs/sketch-studio-tight-bends.md §5).
    then has a button, **Make this hit before bend 1** (or "before step 3" when
    that step is a bend-on hit), and its words say "Bend this one earlier".
 2. **A part-way bend second.** When no place in the order works, it tries your
-   own method: one hit already made taken only part-way (60°, then 45°, 30°,
-   15°, the largest that works), this hit, then that bend finished. Every one
-   of those hits must clear. The button reads **Bend 1 to 60° first, finish it
-   after this hit**. A round bend, a hit across several tabs, a bend already
-   bent on, and the bend you are bending now are not taken part-way.
-3. **The tooling third** — Turn the sheet around, another punch, a shorter
-   punch or die — as before; these come with their own buttons.
+   own method: one hit already made taken only part-way — **45° first**, the
+   shop's own way into a tight space, then 60°, 30°, 15°, each only below that
+   bend's own angle — this hit, then that bend finished. Every one of those
+   hits must clear. The button reads **Bend 1 to 45° first, finish it after
+   this hit**. A round bend, a hit across several tabs, a bend already bent on,
+   and the bend you are bending now are not taken part-way.
+3. **The earlier bends with another punch, last.** When neither found a way
+   and the card has nothing else for this hit (no Turn the sheet around, no
+   other punch or length for it) — it changes a bend you already made — the
+   brake looks again at the latest place of step 1 where this hit itself
+   clears and only a later bend is in the way, stopped by its punch or holder:
+   it tries that bend made with each other sharp punch in the rack (the
+   shop's own first, not one blunter than that bend's die), and if then a
+   bend after it is in the way, that one too (at most three bends). The button
+   reads **Make this hit before bend 1, and bend 1 with the A 101 punch**
+   (several: "…, and bends 1 and 3 with the A 101 punch"). A part-way bend
+   together with another punch is not tried.
+4. **The tooling** — Turn the sheet around, another punch for this hit, a
+   shorter punch or die — as before; these come with their own buttons.
 
 **What the buttons do.** One click _arms_ the cure; nothing is changed yet.
 The card says where the hit goes ("This hit goes in before bend 1: the view
-shows the sheet as it is then", or "Bend 1 goes to 60° first and is finished
+shows the sheet as it is then", "This hit goes in before bend 1, and bend 1 is
+made with the A 101 punch: …", or "Bend 1 goes to 45° first and is finished
 after this hit …") and the 3D and side views pose the sheet as it would really
-be then: the later lines still flat, or bend 1 standing at 60°. The hit is
+be then: the later lines still flat, or bend 1 standing at 45°. The hit is
 checked again in that state, with whatever punch and die you now choose, and
 **Bend** makes it:
 
 - _before bend 1_: the hit goes into the sequence at that place, the others
   shift down one row. One commit, one Undo.
-- _bend 1 to 60° first_: in one commit, the hit is made, bend 1's own row is
-  set to 60°, and a row "bend 1 on: 60° → 90°" is added after this hit. The
-  panel then says "Bend 1 now stands at 60° and is finished in step 3." One
+- _before bend 1, and bend 1 with the A 101 punch_: the same, and that bend's
+  row is now made with the A 101 (the job sheet names it). The panel says
+  "Bend 2 is now made with the A 101 punch." — numbered as the rows read after
+  the hit went in before it. One commit, one Undo.
+- _bend 1 to 45° first_: in one commit, the hit is made, bend 1's own row is
+  set to 45°, and a row "bend 1 on: 45° → 90°" is added after this hit. The
+  panel then says "Bend 1 now stands at 45° and is finished in step 3." One
   Undo takes all three back.
 
 **Cancel**, **Esc** (the first Esc only puts the armed cure down; your line
@@ -674,25 +1294,226 @@ stays), or a new line (another edge, L, points, a segment toggled, Flip sheet,
 another bend shape) disarms it. Changing the punch, the die, a length or the
 angle keeps it armed, and the brake checks the hit again.
 
-**When nothing works**, the card says so plainly: what was tried, then "No
-order and no part-way bend clears it with this punch either: the shape cannot
-be closed with the tools in this rack. Make the web wider or the flange
-shorter, or use tooling this rack does not hold." Then the part needs a
-design change (or a narrower or taller punch than the simulated rack has).
+**When nothing works**, the card says so plainly: what was tried (every
+punch in the rack among it), then "No order, no part-way bend and no other
+punch for the earlier bends clears it. Make the web wider or the flange
+shorter, or use tooling this rack does not hold."
 
 **A sequence that is already stored** (a saved file, a part made by data, or a
 machine changed under it) shows "refused" on the row that collides. A moment
-after the brake opens, that row gets the same two cures as buttons: **Move step
-2 before step 1** or **Bend 1 to 60° first** (the bend-on row then goes right
-after the refused step). They are tried on the whole new order: the button is
-there only when that step then clears and no other step is refused.
+after the brake opens, that row gets the same cures as buttons: **Move step 2
+before step 1** or **Bend 1 to 45° first** (the bend-on row then goes right
+after the refused step); when neither works and the row is stopped by its
+punch or holder, **Make step 2 with the A 101 punch** (the first sharp punch
+in the rack, not blunter than its die, with which it clears). They are tried
+on the whole new order: the button is there only when that step then clears
+and fewer steps are refused. (A move together with another punch is not
+tried for a stored row, and the row's own words still say "or use the
+gooseneck punch".)
 
 Examples from the user's tray (605.4 × 420.4, t 1.2, lines from the right
 edge): inner at 29 mm made first, then the lip at 11 → the card offers _Make
 this hit before bend 1_; Bend makes the lip first, both rows ok, 577.47 × 420.4
 × 20.14 mm. A tight Z (315 × 200, a 150 mm side up, a 15 mm web, a 150 mm side
-down) → _Bend 1 to 60° first, finish it after this hit_. A 15 mm lip with a 15
-mm web, in either order → no button, the "No order and no part-way bend" words.
+down) → _Bend 1 to 45° first, finish it after this hit_. A 15 mm lip with a 15
+mm web, the lip first, the inner bend with the straight punch → **Use the A 101
+punch, reversed** (the A 101 takes the return off along its nose); the inner
+bend made first with the straight punch, then the lip → _Make this hit before
+bend 1, and bend 1 with the A 101 punch_, folded 576.47 × 420.4 × 17.14 mm; the
+same two stored lip first, both with the straight punch → row 2's _Make step 2
+with the A 101 punch_. A 20 mm lip with a 10 mm web, in either order → no
+button, the "No order, no part-way bend and no other punch" words.
+
+### Flange gaps: how close the flanges stand
+
+A **flange gap** is how far a cut end of one flange stands from the flange
+next to it once the part is folded: the end of a wall from the inside face of
+the wall it meets at a corner, or the two mitred ends of two lips from each
+other. It is measured on the folded part, at the sheet's real thickness, to
+0.01 mm (docs/sketch-studio-corner-gaps.md §3).
+
+**Where it shows.** The part's **Sheet metal** panel (Properties, feature 1),
+under the fold's notes and above the bends; and the press brake's panel, under
+the "Folded …" line of the sequence. At the brake it reads the part as made so
+far — every hit already made, at its own angle — whatever line, step view or
+pedal you have going.
+
+**How to read it.** One line is always there: "Flange gaps: least 0.72 mm · 12
+within 3 mm" (the smallest gap, and how many ends stand within 3 mm of a
+neighbour), or "Flange gaps: none within 3 mm". A flat blank or a part with one
+flange shows nothing. Under it, **The gaps, nearest first** lists every end, one
+row each:
+
+- "Bend 8 flange, end → bend 5 flange, inside face — 0.73 mm": the end of the
+  flange bent by bend 8 stands 0.73 mm from the inside face of bend 5's flange.
+  "→ the base, top" when it meets the base.
+- "Bend 1 flange ↔ bend 3 flange, edge to edge — 1.35 mm": two ends facing each
+  other (a mitre); both ends are in the one row.
+- "… · passes 1.22 mm beside it": the end does not land on the face — it stops
+  1.22 mm to one side of it (the other wall is cut short there, by a relief or
+  its own end). Where both walls of a corner stop short, each reads this way:
+  0.72 one way and 1.22 the other on the sample tray.
+- "runs past its end: flush with its outside face" (or "… 0.15 mm short of
+  flush", "… 0.10 mm proud of it"): the wall runs past the other wall's end and
+  covers it, as a closed corner does; the figure is where it ends against the
+  other wall's outside face.
+
+The list opens by itself while any gap is under 1 mm; open or close it and it
+stays the way you left it. The small flat blank beside the rows marks every
+row's edge; the row under the pointer (or the keyboard focus) is marked in
+blue. At the press brake that row is also marked on the part in the 3D view —
+a short blue line between the two closest points with a cross and a dot at
+each end, drawn through the sheet so it is never hidden — and its edge on the
+flat-blank map. It goes when the pointer leaves the row and while the ram
+moves.
+
+**The overlap warning.** When an end is drawn so it would stand inside the
+next flange's metal, a card says so: "Bend 8's flange runs 0.30 mm into bend
+5's flange. Real sheet cannot: give that gap 0 mm or more." and the row reads
+"runs 0.30 mm into it" at the top of the list, in red. A flange lying exactly
+on a face (0.00 mm) is no overlap.
+
+**The brake checks the sheet's thickness** (docs/sketch-studio-corner-gaps.md
+§5). At the end of every hit — the bend at its angle, the hits made before it
+as made, the later ones still flat — the press brake looks at the part at the
+sheet's real thickness. When a flange would end inside another's metal, Bend
+is refused with a collision card, "Bend 8: the flange ends 0.30 mm inside bend
+5's flange (the sheet is 1.2 mm thick). Give that gap 0 mm or more in the
+part's Sheet metal panel.", the two flanges are drawn red in the 3D view, and
+a stored step that does it shows "refused" on its row with the same words. No
+other order, part-way bend, punch, length or turn is offered for it: real
+sheet cannot pass through itself whatever the brake does, so the outline has
+to change (Set the gap, above). Flanges that only touch (a gap of 0.00 mm, a
+hem lying on its base, a wall covering another's end flush) are not refused.
+After a set, the Sheet metal panel's note says so as well ("Step 7 no longer
+goes at the brake: Bend 7: the flange ends …"). What the brake does not check
+at thickness: the sheet on its way between flat and the angle (the stroke is
+checked on the middle of the sheet, as before, so a flange that would pass
+less than half a thickness through another one mid-stroke and end clear is
+not seen).
+
+**Setting a gap** (Sheet metal panel only; docs/sketch-studio-corner-gaps.md
+§4). Type the gap in **Gap (mm)** (0.2 to start with, the panel maker's fit-up
+gap; 0 to 3 mm) and press **Set all**, or a row's own **Set**; both sit right
+under the "Flange gaps" line, above the rows. The app moves
+the edge of the outline that makes that end — parallel to itself, the corners
+sliding along the edges next to it, so a mitre keeps its angle and a relief
+keeps its side — folds the part again and reads the gap, until every row asked
+reads the gap to 0.001 mm (one pass on the sample tray: all twelve corners
+0.20, sixteen edges moved, the most 1.02 mm). It is one step: **Undo** takes
+the whole set back, outline and bends. A line under the button says what it
+did: "Set 12 gaps to 0.20 mm: 16 edges moved, the most 1.02 mm. Undo takes it
+back." When the outline now crosses a bend zone at an angle (the mitres on the
+sample tray do, by 0.05 mm) a note says which bends. A moment later the
+brake's sequence is checked on the new part, and a step that no longer goes
+is added to the note — "Step 7 no longer goes at the brake: Bend 7: the part
+hits the punch at 32.5°. …" — the set stands; Undo, or ask for a wider gap.
+On the sample tray that happens under 0.014 mm: the front and rear walls'
+returned lips, a little longer with every closer mitre, meet the punch while
+those walls go up (whatever the punch's length). 0.02 mm and more go.
+
+**The punch keeps its length.** A punch set to its own length at the brake
+(the sample tray's 367.70 mm on bends 7 and 8) is not stretched by a set: a
+set that makes that bend longer moves the punch's trim by half the change at
+each end, so the punch stays as long as it was and centred (367.70 mm before
+and after). A bend whose tooling is in several runs, or whose trim is a
+parameter, is left as it was. The press brake's card
+only reads the gaps: it says "To change a gap, set it in the part's Sheet
+metal panel." Set is greyed out, with the reason as its tooltip, whenever Edit
+outline is (an outline driven by parameters or constraints).
+
+- **Stops short or runs past.** A wall row has a small list: **Stops short**
+  (its end stops the gap away from the other wall's inside face: the whole
+  edge moves) or **Runs past (covers)** (the wall runs past the other wall's
+  end and covers it: only the wall's own stretch of the edge, between its
+  bend zones, moves out — an ear — until its end is flush with the other
+  wall's outside face; then the other wall's row is the corner's fit-up gap
+  and takes the typed gap). It shows what the row is today; change it and Set
+  is offered. Both walls of one corner cannot cover it: "Both flanges cannot
+  cover the same corner: let one of them stop short." **Bend the covering wall
+  first**: its ear lies across the other wall's punch line until it is bent.
+  The other wall's stored punch line is cut back to the tabs it bent before
+  the set (0.5 mm inside them, as the brake stores a line), so it does not
+  bend the ear too.
+- **Both lips or one.** A mitre row's list: **Both edges** (each lip's edge
+  moves half, the default), or one lip's edge ("Bend 1's edge", "Bend 3's
+  edge") takes the whole move.
+- **What "Set all" leaves alone.** It sets the corner rows: two faces that
+  face each other, edge-to-edge mitres, and the two walls of a corner (each
+  stopping short, or one covering the other), each the way its list shows —
+  as it reads today unless you changed it (a covering wall is set flush
+  again, its partner to the gap). Any other row
+  (an ear's end passing under a lip, a relief's side behind a wall's end) is
+  listed with its own Set and left alone by Set all.
+- **Other parts cut from the same outline** must still fold on the moved
+  outline; if one does not, nothing is changed and the line names it.
+- **The relief.** A set that would leave metal in two bend zones at once is
+  refused, and the line says how wide the relief has to be: "Bend 8 crosses
+  bend 5: their bend zones would share metal at the corner. The relief must
+  reach 1.41 mm (half the bend zone) past each bend line: cut it wider, or ask
+  for a wider gap." The same words show when the outline is finished in the
+  sketcher, and on the panel's own error line.
+- The sketcher keeps its own copy: the same lines, moved, so Edit outline
+  opens them as you drew them; a reference dimension on a corner that moved
+  goes with the corner.
+
+### How close is 0.2 mm on the bench
+
+The app folds the part exactly; a real brake does not (docs/sketch-studio-
+corner-gaps.md §6). A press brake's backgauge goes back to the same place to a
+few hundredths of a millimetre every time, but the part is decided by more
+than that: how well the flat blank was worked out, how thick this sheet really
+is and how much it springs back. What fabricators and brake makers say their
+work holds:
+
+| What                                  | What the shop holds                                                     |
+| ------------------------------------- | ----------------------------------------------------------------------- |
+| The backgauge going back to its place | ± 0.01 – 0.05 mm (the machine, not the part)                            |
+| A flange after bending                | ± 0.2 – 0.5 mm usually; ± 0.1 mm on a good CNC brake with a servo gauge |
+| A flange, as a job shop promises it   | ± 0.25 mm                                                               |
+| The bend angle                        | ± 0.5 – 1°; ± 1° is what job shops promise                              |
+| Sheet 0.05 mm off its thickness       | the angle 0.5° or more off                                              |
+| An angle off at a flange's far end    | flange height × tan(error): 0.35 mm per degree at 20 mm                 |
+| A laser-cut edge                      | about ± 0.1 mm (common practice; no source found that states it)        |
+
+So a gap drawn at 0.2 mm is, on an ordinary shop's bench, somewhere between
+touching and about 0.6 mm.
+
+**On every gap row.** Each row says how far its gap may be off on the bench:
+"0.80 mm · ± 0.37 on the bench", and when the gap is smaller than that, "0.20
+mm · ± 0.37 on the bench: may touch" (a wall that covers another's end: "…
+may stand proud"). The summary line adds "· 12 may touch on the bench". It is
+information, not a fault: nothing is refused for it, and the same figures show
+at the press brake (read only there). The band adds up, as independent errors
+do (the square root of the sum of the squares), and each error counts only as
+far as it moves that end toward or away from what it meets: the cut edge that
+sets the gap (two for a mitre); each bend between the two flanges, its line a
+flange tolerance off (a line off moves its wall out and down: the full amount
+across a wall corner, about seven tenths of it across a 45° mitre, nothing
+when it only slides a wall along its own face); and each such bend's angle,
+times how far the end stands from that bend (a wall 1° off moves its top, not
+its foot). On the sample tray: a wall corner ± 0.37 (the other wall's line,
+and its angle at the end's top 16.7 mm up; the wall's own bend adds nothing),
+a mitre ± 0.46 (both walls' angles count there, the lips' hardly). On deep
+trays the angle is what counts: with walls 100 mm high a wall corner reads
+about ± 1.7 and a mitre ± 1.76 — roughly the wall's height × tan(angle).
+
+**What the shop holds** (in the Sheet metal panel's flange gaps, a closed
+section): **Flange ± (mm)** 0.2, **Cut ± (mm)** 0.1, **Angle ± (°)** 1 to
+start with, the figures above. Put in what your own brake gives you once you
+have measured a few parts; each field is one change (Undo takes it back), and
+emptying a field goes back to the starting figure. They are saved with the
+model, for every part of it. With a good CNC brake's figures (flange ± 0.05,
+cut ± 0.05, angle ± 0.25°) the sample tray's 0.2 mm corners no longer "may
+touch".
+
+Sources (vendor and fabricator pages, read 2026-11-18, indicative):
+<https://www.adhmt.com/how-accurate-is-a-press-brake/>,
+<https://durmapress.com/sheet-metal-tolerances-a-practical-guide-to-accuracy>,
+<https://www.durmapress.com/press-brake-back-gauge-guide/>,
+<https://www.protocase.com/resources/tolerances/bending.php>,
+<https://sendcutsend.com/faq/what-are-your-tolerances-for-bending/>,
+<https://fabcon.com/articles/?p=1518>.
 
 ## 4 · Paint
 
@@ -985,13 +1806,26 @@ What this simulation does not do, and the rules of thumb it uses:
   note, their opening is not modelled. The deepest tray side the tallest
   set-up clears is about 150 mm (the deep gooseneck, 145 + 100 mm under the
   ram); there is no taller holder or riser yet.
-- When a bend will not go in (docs/sketch-studio-tight-bends.md §5): the
-  brake moves only the hit you are setting up (or one refused row of a stored
-  sequence) and opens at most one bend part-way, at 60°, 45°, 30° or 15°. It
-  does not search a whole part's order, open two bends at once, or try another
-  punch together with another order. The tries take one pause once the line
-  is still, longer on parts with many hits made where nothing works (about
-  0.4 s measured with seven).
+- Your shop's punches (docs/sketch-studio-shop-punches.md): read from a photo
+  of the chart on the machine, the outline about ±0.3 mm where the chart's
+  grid reaches and ±1 mm above it. Assumed until the maker's numbers are in:
+  88° tips on the A 101, A 102 and A 108, tip radii 0.8 (A 103 0.6) and 500
+  kN/m; the tang is not modelled (the clamps stand centred on the punch line,
+  as for every punch). The part is taken off the punch along a straight line
+  of at most 45° each way after the stroke; hooking a part onto the punch
+  before the stroke, sliding it off the punch's end and the shop's own dies,
+  holders and ram are not modelled. Where the brake and the chart differ (two
+  cells on the A 103, within 0.3 mm of its outline) the brake's check is the
+  one used.
+- When a bend will not go in (docs/sketch-studio-tight-bends.md §5,
+  docs/sketch-studio-shop-punches.md §6): the brake moves only the hit you are
+  setting up (or one refused row of a stored sequence) and opens at most one
+  bend part-way, at 45°, 60°, 30° or 15° (45° first). With the hit made
+  earlier it tries up to three of the later bends with another punch; it does
+  not search a whole part's order, open two bends at once, try a part-way bend
+  together with another punch, or move a stored row and change its punch at
+  once. The tries take one pause once the line is still, longer where nothing
+  works on parts with many hits made (about 0.5 s measured with seven).
 - A flange along an oblique edge (a trapezoid side) crossing a crease is
   two strokes, not one: the crease's deduction moves its two tabs a fraction
   of a millimetre apart along the edge, so they are not on one flat line.

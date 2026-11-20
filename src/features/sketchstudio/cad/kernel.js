@@ -4,7 +4,15 @@ import { mapPlacement } from './placement.js';
 import { resolveCutPlacement, resolveRow } from './cutPlacement.js';
 import { hardwareGeometry } from './hardwareGeometry.js';
 import { angleSectionProfile } from './stockSections.js';
-import { blankHoles, foldSheet, roundTangents } from './sheetMetal.js';
+import {
+  CHORD_ERROR,
+  blankHoles,
+  foldSheet,
+  pointInRing,
+  polygonBounds,
+  profilePolygon,
+  roundTangents,
+} from './sheetMetal.js';
 import { dieOf, punchOf } from './shopCatalog.js';
 import {
   normalizeModel,
@@ -60,7 +68,93 @@ export function snapshotTransferables(snapshot) {
   return buffers;
 }
 
-export function createKernelSession(input) {
+// The rings are profilePolygon's, chords of the true curves (each within
+// CHORD_ERROR of its arc), so two rings this far apart are apart in truth.
+const CUT_OUT_CLEARANCE = 2 * CHORD_ERROR + 0.01;
+const turn = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+const pointGap = (p, a, b) => {
+  const dx = b[0] - a[0],
+    dy = b[1] - a[1];
+  const length = dx * dx + dy * dy;
+  const t = length ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length)) : 0;
+  return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
+};
+const segmentGap = ([a, b], [c, d]) =>
+  turn(a, b, c) * turn(a, b, d) < 0 && turn(c, d, a) * turn(c, d, b) < 0
+    ? 0
+    : Math.min(pointGap(a, c, d), pointGap(b, c, d), pointGap(c, a, b), pointGap(d, a, b));
+const boxesMeet = ([[x0, y0], [x1, y1]], [[u0, v0], [u1, v1]], gap) =>
+  x0 <= u1 + gap && u0 <= x1 + gap && y0 <= v1 + gap && v0 <= y1 + gap;
+
+/**
+ * The cut-outs that can go into ONE compound face with the outline
+ * (docs/sketch-studio-drawing-table.md §3.2 item 2): `{ free, rest }`, indexes
+ * into `profile.holes`. A hole is free when its ring keeps CUT_OUT_CLEARANCE
+ * from the outline's and from every other hole's, lies inside the outline and
+ * neither it nor another hole holds the other (boxes first, then segment
+ * against segment, then one point of each ring inside the other). Each loop
+ * is sampled alone (profilePolygon of the loop), so a hole across the outline
+ * is one of the rest. null (today's one-by-one cut, whole) for fewer than two
+ * holes, an offset, a spline (its samples have no chord bound), or a loop
+ * that cannot be sampled (a hole with holes or an offset, an open path).
+ */
+export function separateCutOuts(profile, params = {}) {
+  const holes = profile?.holes || [];
+  if (holes.length < 2 || profile.offset) return null;
+  if ([profile, ...holes].some((loop) => loop?.segments?.some((s) => s.type === 'spline'))) return null;
+  let rings;
+  try {
+    rings = [{ ...profile, holes: undefined }, ...holes].map((loop) => {
+      if (loop.holes?.length) throw new Error('A cut-out must be a single closed outline.');
+      return profilePolygon(loop, params).outer;
+    });
+  } catch {
+    return null;
+  }
+  const C = CUT_OUT_CLEARANCE;
+  const loops = rings.map((ring) => {
+    const segments = ring.map((p, i) => {
+      const q = ring[(i + 1) % ring.length];
+      return {
+        s: [p, q],
+        box: [
+          [Math.min(p[0], q[0]), Math.min(p[1], q[1])],
+          [Math.max(p[0], q[0]), Math.max(p[1], q[1])],
+        ],
+      };
+    });
+    return { ring, segments, box: polygonBounds(ring) };
+  });
+  const near = (a, b) => {
+    for (const s of a.segments) {
+      if (!boxesMeet(s.box, b.box, C)) continue;
+      for (const t of b.segments) if (boxesMeet(s.box, t.box, C) && segmentGap(s.s, t.s) < C) return true;
+    }
+    return false;
+  };
+  const [outer, ...cuts] = loops;
+  const free = cuts.map((cut) => !near(outer, cut) && pointInRing(cut.ring[0], outer.ring));
+  const order = cuts.map((_, i) => i).sort((i, j) => cuts[i].box[0][0] - cuts[j].box[0][0]);
+  for (let x = 0; x < order.length; x++) {
+    const a = cuts[order[x]];
+    for (let y = x + 1; y < order.length; y++) {
+      const b = cuts[order[y]];
+      if (b.box[0][0] > a.box[1][0] + C) break;
+      if (!boxesMeet(a.box, b.box, C)) continue;
+      if (near(a, b) || pointInRing(a.ring[0], b.ring) || pointInRing(b.ring[0], a.ring))
+        free[order[x]] = free[order[y]] = false;
+    }
+  }
+  const indexes = (want) => free.flatMap((ok, i) => (ok === want ? [i] : []));
+  return { free: indexes(true), rest: indexes(false) };
+}
+
+/**
+ * `options.cutOuts`: 'compound' (default) puts the separate cut-outs into one
+ * compound face with the outline; 'each' cuts every one in turn (the path
+ * before the compound; kept for tests to compare against).
+ */
+export function createKernelSession(input, { cutOuts = 'compound' } = {}) {
   const model = normalizeModel(input),
     params = resolveParameters(model.parameters);
   const diagnostics = validateReferences(model);
@@ -123,7 +217,25 @@ export function createKernelSession(input) {
       d = profile.closed === false ? pen.done() : pen.close();
     } else throw new Error(`Unsupported profile: ${profile.type}`);
     if (profile.offset) d = d.offset(n(profile.offset));
-    for (const hole of profile.holes || []) d = d.cut(drawing(hole));
+    const holes = profile.holes || [];
+    // Separate cut-outs as one compound face with the outline (one cut each
+    // took 3 s for 68 and ran out of memory at 368); the rest one by one.
+    const split = cutOuts === 'compound' ? separateCutOuts(profile, params) : null;
+    if (split?.free.length) {
+      let compound = null;
+      try {
+        compound = new cad.Drawing(
+          new cad.CompoundBlueprint([d.blueprint, ...split.free.map((i) => drawing(holes[i]).blueprint)]),
+        );
+      } catch {
+        // A loop that is not one blueprint: today's path, whole.
+      }
+      if (compound) {
+        for (const i of split.rest) compound = compound.cut(drawing(holes[i]));
+        return compound;
+      }
+    }
+    for (const hole of holes) d = d.cut(drawing(hole));
     return d;
   };
   const sketch = (id) => {

@@ -19,11 +19,15 @@
 // into the bed or the die from a neighbouring bend made the other way (a
 // back-to-back pair, brake flip tooling §5.4) is reported with its facts and
 // only the remedies tried: the other order, a shorter side.
+import polygonClipping from 'polygon-clipping';
 import { bendArcPoint, bendLabel, hitSequence, poseFold, transformPoint, zoneSamples } from './sheetMetal.js';
-import { BUMP_GAP, STROKE_GAP, assessBend, brakeFrame, machineFrom, strokeInLine } from './pressBrake.js';
+import { BUMP_GAP, HORN_GAP, STROKE_GAP, assessBend, brakeFrame, machineFrom, strokeInLine } from './pressBrake.js';
 import {
+  HORN,
   dieOf,
   dieSection,
+  hornOf,
+  hornProfile,
   machineOf,
   minLeg,
   punchOf,
@@ -398,6 +402,58 @@ export function partSection({ surface, posed, frame, bendId, bendIds = null, x =
 }
 
 // ---------------------------------------------------------------- the tooling
+// Horn sections (docs/sketch-studio-punch-library.md §4.2): the standard horn
+// is checked as this many slices along the bed, each slice the punch's
+// section cut off at the horn's highest point over it (never lower than the
+// real horn). A horn of another length (§4.8) is cut into as many slices as
+// keep each no wider than HORN_SLICE mm (the standard's 4); the scene draws
+// any horn in slices of HORN_DRAWN_SLICE mm, so it reads as its profile.
+export const HORN_SLICES = 5;
+export const HORN_SLICE = 4;
+export const HORN_DRAWN_SLICE = 1;
+const hornSlicesOf = new WeakMap();
+/**
+ * A punch's slices of the horn `horn` (shopCatalog.js HORNS), each at most
+ * `widest` mm along the bed, tip-relative, worked out once per punch, way
+ * round, horn and width: [{ from, to (mm in from the horn's end), top (mm
+ * above the tip: the profile's highest point over the slice), rings (the
+ * section below `top`, each ring counter-clockwise) }], the end first.
+ */
+function hornSlices(punch, reverse, horn = HORN, widest = HORN_SLICE) {
+  let ways = hornSlicesOf.get(punch);
+  if (!ways) hornSlicesOf.set(punch, (ways = new Map()));
+  const key = `${reverse ? 'reversed' : 'plain'}|${horn.reach}|${widest}`;
+  if (ways.has(key)) return ways.get(key);
+  const section = punchSection(punch, reverse);
+  const closed = [...section, section[0]];
+  const ys = section.map(([y]) => y);
+  const [y0, y1] = [Math.min(...ys) - 1, Math.max(...ys) + 1];
+  const count = Math.max(1, Math.ceil(horn.reach / widest - 1e-9));
+  const width = horn.reach / count;
+  // The profile's highest point over [from, to]: its ends and any corner of a sloped top between.
+  const highest = (from, to) =>
+    Math.max(
+      hornProfile(to, horn),
+      hornProfile(from, horn),
+      ...(horn.top || []).filter(([s]) => s > from && s < to).map(([s]) => hornProfile(s, horn)),
+    );
+  const slices = Array.from({ length: count }, (_, k) => {
+    const top = highest(k * width, (k + 1) * width);
+    const box = [
+      [y0, -1],
+      [y1, -1],
+      [y1, top],
+      [y0, top],
+      [y0, -1],
+    ];
+    // The library the fold clips with: every ring that comes back is a part.
+    const rings = polygonClipping.intersection([closed], [box]).map(([outer]) => outer.slice(0, -1));
+    return { from: k * width, to: (k + 1) * width, top, rings };
+  });
+  ways.set(key, slices);
+  return slices;
+}
+
 /**
  * The machine's sections in the Y–Z plane for a punch tip at `tipZ`: punch,
  * punch holder (the sectional clamps on the punch, shop floor §6.2), ram
@@ -409,6 +465,15 @@ export function partSection({ surface, posed, frame, bendId, bendIds = null, x =
  * stands over `dieRanges` when given (brake tool length §3.2: trimmed apart
  * from the punch; the holders follow the punch). `reverse`: the punch turned
  * round in its clamps (brake blades §4.2), its section mirrored.
+ * `horns` (docs/sketch-studio-punch-library.md §4.2): horn sections at both
+ * ends of every punch run (not on a radius punch): the punch's body and the
+ * holders stand over each run less HORN.reach at each end, and the punch
+ * gains `parts` [{ ring, ranges, horn: true }], the horn slices (HORN_SLICES
+ * per end, each ring over the slices of that height at every end). Without
+ * `horns` there is no `parts` key: the same object as before. `horns` is
+ * read by shopCatalog.js hornOf (§4.8): true the standard, or a horn's key;
+ * the body stands back by that horn's reach. `hornSlice`: the widest slice
+ * (HORN_SLICE for the check; the scene draws HORN_DRAWN_SLICE).
  */
 export function toolingSections({
   machine,
@@ -419,6 +484,8 @@ export function toolingSections({
   ranges = null,
   dieRanges = null,
   reverse = false,
+  horns = false,
+  hornSlice = HORN_SLICE,
 }) {
   const press = typeof machine === 'string' || machine == null ? machineOf(machine) : machine;
   const half = press.beam / 2;
@@ -440,9 +507,38 @@ export function toolingSections({
     [w, z1],
     [-w, z1],
   ];
+  // Horn sections (§4.2): the body and holders between the horns, the slices at the ends.
+  let upper = sectional,
+    parts = null;
+  const horn = punch.round ? null : hornOf(horns);
+  if (horn) {
+    const slices = hornSlices(punch, reverse, horn, hornSlice);
+    const body = [];
+    const ends = slices.map(() => []);
+    for (const [x0, x1] of sectional.ranges) {
+      // A run too short for two horns (refused, §4.1): each horn has half of it.
+      const room = Math.min(horn.reach, (x1 - x0) / 2);
+      if (x1 - x0 - 2 * room > 1e-9) body.push([x0 + room, x1 - room]);
+      for (const [k, slice] of slices.entries()) {
+        const a = Math.min(slice.from, room),
+          b = Math.min(slice.to, room);
+        if (b - a > 1e-9) ends[k].push([x0 + a, x0 + b], [x1 - b, x1 - a]);
+      }
+    }
+    upper = body.length ? { x: [body[0][0], body.at(-1)[1]], ranges: body } : { x: [0, 0], ranges: [] };
+    parts = slices.flatMap((slice, k) =>
+      ends[k].length
+        ? slice.rings.map((ring) => ({ ring: ring.map(([y, z]) => [y, z + tipZ]), ranges: ends[k], horn: true }))
+        : [],
+    );
+  }
   return {
-    punch: { ring: punchSection(punch, reverse).map(([y, z]) => [y, z + tipZ]), ...sectional },
-    ...(holder.height > 0 ? { holder: { ring: box(holder.width / 2, top, ram), ...sectional } } : {}),
+    punch: {
+      ring: punchSection(punch, reverse).map(([y, z]) => [y, z + tipZ]),
+      ...upper,
+      ...(parts ? { parts } : {}),
+    },
+    ...(holder.height > 0 ? { holder: { ring: box(holder.width / 2, top, ram), ...upper } } : {}),
     ram: { ring: box(half, ram, ram + RAM_HEIGHT), x: bed, ranges: [bed] },
     die: { ring: dieSection(die), ...(span || ranges ? dieSectional : { x: bed, ranges: [bed] }) },
     bed: {
@@ -487,8 +583,10 @@ export const EARLIER = Object.freeze({
   ram: 'Bend this one earlier',
 });
 /**
- * The punch the advice above names for a tool hit (brake blades §4.3): the
- * station offers it as a fix button when the hit really clears with it.
+ * The punch the advice above names for a tool hit (brake blades §4.3). Since
+ * docs/sketch-studio-shop-punches.md §5.4 it no longer limits what the
+ * station tries: a punch or holder hit tries every sharp punch in the rack
+ * (brakeStation.js punchFix); the general words above stay a stored step's.
  */
 export const ADVISED_PUNCH = Object.freeze({
   punch: Object.freeze({ key: 'gooseneck-88', label: 'Use the gooseneck punch' }),
@@ -503,6 +601,11 @@ export const PUNCH_LABELS = Object.freeze({
   'gooseneck-88': 'Use the gooseneck punch',
   'gooseneck-88-deep': 'Use the deep gooseneck punch',
   'acute-30': 'Use the acute punch',
+  // The shop's own punches (docs/sketch-studio-shop-punches.md §5.2).
+  a101: 'Use the A 101 punch',
+  a102: 'Use the A 102 punch',
+  a103: 'Use the A 103 punch',
+  a108: 'Use the A 108 punch',
 });
 const TOOL_NAMES = {
   punch: 'punch',
@@ -513,6 +616,17 @@ const TOOL_NAMES = {
   self: 'part itself',
 };
 const TOOLS = ['punch', 'holder', 'ram', 'die', 'bed'];
+// The tools that move with the ram, and those that stand.
+const UPPER_TOOLS = ['punch', 'holder', 'ram'];
+const LOWER_TOOLS = ['die', 'bed'];
+/**
+ * The slants a part is taken off the punch along after the stroke, tried in
+ * this order when the straight lift meets the punch, its holders or the ram
+ * (docs/sketch-studio-shop-punches.md §5.3): degrees from straight down,
+ * negative toward the operator (−y). The web lies at 45° at a 90° bend, the
+ * limit of the fan.
+ */
+export const TAKE_OFF_SLANTS = Object.freeze([-15, 15, -30, 30, -45, 45]);
 
 // A 2D ring cut to the band lo ≤ y ≤ hi (Sutherland–Hodgman), as points.
 function clipBand(ring, lo, hi) {
@@ -655,6 +769,19 @@ export function hangingMessage(hanging, { step = null } = {}) {
 }
 
 /**
+ * A hit's name in its messages: "Bend {n}" (`number`, default the place of
+ * the step that first makes the bend), or "Bend {n} on to {a}°" for a bend
+ * made earlier and bent on (`start` above 0, tight bends §4.5). `strokes`:
+ * hitSequence(fold) when the caller has it.
+ */
+export function hitName({ fold, bendIds, number = null, start = 0, target = null, strokes = hitSequence(fold) }) {
+  const bend = fold.bends.find((b) => b.id === bendIds[0]);
+  const first = strokes.findIndex((s) => s.bendIds.includes(bendIds[0])) + 1;
+  if (start > 1e-9) return `Bend ${first || bend.index + 1} on to ${fmt(target ?? bend.angle)}°`;
+  return `Bend ${number ?? (first || bend.index + 1)}`;
+}
+
+/**
  * Does a hit collide, and where first? `fold`: an unposed foldSheet result
  * holding the bend `bendId` (or the stroke `bendIds`, shop floor §6.1: they
  * move through the angle together, every member's zone is the working zone
@@ -681,8 +808,20 @@ export function hangingMessage(hanging, { step = null } = {}) {
  * skips every remedy (and the checks a hanging side's cost: the other order,
  * a shorter side): any collision's message is then its fact alone; 'shorten'
  * tries the shorter side only (the caller has tried the other order itself).
+ * The return (docs/sketch-studio-shop-punches.md §5.3): the part is lifted
+ * straight off the punch, or, when that lift meets the punch, its holders or
+ * the ram, taken off along the first of TAKE_OFF_SLANTS that is free (a round
+ * bend's hits before its last keep the straight lift); only when none is
+ * free is it a hit "as the ram goes back up".
+ * `only: 'return'` (takeOffOf) checks the return alone, at the target.
  * Returns { hit: null | { angle, phase, tool, owner, triangles (machine
- * frame, the part's triangles that hit), message }, samples, ms }.
+ * frame, the part's triangles that hit), message }, samples, ms, takeOff (the
+ * slant the part came off along, degrees, negative toward the operator; null
+ * when the straight lift was free or there is a hit), hooked (only when true,
+ * docs/sketch-studio-punch-library.md §4.3: the bend's horn sections, swept
+ * only HORN_GAP above the sheet, passed where swept as the body is they would
+ * meet the part: it stands over them and is slid on and off) }. A contact
+ * with a horn part is a `punch` hit with `horn: true`.
  */
 export function brakeCollisions({
   fold,
@@ -701,6 +840,7 @@ export function brakeCollisions({
   samples = STROKE_SAMPLES,
   surface = partSurface(fold),
   advise = true,
+  only = null,
 }) {
   const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const ids = bendIds?.length ? bendIds : [bendId];
@@ -714,11 +854,20 @@ export function brakeCollisions({
   // A round bend (round-bend spec §5.3): filled from the side away from the backgauge.
   const from = bend.steps ? machineFrom(fold, ids, { gaugePoint, turned }) : null;
   let checked = 0;
+  // The slant the last return check took the part off along (§5.3 of
+  // docs/sketch-studio-shop-punches.md), or null: the straight lift was free,
+  // or something was met.
+  let slantUsed = null;
+  // Horn sections (docs/sketch-studio-punch-library.md §4.3): set when a sweep
+  // passed only because the horns are slid on and off under the punch (swept
+  // from above as the body is, they would meet the part).
+  let hooked = false;
   // One pose: the hit (or null) at the stroke's posed angle `angle`; sweep:
   // 'down' (approach) / 'up' (return) sweeps the punch, holders and ram over
   // the stroke; `hit`: a round bend's hit in the die (bump order).
   const check = (angle, sweep = null, hit = null) => {
     checked++;
+    slantUsed = null;
     const posed = poseFold(fold, { ...angles, ...Object.fromEntries(ids.map((id) => [id, angle])) }, from);
     const frame = brakeFrame(posed, ids[0], { die: dieEntry, gaugePoint, turned, members: ids, hit, bed: press.bed });
     const triangles = posedTriangles(surface, posed, frame, ids, hit);
@@ -731,23 +880,56 @@ export function brakeCollisions({
       ranges: frame.ranges,
       dieRanges: frame.dieRanges,
       reverse,
+      // The record's horn (§4.8: true the standard, or a horn's key).
+      horns: frame.horns || false,
     });
     const boxes = Object.fromEntries(Object.entries(tools).map(([k, { ring }]) => [k, boxOf(ring)]));
+    const parts = tools.punch.parts || null;
+    const partBoxes = parts ? new Map(parts.map((part) => [part, boxOf(part.ring)])) : null;
+    // Each horn's stretch of the bed (§4.2): every run's ends, the horn's reach long (half a short run).
+    const reachOf = parts ? hornOf(frame.horns).reach : 0;
+    const hornEnds = parts
+      ? frame.ranges.flatMap(([x0, x1]) => {
+          const room = Math.min(reachOf, (x1 - x0) / 2);
+          return [
+            [x0, x0 + room],
+            [x1 - room, x1],
+          ];
+        })
+      : null;
     const reach = frame.tipZ + punchEntry.radius + fold.thickness;
     // The return goes back up as far as the stroke does (brake blades §4.2):
     // to STROKE_GAP above the sheet (BUMP_GAP between a round bend's hits),
     // where the part is taken off. A flange standing in a gooseneck's throat
     // is drawn out forward there, not lifted on the neck all the way up.
-    const back = hit && hit < bend.steps ? BUMP_GAP : STROKE_GAP;
+    const between = Boolean(hit && hit < bend.steps);
+    const back = between ? BUMP_GAP : STROKE_GAP;
     const lift = sweep === 'up' ? Math.max(0, fold.thickness + back - frame.tipZ) : null;
-    for (const tool of TOOLS) {
-      if (!tools[tool]) continue;
+    // A horn (punch library §4.3) is swept only between the stroke and
+    // HORN_GAP above the sheet, coming down and going back up alike.
+    const hornLift = sweep ? Math.max(0, fold.thickness + HORN_GAP - frame.tipZ) : null;
+    // The tool `tool` against the part, the moving ones swept over the stroke;
+    // `slant` (degrees, shop punches §5.3): the return's take-off, the part
+    // travelling lift × (tan s, −1) in (y, z) relative to the upper tools.
+    // The punch's horn parts (§4.3) are parts of it, swept their own short
+    // way; `full`: the horn parts alone, swept as the body is (the hooked test).
+    const meets = (tool, slant = 0, full = false) => {
+      const entry = tools[tool];
+      if (!entry) return null;
+      const horned = tool === 'punch' && Boolean(parts?.length);
       const hits = [];
       let owner = null;
-      const moves = tool === 'punch' || tool === 'holder' || tool === 'ram';
-      for (const item of triangles) {
-        if (item.side === 'zone') continue;
-        for (const [x0, x1] of tools[tool].ranges) {
+      // Whether any contact is with the body (else every one is with a horn).
+      let body = false;
+      const moves = UPPER_TOOLS.includes(tool);
+      const tan = Math.tan((slant * Math.PI) / 180);
+      const across = lift == null ? 0 : lift * tan;
+      // Does `item` meet `ring` (its box `box`) over any of `ranges`? `horn`:
+      // swept the horn's short way (unless `full`); `along`: the triangle's
+      // extent along the bed, so a slice beside it is passed over.
+      const overlaps = (item, ranges, ring, box, horn, along = null) => {
+        for (const [x0, x1] of ranges) {
+          if (along && (along[1] < x0 - EPS || along[0] > x1 + EPS)) continue;
           const cut = clipX(item.triangle, x0, x1);
           if (!cut) continue;
           const section = cut.map((p) => [p[1], p[2]]);
@@ -758,18 +940,69 @@ export function brakeCollisions({
           // coming down, anything above it; going back up, what lies within the lift.
           const shape =
             sweep && moves
-              ? hull([...section, ...section.map(([y, z]) => [y, lift == null ? -FAR : z - lift])])
+              ? horn && !full
+                ? hull([
+                    ...section,
+                    ...section.map(([y, z]) => [y + (sweep === 'up' ? hornLift * tan : 0), z - hornLift]),
+                  ])
+                : hull([...section, ...section.map(([y, z]) => (lift == null ? [y, -FAR] : [y + across, z - lift]))])
               : section;
-          if (polygonsOverlap(shape, tools[tool].ring, boxOf(shape), boxes[tool])) {
-            hits.push(item.triangle);
-            owner ||= item.owner;
-            break;
-          }
+          if (polygonsOverlap(shape, ring, boxOf(shape), box)) return true;
         }
+        return false;
+      };
+      for (const item of triangles) {
+        if (item.side === 'zone') continue;
+        let met = false;
+        if (!full && overlaps(item, entry.ranges, entry.ring, boxes[tool], false)) {
+          met = true;
+          body = true;
+        } else if (horned) {
+          // The horns (§4.3): first the whole section over each horn's end
+          // (every slice is a part of it there), then the slices themselves.
+          const [a, b, c] = item.triangle;
+          const along = [Math.min(a[0], b[0], c[0]), Math.max(a[0], b[0], c[0])];
+          met =
+            overlaps(item, hornEnds, entry.ring, boxes[tool], true, along) &&
+            parts.some((part) => overlaps(item, part.ranges, part.ring, partBoxes.get(part), true, along));
+        }
+        if (!met) continue;
+        hits.push(item.triangle);
+        owner ||= item.owner;
       }
-      // `runs`: where the tool stood along the bed (brake tool length §3.5: is the contact at its ends?).
-      if (hits.length) return { tool, owner, triangles: hits, runs: tools[tool].ranges };
+      if (!hits.length) return null;
+      // `runs`: where the tool stood along the bed (brake tool length §3.5: is the contact at its ends?);
+      // with horns the punch's and holders' whole runs, horns and all.
+      const runs = parts && (tool === 'punch' || tool === 'holder') ? frame.ranges : entry.ranges;
+      return { tool, owner, triangles: hits, runs, ...(horned && !body ? { horn: true } : {}) };
+    };
+    const first = (list, slant = 0) => {
+      for (const tool of list) {
+        const found = meets(tool, slant);
+        if (found) return found;
+      }
+      return null;
+    };
+    let found = first(TOOLS);
+    // Taking the part off the punch (shop punches §5.3): when the straight
+    // lift meets the punch, its holders or the ram, the same sweep along each
+    // slant in turn; the first that is free clears the return. Not between a
+    // round bend's hits (the part is not taken off there), never the approach.
+    if (found && sweep === 'up' && !between && UPPER_TOOLS.includes(found.tool)) {
+      const slant = TAKE_OFF_SLANTS.find((s) => !first(UPPER_TOOLS, s));
+      if (slant != null) {
+        found = first(LOWER_TOOLS);
+        if (!found) slantUsed = slant;
+      }
     }
+    if (found) {
+      slantUsed = null;
+      return found;
+    }
+    // Horn sections (§4.3): the short sweep passed; swept as the body is
+    // (from above, back up along the slant the part came off), do they meet
+    // the part? Then the part stands over them: it is slid on and off.
+    if (sweep && parts?.length && !hooked && meets('punch', sweep === 'up' ? slantUsed || 0 : 0, true)) hooked = true;
     // The part against itself: the two rigid sides of this bend.
     const fixed = triangles.filter((i) => i.side === 'fixed').map((i) => ({ ...i, box: box3(i.triangle) }));
     const moving = triangles.filter((i) => i.side === 'moving').map((i) => ({ ...i, box: box3(i.triangle) }));
@@ -781,14 +1014,14 @@ export function brakeCollisions({
           hits.push(a.triangle, b.triangle);
           owner ||= a.owner;
         }
+    if (hits.length) slantUsed = null;
     return hits.length ? { tool: 'self', owner, triangles: hits } : null;
   };
   // The steps in the order made (tight bends §4.2): a bend's number is its first step's place.
   const strokes = hitSequence(fold);
   const onward = start > 1e-9;
   const firstStep = (id) => strokes.findIndex((s) => s.bendIds.includes(id)) + 1;
-  const hitNumber = number ?? (firstStep(ids[0]) || bend.index + 1);
-  const prefix = onward ? `Bend ${firstStep(ids[0]) || bend.index + 1} on to ${fmt(goal)}°` : `Bend ${hitNumber}`;
+  const prefix = hitName({ fold, bendIds: ids, number, start, target: goal, strokes });
   // The bend made earlier that turned the colliding piece where it is,
   // relative to the face on the die: a bend between the two on the sheet
   // (on one's path from the root, not the other's), bent at this pose, not
@@ -942,9 +1175,19 @@ export function brakeCollisions({
       ...(earlier && !broken ? { earlier: earlier.number } : {}),
       ...(bump ? { bump, bumps: bend.steps } : {}),
       // Without `advise` the fact alone: the remedies come with the advice.
-      message: `${prefix}${bump ? `, hit ${bump} of ${bend.steps}` : ''}: the part hits the ${TOOL_NAMES[found.tool]} ${where}.${advise && advice ? ` ${advice}.` : ''}`,
+      // A horn part (punch library §4.3) is the punch: "the punch's horn".
+      message: `${prefix}${bump ? `, hit ${bump} of ${bend.steps}` : ''}: the part hits the ${found.horn ? "punch's horn" : TOOL_NAMES[found.tool]} ${where}.${advise && advice ? ` ${advice}.` : ''}`,
     };
   };
+  // The slant the part is taken off along (shop punches §5.3), or null.
+  let takeOff = null;
+  // `only: 'return'` (takeOffOf): the return alone, from the pose at the
+  // target (a round bend's last hit), for a view that re-runs a made step.
+  if (only === 'return') {
+    const back = check(goal, 'up', bend.steps || null);
+    const ended = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    return { hit: null, met: Boolean(back), samples: checked, ms: ended - started, takeOff: back ? null : slantUsed };
+  }
   // A round bend (round-bend spec §5.5): the hits in order, each in its own
   // frame from (j − 1)·a to j·a — the punch coming down, ⌈samples / N⌉ poses
   // through the hit, the last of them the punch going back up (a sweep holds
@@ -967,6 +1210,8 @@ export function brakeCollisions({
         const last = k === per;
         let found = check(angle, last ? 'up' : null, j);
         if (!found) {
+          // The last hit's return: the slant the part came off along (§5.3).
+          if (last && j === steps) takeOff = slantUsed;
           clear = angle;
           continue;
         }
@@ -992,7 +1237,13 @@ export function brakeCollisions({
       }
     }
     const ended = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    return { hit, samples: checked, ms: ended - started };
+    return {
+      hit,
+      samples: checked,
+      ms: ended - started,
+      takeOff: hit ? null : takeOff,
+      ...(hooked ? { hooked: true } : {}),
+    };
   }
   let hit = null;
   const approach = check(start, 'down');
@@ -1022,7 +1273,17 @@ export function brakeCollisions({
   if (!hit) {
     const back = check(goal, 'up');
     if (back) hit = report(back, goal, 'return');
+    else takeOff = slantUsed;
   }
   const ended = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  return { hit, samples: checked, ms: ended - started };
+  return { hit, samples: checked, ms: ended - started, takeOff, ...(hooked ? { hooked: true } : {}) };
 }
+
+/**
+ * The slant a made hit's part is taken off the punch along (docs/sketch-studio-
+ * shop-punches.md §5.3), its return alone checked: brakeCollisions' options;
+ * the slant in degrees (negative toward the operator), or null when the
+ * straight lift is free or no slant is (the re-run of a step shows it lifted
+ * straight). For the view only: a stored step is checked by sequenceChecks.
+ */
+export const takeOffOf = (options) => brakeCollisions({ ...options, advise: false, only: 'return' }).takeOff;

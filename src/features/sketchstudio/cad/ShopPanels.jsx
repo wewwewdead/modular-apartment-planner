@@ -13,6 +13,7 @@ import {
   strokeBends,
   autoHits,
   bendNumbers,
+  crossingText,
   distanceFromLeg,
   foldSheet,
   isBendOn,
@@ -21,13 +22,18 @@ import {
   profilePolygon,
 } from './sheetMetal.js';
 import {
+  DEFAULT_MACHINE,
   DEFAULT_STOCK,
+  MACHINES,
   PUNCHES,
   RADIUS_PUNCHES,
   SHEET_STOCK,
+  SHOP_TOLERANCE,
   STOCK_KEYS,
   dieOf,
+  machineOf,
   nearestRadiusPunch,
+  shopTolerance,
   stockOf,
 } from './shopCatalog.js';
 import { ValueField } from './CadEditors.jsx';
@@ -35,6 +41,10 @@ import { OutlineThumb, PrimaryButton, ProblemCard, StationShell } from './ShopFl
 import { ParameterContext } from './ExpressionInput.jsx';
 import { MAX_LASER_QUANTITY } from './laserStation.js';
 import NumericInput from '../components/NumericInput.jsx';
+import FlangeGaps from './FlangeGaps.jsx';
+import { cornerRows, gapLabel, setGapsText } from './cornerGaps.js';
+import { sequenceChecks } from './brakeStation.js';
+import { cutParts, readyOutlines } from './shopRoute.js';
 
 const fmt = (value) => (Number.isFinite(value) ? Number(value.toFixed(2)).toString() : '—');
 const plural = (count, one, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
@@ -225,10 +235,19 @@ export function BoughtInPanel({ onAdd, onCancel }) {
  * such record per outline. A sketch outline has Edit outline (§3.6):
  * `onEditOutline({ stock, thickness })` reopens it in the sketcher, and the
  * finish comes back here with the outline's `stock` and `thickness` as they
- * were; `editNotice` says what that finish did.
+ * were; `editNotice` says what that finish did. `{ kind: 'pick', selected,
+ * quantities, stock, thickness }` is Cut's picker (docs/sketch-studio-cut-pick.md
+ * §4.2, PickCutPanel): every outline ready to cut, ticked to cut.
  */
 export function CutFromSheetPanel(props) {
-  return props.outline?.kind === 'batch' ? <BatchCutPanel {...props} /> : <SingleCutPanel {...props} />;
+  const kind = props.outline?.kind;
+  return kind === 'pick' ? (
+    <PickCutPanel {...props} />
+  ) : kind === 'batch' ? (
+    <BatchCutPanel {...props} />
+  ) : (
+    <SingleCutPanel {...props} />
+  );
 }
 
 // The panel's parameter values ({} when they cannot be read: the fold then says why).
@@ -529,6 +548,212 @@ function BatchCutPanel({ model, outline, shell = null, onCreate }) {
         </p>
       )}
       {error && <ProblemCard message={error} />}
+    </StationShell>
+  );
+}
+
+/**
+ * Cut's picker (docs/sketch-studio-cut-pick.md §4.2): every outline ready to
+ * cut, in model order, ticked to cut — here, or by a click on it in the view
+ * (the workspace toggles `outline.selected`) — then one stock and thickness
+ * and Cut on the laser, which calls `onCreate({ items })` as the batch does,
+ * one record per ticked outline. Controlled: `outline` is `{ kind: 'pick',
+ * selected, quantities, stock, thickness }` and every change goes to
+ * `onOutline(next)`, so Edit (`onEditOutline(sketchId)`: the sketcher, then
+ * back here) and the view see the same selection. A row that makes no blank
+ * at this stock says why and cannot be ticked; a quantity stays while its
+ * row is unticked. Already cut: the sheet-metal parts (`cutParts`), each
+ * with Open on the laser (`onOpenPart(instanceId)`).
+ */
+function PickCutPanel({
+  model,
+  outline,
+  shell = null,
+  onCreate,
+  onOutline,
+  onEditOutline = null,
+  onOpenPart = null,
+  editNotice = '',
+}) {
+  const stock = outline.stock || DEFAULT_STOCK;
+  const thickness = outline.thickness ?? 1.5;
+  const quantities = outline.quantities || {};
+  const selected = useMemo(() => new Set(outline.selected || []), [outline.selected]);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const params = useParams(model);
+  const change = (patch) => onOutline({ ...outline, ...patch });
+  const ready = useMemo(() => readyOutlines(model, params), [model, params]);
+  const rows = useMemo(
+    () =>
+      ready.map((o) => {
+        const sketch = model.sketches.find((s) => s.id === o.id);
+        let flat = null,
+          problem = '';
+        try {
+          flat = foldSheet({ thickness, stock, bends: [] }, sketch.profile, params).flat;
+        } catch (e) {
+          problem = e.message || String(e);
+        }
+        return { ...o, sketch, flat, problem, editProblem: sketchEditProblem(sketch) };
+      }),
+    [ready, model.sketches, thickness, stock, params],
+  );
+  const cut = useMemo(() => cutParts(model, params), [model, params]);
+  // A ticked row that makes no blank at this stock is not cut (its tick comes back with a stock that takes it).
+  const picked = rows.filter((r) => selected.has(r.id) && !r.problem);
+  const quantityOf = (r) => quantities[r.id] ?? 1;
+  const blanks = picked.reduce((sum, r) => sum + quantityOf(r), 0);
+  const toggle = (id) =>
+    change({
+      selected: selected.has(id) ? [...selected].filter((s) => s !== id) : [...selected, id],
+    });
+  const create = () => {
+    setError('');
+    try {
+      if (!picked.length) throw new Error('Choose an outline to cut.');
+      const items = picked.map((r) => {
+        const reuse = reusesSketch(r.sketch);
+        const sketch = reuse ? null : blankSketch({ name: `${r.name} blank`, profile: r.sketch.profile });
+        const part = sheetMetalPart({ sketchId: reuse ? r.sketch.id : sketch.id, stock, thickness, name: r.name });
+        return { sketch, part, centre: centreOf(r.flat.bounds), bounds: r.flat.bounds, quantity: quantityOf(r) };
+      });
+      onCreate({ items });
+      setNotice(`Cut ${plural(blanks, 'blank')} from ${thickness} mm ${stockOf(stock).name}`);
+    } catch (e) {
+      setError(e.message || String(e));
+    }
+  };
+  return (
+    <StationShell
+      station="cut"
+      region="Cut from sheet"
+      shell={shell}
+      className="cad-cut-pick"
+      primary={
+        <PrimaryButton disabled={!picked.length} onClick={create}>
+          Cut on the laser
+        </PrimaryButton>
+      }
+    >
+      <p className="cad-shop-lead">Choose the outlines to cut, then the sheet stock.</p>
+      <div className="cad-cut-pick-bar">
+        <button
+          type="button"
+          disabled={rows.every((r) => r.problem || selected.has(r.id))}
+          onClick={() =>
+            change({
+              selected: [...selected, ...rows.filter((r) => !r.problem && !selected.has(r.id)).map((r) => r.id)],
+            })
+          }
+        >
+          Select all
+        </button>
+        <button type="button" disabled={!selected.size} onClick={() => change({ selected: [] })}>
+          Select none
+        </button>
+        <span className="cad-cut-pick-count" role="status" aria-label="Selected outlines">
+          {picked.length} of {rows.length} selected
+        </span>
+      </div>
+      <p className="cad-help">Or click a drawing in the view to select it; click it again to leave it out.</p>
+      {editNotice && (
+        <p className="cad-help cad-shop-notice" role="status">
+          {editNotice}
+        </p>
+      )}
+      <ul className="cad-draw-outlines cad-batch-outlines cad-pick-outlines" aria-label="Outlines to cut">
+        {rows.map((r) => {
+          const on = selected.has(r.id) && !r.problem;
+          return (
+            <li key={r.id} className={on ? 'is-picked' : r.problem ? 'is-problem' : ''}>
+              <label className="cad-pick-check">
+                <input
+                  type="checkbox"
+                  aria-label={`Select ${r.name}`}
+                  checked={on}
+                  disabled={Boolean(r.problem)}
+                  onChange={() => toggle(r.id)}
+                />
+                <OutlineThumb profile={r.sketch.profile} params={params} />
+              </label>
+              <span>
+                <strong>{r.name}</strong>
+                {r.problem ? (
+                  <small role="note">{r.problem}</small>
+                ) : (
+                  <small>
+                    {fmt(r.width)} × {fmt(r.height)} mm
+                  </small>
+                )}
+              </span>
+              <span className="cad-draw-outline-actions">
+                {on && (
+                  <QuantityField
+                    label={`Quantity of ${r.name}`}
+                    value={quantityOf(r)}
+                    onChange={(n) => change({ quantities: { ...quantities, [r.id]: n } })}
+                  />
+                )}
+                <button
+                  type="button"
+                  aria-label={`Edit ${r.name}`}
+                  disabled={Boolean(r.editProblem) || !onEditOutline}
+                  title={r.editProblem || `Open ${r.name} in the sketcher`}
+                  onClick={() => onEditOutline(r.id)}
+                >
+                  Edit
+                </button>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <StockFields
+        stock={stock}
+        thickness={thickness}
+        onStock={(key) => change({ stock: key })}
+        onThickness={(t) => change({ thickness: t })}
+      />
+      <p className="cad-help">One sheet is one stock and thickness: every outline selected is cut from it.</p>
+      <p className="cad-part-size cad-shop-figure" aria-label="Batch">
+        {plural(blanks, 'blank')} from {plural(picked.length, 'outline')}
+      </p>
+      {notice && (
+        <p className="cad-help" role="status">
+          {notice}
+        </p>
+      )}
+      {error && <ProblemCard message={error} />}
+      {cut.length > 0 && (
+        <>
+          <h4>Already cut</h4>
+          <ul className="cad-draw-outlines cad-pick-cut" aria-label="Already cut">
+            {cut.map((row) => (
+              <li key={row.partId}>
+                <OutlineThumb profile={row.profile} params={params} />
+                <span>
+                  <strong>
+                    {row.name}
+                    {row.copies > 1 && <span className="cad-laser-copies"> × {row.copies}</span>}
+                  </strong>
+                  <small>{row.sheet}</small>
+                </span>
+                <span className="cad-draw-outline-actions">
+                  <button
+                    type="button"
+                    aria-label={`Open ${row.name} on the laser`}
+                    disabled={!onOpenPart || shell?.disabled}
+                    onClick={() => onOpenPart(row.instanceId)}
+                  >
+                    Open on the laser
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </StationShell>
   );
 }
@@ -935,15 +1160,299 @@ function AddBendForm({ feature, profile, params, fold, onAdd, focusKey }) {
   );
 }
 
+// A flange in an edge-to-edge row's way: its bend path ('base': the base), steady when the row's a / b swap.
+const sideOf = (path) => (path.length ? path.join('/') : 'base');
+const edgeName = (bend) => (bend == null ? "The base's edge" : `Bend ${bend + 1}'s edge`);
+const DEFAULT_GAP = 0.2; // the panel maker's fit-up gap (PANEL_DEFAULTS.gap)
+
+// What the shop holds (corner gaps §6.1): the three fields, their words and units.
+const TOLERANCE_FIELDS = [
+  ['flange', 'Flange ± (mm)', '0.05'],
+  ['cut', 'Cut ± (mm)', '0.05'],
+  ['angle', 'Angle ± (°)', '0.25'],
+];
+/**
+ * "What the shop holds" (docs/sketch-studio-corner-gaps.md §6.1): the flange,
+ * cut and angle tolerances the gaps' band is worked out from. `tolerance`: in
+ * force (the model's own over the catalogue's); `own`: the model's
+ * `fabrication.shop.tolerance` (or null); `onTolerance(key, value)` commits
+ * one settled field (null: back to the catalogue's value, the field emptied).
+ */
+function ShopTolerance({ tolerance, own, onTolerance }) {
+  return (
+    <details className="cad-shop-numbers cad-gaps-tolerance">
+      <summary>What the shop holds</summary>
+      <div className="cad-gaps-controls">
+        {TOLERANCE_FIELDS.map(([key, label, step]) => (
+          <label className="cad-field" key={key}>
+            {label}
+            <NumericInput
+              aria-label={label}
+              min="0"
+              step={step}
+              value={tolerance[key]}
+              allowEmpty
+              title={
+                own && key in own
+                  ? `This model's own; empty the field for the usual ${SHOP_TOLERANCE[key]}`
+                  : 'The usual figure: put in what your brake gives you'
+              }
+              onCommit={(v) => onTolerance(key, v == null ? null : Math.max(0, v))}
+            />
+          </label>
+        ))}
+      </div>
+      <p className="cad-help">
+        Typical figures: a good CNC brake holds a flange to ± 0.1 mm, an ordinary shop ± 0.2 – 0.5 mm; ± 1° on the
+        angle. Put in what your own brake gives you once you have measured a few parts.
+      </p>
+    </details>
+  );
+}
+
+/**
+ * The flange gaps with their Set controls (docs/sketch-studio-corner-gaps.md
+ * §4.3): the "Gap (mm)" field and "Set all" (the corner rows, each its way as
+ * its select shows), each row's way and its Set. The ways chosen live here by
+ * row key until the part is left. `onSetGaps({ target, keys, styles })` sets
+ * and commits (the workspace) and gives back setGaps' result, or throws the
+ * refusal, shown here: nothing is committed then. `editProblem`: why the
+ * outline cannot be edited ('' when it can): every control is disabled with
+ * it as its title, as Edit outline is. After a set that moved something, the
+ * brake's sequence is checked on the part as committed (§4.5, after the first
+ * audit: deferred, off the click) and a step that no longer goes is added to
+ * the note; nothing is refused for it. `feature`, `machine` (the shop's brake
+ * key): what that check reads.
+ */
+function FlangeGapsSet({
+  fold,
+  feature,
+  profile,
+  params,
+  editProblem,
+  machine,
+  onSetGaps,
+  tolerance = null,
+  ownTolerance = null,
+  onTolerance = null,
+}) {
+  const [target, setTarget] = useState(DEFAULT_GAP);
+  const [ways, setWays] = useState(() => new Map());
+  const [outcome, setOutcome] = useState(null);
+  const [refusal, setRefusal] = useState('');
+  const disabled = Boolean(editProblem);
+  const profileText = useMemo(() => JSON.stringify(profile), [profile]);
+  // The status line says what the last set did while the outline is the one it made (Undo takes it away).
+  const said = outcome && outcome.profile === profileText ? outcome : null;
+  const t = fold.thickness;
+  // The brake's steps on the part as committed, against the part before the set: off the click.
+  const pending = said && said.brake == null ? said : null;
+  useEffect(() => {
+    if (!pending) return undefined;
+    const timer = setTimeout(() => {
+      let brake = '';
+      try {
+        const press = machineOf(MACHINES[machine] ? machine : DEFAULT_MACHINE);
+        // Each step's end at the sheet's true thickness too (corner gaps §5).
+        const after = sequenceChecks({ fold, machine: press, profile, params });
+        const fails = (check) => Boolean(check && (check.refusals.length || check.collision));
+        const why = (check) => (check.collision ? check.collision.message : check.refusals[0].message);
+        // The part before the set is only read when a step fails now (each reading costs as much as the set's whole click).
+        const before = after.some(fails)
+          ? sequenceChecks({
+              fold: foldSheet(pending.before.feature, pending.before.profile, params),
+              machine: press,
+              profile: pending.before.profile,
+              params,
+            })
+          : [];
+        brake = after
+          .map((check, i) =>
+            !fails(check)
+              ? ''
+              : fails(before[i])
+                ? `Step ${i + 1} does not go at the brake (nor did it before the set): ${why(check)}`
+                : `Step ${i + 1} no longer goes at the brake: ${why(check)}`,
+          )
+          .filter(Boolean)
+          .join(' ');
+      } catch {
+        // The part's own fold error shows on the panel; nothing to add here.
+      }
+      setOutcome((o) => (o === pending ? { ...o, brake } : o));
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [pending, fold, machine, params, profile]);
+  const wayOf = (row) => {
+    const chosen = ways.get(row.key);
+    if (row.b.kind === 'edge') return chosen ?? 'both';
+    return chosen ?? (row.cover ? 'cover' : 'short');
+  };
+  const changed = (row) => {
+    const chosen = ways.get(row.key);
+    return chosen != null && chosen !== (row.b.kind === 'edge' ? 'both' : row.cover ? 'cover' : 'short');
+  };
+  // What setGaps takes for the row's way: an edge row's choice is the flange's bend path, 'a' / 'b' as the row reads.
+  const styleOf = (row) => {
+    const way = wayOf(row);
+    if (row.b.kind !== 'edge') return way;
+    return way === 'both' ? 'both' : way === sideOf(row.a.path) ? 'a' : 'b';
+  };
+  const offTarget = (row) => (wayOf(row) === 'cover' ? Math.abs(row.gap + t / row.k) : Math.abs(row.gap - target));
+  const run = (request) => {
+    try {
+      const result = onSetGaps({ target, ...request });
+      setOutcome({
+        ...setGapsText(result, target),
+        profile: JSON.stringify(result.committed ?? result.profile),
+        before: { feature, profile },
+        // Nothing moved: nothing to check at the brake.
+        brake: result.moved.length ? null : '',
+      });
+      setRefusal('');
+      // A row set reads its way now; the next Set starts from what it reads.
+      setWays((old) => {
+        const next = new Map(old);
+        for (const key of result.asked) next.delete(key);
+        return next;
+      });
+    } catch (e) {
+      setRefusal(e.message || String(e));
+      setOutcome(null);
+    }
+  };
+  const rowControls = (row) => {
+    const way = wayOf(row);
+    const edge = row.b.kind === 'edge';
+    return (
+      <div className="cad-gaps-set">
+        <select
+          aria-label={`Way for ${gapLabel(row)}`}
+          value={way}
+          disabled={disabled}
+          title={editProblem || undefined}
+          onChange={(e) => {
+            const chosen = e.target.value;
+            setWays((old) => new Map(old).set(row.key, chosen));
+          }}
+        >
+          {edge ? (
+            <>
+              <option value="both">Both edges</option>
+              <option value={sideOf(row.a.path)}>{edgeName(row.a.bend)}</option>
+              <option value={sideOf(row.b.path)}>{edgeName(row.b.bend)}</option>
+            </>
+          ) : (
+            <>
+              <option value="short">Stops short</option>
+              <option value="cover">Runs past (covers)</option>
+            </>
+          )}
+        </select>
+        {(offTarget(row) > 0.001 || changed(row)) && (
+          <button
+            type="button"
+            disabled={disabled}
+            title={editProblem || `Move this edge so the gap reads ${fmt(target)} mm`}
+            aria-label={`Set ${gapLabel(row)}`}
+            onClick={() => run({ keys: [row.key], styles: { [row.key]: styleOf(row) } })}
+          >
+            Set
+          </button>
+        )}
+      </div>
+    );
+  };
+  const notes = [said?.warnings, said?.brake].filter(Boolean).join(' ');
+  return (
+    <FlangeGaps fold={fold} profile={profile} params={params} rowExtra={rowControls} tolerance={tolerance}>
+      {({ rows }) => (
+        <>
+          <div className="cad-gaps-controls">
+            <label className="cad-field">
+              Gap (mm)
+              <NumericInput
+                aria-label="Gap (mm)"
+                min="0"
+                max="3"
+                step="0.05"
+                value={target}
+                disabled={disabled}
+                title={editProblem || undefined}
+                onCommit={(v) => setTarget(v)}
+              />
+            </label>
+            <button
+              type="button"
+              disabled={disabled || !cornerRows(rows).length}
+              title={editProblem || 'Set every corner gap to this gap, each its way as shown'}
+              // Every corner row its way as its select shows: the ones changed go with it.
+              onClick={() =>
+                run({
+                  keys: null,
+                  styles: Object.fromEntries(
+                    cornerRows(rows)
+                      .filter(changed)
+                      .map((row) => [row.key, styleOf(row)]),
+                  ),
+                })
+              }
+            >
+              Set all
+            </button>
+          </div>
+          {refusal && (
+            <p className="cad-shop-error" role="alert">
+              {refusal}
+            </p>
+          )}
+          {said && (
+            <p
+              className="cad-help cad-shop-notice"
+              role="status"
+              data-brake={said.brake == null ? 'checking' : 'checked'}
+            >
+              {said.text}
+            </p>
+          )}
+          {notes && (
+            <p className="cad-help" role="note">
+              {notes}
+            </p>
+          )}
+          {tolerance && onTolerance && (
+            <ShopTolerance tolerance={tolerance} own={ownTolerance} onTolerance={onTolerance} />
+          )}
+        </>
+      )}
+    </FlangeGaps>
+  );
+}
+
 /**
  * The `sheetmetal` feature (Properties → feature 1): stock, thickness, K and
  * the bend table, plus Add bend. A change the fold refuses is never committed:
  * a live value waits, Enter / blur shows the reason here. `onEditOutline()`
  * reopens the blank's outline in the sketcher (docs/sketch-studio-outline-
  * edit-sheet-nest.md §3.6); `editNotice` says what the last such finish did.
+ * `onSetGaps(request)`: the flange gaps' Set controls (corner gaps §4.3;
+ * none without it). The gaps' band on the bench is the model's shop
+ * tolerances (§6.1); `onShopTolerance(key, value)` commits one of them from
+ * the card's "What the shop holds" (none without it).
  */
-export function SheetMetalForm({ feature, model, onChange, addBendFocus = 0, onEditOutline = null, editNotice = '' }) {
+export function SheetMetalForm({
+  feature,
+  model,
+  onChange,
+  addBendFocus = 0,
+  onEditOutline = null,
+  editNotice = '',
+  onSetGaps = null,
+  onShopTolerance = null,
+}) {
   const { values } = useContext(ParameterContext);
+  const shop = model.fabrication?.shop;
+  const tolerance = useMemo(() => shopTolerance(shop), [shop]);
   const params = useMemo(() => {
     try {
       return resolveParameters(model.parameters);
@@ -958,11 +1467,12 @@ export function SheetMetalForm({ feature, model, onChange, addBendFocus = 0, onE
     [blankSketch],
   );
   const [problem, setProblem] = useState(null);
+  // A crossing at a corner says how far its relief must reach (corner gaps §4.2).
   const { fold, error } = useMemo(() => {
     try {
       return { fold: foldSheet(feature, profile, params) };
     } catch (e) {
-      return { error: e.message };
+      return { error: crossingText(e) };
     }
   }, [feature, profile, params]);
   // Commit only what folds; a refused live value waits for Enter / blur.
@@ -970,7 +1480,7 @@ export function SheetMetalForm({ feature, model, onChange, addBendFocus = 0, onE
     try {
       foldSheet(next, profile, params);
     } catch (e) {
-      if (!meta?.live) setProblem({ where, message: e.message });
+      if (!meta?.live) setProblem({ where, message: crossingText(e) });
       return;
     }
     setProblem(null);
@@ -1060,6 +1570,25 @@ export function SheetMetalForm({ feature, model, onChange, addBendFocus = 0, onE
           <p className="cad-help" role="note" key={w.code}>
             {w.message}
           </p>
+        ))}
+      {/* How far the folded flanges stand apart (docs/sketch-studio-corner-gaps.md §3.3): hover marks the
+          thumbnail; with onSetGaps each row is set here (§4.3). */}
+      {fold &&
+        (onSetGaps ? (
+          <FlangeGapsSet
+            fold={fold}
+            feature={feature}
+            machine={model.fabrication?.shop?.machine}
+            profile={profile}
+            params={params}
+            editProblem={editProblem}
+            onSetGaps={onSetGaps}
+            tolerance={tolerance}
+            ownTolerance={shop?.tolerance || null}
+            onTolerance={onShopTolerance}
+          />
+        ) : (
+          <FlangeGaps fold={fold} profile={profile} params={params} tolerance={tolerance} />
         ))}
       <h4>Bends, in the order they are made</h4>
       {!bends.length && <p className="cad-help">No bends yet: the part is the flat blank.</p>}

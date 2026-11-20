@@ -776,7 +776,7 @@ function layoutPanel(input, { machine = null, idPrefix = 'panel' } = {}, extra =
     );
   }
   const press = machineOf(machine || undefined);
-  const checks = sequenceChecks({ fold, machine: press });
+  const checks = sequenceChecks({ fold, machine: press, profile });
   const [lo, hi] = foldedBounds(fold);
   const flatNumbers = flatSummary(polygon, profile);
   const problems = checks
@@ -971,7 +971,7 @@ export function cornerPiece(
   };
   const fold = foldSheet(feature, profile);
   const press = machineOf(machine || undefined);
-  const checks = sequenceChecks({ fold, machine: press });
+  const checks = sequenceChecks({ fold, machine: press, profile });
   const [lo, hi] = foldedBounds(fold);
   const flatNumbers = flatSummary(profilePolygon(profile), profile);
   return {
