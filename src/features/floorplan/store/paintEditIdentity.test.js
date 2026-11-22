@@ -80,10 +80,12 @@ function paintAction(project, hex) {
   return { type: 'WALL_UPDATE', floorId: floor.id, wall: { id: wall.id, assembly } };
 }
 
-const roofTruss = (project) => project.trussSystems.find((entry) => entry.id === project.roofSystem.trussAttachmentId);
+const roofTruss = (project) =>
+  project.trussSystems.find((entry) => entry.id === project.roofSystems[0].trussAttachmentId);
 
 /** The unmemoised attachment: a catalogue of its own always bypasses the memo. */
-const freshAttachment = (project) => resolveRoofAttachmentContext(project, project.roofSystem, getDefaultTrussTypes());
+const freshAttachment = (project) =>
+  resolveRoofAttachmentContext(project, project.roofSystems[0], getDefaultTrussTypes());
 
 /**
  * The playground opens with one legacy field its normaliser fills on the
@@ -103,7 +105,8 @@ describe('a wall finish edit keeps the roof structure (PP-1 §2.3)', () => {
     expect(after.project).not.toBe(before.project);
     expect(firstPaintableWall(after.project).wall.assembly.exterior.finish.colour.hex).toBe('#336699');
     expect(after.project.trussSystems).toBe(before.project.trussSystems);
-    expect(after.project.roofSystem).toBe(before.project.roofSystem);
+    expect(after.project.roofSystems[0]).toBe(before.project.roofSystems[0]);
+    expect(after.project.roofSystems).toBe(before.project.roofSystems);
   });
 
   it('builds no truss geometry: the memo hands back the very same object, equal to a fresh build', () => {
@@ -117,9 +120,9 @@ describe('a wall finish edit keeps the roof structure (PP-1 §2.3)', () => {
 
   it('re-derives no roof attachment, and the remembered one equals a fresh one', () => {
     const before = settledState();
-    const context = resolveRoofAttachmentContext(before.project, before.project.roofSystem);
+    const context = resolveRoofAttachmentContext(before.project, before.project.roofSystems[0]);
     const after = floorplanReducer(before, paintAction(before.project, '#336699'));
-    const again = resolveRoofAttachmentContext(after.project, after.project.roofSystem);
+    const again = resolveRoofAttachmentContext(after.project, after.project.roofSystems[0]);
 
     expect(again.derivedRoofState).toBe(context.derivedRoofState);
     expect(again.derivedBoundaryPolygon).toBe(context.derivedBoundaryPolygon);
@@ -133,7 +136,7 @@ describe('a wall finish edit keeps the roof structure (PP-1 §2.3)', () => {
     const sceneAfter = buildPreviewScene(after.project);
     const key = (scene, id) => scene.floors.find((entry) => entry.floorId === id).sourceKey;
     const trussFloorId = roofTruss(after.project).floorId;
-    const roofId = after.project.roofSystem.id;
+    const roofId = after.project.roofSystems[0].id;
 
     expect(key(sceneAfter, trussFloorId).trussSystems).toEqual(key(sceneBefore, trussFloorId).trussSystems);
     key(sceneAfter, trussFloorId).trussSystems.forEach((system, index) =>
@@ -159,7 +162,7 @@ describe('a wall finish edit keeps the roof structure (PP-1 §2.3)', () => {
     expect(buildTrussSystemGeometry(roofTruss(after.project))).toEqual(
       computeTrussSystemGeometry(roofTruss(syncProjectStructures(after.project))),
     );
-    expect(resolveRoofAttachmentContext(after.project, after.project.roofSystem)).toEqual(
+    expect(resolveRoofAttachmentContext(after.project, after.project.roofSystems[0])).toEqual(
       freshAttachment(after.project),
     );
   });
@@ -192,8 +195,8 @@ describe('a real roof-structure edit invalidates (PP-1 §2.3)', () => {
     expect(rebuilt).not.toEqual(geometry);
     expect(rebuilt).toEqual(computeTrussSystemGeometry(movedTruss));
     // And the roof that follows it is re-attached, not remembered.
-    expect(after.project.roofSystem).not.toBe(before.project.roofSystem);
-    expect(resolveRoofAttachmentContext(after.project, after.project.roofSystem)).toEqual(
+    expect(after.project.roofSystems[0]).not.toBe(before.project.roofSystems[0]);
+    expect(resolveRoofAttachmentContext(after.project, after.project.roofSystems[0])).toEqual(
       freshAttachment(after.project),
     );
   });
@@ -203,7 +206,7 @@ describe('a real roof-structure edit invalidates (PP-1 §2.3)', () => {
     const truss = roofTruss(before.project);
     const instance = truss.trussInstances[0];
     const geometry = buildTrussSystemGeometry(truss);
-    const context = resolveRoofAttachmentContext(before.project, before.project.roofSystem);
+    const context = resolveRoofAttachmentContext(before.project, before.project.roofSystems[0]);
     const after = floorplanReducer(before, {
       type: 'TRUSS_INSTANCE_UPDATE',
       trussSystemId: truss.id,
@@ -216,7 +219,7 @@ describe('a real roof-structure edit invalidates (PP-1 §2.3)', () => {
     const rebuilt = buildTrussSystemGeometry(steeper);
     expect(rebuilt).not.toEqual(geometry);
     expect(rebuilt).toEqual(computeTrussSystemGeometry(steeper));
-    const reattached = resolveRoofAttachmentContext(after.project, after.project.roofSystem);
+    const reattached = resolveRoofAttachmentContext(after.project, after.project.roofSystems[0]);
     expect(reattached.derivedRoofState).not.toBe(context.derivedRoofState);
     expect(reattached.derivedRoofState.pitch.slope).toBeGreaterThan(context.derivedRoofState.pitch.slope);
     expect(reattached).toEqual(freshAttachment(after.project));
@@ -224,22 +227,22 @@ describe('a real roof-structure edit invalidates (PP-1 §2.3)', () => {
 
   it('a changed roof overhang moves the hip datum it reads, through the same truss memo', () => {
     const before = settledState();
-    const roof = before.project.roofSystem;
+    const roof = before.project.roofSystems[0];
     const context = resolveRoofAttachmentContext(before.project, roof);
     const after = floorplanReducer(before, {
       type: 'ROOF_UPDATE',
       roofSystem: { id: roof.id, pitch: { ...roof.pitch, overhang: roof.pitch.overhang + 200 } },
     });
-    const reattached = resolveRoofAttachmentContext(after.project, after.project.roofSystem);
+    const reattached = resolveRoofAttachmentContext(after.project, after.project.roofSystems[0]);
 
-    expect(after.project.roofSystem).not.toBe(roof);
+    expect(after.project.roofSystems[0]).not.toBe(roof);
     // The truss did not change, so its part is remembered…
     expect(roofTruss(after.project)).toBe(roofTruss(before.project));
     expect(reattached.derivedRoofState).toBe(context.derivedRoofState);
     // …and the roof's own input is applied fresh: a hip datum runs further down the tail.
     expect(reattached.attachmentElevation).toBeLessThan(context.attachmentElevation);
     expect(reattached).toEqual(freshAttachment(after.project));
-    expect(after.project.roofSystem.baseElevation).toBeLessThan(roof.baseElevation);
+    expect(after.project.roofSystems[0].baseElevation).toBeLessThan(roof.baseElevation);
   });
 });
 
@@ -258,7 +261,7 @@ describe('history and persistence hand back correct structure (PP-1 §2.3)', () 
     for (const state of [undone, redone]) {
       const truss = roofTruss(state.project);
       expect(buildTrussSystemGeometry(truss)).toEqual(computeTrussSystemGeometry(truss));
-      expect(resolveRoofAttachmentContext(state.project, state.project.roofSystem)).toEqual(
+      expect(resolveRoofAttachmentContext(state.project, state.project.roofSystems[0])).toEqual(
         freshAttachment(state.project),
       );
     }
@@ -276,7 +279,7 @@ describe('history and persistence hand back correct structure (PP-1 §2.3)', () 
     expect(buildTrussSystemGeometry(roofTruss(state.project))).toEqual(
       buildTrussSystemGeometry(roofTruss(painted.project)),
     );
-    expect(state.project.roofSystem.baseElevation).toBeCloseTo(painted.project.roofSystem.baseElevation, 9);
+    expect(state.project.roofSystems[0].baseElevation).toBeCloseTo(painted.project.roofSystems[0].baseElevation, 9);
   });
 });
 
@@ -294,7 +297,7 @@ describe('the shared truss geometry is read-only to every consumer', () => {
     const project = syncProjectStructures(syncProjectStructures(loaded));
     const truss = roofTruss(project);
     const geometry = deepFreeze(buildTrussSystemGeometry(truss));
-    const roof = project.roofSystem;
+    const roof = project.roofSystems[0];
 
     expect(() => {
       buildTrussPreviewObjects(truss, geometry);

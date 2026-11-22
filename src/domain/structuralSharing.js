@@ -55,6 +55,66 @@ export function reuseIfEqual(previous, next) {
   return previous && next && plainValuesEqual(previous, next) ? previous : next;
 }
 
+/**
+ * `next` with every part that is the same value as the matching part of
+ * `previous` swapped for `previous`'s object — all the way down, and `previous`
+ * itself when the whole is the same.
+ *
+ * Unlike `reuseIfEqual` this also keeps what it can of a value that DID change:
+ * the canonical building sync rebuilds the whole `building` on every edit, and a
+ * moved shaft must not hand every other system, the site and the unit list back
+ * as new objects. "The same" is stricter here than `plainValuesEqual` in one
+ * way: the keys must come in the same order, because the result is saved as it
+ * is and a save must serialise exactly as the fresh value would. A part that is
+ * not the same is a new container holding `next`'s keys in `next`'s order, so
+ * whatever comes back serialises exactly as `next` does. Neither argument is
+ * ever written to: history entries alias the project these parts come from.
+ */
+export function reuseUnchanged(previous, next) {
+  if (Object.is(previous, next)) return previous;
+  if (Array.isArray(next)) {
+    if (!Array.isArray(previous)) return next;
+    let samePrevious = previous.length === next.length;
+    let sameNext = true;
+    const values = new Array(next.length);
+    for (let index = 0; index < next.length; index += 1) {
+      const value = index < previous.length ? reuseUnchanged(previous[index], next[index]) : next[index];
+      values[index] = value;
+      if (samePrevious && value !== previous[index]) samePrevious = false;
+      if (sameNext && value !== next[index]) sameNext = false;
+    }
+    if (samePrevious) return previous;
+    return sameNext ? next : values;
+  }
+  // Only ordinary objects are taken apart; anything else (and an object with no
+  // prototype, which a rebuilt container would not reproduce) is kept as given.
+  if (!isOrdinaryObject(next) || !isOrdinaryObject(previous)) return next;
+  const nextKeys = Object.keys(next);
+  const previousKeys = Object.keys(previous);
+  let samePrevious = previousKeys.length === nextKeys.length;
+  let sameNext = true;
+  const values = new Array(nextKeys.length);
+  for (let index = 0; index < nextKeys.length; index += 1) {
+    const key = nextKeys[index];
+    // An own `__proto__` key (JSON.parse can make one) cannot be rebuilt by assignment.
+    if (key === '__proto__') return next;
+    const inPrevious = Object.prototype.hasOwnProperty.call(previous, key);
+    const value = inPrevious ? reuseUnchanged(previous[key], next[key]) : next[key];
+    values[index] = value;
+    if (samePrevious && (previousKeys[index] !== key || value !== previous[key])) samePrevious = false;
+    if (sameNext && value !== next[key]) sameNext = false;
+  }
+  if (samePrevious) return previous;
+  if (sameNext) return next;
+  const result = {};
+  for (let index = 0; index < nextKeys.length; index += 1) result[nextKeys[index]] = values[index];
+  return result;
+}
+
+function isOrdinaryObject(value) {
+  return value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype;
+}
+
 /** `previous` when every element of `next` is the very same object, otherwise `next`. */
 export function reuseArrayIfSameElements(previous, next) {
   if (!Array.isArray(previous) || previous.length !== next.length) return next;

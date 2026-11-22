@@ -1,6 +1,7 @@
 import { memo, useMemo, useState, useTransition } from 'react';
 import { BusyButton, LOADING_COPY, afterPaint } from '@/ui/loading';
 import { BUILDING_COMMANDS } from '@/domain/buildingCommands';
+import { getProjectRoofs, resolveActiveRoof } from '@/domain/projectRoofs';
 import { formatBearing, isValidTraverseLine, traverseBoundary } from '@/domain/surveyTraverse';
 import styles from './ProjectLifecyclePanel.module.css';
 
@@ -194,6 +195,10 @@ export function deriveLifecycleStatus(project, derived = {}) {
   const spacesComplete =
     Boolean(program.configured) && (program.totalUnitInstances > 0 || Boolean(testFits.acceptedOption));
   const structureComplete = structuralRealization.state?.status === 'realized';
+  const systemsRealized = servicesRealization.state?.status === 'realized';
+  // A stage that was realized (or detailed) against inputs that have since
+  // changed is not ready: its stage body already says "Regeneration required".
+  const spacesStale = spacesComplete && Boolean(apartmentDesign.outOfDate);
   const systemsModeled =
     (building.systems?.plumbing?.shafts || []).length > 0 ||
     (building.systems?.electrical?.riserZones || []).length > 0 ||
@@ -202,7 +207,7 @@ export function deriveLifecycleStatus(project, derived = {}) {
     (building.systems?.water?.equipmentZones || []).length > 0 ||
     (building.systems?.mechanical?.outdoorUnitZones || []).length > 0 ||
     (building.systems?.plumbing?.drainageRoutes || []).length > 0 ||
-    (project?.roofSystem?.drains || []).length > 0 ||
+    getProjectRoofs(project).some((roofSystem) => (roofSystem.drains || []).length > 0) ||
     (building.systems?.egress?.routes || []).length > 0 ||
     (building.systems?.envelope?.ventilationZones || []).length > 0;
 
@@ -213,28 +218,39 @@ export function deriveLifecycleStatus(project, derived = {}) {
       value: siteComplete ? `${building.site?.parkingPlan?.bays?.length || 0} parking` : 'Not defined',
     },
     spaces: {
-      state: spacesComplete ? 'ready' : 'incomplete',
+      state: spacesComplete ? (spacesStale ? 'attention' : 'ready') : 'incomplete',
       value:
         apartmentDesign.state?.status === 'detailed'
-          ? `${program.totalUnitInstances || 0} units · detailed`
+          ? apartmentDesign.outOfDate
+            ? `${program.totalUnitInstances || 0} units · detail outdated`
+            : `${program.totalUnitInstances || 0} units · detailed`
           : testFits.acceptedOption
             ? `${program.totalUnitInstances || 0} units · fit accepted`
             : `${program.totalUnitInstances || 0} units`,
     },
     structure: {
-      state: structureComplete ? 'ready' : 'incomplete',
+      state: structureComplete ? (structuralRealization.outOfDate ? 'attention' : 'ready') : 'incomplete',
       value: structureComplete
-        ? `${structuralRealization.generatedStackCount || 0} stacks · realized`
+        ? structuralRealization.outOfDate
+          ? 'Realization outdated'
+          : `${structuralRealization.generatedStackCount || 0} stacks · realized`
         : `${(structural.gridSystems || []).length} grids · proposed`,
     },
     systems: {
-      state: servicesRealization.state?.status === 'realized' ? 'ready' : systemsModeled ? 'attention' : 'incomplete',
-      value:
-        servicesRealization.state?.status === 'realized'
-          ? `${servicesRealization.actualEntityCounts?.electricalPoints || 0} points · realized`
-          : systemsModeled
-            ? 'Partial model'
-            : 'Not planned',
+      state: systemsRealized
+        ? servicesRealization.outOfDate
+          ? 'attention'
+          : 'ready'
+        : systemsModeled
+          ? 'attention'
+          : 'incomplete',
+      value: systemsRealized
+        ? servicesRealization.outOfDate
+          ? 'Realization outdated'
+          : `${servicesRealization.actualEntityCounts?.electricalPoints || 0} points · realized`
+        : systemsModeled
+          ? 'Partial model'
+          : 'Not planned',
     },
     validate: {
       state: issues.length ? 'attention' : 'ready',
@@ -2743,6 +2759,7 @@ function SystemsStage({
   realization,
   equipment,
   roofDrainage,
+  lifecycleRoof = null,
   lastCommand,
   onExecuteCommand,
 }) {
@@ -2751,7 +2768,7 @@ function SystemsStage({
   const primaryRiser = (systems.electrical?.riserZones || [])[0] || null;
   const primaryPanel = (systems.electrical?.panelZones || [])[0] || null;
   const primaryElectricalPoint = (systems.electrical?.points || [])[0] || null;
-  const primaryRoofDrain = (project.roofSystem?.drains || [])[0] || null;
+  const primaryRoofDrain = (lifecycleRoof?.drains || [])[0] || null;
   const primaryDrainage = (systems.plumbing?.drainageRoutes || [])[0] || null;
   const primaryExit = (systems.egress?.exits || [])[0] || null;
   const primaryRoute = (systems.egress?.routes || [])[0] || null;
@@ -3010,6 +3027,7 @@ function SystemsStage({
   const configureRoofDrain = () =>
     onExecuteCommand({
       type: BUILDING_COMMANDS.CONFIGURE_ROOF_DRAINAGE_PATH,
+      roofId: lifecycleRoof?.id || null,
       drainId: primaryRoofDrain?.id || `${building.id}_roof_drain_1`,
       name: roofDrainDraft.name,
       position: {
@@ -3017,7 +3035,7 @@ function SystemsStage({
         y: millimetersFromMeters(roofDrainDraft.positionY),
       },
       diameter: millimetersFromMeters(roofDrainDraft.diameter),
-      catchmentPlaneIds: (project.roofSystem?.roofPlanes || []).map((plane) => plane.id),
+      catchmentPlaneIds: (lifecycleRoof?.roofPlanes || []).map((plane) => plane.id),
       outletRef:
         roofDrainDraft.outletKind === 'plumbing_shaft'
           ? { kind: 'plumbing_shaft', id: roofDrainDraft.outletId }
@@ -3709,7 +3727,7 @@ function SystemsStage({
           </button>
         </div>
       )}
-      {project.roofSystem && (
+      {lifecycleRoof && (
         <div className={styles.formSection}>
           <strong>Roof drainage path</strong>
           <div className={styles.formGrid}>
@@ -5910,8 +5928,17 @@ function seedKey(parts) {
   return parts.map(identityToken).join('|');
 }
 
-function ProjectLifecyclePanel({ project, derived, activeStage = 'brief', onStageChange, onExecuteCommand }) {
+function ProjectLifecyclePanel({
+  project,
+  derived,
+  activeStage = 'brief',
+  onStageChange,
+  onExecuteCommand,
+  activeRoofId = null,
+}) {
   const building = project.building || {};
+  // The roof the drainage form writes to: the one the roof workspace is on.
+  const lifecycleRoof = resolveActiveRoof(project, activeRoofId);
   const brief = building.brief || {};
   const issues = derived?.validationIssues || [];
   const program = derived?.apartmentProgram || {};
@@ -5955,7 +5982,14 @@ function ProjectLifecyclePanel({ project, derived, activeStage = 'brief', onStag
     building.systems?.structural?.realization,
     ...structuralFloorParts,
   ]);
-  const systemsFormKey = seedKey([building.systems, project.roofSystem, ...systemsFloorParts]);
+  // The active roof is in the key: the drainage form is seeded from its first
+  // drain, so a switch to another roof has to reseed it.
+  const systemsFormKey = seedKey([
+    building.systems,
+    getProjectRoofs(project),
+    lifecycleRoof?.id || null,
+    ...systemsFloorParts,
+  ]);
   const spacesFormKey = seedKey([
     building.unitTypes,
     building.spaceProgram,
@@ -6109,6 +6143,7 @@ function ProjectLifecyclePanel({ project, derived, activeStage = 'brief', onStag
           }
           equipment={derived?.equipmentCoordination || {}}
           roofDrainage={derived?.roofDrainageCoordination || {}}
+          lifecycleRoof={lifecycleRoof}
           lastCommand={derived?.lastCommand}
           onExecuteCommand={onExecuteCommand}
         />

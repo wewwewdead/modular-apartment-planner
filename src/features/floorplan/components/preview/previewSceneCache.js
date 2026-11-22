@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { applySceneLightBudgets, buildFloorObjectGroup } from './buildPreviewObjects';
 import { disposeScene } from './disposeScene';
 import { MODEL_LIGHT_POOL_POLICY, disposeFixtureLightPool, syncFixtureLightPool } from './fixtureLightPool';
-import { pruneWallFinishMaterials } from './materials';
+import { pruneOwnerMaterials, pruneWallFinishMaterials } from './materials';
 import { freezeStaticMatrices } from './staticMatrices';
 
 /**
@@ -186,6 +186,10 @@ export function createPreviewSceneCache({ batch = true, lightPool = MODEL_LIGHT_
     const liveKeys = new Set();
     for (const entry of meshMap.values()) liveKeys.add(entry.materialKey);
     pruneWallFinishMaterials(materialPalette, liveKeys);
+    // Each roof and each truss system's closures wear their own materials
+    // (docs/multi-roof.md §6); those go as soon as nothing draws with them —
+    // their key never changes with a colour, so there is nothing to cap.
+    pruneOwnerMaterials(materialPalette, liveKeys);
 
     // Re-attach children in descriptor order. clear() detaches without
     // disposing (reused groups must survive), then add back.

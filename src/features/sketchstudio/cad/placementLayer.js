@@ -320,7 +320,9 @@ export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pic
     dot.frustumCulled = false;
     layer.add(dot);
   };
-  const redraw = () => {
+  // The overlay drawn again from the view, the hover and the drag; redraw
+  // also renders it.
+  const drawOverlay = () => {
     clear(layer);
     axisLabel.hidden = true;
     try {
@@ -329,6 +331,9 @@ export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pic
       // An overlay must never take the viewport down; the panel reports problems.
       console.error('Placement overlay:', error);
     }
+  };
+  const redraw = () => {
+    drawOverlay();
     ctx.render();
   };
   const draw = () => {
@@ -1016,7 +1021,20 @@ export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pic
         value = toolPoseAfterTurn(pose, completed.turn, completed.start.toArray(), tool.hostOps);
     } else if (completed.delta.some((v) => Math.abs(v) > 1e-6))
       value = toolPoseAfterMove(pose, completed.delta, tool.hostOps);
-    if (value) callbacks.current.onPlacementDrag?.({ id: 'tool', value });
+    if (!value) return;
+    // As a handle drop (finishDrag): the ghost waits where it was dropped for
+    // the workspace's new view, and goes back if none arrives (refused).
+    const before = view;
+    clearTimeout(pending);
+    pending = setTimeout(() => {
+      if (view !== before || toolDrag || !ghost) return;
+      ctx.pivot.position.copy(completed.start);
+      ctx.pivot.quaternion.copy(completed.startQuat);
+      ghost.matrix.copy(completed.ghostStart);
+      ghost.matrixWorldNeedsUpdate = true;
+      ctx.render();
+    }, 400);
+    callbacks.current.onPlacementDrag?.({ id: 'tool', value });
   };
   const cancelTool = () => {
     if (!toolDrag) return;
@@ -1079,10 +1097,15 @@ export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pic
     layer,
     active: () => Boolean(view),
     isDragging: () => Boolean(drag || toolDrag),
+    // The boolean tool gizmo is being dragged (its moves draw from objectChange, toolChange).
+    toolDragging: () => Boolean(toolDrag),
     setView(next) {
       clearTimeout(pending);
       if (!next?.row?.seed) rowTyped = '';
-      if (drag && next?.handles?.every((h) => h.id !== drag.handle.id)) cancelDrag();
+      // A view that no longer has what is being dragged (or no view at all:
+      // the operation closed, its draft went stale) ends the drag, as Esc does.
+      if (drag && (!next || next.handles?.every((h) => h.id !== drag.handle.id))) cancelDrag();
+      if (toolDrag && !next?.toolGizmo) cancelDrag();
       view = next || null;
       live = null;
       if (!view?.pick) hover = pathHover = edgeHover = null;
@@ -1272,9 +1295,11 @@ export function createPlacementLayer({ ctx, renderer, hud, callbacks, rayAt, pic
       ctx.scene.remove(layer);
     },
   };
-  // Handles keep their on-screen size while orbiting and zooming.
-  ctx.controls.addEventListener('change', () => {
-    if (view?.handles?.length || view?.extras?.length) redraw();
+  // Handles keep their on-screen size while orbiting and zooming: laid out
+  // again in the render the orbit step makes (CadViewport's beforeRender,
+  // ctx.viewMoved), so the step is drawn once, with them already resized.
+  ctx.beforeRender.push(() => {
+    if (ctx.viewMoved && (view?.handles?.length || view?.extras?.length)) drawOverlay();
   });
   return api;
 }

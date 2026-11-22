@@ -42,6 +42,13 @@ function centeredRectangle(origin, width, depth) {
 const GRID_ROTATE_SNAP_DEGREES = 15;
 
 /**
+ * How far, in screen pixels, a press on an object has to travel before it is a
+ * drag rather than a click. Under it the press only selects; a click with a
+ * hand's wobble in it must not move anything.
+ */
+export const DRAG_THRESHOLD_PX = 4;
+
+/**
  * The slab boundary as it stood when the drag started.
  *
  * A slab edit commits on every pointer-move, so reading the live slab each
@@ -393,8 +400,6 @@ export function createSelectHandler({
     },
 
     onMouseMove(modelPos, e, toolState, selectedId, selectedType) {
-      const DRAG_THRESHOLD_PX = 4;
-
       if (toolState.pendingDrag && !toolState.dragging) {
         const dx = modelPos.x - toolState.startPos.x;
         const dy = modelPos.y - toolState.startPos.y;
@@ -1017,31 +1022,20 @@ export function createSelectHandler({
       // no history entry consumed — the wall stays exactly where it was.
       if (e.key === 'Escape' && (toolState.dragging || toolState.pendingDrag)) {
         // A slab edit has no preview to drop: it commits on every pointer-move,
-        // so cancelling means putting the boundary back where mousedown found
-        // it. The restore rides inside the still-open drag gesture (the button
-        // is usually still down), so the drag and its undo collapse into one
-        // history entry that ends where it began.
+        // like the column, fixture, stair, landing, railing, service, door,
+        // window and device drags. All of them are put back by the store, which
+        // still holds the pre-drag project as the gesture's one history entry
+        // (CANCEL_DRAG_GESTURE): the project returns to exactly what it was and
+        // the entry goes with it. Wall, section and grid drags only preview, so
+        // they have nothing to put back and dispatch nothing. With the selection
+        // gone (Ctrl+Z deselects mid-drag) there is nothing to cancel: the undo
+        // already took the gesture's entry, and cancelling would take the one
+        // before it.
         const slabOrigin = toolState.slabEditOrigin;
-        // The other drags that commit per frame — column, fixture, stair,
-        // landing, railing, service, door, window, device — are put back by
-        // the store, which still holds the pre-drag project
-        // (CANCEL_DRAG_GESTURE). Wall, section and grid drags only preview, so
-        // they have nothing to put back and dispatch nothing.
-        if (!slabOrigin && PER_FRAME_DRAG_TYPES.has(selectedType)) dispatch({ type: 'CANCEL_DRAG_GESTURE' });
-        if (slabOrigin) {
-          const floor = getFloor(activeFloorId);
-          const slab = (floor?.slabs || []).find((entry) => entry.id === slabOrigin.slabId);
-          if (slab && !sameBoundary(slab.boundaryPoints || [], slabOrigin.boundaryPoints)) {
-            dispatch({
-              type: 'SLAB_UPDATE',
-              floorId: activeFloorId,
-              slab: {
-                id: slab.id,
-                boundaryPoints: slabOrigin.boundaryPoints.map((point) => ({ x: point.x, y: point.y })),
-              },
-            });
-          }
-        }
+        const commitsPerFrame = slabOrigin
+          ? selectedType === 'slab' && selectedId === slabOrigin.slabId
+          : PER_FRAME_DRAG_TYPES.has(selectedType);
+        if (commitsPerFrame) dispatch({ type: 'CANCEL_DRAG_GESTURE' });
 
         editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: IDLE_DRAG_STATE });
         return;
@@ -1100,6 +1094,11 @@ export function createSelectHandler({
           dispatch({ type: 'ROOM_DELETE', floorId: activeFloorId, roomId: selectedId });
         }
         editorDispatch({ type: 'DESELECT' });
+        // A drag of what was just deleted ends with it, or its release would
+        // commit the preview for an object that is no longer there.
+        if (toolState.dragging || toolState.pendingDrag) {
+          editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: IDLE_DRAG_STATE });
+        }
       }
     },
 

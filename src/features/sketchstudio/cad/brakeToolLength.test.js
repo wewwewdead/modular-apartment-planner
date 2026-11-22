@@ -172,7 +172,8 @@ describe('§4 items 2 – 3: the punch longer and shorter than the bend', () => 
     expect(MIN_COVERAGE).toBe(0.5);
     expect(half.refusals.map((r) => r.code)).toContain('tool-cover');
     expect(half.refusals.find((r) => r.code === 'tool-cover').message).toBe(
-      'The punch stands over 180 mm of the 391.8 mm bend: less than half of it is pressed. Make it longer, or fit it to the bend.',
+      // One piece (docs/sketch-studio-piece-pick.md §5.4): what would let a part of it bend alone follows.
+      'The punch stands over 180 mm of the 391.8 mm bend: less than half of it is pressed. Make it longer, or fit it to the bend. A piece of sheet bends whole. To bend a part of it alone, cut a relief across the bend line between that part and the rest (Relief, in the sketcher).',
     );
     expect(clears(station(setup, { punchTrim: lengthTrim(200) }).pending)).toBe(true);
   });

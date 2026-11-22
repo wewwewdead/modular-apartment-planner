@@ -919,20 +919,43 @@ export function resolveEntityReference(entity, ref) {
   return null;
 }
 
-export function resolveSourceReferenceFromEntities(entities, ref, fallbackPoint = null) {
+/**
+ * An id -> entity lookup that answers exactly as `entities.find((item) =>
+ * item.id === id)` does: the FIRST entity with that id, and nothing for an id
+ * `===` never matches (NaN). Build it once per entities array where many
+ * references resolve against the same array (a render of every dimension).
+ */
+export function buildEntityIdLookup(entities = []) {
+  const byId = new Map();
+
+  for (const entity of entities) {
+    if (entity && !byId.has(entity.id)) {
+      byId.set(entity.id, entity);
+    }
+  }
+
+  return {
+    get: (id) => (Number.isNaN(id) ? undefined : byId.get(id)),
+    has: (id) => (Number.isNaN(id) ? false : byId.has(id)),
+  };
+}
+
+// `entityById` (from buildEntityIdLookup(entities)) is optional and answers as
+// the scan of `entities` would.
+export function resolveSourceReferenceFromEntities(entities, ref, fallbackPoint = null, entityById = null) {
   if (!ref) {
     return fallbackPoint;
   }
 
-  const entity = entities.find((item) => item.id === ref.entityId);
+  const entity = entityById ? entityById.get(ref.entityId) : entities.find((item) => item.id === ref.entityId);
   return resolveEntityReference(entity, ref) ?? fallbackPoint;
 }
 
-function reslotLegacySourceRefs(sourceRefs, entities, slotPoints) {
+function reslotLegacySourceRefs(sourceRefs, entities, slotPoints, entityById = null) {
   const slots = slotPoints.map(() => null);
 
   sourceRefs.forEach((ref) => {
-    const point = ref ? resolveSourceReferenceFromEntities(entities, ref, null) : null;
+    const point = ref ? resolveSourceReferenceFromEntities(entities, ref, null, entityById) : null;
 
     if (!point) {
       return;
@@ -962,14 +985,14 @@ function reslotLegacySourceRefs(sourceRefs, entities, slotPoints) {
   return slots;
 }
 
-function getPositionalSourceRefs(entity, entities, slotPoints) {
+function getPositionalSourceRefs(entity, entities, slotPoints, entityById = null) {
   const sourceRefs = entity.meta?.sourceRefs ?? [];
 
   if (sourceRefs.length >= slotPoints.length) {
     return sourceRefs;
   }
 
-  return reslotLegacySourceRefs(sourceRefs, entities, slotPoints);
+  return reslotLegacySourceRefs(sourceRefs, entities, slotPoints, entityById);
 }
 
 /**
@@ -982,31 +1005,31 @@ function getPositionalSourceRefs(entity, entities, slotPoints) {
  * agree on the slotting, or a dimension would report one pair of points while
  * following another.
  */
-export function getLinearDimensionSourceRefs(entity, entities = []) {
-  return getPositionalSourceRefs(entity, entities, [entity.p1, entity.p2]);
+export function getLinearDimensionSourceRefs(entity, entities = [], entityById = null) {
+  return getPositionalSourceRefs(entity, entities, [entity.p1, entity.p2], entityById);
 }
 
 /** The [p1, vertex, p2] source-ref slots of an angle dimension. See above. */
-export function getAngleDimensionSourceRefs(entity, entities = []) {
-  return getPositionalSourceRefs(entity, entities, [entity.p1, entity.vertex, entity.p2]);
+export function getAngleDimensionSourceRefs(entity, entities = [], entityById = null) {
+  return getPositionalSourceRefs(entity, entities, [entity.p1, entity.vertex, entity.p2], entityById);
 }
 
-export function resolveLinearDimensionPoints(entity, entities = []) {
-  const sourceRefs = getLinearDimensionSourceRefs(entity, entities);
+export function resolveLinearDimensionPoints(entity, entities = [], entityById = null) {
+  const sourceRefs = getLinearDimensionSourceRefs(entity, entities, entityById);
 
   return {
-    p1: resolveSourceReferenceFromEntities(entities, sourceRefs[0], entity.p1),
-    p2: resolveSourceReferenceFromEntities(entities, sourceRefs[1], entity.p2),
+    p1: resolveSourceReferenceFromEntities(entities, sourceRefs[0], entity.p1, entityById),
+    p2: resolveSourceReferenceFromEntities(entities, sourceRefs[1], entity.p2, entityById),
   };
 }
 
-export function resolveAngleDimensionPoints(entity, entities = []) {
-  const sourceRefs = getAngleDimensionSourceRefs(entity, entities);
+export function resolveAngleDimensionPoints(entity, entities = [], entityById = null) {
+  const sourceRefs = getAngleDimensionSourceRefs(entity, entities, entityById);
 
   return {
-    p1: resolveSourceReferenceFromEntities(entities, sourceRefs[0], entity.p1),
-    vertex: resolveSourceReferenceFromEntities(entities, sourceRefs[1], entity.vertex),
-    p2: resolveSourceReferenceFromEntities(entities, sourceRefs[2], entity.p2),
+    p1: resolveSourceReferenceFromEntities(entities, sourceRefs[0], entity.p1, entityById),
+    vertex: resolveSourceReferenceFromEntities(entities, sourceRefs[1], entity.vertex, entityById),
+    p2: resolveSourceReferenceFromEntities(entities, sourceRefs[2], entity.p2, entityById),
   };
 }
 

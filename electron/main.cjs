@@ -89,7 +89,10 @@ function createWindow() {
 
   // The page cancels unload while it has unsaved changes. A browser asks the
   // user about that; Electron just keeps the window open, so the close button
-  // seemed to do nothing. Ask here instead — Stay is the default.
+  // seemed to do nothing. Ask here instead — Stay is the default. The page
+  // vetoes for two reasons this process cannot tell apart: an edit not yet
+  // saved anywhere, or a project whose file is behind its browser draft. So
+  // the words promise neither that the changes are lost nor that they are kept.
   win.webContents.on('will-prevent-unload', (event) => {
     const choice = dialog.showMessageBoxSync(win, {
       type: 'question',
@@ -97,8 +100,8 @@ function createWindow() {
       defaultId: 1,
       cancelId: 1,
       title: 'Unsaved changes',
-      message: 'This project has unsaved changes.',
-      detail: 'Leave without saving? Your changes will be lost.',
+      message: 'This project has changes that are not saved to a file.',
+      detail: 'Leave without saving?',
     });
     // preventDefault here overrides the page's veto: the window unloads.
     if (choice === 0) event.preventDefault();
@@ -112,14 +115,37 @@ function createWindow() {
 
   // A crashed or killed renderer leaves a blank window; bring the app back.
   // A renderer that dies again and again (a crash on load) is not reloaded
-  // forever: after three crashes inside a minute the window stays as it is.
+  // forever: the first three crashes inside a minute reload on their own, and
+  // the fourth asks whether to try again or quit, rather than leaving a blank
+  // window with nothing on it to say why.
+  const CRASH_RELOADS_PER_MINUTE = 3;
   const recentCrashes = [];
   win.webContents.on('render-process-gone', (_event, details) => {
     if (details.reason === 'clean-exit' || win.isDestroyed()) return;
     const now = Date.now();
     while (recentCrashes.length && now - recentCrashes[0] > 60000) recentCrashes.shift();
     recentCrashes.push(now);
-    if (recentCrashes.length <= 3) win.reload();
+    if (recentCrashes.length <= CRASH_RELOADS_PER_MINUTE) {
+      win.reload();
+      return;
+    }
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'error',
+      buttons: ['Reload', 'Quit'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Apartment Planner stopped',
+      message: 'The app keeps stopping.',
+      detail: `It stopped ${recentCrashes.length} times in the last minute. Reload to try again, or quit.`,
+    });
+    if (win.isDestroyed()) return;
+    if (choice === 0) {
+      // A fresh count: a reload the user asked for gets the same three tries.
+      recentCrashes.length = 0;
+      win.reload();
+    } else {
+      app.quit();
+    }
   });
 
   // ELECTRON_START_URL points the shell at the Vite dev server for hot reload

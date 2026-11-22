@@ -6,9 +6,15 @@ import { mirrorEntities, rotateEntities } from '../utils/transformUtils';
 export default function useSketchTransform(state, dispatch, viewportHook, selection) {
   const { readCanvasPoint, readWorldPoint } = viewportHook;
   const { selectedIds, selectedEntity, selectionBounds } = selection;
+  // The frame and the handles belong to the select tool. A drawing tool leaves
+  // what it drew selected, so its next click (the end of the line just drawn,
+  // a point inside the last rectangle) lands on them; with another tool armed
+  // the press goes through to the canvas and the tool gets its click.
+  const ownsPresses = state.ui.activeTool === 'select';
 
   const handleTransformPointerDown = useCallback(
     (transformType, event, options = {}) => {
+      if (!ownsPresses) return;
       event.stopPropagation();
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -30,7 +36,7 @@ export default function useSketchTransform(state, dispatch, viewportHook, select
         }),
       );
     },
-    [dispatch, readCanvasPoint, readWorldPoint, state.document.entities, selectedIds],
+    [dispatch, ownsPresses, readCanvasPoint, readWorldPoint, state.document.entities, selectedIds],
   );
 
   const handleRotateSelection = useCallback(
@@ -66,12 +72,12 @@ export default function useSketchTransform(state, dispatch, viewportHook, select
 
   const handleHandlePointerDown = useCallback(
     (handle, event) => {
-      if (!selectedEntity) return;
+      if (!ownsPresses || !selectedEntity) return;
       event.stopPropagation();
       event.currentTarget.setPointerCapture(event.pointerId);
       dispatch(startHandleDrag({ entityId: selectedEntity.id, handleId: handle.id, pointerId: event.pointerId }));
     },
-    [dispatch, selectedEntity],
+    [dispatch, ownsPresses, selectedEntity],
   );
 
   return {

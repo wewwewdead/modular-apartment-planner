@@ -42,6 +42,12 @@ function keydown(code, init = {}) {
   return event;
 }
 
+function keyup(code, init = {}) {
+  const event = new KeyboardEvent('keyup', { code, key: init.key ?? code, bubbles: true, cancelable: true, ...init });
+  window.dispatchEvent(event);
+  return event;
+}
+
 beforeEach(() => {
   lockState.locked = false;
   lockState.listeners = [];
@@ -97,6 +103,32 @@ describe('walk navigation keys', () => {
     window.removeEventListener('keydown', reachedWindow);
 
     expect(w.defaultPrevented).toBe(true);
+    expect(reachedWindow).not.toHaveBeenCalled();
+  });
+
+  // The plan canvas latches its Space pan on key-down and lets go on key-up.
+  // Walk lets that key-down through while unlocked, so it must let the key-up
+  // through as well, or the latch never releases and every plan click pans.
+  it('lets the key-up of a key it let down through while unlocked', () => {
+    const reachedWindow = vi.fn();
+    window.addEventListener('keyup', reachedWindow);
+    keydown('Space', { key: ' ' });
+    const up = keyup('Space', { key: ' ' });
+    window.removeEventListener('keyup', reachedWindow);
+
+    expect(up.defaultPrevented).toBe(false);
+    expect(reachedWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it('still takes key-ups while locked', () => {
+    lockState.locked = true;
+    const reachedWindow = vi.fn();
+    window.addEventListener('keyup', reachedWindow);
+    keydown('KeyW', { key: 'w' });
+    const up = keyup('KeyW', { key: 'w' });
+    window.removeEventListener('keyup', reachedWindow);
+
+    expect(up.defaultPrevented).toBe(true);
     expect(reachedWindow).not.toHaveBeenCalled();
   });
 

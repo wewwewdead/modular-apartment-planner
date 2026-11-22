@@ -159,6 +159,40 @@ it('snaps a dragged part flush and edge-aligned to a nearby part and commits the
   expect(snapLines()).toHaveLength(0);
 });
 
+// B1.3 (docs/perf-pass-3.md §5): a material disposed per drag step relinked its program every move.
+it('keeps one snap outline material per colour through a drag and releases it on unmount', () => {
+  const { unmount } = render(
+    <CadViewport
+      model={model}
+      snapshot={snapshot}
+      ready
+      selectedId="leg"
+      moveEnabled
+      onMove={vi.fn()}
+      onSelect={vi.fn()}
+    />,
+  );
+  drag([-1395.4, -3.4, 0]);
+  const first = snapLines();
+  const byColour = new Map(first.map((l) => [l.material.color.getHexString(), l.material]));
+  expect(byColour.size).toBe(2);
+  const disposed = new Set();
+  for (const material of byColour.values()) material.addEventListener('dispose', () => disposed.add(material));
+  // The next step snaps the same way: the same two materials, nothing disposed.
+  act(() => {
+    TransformControls.current.object.position.add(new THREE.Vector3(0.2, 0.1, 0));
+    TransformControls.current.dispatchEvent({ type: 'objectChange' });
+  });
+  const second = snapLines();
+  expect(second.map((l) => l.name).sort()).toEqual(['snap-aligned', 'snap-aligned', 'snap-flush']);
+  for (const line of second) expect(line.material).toBe(byColour.get(line.material.color.getHexString()));
+  act(() => TransformControls.current.dispatchEvent({ type: 'mouseUp' }));
+  expect(snapLines()).toHaveLength(0);
+  expect(disposed.size).toBe(0);
+  unmount();
+  expect(disposed.size).toBe(2);
+});
+
 it('moves freely with Alt held, with Snap 0, and only along the dragged handle', () => {
   const onMove = vi.fn();
   const props = { model, snapshot, ready: true, selectedId: 'leg', moveEnabled: true, onMove, onSelect: vi.fn() };

@@ -256,7 +256,14 @@ function migrateV14toV15(project) {
       })),
     };
   });
-  project = syncProjectTrussSystems(project);
+  // The truss sync reads roofs from the list (schema 32), but at this step the
+  // file still holds the single slot: hand the slot to it as a one-roof list and
+  // take back the roof it may have detached, so this step behaves as it always did.
+  const { roofSystems: syncedRoofSystems, ...syncedProject } = syncProjectTrussSystems({
+    ...project,
+    roofSystems: project.roofSystem ? [project.roofSystem] : [],
+  });
+  project = { ...syncedProject, roofSystem: syncedRoofSystems[0] || null };
 
   if (project.roofSystem) {
     const roofSystem = {

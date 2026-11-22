@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ownerMaterialKey, parseOwnerMaterialKey } from '@/domain/roofCoveringCatalog';
 import { parseWallFastenerTonalMaterialKey, parseWallFinishMaterialKey } from '@/domain/wallFinishes';
 import { SIDING_BOARD_LENGTH } from '@/domain/wallSiding';
 import {
@@ -303,10 +304,10 @@ export function createMaterialPalette({ look = PALETTE_LOOKS.WHITE_MODEL } = {})
     slab: surface({ color: 0x8b8d8c, roughness: 0.96 }),
     // The roof body, one material per covering family. `roof_slab` is the old
     // `roof`: a notch lighter than the slab, so a flat roof reads as a finished
-    // surface. The others start in the default covering's Shale Grey; the real
-    // colour and finish are the project's, applied at runtime by
-    // `applyRoofAppearanceToPalette` (one roof per project, so mutating the
-    // shared instances is enough and nothing recompiles).
+    // surface. The others start in the default covering's Shale Grey. These
+    // are clone sources: each roof is drawn in its own copies
+    // (`roof_metal@<roof id>`, built by `paletteMaterialFor`), and its colour
+    // and finish reach those copies at runtime (`applyRoofAppearanceToPalette`).
     roof_slab: surface({ color: 0xb4b8bc, roughness: 0.9 }),
     // Painted steel is a paint film, not a mirror: dielectric, satin.
     roof_metal: surface({ color: 0xbdbfba, roughness: 0.5 }),
@@ -320,8 +321,8 @@ export function createMaterialPalette({ look = PALETTE_LOOKS.WHITE_MODEL } = {})
     roofTrim: surface({ color: 0xbdbfba, roughness: 0.55 }),
     // Fibre cement eaves lining, painted.
     roofSoffit: surface({ color: 0xe4e2d5, roughness: 0.88 }),
-    // Gable-end infill cladding (RT-2 draws it; the key is here so the palette
-    // and its runtime appearance hook are complete).
+    // Gable-end infill cladding (RT-2 draws it), cloned per truss system
+    // (`gableInfill@<system id>`) like the roof keys above.
     gableInfill: surface({ color: 0xe9e5dd, roughness: 0.8 }),
     parapet: surface({ color: 0xd9d6cf, roughness: 0.9 }),
     drain: metal({ color: 0x8d979f, roughness: 0.45 }),
@@ -609,8 +610,9 @@ export function applyRenderStyleToPalette(materialPalette, styleConfig) {
 /** Roughness of a painted covering by finish (spec §5.1). */
 export const ROOF_FINISH_ROUGHNESS = Object.freeze({ matte: 0.75, satin: 0.5, gloss: 0.3, unpainted: 0.4 });
 
-const ROOF_COVERING_KEYS = ['roof_metal', 'roof_tile', 'roof_membrane', 'roof_slab', 'roofRidgeCap'];
-const ROOF_TRIM_KEYS = ['roofTrim', 'roofGutter', 'roofDownpipe'];
+const ROOF_COVERING_KEYS = new Set(['roof_metal', 'roof_tile', 'roof_membrane', 'roof_slab', 'roofRidgeCap']);
+/** The covering keys that are sheet steel, and so turn to bare metal when 'unpainted'. */
+const ROOF_METAL_FAMILY_KEYS = new Set(['roof_metal', 'roofRidgeCap']);
 /** The base roughness of the non-metal covering families, which a 'matte' finish keeps. */
 const ROOF_MATTE_ROUGHNESS = { roof_tile: 0.85, roof_membrane: 0.6, roof_slab: 0.9 };
 
@@ -646,53 +648,168 @@ function setMaterialAppearance(material, hex, roughness, metal, result) {
   if (changed) result.changed = true;
 }
 
+// ── Per-owner roof and closure materials (docs/multi-roof.md §6) ─────────────
+
 /**
- * Put the project's roof covering, trim, soffit and gable-infill colours on the
- * palette. `appearance` is `{covering: {kind, hex, finish}, trims: {hex},
- * soffit: {hex}, closures: [{hex}]}` (see `resolveRoofAppearance`).
+ * An owner's gutters and downpipes are its trim — one instance, as
+ * `roofGutter` and `roofDownpipe` are aliases of `roofTrim` in the palette
+ * itself — so an owner's whole edge kit is still one instanced material.
+ */
+const OWNER_KEY_ALIASES = Object.freeze({ roofGutter: 'roofTrim', roofDownpipe: 'roofTrim' });
+
+/**
+ * The see-through tier of every owner material. Every base key that has
+ * owners is skin in `viewMode.js` MATERIAL_TIERS (pinned by a test there);
+ * it is stated on the material, like a finish's, because no table can list
+ * keys made of ids.
+ */
+const OWNER_MATERIAL_TIER = 'skin';
+
+/** The key an owner's material is kept under: its own, or its alias's. */
+function canonicalOwnerKey(owner) {
+  return ownerMaterialKey(OWNER_KEY_ALIASES[owner.baseKey] || owner.baseKey, owner.ownerId);
+}
+
+/**
+ * The last appearances each palette was given, indexed by owner. The scene
+ * build can ask for an owner's material before the appearance effect has run
+ * (first mount, a roof just added) or after it; remembering them is what lets
+ * a material built later be born wearing its owner's look either way.
+ */
+const lastAppearances = new WeakMap();
+
+function indexAppearances(appearances) {
+  const byId = (entries) => new Map((entries || []).filter((entry) => entry?.id).map((entry) => [entry.id, entry]));
+  return { roofs: byId(appearances.roofs), closures: byId(appearances.closures) };
+}
+
+/**
+ * Paint one owner material from its owner's entry, by the rules the shared
+ * palette keys always followed: the covering family takes the sheet colour and
+ * the finish's roughness (a matte tile, membrane or slab keeps its own), only
+ * sheet steel turns to bare metal when 'unpainted'; trims are painted steel in
+ * the same finish as the sheet they edge; the soffit lining and the gable
+ * cladding are fibre cement, colour only. An owner with no entry is left alone.
+ */
+function writeOwnerAppearance(material, owner, index, result) {
+  const { baseKey, ownerId } = owner;
+  if (baseKey === 'gableInfill') {
+    const closure = index.closures.get(ownerId);
+    if (closure) setMaterialAppearance(material, hexNumber(closure.hex), undefined, undefined, result);
+    return;
+  }
+  const roof = index.roofs.get(ownerId);
+  if (!roof) return;
+  const finish = roof.covering?.finish;
+  const unpainted = finish === 'unpainted';
+  const finishRoughness = ROOF_FINISH_ROUGHNESS[finish];
+  if (ROOF_COVERING_KEYS.has(baseKey)) {
+    const metalFamily = ROOF_METAL_FAMILY_KEYS.has(baseKey);
+    const roughness = finish === 'matte' && !metalFamily ? ROOF_MATTE_ROUGHNESS[baseKey] : finishRoughness;
+    setMaterialAppearance(material, hexNumber(roof.covering?.hex), roughness, metalFamily ? unpainted : false, result);
+  } else if (baseKey === 'roofTrim') {
+    setMaterialAppearance(material, hexNumber(roof.trims?.hex), finishRoughness, unpainted, result);
+  } else if (baseKey === 'roofSoffit') {
+    setMaterialAppearance(material, hexNumber(roof.soffit?.hex), undefined, undefined, result);
+  }
+}
+
+/**
+ * Put each roof's covering, trim and soffit colours, and each truss system's
+ * gable-infill colour, on that owner's own materials. `appearances` is
+ * `{roofs: [{id, covering: {kind, hex, finish}, trims: {hex}, soffit: {hex}}],
+ * closures: [{id, hex}]}` (see `resolveRoofAppearances`).
  *
- * A runtime mutation of shared instances, like the window glow and the ground
+ * A runtime mutation of palette instances, like the window glow and the ground
  * colour: nothing is rebuilt, nothing recompiles unless an 'unpainted' finish
  * flips a material to bare metal, and batching keeps working because the
- * instanced draws hold the same material objects. One roof per project is what
- * makes this enough — a second roof would need per-roof keys.
+ * instanced draws hold the same material objects. The base keys are only
+ * clone sources and are never recoloured. An owner material the scene has not
+ * asked for yet is not built here; the appearances are remembered and it is
+ * born with them (`paletteMaterialFor`).
  *
  * Returns `{changed, recompile}` so the caller can skip a redraw, and warm
  * shaders only when a metalness flip asked for a new program.
  */
-export function applyRoofAppearanceToPalette(materialPalette, appearance) {
+export function applyRoofAppearanceToPalette(materialPalette, appearances) {
   const result = { changed: false, recompile: false };
-  if (!materialPalette || !appearance) return result;
-  const finish = appearance.covering?.finish;
-  const unpainted = finish === 'unpainted';
-  const finishRoughness = ROOF_FINISH_ROUGHNESS[finish];
-  const coveringHex = hexNumber(appearance.covering?.hex);
-
-  // A project with trusses but no roof answers for its closures only
-  // (`covering` null): the roof keys are left exactly as they are.
-  if (appearance.covering) {
-    for (const key of ROOF_COVERING_KEYS) {
-      const metalFamily = key === 'roof_metal' || key === 'roofRidgeCap';
-      const roughness = finish === 'matte' && !metalFamily ? ROOF_MATTE_ROUGHNESS[key] : finishRoughness;
-      setMaterialAppearance(materialPalette[key], coveringHex, roughness, metalFamily ? unpainted : false, result);
-    }
-
-    // Trims are painted steel in the same finish as the sheet they edge.
-    const trimHex = hexNumber(appearance.trims?.hex);
-    for (const key of ROOF_TRIM_KEYS) {
-      setMaterialAppearance(materialPalette[key], trimHex, finishRoughness, unpainted, result);
-    }
+  if (!materialPalette || !appearances) return result;
+  const index = indexAppearances(appearances);
+  lastAppearances.set(materialPalette, index);
+  for (const key of ownerMaterialKeys(materialPalette)) {
+    writeOwnerAppearance(materialPalette[key], parseOwnerMaterialKey(key), index, result);
   }
 
-  // Lining and cladding are fibre cement: colour only, never metal.
-  setMaterialAppearance(materialPalette.roofSoffit, hexNumber(appearance.soffit?.hex), undefined, undefined, result);
-  const closureHex = hexNumber(appearance.closures?.[0]?.hex);
-  setMaterialAppearance(materialPalette.gableInfill, closureHex, undefined, undefined, result);
-
-  // A roof ghosted in X-ray is still the project's roof colour, cooled.
+  // A roof ghosted in X-ray is still that roof's colour, cooled.
   if (result.changed) syncGhostMaterials(materialPalette);
 
   return result;
+}
+
+/**
+ * Build one owner material: a `cloneWithProceduralDetail` of its base key's
+ * material, as a wall finish is built from its substrate — so it is in the
+ * detailed palette's one program family (a new roof links nothing new), keeps
+ * the base's detail family, side and roughness, and starts at the relief
+ * strength the render style has the palette at — in whichever look the palette
+ * was made (white model, classic, a sheet's own). Then painted from the last
+ * appearances the palette was given, if it was given any.
+ */
+function buildOwnerMaterial(materialPalette, owner, key) {
+  const source = materialPalette[owner.baseKey];
+  if (!source?.isMaterial) return null;
+  const material = cloneWithProceduralDetail(source);
+  material.name = key;
+  // Owned by the palette like every material in it: batchable, never disposed
+  // with an object, ghosted by its own tier rather than a table row.
+  material.userData = {
+    ...material.userData,
+    paletteKey: key,
+    tier: OWNER_MATERIAL_TIER,
+    ownedByPalette: true,
+  };
+  delete material.userData.ownedByPreviewObject;
+  delete material.userData.baseOpacity;
+  delete material.userData.ghostTwin;
+  delete material.userData.selectionClone;
+  const index = lastAppearances.get(materialPalette);
+  if (index) writeOwnerAppearance(material, owner, index, { changed: false, recompile: false });
+  return material;
+}
+
+/** Every owner key the palette holds a material for (aliases are resolved, never stored). */
+export function ownerMaterialKeys(materialPalette) {
+  return Object.keys(materialPalette || {}).filter((key) => parseOwnerMaterialKey(key));
+}
+
+/**
+ * Drop the owner materials nothing in the scene draws with any more: a deleted
+ * roof's or truss system's, a roof's old covering family after a kind change,
+ * a roof a phase view hides (built again, in its remembered look, when it is
+ * shown). Disposed with their twins and tints, and deleted from the palette.
+ * No cap, unlike the finish materials: an owner key does not change with its
+ * colour, so a colour drag makes none, and one only goes unused when its owner
+ * or its family went.
+ *
+ * Returns how many were removed.
+ */
+export function pruneOwnerMaterials(materialPalette, liveKeys) {
+  const live = new Set();
+  for (const key of liveKeys || []) {
+    const owner = parseOwnerMaterialKey(key);
+    if (owner) live.add(canonicalOwnerKey(owner));
+  }
+  let removed = 0;
+  for (const key of ownerMaterialKeys(materialPalette)) {
+    if (live.has(key)) continue;
+    const material = materialPalette[key];
+    disposeGhostMaterialFor(materialPalette, material);
+    disposeSelectionMaterialsFor(materialPalette, material);
+    material?.dispose?.();
+    delete materialPalette[key];
+    removed += 1;
+  }
+  return removed;
 }
 
 // ── Wall finishes (docs/wall-cladding-finishes.md §5.4) ──────────────────────
@@ -797,12 +914,24 @@ function buildWallFinishMaterial(materialPalette, parsed, key) {
  * same colour gets the same instance — and the batcher, which buckets on
  * identity, draws them in one call. A tonal screw-head key
  * (`wallFastenerTonal:<face key>`) is built the same way, from its face's
- * material. Any other unknown key answers `undefined`, as indexing always did.
+ * material, and so is an owner key (`roof_metal@<roof id>`, `gableInfill@<truss
+ * system id>`, docs/multi-roof.md §6), from its base key's material; an owner's
+ * gutter and downpipe keys answer with that owner's trim. Any other unknown key
+ * answers `undefined`, as indexing always did.
  */
 export function paletteMaterialFor(materialPalette, key) {
   if (!materialPalette) return undefined;
   const existing = materialPalette[key];
   if (existing) return existing;
+  const owner = parseOwnerMaterialKey(key);
+  if (owner) {
+    const canonicalKey = canonicalOwnerKey(owner);
+    if (canonicalKey !== key) return paletteMaterialFor(materialPalette, canonicalKey);
+    const material = buildOwnerMaterial(materialPalette, owner, key);
+    if (!material) return undefined;
+    materialPalette[key] = material;
+    return material;
+  }
   const faceKey = parseWallFastenerTonalMaterialKey(key);
   if (faceKey) {
     const tonal = buildTonalFastenerMaterial(materialPalette, faceKey, key);

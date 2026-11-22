@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useEditorState, useViewport } from '@/features/floorplan/context/FloorplanContext';
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
 import { useDragGestureRelease } from '@/features/floorplan/hooks/useDragGestureRelease';
@@ -22,6 +22,14 @@ export default function SheetCanvas() {
   const activePointerId = useRef(null);
   const isPanning = useRef(false);
   const lastPanPos = useRef({ x: 0, y: 0 });
+  // The pan's pointer moves since the last frame, sent as one PAN per frame
+  // rather than one per move. Every way a pan ends sends what is left first.
+  const pendingPan = useRef(null);
+  const panFrame = useRef(0);
+  // The <svg>'s box, measured once and kept until something can have moved it:
+  // a resize (observer), a window resize or scroll, or the next press.
+  const svgRect = useRef(null);
+  const viewportRef = useRef(null);
 
   const { project, dispatch } = useProject();
   const { activeSheetId, selectedId, selectedType, dispatch: editorDispatch } = useEditorState();
@@ -29,16 +37,34 @@ export default function SheetCanvas() {
 
   useDragGestureRelease(dispatch);
 
+  useLayoutEffect(() => {
+    viewportRef.current = viewport;
+  }, [viewport]);
+
   const sheet = (project.sheets || []).find((entry) => entry.id === activeSheetId) || null;
+  // The one build of the scene: the visible sheet and the hidden PDF root are
+  // both drawn from it, and the hit tests below read it.
   const scene = useMemo(() => buildSheetScene(project, sheet), [project, sheet]);
 
+  const readSvgRect = useCallback(() => {
+    if (!svgRect.current) svgRect.current = svgRef.current.getBoundingClientRect();
+    return svgRect.current;
+  }, []);
+
   const getSheetPos = useCallback(
-    (event) => {
-      const rect = svgRef.current.getBoundingClientRect();
-      return screenToSheet(event.clientX, event.clientY, viewport, rect);
-    },
-    [viewport],
+    (event) => screenToSheet(event.clientX, event.clientY, viewport, readSvgRect()),
+    [readSvgRect, viewport],
   );
+
+  const flushPan = useCallback(() => {
+    if (panFrame.current) {
+      cancelAnimationFrame(panFrame.current);
+      panFrame.current = 0;
+    }
+    const pan = pendingPan.current;
+    pendingPan.current = null;
+    if (pan) editorDispatch({ type: 'PAN', dx: pan.dx, dy: pan.dy });
+  }, [editorDispatch]);
 
   const updateViewport = useCallback(
     (viewportId, updates) => {
@@ -104,6 +130,7 @@ export default function SheetCanvas() {
       // the plan canvas: bracket it so the drag is one undo entry and one
       // coordination pass rather than one of each per frame.
       dispatch({ type: 'BEGIN_DRAG_GESTURE' });
+      svgRect.current = null;
 
       if (event.button === 1 || (event.button === 0 && event.shiftKey)) {
         capturePointer(event.pointerId);
@@ -200,14 +227,42 @@ export default function SheetCanvas() {
     ],
   );
 
+  /*
+   * A drag or pan whose release will never arrive: the pointer lost its
+   * capture, the window lost focus, or a move came with no button held. It ends
+   * where it stands, as a release would — what it already wrote is kept, as one
+   * undo step — and the store's gesture is closed here, because no window
+   * release is coming to close it.
+   */
+  const abandonDrag = useCallback(() => {
+    if (!dragState.current && !isPanning.current) return;
+    flushPan();
+    isPanning.current = false;
+    dragState.current = null;
+    releasePointer();
+    dispatch({ type: 'END_DRAG_GESTURE' });
+  }, [dispatch, flushPan, releasePointer]);
+
   const handlePointerMove = useCallback(
     (event) => {
       if (activePointerId.current !== null && event.pointerId !== activePointerId.current) return;
 
+      if ((isPanning.current || dragState.current) && event.buttons === 0) {
+        abandonDrag();
+        return;
+      }
+
       if (isPanning.current) {
         const dx = event.clientX - lastPanPos.current.x;
         const dy = event.clientY - lastPanPos.current.y;
-        editorDispatch({ type: 'PAN', dx, dy });
+        const pending = pendingPan.current;
+        pendingPan.current = pending ? { dx: pending.dx + dx, dy: pending.dy + dy } : { dx, dy };
+        if (!panFrame.current) {
+          panFrame.current = requestAnimationFrame(() => {
+            panFrame.current = 0;
+            flushPan();
+          });
+        }
         lastPanPos.current = { x: event.clientX, y: event.clientY };
         return;
       }
@@ -265,43 +320,97 @@ export default function SheetCanvas() {
 
       updateViewport(viewportId, next);
     },
-    [editorDispatch, getSheetPos, sheet, updateViewport],
+    [abandonDrag, flushPan, getSheetPos, sheet, updateViewport],
   );
 
   const handlePointerUp = useCallback(
     (event) => {
       if (activePointerId.current !== null && event.pointerId !== activePointerId.current) return;
+      flushPan();
       isPanning.current = false;
       dragState.current = null;
       releasePointer(event.pointerId);
     },
-    [releasePointer],
+    [flushPan, releasePointer],
   );
 
   const handlePointerCancel = useCallback(
     (event) => {
       if (activePointerId.current !== null && event.pointerId !== activePointerId.current) return;
+      flushPan();
       isPanning.current = false;
       dragState.current = null;
       releasePointer(event.pointerId);
     },
-    [releasePointer],
+    [flushPan, releasePointer],
   );
 
+  const handleLostPointerCapture = useCallback(
+    (event) => {
+      if (activePointerId.current !== null && event.pointerId !== activePointerId.current) return;
+      abandonDrag();
+    },
+    [abandonDrag],
+  );
+
+  /*
+   * Escape mid-drag puts the viewport back where the press found it. The drag
+   * has rewritten the project every frame, and its first frame stored the
+   * pre-drag project as the gesture's one history entry: CANCEL_DRAG_GESTURE
+   * restores exactly that and takes the entry off again. Only while the drag's
+   * own viewport is still selected — an undo mid-drag deselects, and has
+   * already taken that entry, so cancelling would take the one before it. The
+   * drag is dropped either way, so the moves and the release that follow do
+   * nothing. A pan has nothing to put back and is left to its release.
+   */
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      const drag = dragState.current;
+      if (!drag) return;
+      event.preventDefault();
+      if (selectedType === 'sheetViewport' && selectedId === drag.viewportId) {
+        dispatch({ type: 'CANCEL_DRAG_GESTURE' });
+      }
+      dragState.current = null;
+      releasePointer();
+    };
+    const handleBlur = () => abandonDrag();
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [abandonDrag, dispatch, releasePointer, selectedId, selectedType]);
+
+  // Reads the view through a ref, so the listener below is bound once rather
+  // than again on every pan and zoom. A pan still waiting for its frame is part
+  // of the view being zoomed: it is folded into this zoom's absolute pan and
+  // dropped, never sent after it.
   const handleWheel = useCallback(
     (event) => {
       event.preventDefault();
-      const rect = svgRef.current.getBoundingClientRect();
+      const rect = readSvgRect();
       const mouseX = event.clientX - rect.left;
       const mouseY = event.clientY - rect.top;
+      const pending = pendingPan.current;
+      if (panFrame.current) {
+        cancelAnimationFrame(panFrame.current);
+        panFrame.current = 0;
+      }
+      pendingPan.current = null;
+      const current = viewportRef.current;
+      const currentPanX = current.panX + (pending?.dx || 0);
+      const currentPanY = current.panY + (pending?.dy || 0);
       const direction = event.deltaY < 0 ? 1 : -1;
       const factor = direction > 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
-      const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, viewport.zoom * factor));
-      const panX = mouseX - (mouseX - viewport.panX) * (newZoom / viewport.zoom);
-      const panY = mouseY - (mouseY - viewport.panY) * (newZoom / viewport.zoom);
+      const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, current.zoom * factor));
+      const panX = mouseX - (mouseX - currentPanX) * (newZoom / current.zoom);
+      const panY = mouseY - (mouseY - currentPanY) * (newZoom / current.zoom);
       editorDispatch({ type: 'ZOOM', zoom: newZoom, panX, panY });
     },
-    [editorDispatch, viewport],
+    [editorDispatch, readSvgRect],
   );
 
   useEffect(() => {
@@ -316,6 +425,28 @@ export default function SheetCanvas() {
     };
   }, [handleWheel]);
 
+  // What can move the <svg> drops its cached box; the next read measures it.
+  // A pan frame still waiting when the canvas goes is dropped with it.
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return undefined;
+    const invalidate = () => {
+      svgRect.current = null;
+    };
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(invalidate) : null;
+    observer?.observe(svg);
+    window.addEventListener('resize', invalidate);
+    window.addEventListener('scroll', invalidate, true);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', invalidate);
+      window.removeEventListener('scroll', invalidate, true);
+      if (panFrame.current) cancelAnimationFrame(panFrame.current);
+      panFrame.current = 0;
+      pendingPan.current = null;
+    };
+  }, []);
+
   return (
     <div className={styles.canvasContainer}>
       <svg
@@ -326,10 +457,17 @@ export default function SheetCanvas() {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
+        onLostPointerCapture={handleLostPointerCapture}
       >
         <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
           {sheet ? (
-            <SheetRenderer project={project} sheet={sheet} selectedId={selectedId} selectedType={selectedType} />
+            <SheetRenderer
+              project={project}
+              sheet={sheet}
+              scene={scene}
+              selectedId={selectedId}
+              selectedType={selectedType}
+            />
           ) : (
             <g className="sheet-empty">
               <rect x={0} y={0} width={420} height={297} fill="#f6f7f9" stroke="#d0d6de" strokeDasharray="2 2" />
@@ -356,7 +494,7 @@ export default function SheetCanvas() {
           }}
           aria-hidden="true"
         >
-          <SheetRenderer project={project} sheet={sheet} selectedId={null} selectedType={null} />
+          <SheetRenderer project={project} sheet={sheet} scene={scene} selectedId={null} selectedType={null} />
         </svg>
       )}
       <div className={styles.statusBar}>

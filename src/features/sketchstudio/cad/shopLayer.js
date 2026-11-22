@@ -34,12 +34,15 @@ import {
   backDirection,
   defaultGripAxis,
   edgeSegments,
+  fingerPlacement,
   freeRect,
   gripAnchor,
   inRects,
   nearestAxis,
   nearestEdge,
+  nearestPiece,
   pickInOrder,
+  pieceSegments,
   placementGap,
   polylineDistance,
   reachRect,
@@ -50,6 +53,7 @@ import {
 } from './brakeHands.js';
 import { EDGE_ALPHA, EDGE_COLOR } from './viewMode.js';
 import {
+  SLIDE_MS,
   STROKE_GAP,
   TURN_MS,
   brakeFrame,
@@ -83,6 +87,8 @@ export const MACHINE_COLORS = Object.freeze({
 });
 // The pending punch line, marked on the sheet where the punch tip will touch.
 const PUNCH_LINE_COLOR = '#d9480f';
+// A piece of the line this hit leaves flat (piece pick §6.1): the same weight, a quieter grey (red is a refusal).
+const FLAT_PIECE_COLOR = '#7f8c99';
 // The station's camera: the operator's view, standing in front of the machine
 // (−Y), looking toward the backgauge and down 25°, 35° round toward the bed's
 // right end so the end faces of the punch and the die (the punch's profile,
@@ -139,8 +145,16 @@ const UNIT_SCALE = new THREE.Vector3(1, 1, 1);
  *   (pressBrake.js sheetSection), context (brakeCollisions.js partSection), tools
  *   (toolingSections at the pose's tip), finger, gaugeDistance, angle, target, tipZ, punch,
  *   die (names), phase, collision } — and null when the station closes.
+ *   onGripEnd(): the layer ended a grip drag itself (a new view under it, the
+ *   grip no longer shown, the station closing): the viewport's press ends with it.
  */
-export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStationPose = () => {} }) {
+export function createShopLayer({
+  ctx,
+  labels,
+  onStrokeEnd = () => {},
+  onStationPose = () => {},
+  onGripEnd = () => {},
+}) {
   const root = new THREE.Group();
   root.name = 'shop-layer';
   root.matrixAutoUpdate = false;
@@ -302,6 +316,18 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
   punchLine.renderOrder = 4;
   punchLine.visible = false;
   stationRoot.add(punchLine);
+  // The pieces of the line this hit leaves flat (piece pick §6.1), beside the
+  // punch line and shown with it; the grip's `pieces` say which (the layer never guesses).
+  const flatLine = new THREE.LineSegments(
+    new THREE.BufferGeometry(),
+    new THREE.LineBasicMaterial({ color: FLAT_PIECE_COLOR }),
+  );
+  flatLine.name = 'press-brake-flat-pieces';
+  flatLine.raycast = () => {};
+  flatLine.renderOrder = 4;
+  flatLine.visible = false;
+  let flatShown = false;
+  stationRoot.add(flatLine);
   const machineMaterial = (key) => ctx.materials.body(MACHINE_COLORS[key], 1, { depthWrite: true, roughness: 0.6 });
   const solid = (geometry, colour, name) => {
     const mesh = new THREE.Mesh(geometry, machineMaterial(colour));
@@ -664,28 +690,31 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
     station.part.group.matrixWorldNeedsUpdate = true;
     const punch = punchOf(view.punch);
     const reverse = Boolean(view.reverse);
+    // The sheet slid (docs/sketch-studio-sheet-slide.md §4): the die goes with it, built as if
+    // centred and moved along the bed, so a slide alone rebuilds no tooling.
+    const shift = frame.shift || 0;
+    const back = (runs) => (shift ? runs.map(([a, b]) => [a - shift, b - shift]) : runs);
     buildTooling(
       punch,
       dieEntry,
       frame.ranges,
-      frame.dieRanges,
-      dieExtent(partReach(posed, frame), frame.span),
+      back(frame.dieRanges),
+      back([dieExtent(partReach(posed, frame), frame.span)])[0],
       Boolean(view.bendId),
       reverse,
       // Horn sections (punch library §4.4): the bend's record says, through the frame.
       frame.horns || false,
     );
+    station.die.position.x = shift;
+    station.die.updateMatrixWorld(true);
     markPunchLine(posed, members, frame);
     const tipZ = tip === 'follow' || (tip === undefined && view.collision) ? frame.tipZ : (tip ?? t + STROKE_GAP);
     station.ram.position.set(0, 0, tipZ);
     station.ram.updateMatrixWorld(true);
-    const width = frame.span[1] - frame.span[0];
     station.gauge.visible = gaugeDistance != null;
     if (station.gauge.visible) {
       station.gauge.position.set(0, gaugeDistance, 0);
-      const spread = Math.max(FINGER.width, Math.min(width * 0.3, station.machine.bed * 0.35));
-      station.gauge.getObjectByName('press-brake-finger-left').position.x = -spread;
-      station.gauge.getObjectByName('press-brake-finger-right').position.x = spread;
+      placeFingers(posed, frame);
       station.gauge.updateMatrixWorld(true);
     }
     const bend = view.bendId ? posed.bends.find((b) => b.id === view.bendId) : null;
@@ -703,6 +732,8 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
       back: backDirection(bend, frame.back, flipped),
       posed,
     };
+    // The pieces left flat (piece pick §6.1), on this pose.
+    drawFlatPieces();
     // The side view of the same pose (pressBrake.js sheetSection), in the machine's Y–Z mm.
     const window = sideViewWindow({ punch, die: dieEntry });
     // The rest of the part (what earlier bends made of it) cut where a
@@ -754,6 +785,22 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
     };
     placeGap();
     return frame;
+  };
+  // The backgauge fingers behind the gauge edge's own run on the sheet (piece
+  // pick §6.3, view only): its extent along X as posed; with no gauge edge,
+  // about the bend as before. A short edge has one finger, the other not drawn.
+  const placeFingers = (posed, frame) => {
+    const xs = fingerPlacement(
+      gaugeRun(posed, frame),
+      frame.span[1] - frame.span[0],
+      station.machine.bed,
+      FINGER.width,
+    );
+    const left = station.gauge.getObjectByName('press-brake-finger-left'),
+      right = station.gauge.getObjectByName('press-brake-finger-right');
+    left.position.x = xs[0];
+    right.visible = xs.length > 1;
+    if (right.visible) right.position.x = xs[1];
   };
   // The posed part's bounding-box centre (posed part mm) and the radius of the sphere round it.
   const partBounds = (posed) => {
@@ -899,7 +946,10 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
     const lineShown = punchLine.visible;
     stopTurn();
     const turn = options.plan || planTurn(fromMatrix.toArray(), station.pose.frame.matrix);
+    // A slide along the bed (piece pick §6.2): straight there, not drawn out nor lifted.
+    if (options.slide) Object.assign(turn, { out: 0, rise: 0 });
     Object.assign(turn, {
+      slide: Boolean(options.slide),
       start: performance.now(),
       frames: 0,
       total: 0,
@@ -916,12 +966,39 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
     if (reducedMotion()) turnTick(performance.now());
     else turnLoop = requestAnimationFrame(turnTick);
   };
+  // The part slid along the bed to other pieces picked (piece pick §6.2): from
+  // where it is drawn (the pose before, rebased onto the new pieces) when the new pose
+  // differs from it by a move along X and nothing else (a new L moves it in Y,
+  // a turn turns it), a line in the die both times, no scrub, no replay. The
+  // matrix to glide from, or null. One rule for any move along the bed.
+  const slideFrom = (before, view) => {
+    if (!before?.lined || !view.bendId || before.scrub || view.scrub || before.film || ctx.filmKey) return null;
+    const drawn =
+      rebaseMatrix({ matrix: before.matrix, pieces: before.pieces }, { pieces: station.pose.posed.pieces }) ||
+      before.matrix;
+    const a = drawn.elements,
+      b = station.pose.frame.matrix;
+    for (let i = 0; i < 12; i++) if (Math.abs(a[i] - b[i]) > 1e-6) return null;
+    if (Math.abs(a[13] - b[13]) > 1e-3 || Math.abs(a[14] - b[14]) > 1e-3 || Math.abs(a[12] - b[12]) <= 1e-3)
+      return null;
+    return drawn;
+  };
+  // The sheet in the hand (sheet slide §6.1): drawn where the pointer has it,
+  // its pose moved along X by what the session has not caught up with yet.
+  const placeHeld = () => {
+    if (!slideHand || !station?.pose) return;
+    const m = new THREE.Matrix4().fromArray(station.pose.frame.matrix);
+    m.elements[12] += slideHand.value - (station.pose.frame.shift || 0);
+    station.part.group.matrix.copy(m);
+    station.part.group.matrixWorldNeedsUpdate = true;
+  };
   // The side view hears every pose: the stroke's frames, a pick, a shown collision.
   // The sheet turning on its own or in the operator's hands (hands on the
   // sheet §5.2): 'turn' (over, §5.1) or 'around' (the side up stays), else null.
   const turnPhase = () => {
     if (gripDrag) return gripDrag.kind === 'turn' ? 'around' : 'turn';
-    if (station?.turn) return station.turn.around ? 'around' : 'turn';
+    // A slide along the bed (piece pick §6.2) is no turn: the side view stays as it is.
+    if (station?.turn) return station.turn.slide ? null : station.turn.around ? 'around' : 'turn';
     return null;
   };
   const emitPose = () => {
@@ -1096,9 +1173,13 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
   // from where the hand left it (`handover`, see setStation).
   const grip = createBrakeGrip();
   stationRoot.add(grip.group);
-  const KINDS = ['flip', 'turn'];
+  // Slide sheet (docs/sketch-studio-sheet-slide.md §6.1) beside the two rings: the viewport drags it
+  // as it does the fingers (slideStart / slideTo / slideHold), never through gripStart.
+  const KINDS = ['flip', 'turn', 'slide'];
   const NO_HANDS = { shown: false, lined: false, flip: null, turn: null, ms: null };
   let hands = NO_HANDS,
+    // The sheet slid by hand (sheet slide §6.1): { value (the sheet's move in the hand, mm, machine X) } while held.
+    slideHand = null,
     lastGripDrag = null,
     // Per drawn pose: the anchor, the pose lying flat (a collision's waits), each act's placement.
     gripCache = { pose: null, anchor: null, flat: null, targets: {} },
@@ -1229,10 +1310,22 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
     const point = [spot.x, anchor.y, anchor.z];
     const scale = mmPerPixelAt(ctx.camera, [point[0], point[1], point[2] + WORK_HEIGHT], height);
     for (const kind of KINDS) {
-      // Turn sheet around only with a punch line (with none, picking the edge is the turn: HO-2).
-      const shown = kind === 'flip' || hands.lined;
+      // Turn sheet around only with a punch line (with none, picking the edge is the turn: HO-2);
+      // Slide sheet only where the workspace offers it (a pending hit, sheet slide §6.1); in the
+      // hand, the arrow alone.
+      const shown = slideHand
+        ? kind === 'slide'
+        : kind === 'slide'
+          ? Boolean(hands.lined && hands.slide?.offered)
+          : kind === 'flip' || hands.lined;
       grip.show(kind, shown);
       if (!shown) continue;
+      if (kind === 'slide') {
+        // Along the bed, lying flat: its local X the machine's X.
+        grip.colour(kind, 'X');
+        grip.place(kind, { anchor: point, axis: [0, 0, 1], up: [0, 1, 0], scale });
+        continue;
+      }
       const axis = gripAxis(kind);
       grip.colour(kind, nearestAxis(axis));
       grip.place(kind, { anchor: point, axis, up: kind === 'turn' ? [0, 1, 0] : [0, 0, 1], scale });
@@ -1331,7 +1424,7 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
         centre: client(centre),
         press: arc.length ? client(arc[Math.floor(arc.length / 2)]) : null,
         arc: arc.map(client),
-        axis: nearestAxis(gripAxis(kind)),
+        axis: kind === 'slide' ? 'X' : nearestAxis(gripAxis(kind)),
       };
     };
     const outcome = (o) => (o ? { hit: o.hit, ok: o.ok, fact: o.fact } : null);
@@ -1342,7 +1435,10 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
       dragging: gripDrag ? gripDrag.kind : null,
       fraction: gripDrag ? gripDrag.fraction : null,
       handover: Boolean(handover),
-      handles: { flip: handle('flip'), turn: handle('turn') },
+      // Slide sheet (sheet slide §6.1) named only when it is drawn.
+      handles: { flip: handle('flip'), turn: handle('turn'), ...(handle('slide') ? { slide: handle('slide') } : {}) },
+      // Sheet slide §6.1: the sheet in the hand, and where.
+      sliding: slideHand ? slideHand.value : null,
       outcomes: { flip: outcome(hands.flip), turn: outcome(hands.turn) },
       outcomesMs: hands.ms ?? null,
       // The pair would pass the budget: each is worked out on its handle's first approach (§5.4).
@@ -1383,11 +1479,60 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
     }
     return edgeCache.lines;
   };
+  // The gauge edge's run along the bed as posed (piece pick §6.3): [x0, x1]
+  // machine mm, or null with no gauge edge offered (two points) or none on the pose.
+  const gaugeRun = (posed, frame) => {
+    const edge = hands.gaugeEdge;
+    if (!edge || !station?.view?.gaugePoint) return null;
+    const xs = edgeSegments(posed, edge, frame.matrix).flatMap(([p, q]) => [p[0], q[0]]);
+    return xs.length ? [Math.min(...xs), Math.max(...xs)] : null;
+  };
+  // Each offered piece's stretch on the sheet (machine mm, brakeHands.js
+  // pieceSegments), per drawn pose and offered pieces (piece pick §6.1).
+  const NO_LINES = Object.freeze([]);
+  let pieceCache = { pose: null, pieces: null, lines: NO_LINES },
+    flatFor = null;
+  const pieceLines = () => {
+    if (!hands.pieces?.length || !station?.pose) return NO_LINES;
+    if (pieceCache.pose !== station.pose || pieceCache.pieces !== hands.pieces) {
+      const { posed, frame } = station.pose;
+      pieceCache = {
+        pose: station.pose,
+        pieces: hands.pieces,
+        lines: hands.pieces.map((piece) => ({
+          index: piece.index,
+          skipped: Boolean(piece.skipped),
+          segments: pieceSegments(posed, piece, frame.matrix),
+        })),
+      };
+    }
+    return pieceCache.lines;
+  };
+  // The pieces left flat, drawn quieter beside the punch line (§6.1).
+  const drawFlatPieces = () => {
+    const lines = pieceLines();
+    if (lines !== flatFor) {
+      flatFor = lines;
+      const points = lines
+        .filter((line) => line.skipped)
+        .flatMap((line) => line.segments.flat().map((p) => new THREE.Vector3(...p)));
+      flatShown = points.length > 0;
+      flatLine.geometry.dispose();
+      flatLine.geometry = new THREE.BufferGeometry().setFromPoints(points);
+    }
+    flatLine.visible = flatShown && punchLine.visible;
+  };
+  // The piece the panel names (§5.5), lit as one in reach is; null none.
+  const panelPiece = () =>
+    hands.litPiece != null && gripVisible() ? { kind: 'piece', index: hands.litPiece, panel: true } : null;
   // An edge's runs on the canvas (px), the parts in front of the camera only.
   const screenRuns = (segments, width, height) =>
     segments
       .map(([p, q]) => [toScreen(p, width, height), toScreen(q, width, height)])
       .filter(([p, q]) => !p[2] && !q[2]);
+  // Lines' runs on the canvas, for the screen-space picks.
+  const onScreen = (lines, width, height) =>
+    lines.map((line) => ({ index: line.index, segments: screenRuns(line.segments, width, height) }));
   const fingerOf = (name) => station?.gauge?.getObjectByName(`press-brake-finger-${name}`) || null;
   // The two fingers on the canvas: each box's projected corners' extent, a 24 px target at least.
   const fingerRects = (width, height) => {
@@ -1395,7 +1540,10 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
     const y = station.gauge.position.y;
     return ['left', 'right']
       .map((name) => {
-        const x = fingerOf(name)?.position.x ?? 0;
+        // Only the fingers drawn (piece pick §6.3: a short edge has one).
+        const finger = fingerOf(name);
+        if (finger && !finger.visible) return null;
+        const x = finger?.position.x ?? 0;
         const xs = [],
           ys = [];
         for (const dx of [-FINGER.width / 2, FINGER.width / 2])
@@ -1476,7 +1624,11 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
       });
     }
     if (target.kind === 'edge') lights.edge(on ? edgeLines().find((l) => l.index === target.index)?.segments : null);
+    // A piece of the line (piece pick §6.1): the same ribbon along its stretch.
+    if (target.kind === 'piece') lights.edge(on ? litLine(target)?.segments : null);
   };
+  const litLine = (target) =>
+    (target.kind === 'piece' ? pieceLines() : edgeLines()).find((l) => l.index === target.index) || null;
   // Returns whether what is lit changed.
   const setReach = (target) => {
     if (sameReach(target, reach)) return false;
@@ -1489,9 +1641,11 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
   // stroke, a turn, a hand-over), the fingers kept lit while in the hand;
   // the lit edge follows its pose and keeps its width on screen.
   const layoutReach = () => {
+    // The pieces left flat show with the punch line (a turn or a slide hides both until it lands).
+    flatLine.visible = flatShown && punchLine.visible;
     if (reach && !gripVisible() && !fingerHeld) setReach(null);
-    if (reach?.kind !== 'edge') return;
-    const line = edgeLines().find((l) => l.index === reach.index);
+    if (reach?.kind !== 'edge' && reach?.kind !== 'piece') return;
+    const line = litLine(reach);
     if (!line) return setReach(null);
     lights.edge(line.segments);
     const [, height] = canvasSize();
@@ -1533,6 +1687,30 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
             };
           })
         : [],
+      // Piece pick §6.1: each offered piece, its stretch's middle and ends on the canvas
+      // (machine mm too, for the finger and slide checks), and whether it is drawn left flat.
+      pieces: open
+        ? pieceLines().map((line) => {
+            const run = screenRuns(line.segments, width, height)[0] || null;
+            return {
+              index: line.index,
+              skipped: line.skipped,
+              stretch: line.segments.map(([p, q]) => [p, q].map((v) => v.map((c) => Number(c.toFixed(3))))),
+              points: run
+                ? [0.5, 0.3, 0.7].map((f) =>
+                    client([run[0][0] + (run[1][0] - run[0][0]) * f, run[0][1] + (run[1][1] - run[0][1]) * f]),
+                  )
+                : [],
+            };
+          })
+        : [],
+      flatDrawn: flatLine.visible,
+      fingerX: station?.gauge?.visible
+        ? ['left', 'right']
+            .map((name) => fingerOf(name))
+            .filter((f) => f?.visible)
+            .map((f) => Number(f.position.x.toFixed(3)))
+        : [],
     };
   };
 
@@ -1554,7 +1732,9 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
   const closeStation = () => {
     stopStroke();
     stopTurn();
-    gripDrag = handover = null;
+    const dragged = Boolean(gripDrag);
+    gripDrag = handover = slideHand = null;
+    if (dragged) onGripEnd();
     hideGrip();
     grip.hot(null);
     // HO-2: nothing lit, the fingers out of the hand (the meshes go with the machine).
@@ -1630,6 +1810,8 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
               film: Boolean(ctx.filmKey),
               matrix: station.part.group.matrix.clone(),
               pieces: station.pose.posed.pieces,
+              // A line in the die (piece pick §6.2: only such a pose slides to another).
+              lined: Boolean(station.view?.bendId),
             }
           : null;
       // The cards may have changed: the free part of the view is read again.
@@ -1674,7 +1856,10 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
       }
       station.view = view;
       // A new view under a drag (the model moved): the drag ends where it is.
-      gripDrag = null;
+      if (gripDrag) {
+        gripDrag = null;
+        onGripEnd();
+      }
       const held = handover;
       handover = null;
       const run = view.stroke;
@@ -1701,7 +1886,12 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
         const options = { repose: Boolean(view.collision), around: before?.flipped === after.flipped };
         // A drag let go past 90° carries on from where the hand left it (§5.2).
         const carried = Boolean(held) && continueHandover(held);
-        if (!carried && turnNow)
+        // Other pieces picked (piece pick §6.2): the part moves along the bed only, and glides there.
+        // In the hand (sheet slide §6.1) it is no glide: the sheet stays under the pointer.
+        const slid = !carried && !turnNow && !slideHand ? slideFrom(before, view) : null;
+        if (slideHand) placeHeld();
+        else if (slid) startTurn(slid, null, { slide: true, ms: SLIDE_MS });
+        else if (!carried && turnNow)
           // From where the part is drawn, its pieces matched onto the new fold's.
           startTurn(
             rebaseMatrix({ matrix: before.matrix, pieces: before.pieces }, { pieces: station.pose.posed.pieces }) ||
@@ -1709,6 +1899,7 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
             null,
             options,
           );
+        else if (!carried && turning?.slide) stopTurn();
         else if (!carried && turning) {
           // A pick while the sheet turns: it lands on the new pose.
           const { start, frames, total, worst, onDone, range, ms, around } = turning;
@@ -1752,15 +1943,28 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
      * turn (brakeHands.js brakeOutcome, or null until worked out), ms }.
      */
     setGrip(next) {
+      const edgeWas = hands.gaugeEdge || null;
       hands = next || NO_HANDS;
+      // The gauge edge offered or changed (piece pick §6.3): the fingers go behind it on the pose drawn.
+      if (station?.pose && station.gauge?.visible && (hands.gaugeEdge || null) !== edgeWas) {
+        placeFingers(station.pose.posed, station.pose.frame);
+        station.gauge.updateMatrixWorld(true);
+      }
       gripCache.targets = {};
       if (!station) return;
-      if (!hands.shown && gripDrag) this.gripCancel();
+      if (!hands.shown && gripDrag) {
+        this.gripCancel();
+        onGripEnd();
+      }
       // HO-2: not being set up, nothing is in reach (rule 2: every way out clears what the mode owns).
       if (!hands.shown) {
         fingerHeld = false;
+        // The sheet in the hand is let go where its pose is (rule 2).
+        slideHand = null;
         setReach(null);
-      }
+      } else if (!reach || reach.panel) setReach(panelPiece());
+      // The pieces left flat as now offered (piece pick §6.1).
+      if (station.pose) drawFlatPieces();
       ctx.render();
     },
     /** Before each render: the handles where the hands go, a constant size on screen. */
@@ -1902,19 +2106,23 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
         },
         fingers: () => (inRects(fingerRects(width, height), px) ? { offered: Boolean(hands.fingers?.offered) } : null),
         blade: () => machinePick(typeof ray === 'function' ? ray() : ray),
+        // Piece pick §6.1: a piece unless an edge is nearer the pointer (one nearest test over both).
+        piece: () => {
+          const pieces = pieceLines();
+          if (!pieces.length) return null;
+          const index = nearestPiece(onScreen(pieces, width, height), onScreen(edgeLines(), width, height), px);
+          return index == null ? null : { index };
+        },
         edge: () => {
-          const lines = edgeLines().map((line) => ({
-            index: line.index,
-            segments: screenRuns(line.segments, width, height),
-          }));
-          const index = nearestEdge(lines, px);
+          const index = nearestEdge(onScreen(edgeLines(), width, height), px);
           return index == null ? null : { index };
         },
       });
     },
     /** Light one thing in reach (handPick's target, never a grip handle), or none. */
     reachLight(target) {
-      const next = target && target.kind !== 'grip' && (gripVisible() || fingerHeld) ? target : null;
+      // Nothing under the pointer: the piece the panel names, if any (piece pick §6.1).
+      const next = target && target.kind !== 'grip' && (gripVisible() || fingerHeld) ? target : panelPiece();
       if (setReach(next)) ctx.render();
       return reach;
     },
@@ -1945,6 +2153,48 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
       ctx.render();
     },
     fingerHeld: () => fingerHeld,
+    /**
+     * The sheet slid by hand (sheet slide §6.1): null unless the arrow is
+     * shown, else where its drag is measured: { axis (the machine's +X on the
+     * canvas at the arrow, px per mm), value (the sheet's move now, mm) }.
+     */
+    slideStart() {
+      if (!gripVisible() || !grip.shown('slide') || !hands.slide?.offered) return null;
+      const [width, height] = canvasSize();
+      ctx.camera.updateMatrixWorld();
+      const c = grip.centre('slide').toArray();
+      const a = toScreen(c, width, height),
+        b = toScreen([c[0] + 1, c[1], c[2]], width, height);
+      return { axis: [b[0] - a[0], b[1] - a[1]], value: hands.slide.value };
+    },
+    /** The sheet in the hand (on) or let go: in the hand the other handles hide and no new pose glides; let go, it glides to its pose. */
+    slideHold(on, value = null) {
+      if (on && station) {
+        slideHand = { value: value ?? hands.slide?.value ?? 0 };
+        grip.hot('slide');
+      } else if (slideHand) {
+        slideHand = null;
+        grip.hot(null);
+        if (station?.pose) {
+          const drawn = station.part.group.matrix.clone();
+          const pose = new THREE.Matrix4().fromArray(station.pose.frame.matrix);
+          if (Math.abs(drawn.elements[12] - pose.elements[12]) > 1e-6)
+            startTurn(drawn, null, { slide: true, ms: SLIDE_MS });
+        }
+      }
+      ctx.render();
+    },
+    /** The sheet moved by hand to `value` (mm, machine X, view only): drawn there at once; the session follows once a frame. */
+    slideTo(value) {
+      if (!slideHand || !station) return;
+      const begin = performance.now();
+      slideHand.value = value;
+      placeHeld();
+      // Drawn with the pose the slide's patch brings (the viewport sends one a frame): a pointer
+      // move is no render of its own (an extra render a move cost 3 ms a position on the lip tray).
+      slideHand.ms = performance.now() - begin;
+    },
+    slideHeld: () => Boolean(slideHand),
     /**
      * Browser checks: a client point on the punch and on the die where the
      * ray's first hit is that blade (sampled over each one's box), or null.
@@ -2171,6 +2421,13 @@ export function createShopLayer({ ctx, labels, onStrokeEnd = () => {}, onStation
             flipped: Boolean(station.pose?.flipped),
             turned: Boolean(station.view.turned),
             turning: Boolean(station.turn) || station.stroke?.phase === 'turn',
+            // Piece pick §6.2: the part sliding along the bed, and where it is drawn now (the
+            // part's machine matrix, column-major) beside where its pose puts it.
+            sliding: Boolean(station.turn?.slide),
+            // Sheet slide §4: the sheet's move along the bed from centred under the punch (mm, machine X).
+            shift: station.pose?.frame?.shift ?? 0,
+            drawn: station.part ? station.part.group.matrix.elements.map((v) => Number(v.toFixed(4))) : null,
+            posedAt: station.pose ? station.pose.frame.matrix.map((v) => Number(v.toFixed(4))) : null,
             part: station.stroke?.views ? (station.stroke.part ?? 0) : null,
             lastTurn,
             // A round bend's hit in the die (round-bend spec §6), and the last stroke's frame work.

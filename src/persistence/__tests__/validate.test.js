@@ -3,11 +3,13 @@ import {
   validateProjectStructure,
   validateProjectReferences,
   repairBrokenReferences,
+  repairProjectRoofList,
   validateAndRepair,
 } from '../validate';
 import { createCanonicalBuilding } from '@/domain/buildingModels';
 import { createBeam, createColumn } from '@/domain/models';
 import { resolveCeilingElevations } from '@/domain/ceilingModels';
+import { getFloorStackBounds } from '@/domain/floorModels';
 
 function makeProject(overrides = {}) {
   const project = {
@@ -33,7 +35,7 @@ function makeProject(overrides = {}) {
     ],
     phases: [],
     sheets: [],
-    roofSystem: null,
+    roofSystems: [],
     trussSystems: [],
     ...overrides,
   };
@@ -538,17 +540,19 @@ describe('Eta relationship persistence', () => {
     project.building.systems.water.equipmentZones = [
       { id: 'tank_1', kind: 'water_tank', location: 'ground', servedFloorIds: ['floor_1', 'floor_missing'] },
     ];
-    project.roofSystem = {
-      id: 'roof_1',
-      roofPlanes: [{ id: 'plane_valid' }],
-      drains: [
-        {
-          id: 'drain_1',
-          catchmentPlaneIds: ['plane_valid', 'plane_missing'],
-          outletRef: { kind: 'plumbing_shaft', id: 'shaft_missing' },
-        },
-      ],
-    };
+    project.roofSystems = [
+      {
+        id: 'roof_1',
+        roofPlanes: [{ id: 'plane_valid' }],
+        drains: [
+          {
+            id: 'drain_1',
+            catchmentPlaneIds: ['plane_valid', 'plane_missing'],
+            outletRef: { kind: 'plumbing_shaft', id: 'shaft_missing' },
+          },
+        ],
+      },
+    ];
 
     const warningPaths = validateProjectReferences(project).map((entry) => entry.path);
     expect(warningPaths).toEqual(
@@ -567,7 +571,7 @@ describe('Eta relationship persistence', () => {
     expect(repaired.building.systems.electrical.panelZones[0].servedFloorIds).toEqual(['floor_1']);
     expect(repaired.building.systems.electrical.points.map((entry) => entry.id)).toEqual(['point_valid']);
     expect(repaired.building.systems.water.equipmentZones[0].servedFloorIds).toEqual(['floor_1']);
-    expect(repaired.roofSystem.drains[0]).toMatchObject({ catchmentPlaneIds: ['plane_valid'], outletRef: null });
+    expect(repaired.roofSystems[0].drains[0]).toMatchObject({ catchmentPlaneIds: ['plane_valid'], outletRef: null });
   });
 
   it('rejects malformed Eta collections', () => {
@@ -1041,5 +1045,70 @@ describe('storey-top ceiling re-attachment', () => {
     const project = makeProject({ ceilings: [ceiling] });
 
     expect(validateAndRepair(project).ceilings[0]).toBe(ceiling);
+  });
+});
+
+describe('the roof list on load (MR-1, docs/multi-roof.md §3.2)', () => {
+  it('folds a stray legacy roof slot into the list and drops the slot', () => {
+    const roofSystem = { id: 'roof_legacy', trussAttachmentId: null };
+    const repaired = validateAndRepair(makeProject({ roofSystem }));
+
+    expect(repaired.roofSystems).toEqual([roofSystem]);
+    expect(repaired).not.toHaveProperty('roofSystem');
+  });
+
+  it('does not double a legacy slot the list already holds', () => {
+    const roofSystem = { id: 'roof_1' };
+    const repaired = repairProjectRoofList(makeProject({ roofSystem, roofSystems: [roofSystem] }));
+
+    expect(repaired.roofSystems).toEqual([roofSystem]);
+    expect(repaired).not.toHaveProperty('roofSystem');
+  });
+
+  it('gives a duplicate roof id a fresh one', () => {
+    const repaired = repairProjectRoofList(makeProject({ roofSystems: [{ id: 'roof_1' }, { id: 'roof_1' }] }));
+
+    expect(repaired.roofSystems[0].id).toBe('roof_1');
+    expect(repaired.roofSystems[1].id).not.toBe('roof_1');
+    expect(repaired.roofSystems[1].id).toMatch(/^roof_/);
+  });
+
+  it('detaches every roof after the first that claims the same truss system, where it stands', () => {
+    const first = { id: 'roof_1', trussAttachmentId: 'ts_1', baseElevation: 6000 };
+    const second = { id: 'roof_2', trussAttachmentId: 'ts_1', baseElevation: 6200, pitchSource: 'truss' };
+    const other = { id: 'roof_3', trussAttachmentId: 'ts_2' };
+    const project = makeProject({ roofSystems: [first, second, other] });
+    const repaired = repairProjectRoofList(project);
+
+    expect(repaired.roofSystems[0]).toBe(first);
+    expect(repaired.roofSystems[2]).toBe(other);
+    expect(repaired.roofSystems[1]).toMatchObject({ id: 'roof_2', trussAttachmentId: null, pitchSource: 'manual' });
+    // Re-measured from the top of the floor stack, so the roof keeps its height.
+    expect(repaired.roofSystems[1].attachmentOffset).toBe(6200 - getFloorStackBounds(project).maxElevation);
+  });
+
+  it('hands back the very project when the list is already sound', () => {
+    const project = makeProject({ roofSystems: [{ id: 'roof_1', trussAttachmentId: 'ts_1' }] });
+    expect(repairProjectRoofList(project)).toBe(project);
+  });
+
+  it('repairs each roof on its own: a drain keeps only its own roof planes, and a stale phase drops', () => {
+    const project = makeProject({
+      phases: [],
+      roofSystems: [
+        { id: 'roof_a', phaseId: 'phase_gone', roofPlanes: [{ id: 'plane_a' }], drains: [] },
+        {
+          id: 'roof_b',
+          roofPlanes: [{ id: 'plane_b' }],
+          drains: [{ id: 'drain_b', catchmentPlaneIds: ['plane_b', 'plane_a'] }],
+        },
+      ],
+    });
+
+    const paths = validateProjectReferences(project).map((entry) => entry.path);
+    expect(paths).toEqual(expect.arrayContaining(['roofSystem roof_a', 'roofDrain drain_b']));
+    const repaired = repairBrokenReferences(project);
+    expect(repaired.roofSystems[0].phaseId).toBeNull();
+    expect(repaired.roofSystems[1].drains[0].catchmentPlaneIds).toEqual(['plane_b']);
   });
 });

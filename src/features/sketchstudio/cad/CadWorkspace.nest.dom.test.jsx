@@ -152,17 +152,19 @@ it('cuts every outline in one go: Cut all, a quantity each, a row unticked, one 
   expect(within(cut).getByLabelText('Selected outlines').textContent).toBe('3 of 3 selected');
   commitNumber(within(cut).getByLabelText('Quantity of Small'), 2);
 
-  // Cut on the laser: one commit, 3 parts named after their outlines, 4 instances, none overlapping.
+  // Cut on the laser: one commit, 4 parts named after their outlines (one piece of metal is one
+  // part, docs/sketch-studio-own-bends.md §4.3: Small's second blank is "Small #2" on the same
+  // outline), 4 instances, none overlapping.
   const commits = harness.setCadModel.mock.calls.length;
   act(() => fireEvent.click(within(cut).getByRole('button', { name: 'Cut on the laser' })));
   expect(harness.setCadModel.mock.calls.length).toBe(commits + 1);
   const model = harness.model();
-  expect(model.parts.map((p) => p.name)).toEqual(['Big', 'Small', 'Tab']);
-  expect(model.parts.map((p) => p.features[0].sketchId)).toEqual(['big', 'small', 'tab']);
+  expect(model.parts.map((p) => p.name)).toEqual(['Big', 'Small', 'Small #2', 'Tab']);
+  expect(model.parts.map((p) => p.features[0].sketchId)).toEqual(['big', 'small', 'small', 'tab']);
   expect(model.instances.map((i) => model.parts.find((p) => p.id === i.partId).name)).toEqual([
     'Big',
     'Small',
-    'Small',
+    'Small #2',
     'Tab',
   ]);
   const boxes = model.instances.map((i) => {
@@ -207,15 +209,16 @@ it('cuts every outline in one go: Cut all, a quantity each, a row unticked, one 
   expect(within(laser).getByLabelText('Quantity').value).toBe('2');
   expect(within(job).getAllByRole('button')[1].getAttribute('aria-current')).toBe('true');
   expect(screen.getByRole('figure', { name: 'Laser bed' }).dataset.state).toBe('cut');
-  // Its third copy joins the job.
+  // Its third blank joins the job: a part of its own, "Small #3".
   commitNumber(within(laser).getByLabelText('Quantity'), 3);
   expect(harness.model().instances).toHaveLength(5);
+  expect(harness.model().parts.map((p) => p.name)).toEqual(['Big', 'Small', 'Small #2', 'Tab', 'Small #3']);
   harness.rerender();
   expect(within(screen.getByRole('figure', { name: 'Laser bed' })).getAllByLabelText(/^Blank \d+$/)).toHaveLength(5);
   expect(within(job).getAllByRole('button')[1].querySelector('strong').textContent).toBe('Small × 3');
 });
 
-it('keeps a painted copy when Quantity goes down, and says so', () => {
+it('keeps a painted blank when Quantity goes down, and says so', () => {
   const harness = setup(outlines());
   shopStation('Draw');
   act(() =>
@@ -226,8 +229,12 @@ it('keeps a painted copy when Quantity goes down, and says so', () => {
   const cut = screen.getByRole('region', { name: 'Cut from sheet' });
   commitNumber(within(cut).getByLabelText('Quantity'), 3);
   act(() => fireEvent.click(within(cut).getByRole('button', { name: 'Cut on the laser' })));
-  // A single cut keeps its name (tests pin it); three instances of one part.
-  expect(harness.model().parts.map((p) => p.name)).toEqual(['Sheet-metal part']);
+  // A single cut keeps its name (tests pin it); three blanks, each its own part (own bends §4.3).
+  expect(harness.model().parts.map((p) => p.name)).toEqual([
+    'Sheet-metal part',
+    'Sheet-metal part #2',
+    'Sheet-metal part #3',
+  ]);
   expect(harness.model().instances).toHaveLength(3);
   harness.rerender();
   runFrames();
@@ -246,6 +253,8 @@ it('keeps a painted copy when Quantity goes down, and says so', () => {
   commitNumber(within(screen.getByRole('region', { name: 'Laser station' })).getByLabelText('Quantity'), 1);
   const after = harness.model();
   expect(after.instances.map((i) => i.id)).toEqual([first.id, last.id]);
+  // The part goes with its blank (removeInstances).
+  expect(after.parts.map((p) => p.name)).toEqual(['Sheet-metal part', 'Sheet-metal part #3']);
   harness.rerender();
   const panel = screen.getByRole('region', { name: 'Laser station' });
   expect(within(panel).getByLabelText('Quantity').value).toBe('2');
@@ -253,7 +262,7 @@ it('keeps a painted copy when Quantity goes down, and says so', () => {
     within(panel)
       .getAllByRole('note')
       .map((n) => n.textContent),
-  ).toContain('1 copy is painted, printed or grouped: delete it in the view if you mean to.');
+  ).toContain('1 blank is bent, painted, printed or grouped: delete it in the view if you mean to.');
 });
 
 // Since docs/sketch-studio-cut-pick.md §4.1 the route's Cut opens the picker with nothing ticked.

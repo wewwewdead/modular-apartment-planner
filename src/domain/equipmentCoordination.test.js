@@ -20,14 +20,16 @@ describe('remaining equipment coordination', () => {
     const floor = project.floors[0];
     floor.slabs = [createSlab(floor.id, rectangle(10_000, 8000))];
     project.building.site.boundary = rectangle(15_000, 20_000);
-    project.roofSystem = {
-      id: 'roof_1',
-      roofType: 'flat',
-      boundaryPolygon: rectangle(10_000, 8000),
-      finishSlope: 1,
-      drains: [],
-      roofPlanes: [],
-    };
+    project.roofSystems = [
+      {
+        id: 'roof_1',
+        roofType: 'flat',
+        boundaryPolygon: rectangle(10_000, 8000),
+        finishSlope: 1,
+        drains: [],
+        roofPlanes: [],
+      },
+    ];
     const panel = createEquipmentZone({
       id: 'panel_1',
       name: 'Panel',

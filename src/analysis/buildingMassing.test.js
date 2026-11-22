@@ -203,7 +203,7 @@ describe('buildAnalysisMassing', () => {
     // omits the roof beats one that throws mid-render.
     const project = {
       floors: [floorOf({ walls: squareWalls() })],
-      roofSystem: { boundaryPolygon: [{ x: 0, y: 0 }], roofType: 'hip' },
+      roofSystems: [{ boundaryPolygon: [{ x: 0, y: 0 }], roofType: 'hip' }],
     };
 
     expect(() => buildAnalysisMassing(project)).not.toThrow();
@@ -214,19 +214,21 @@ describe('buildAnalysisMassing', () => {
     // Roof slope is a percentage in this model, not a ratio.
     const project = {
       floors: [],
-      roofSystem: {
-        id: 'roof_1',
-        roofType: 'gable',
-        baseElevation: 3000,
-        slabThickness: 0,
-        boundaryPolygon: [
-          { x: 0, y: 0 },
-          { x: 10000, y: 0 },
-          { x: 10000, y: 8000 },
-          { x: 0, y: 8000 },
-        ],
-        pitch: { slope: 50, direction: { x: 0, y: 1 }, ridgeOffset: 0, overhang: 0 },
-      },
+      roofSystems: [
+        {
+          id: 'roof_1',
+          roofType: 'gable',
+          baseElevation: 3000,
+          slabThickness: 0,
+          boundaryPolygon: [
+            { x: 0, y: 0 },
+            { x: 10000, y: 0 },
+            { x: 10000, y: 8000 },
+            { x: 0, y: 8000 },
+          ],
+          pitch: { slope: 50, direction: { x: 0, y: 1 }, ridgeOffset: 0, overhang: 0 },
+        },
+      ],
     };
 
     const masses = buildAnalysisMassing(project);
@@ -246,19 +248,21 @@ describe('buildAnalysisMassing', () => {
   it('keeps a flat roof slab, which can overhang the walls below', () => {
     const project = {
       floors: [],
-      roofSystem: {
-        id: 'roof_flat',
-        roofType: 'flat',
-        baseElevation: 3000,
-        slabThickness: 200,
-        boundaryPolygon: [
-          { x: 0, y: 0 },
-          { x: 10000, y: 0 },
-          { x: 10000, y: 8000 },
-          { x: 0, y: 8000 },
-        ],
-        pitch: { slope: 0, direction: { x: 0, y: 1 }, ridgeOffset: 0, overhang: 0 },
-      },
+      roofSystems: [
+        {
+          id: 'roof_flat',
+          roofType: 'flat',
+          baseElevation: 3000,
+          slabThickness: 200,
+          boundaryPolygon: [
+            { x: 0, y: 0 },
+            { x: 10000, y: 0 },
+            { x: 10000, y: 8000 },
+            { x: 0, y: 8000 },
+          ],
+          pitch: { slope: 0, direction: { x: 0, y: 1 }, ridgeOffset: 0, overhang: 0 },
+        },
+      ],
     };
 
     const masses = buildAnalysisMassing(project);

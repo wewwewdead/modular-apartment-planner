@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useEditor } from '@/features/floorplan/context/FloorplanContext';
-import { useProject } from '@/features/floorplan/context/FloorplanContext';
+import { useFloorplanSelectors, useProject } from '@/features/floorplan/context/FloorplanContext';
 import { usePlanClipboardController } from '@/features/floorplan/hooks/usePlanClipboardController';
 import { useDragGestureRelease } from '@/features/floorplan/hooks/useDragGestureRelease';
 import { useFloorOverhangs } from '@/features/floorplan/hooks/useFloorOverhangs';
 import { getOrderedFloors } from '@/domain/floorModels';
 import { resolveRoofSectionCut } from '@/domain/roofModels';
-import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { getProjectSectionScene } from '@/sections/sectionSceneCache';
 import { getSectionVisibilityMessage, SECTION_VISIBILITY_REASONS } from '@/sections/diagnostics';
 import { usePhaseFilteredFloor } from '@/hooks/usePhaseFilteredFloor';
@@ -17,6 +16,7 @@ import { describeWallEditRejection } from '@/domain/modelGraph';
 import { GRID_MAJOR, GRID_MINOR, MIN_ZOOM, MAX_ZOOM, ZOOM_FACTOR } from '@/domain/defaults';
 import { formatSurveyorBearing, pointsToSurveyorBearing } from '@/geometry/bearing';
 import { TOOLS } from '@/editor/tools';
+import { enterTool } from '@/editor/toolSession';
 import { isTypingTarget } from '@/utils/keyboard';
 import CompassOverlay from '@/features/floorplan/components/CompassOverlay';
 import { CanvasZoomProvider } from './CanvasZoomContext';
@@ -27,6 +27,7 @@ import FloorScene from './FloorScene';
 import GridRenderer from './GridRenderer';
 import RoofScene from './RoofScene';
 import TrussScene from './TrussScene';
+import { getProjectRoof, getProjectRoofs, resolveActiveRoof } from '@/domain/projectRoofs';
 import BeamLevelChip from './BeamLevelChip';
 import ElectricalDeviceChip from './ElectricalDeviceChip';
 import SectionViewControls from './SectionViewControls';
@@ -35,6 +36,10 @@ import CanvasStatusBar from './CanvasStatusBar';
 import { DeferredDrawingContext, DeferredDrawingOverlayHost } from './DeferredDrawing';
 import { RenderProfilerScope, useRenderProfile } from './renderProfiling';
 import styles from './SvgCanvas.module.css';
+
+// The store's rejection records already toasted. Each refused edit is a new
+// object, so its identity is the "shown once" mark, and it outlives a remount.
+const shownRejections = new WeakSet();
 
 function screenToModel(screenX, screenY, viewport, svgRect) {
   const x = (screenX - svgRect.left - viewport.panX) / viewport.zoom;
@@ -111,6 +116,7 @@ export default function SvgCanvas() {
     modelTarget,
     activePhaseId,
     phaseViewMode,
+    activeRoofId,
     lastRejection,
     sunStudy,
     wallDetailEditor,
@@ -155,13 +161,26 @@ export default function SvgCanvas() {
     () => (toolState.ceilingTargetFloorId ? getFloor(toolState.ceilingTargetFloorId) || floor : floor),
     [toolState.ceilingTargetFloorId, getFloor, floor],
   );
-  const filteredProject = useMemo(
-    () => filterProjectByPhase(project, activePhaseId, phaseViewMode),
-    [project, activePhaseId, phaseViewMode],
+  // The project as the phase view shows it: the workspace filters it once per
+  // project or phase change, from the same project and phase this canvas reads,
+  // rather than once more here.
+  const { filteredProject } = useFloorplanSelectors();
+  // The roof being edited, chosen in the whole project (so the canvas and the
+  // properties panel agree on which roof it is), then drawn as the phase view
+  // shows it: null while the view hides it.
+  const editedRoof = resolveActiveRoof(project, activeRoofId);
+  const roofSystem = getProjectRoof(filteredProject, editedRoof?.id);
+  const roofHiddenByPhase = Boolean(editedRoof && !roofSystem);
+  // The floor plan's section asks about the building, not the roof being
+  // edited: its roof is hidden only when the phase view hides every roof.
+  const hasProjectRoof = getProjectRoofs(project).length > 0;
+  const allRoofsHiddenByPhase = hasProjectRoof && !getProjectRoofs(filteredProject).length;
+  // Every other roof the phase view shows: drawn under the active one as quiet
+  // context, and what a click off the active roof can switch to.
+  const contextRoofSystems = useMemo(
+    () => getProjectRoofs(filteredProject).filter((entry) => entry.id !== editedRoof?.id),
+    [filteredProject, editedRoof?.id],
   );
-  const roofSystem = filteredProject.roofSystem || null;
-  const roofHiddenByPhase = Boolean(project.roofSystem && !roofSystem);
-  const hasProjectRoof = Boolean(project.roofSystem);
   const hasProjectRailings = Boolean((project.floors || []).some((entry) => (entry.railings || []).length));
   const visibleProjectRailings = Boolean((filteredProject.floors || []).some((entry) => (entry.railings || []).length));
   const railingsHiddenByPhase = Boolean(hasProjectRailings && !visibleProjectRailings);
@@ -209,6 +228,7 @@ export default function SvgCanvas() {
     floorBelow,
     showFloorBelowUnderlay,
     roofSystem,
+    contextRoofSystems,
     trussSystems: floorTrussSystems,
     modelTarget,
     viewport,
@@ -545,6 +565,22 @@ export default function SvgCanvas() {
     [dispatch, handleMouseUp],
   );
 
+  /*
+   * A window blur ends a tool press the way a cancelled pointer does. The same
+   * blur closes the store's gesture, and a press that outlived it — Alt-Tab
+   * with the button held, then back and dragging on — turned every later frame
+   * of the drag into an undo step of its own. Bound once, ahead of the
+   * gesture's own release below, so the tool ends its drag inside the gesture
+   * as it does on pointer-cancel.
+   */
+  const pointerAbortRef = useRef(handlePointerAbort);
+  pointerAbortRef.current = handlePointerAbort;
+  useEffect(() => {
+    const endToolPress = (e) => pointerAbortRef.current(e);
+    window.addEventListener('blur', endToolPress);
+    return () => window.removeEventListener('blur', endToolPress);
+  }, []);
+
   useDragGestureRelease(dispatch);
 
   useEffect(
@@ -688,14 +724,20 @@ export default function SvgCanvas() {
   }, [statusMessage, editorDispatch]);
 
   // Authoritative reducer rejections (a dispatcher forgot to pre-validate, or
-  // raced a state change) surface through the same status-message toast.
+  // raced a state change) surface through the same status-message toast. Once
+  // each: the store keeps the last rejection until the next real edit, and a
+  // canvas coming back from another view must not report it again.
   useEffect(() => {
-    if (!lastRejection) return;
+    if (!lastRejection || shownRejections.has(lastRejection)) return;
+    shownRejections.add(lastRejection);
     editorDispatch({ type: 'SET_STATUS_MESSAGE', message: describeWallEditRejection(lastRejection.reason) });
   }, [lastRejection, editorDispatch]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // One Escape, one thing: a dialog that took it (`Modal` marks the press
+      // it closes on) has used it, and the flow behind it stays as it was.
+      if (e.key === 'Escape' && e.defaultPrevented) return;
       if (isTypingTarget(e.target)) return;
       if (detailEditorOpen) return;
       flushPendingZoom();
@@ -776,10 +818,9 @@ export default function SvgCanvas() {
                 targetTrussSystem && (targetTrussSystem.trussInstances || []).length
                   ? targetTrussSystem.trussInstances[targetTrussSystem.trussInstances.length - 1]
                   : null;
-              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.TRUSS_DRAW });
-              editorDispatch({
-                type: 'UPDATE_TOOL_STATE',
-                payload: {
+              enterTool(editorDispatch, {
+                tool: TOOLS.TRUSS_DRAW,
+                toolState: {
                   targetTrussSystemId: targetTrussSystem?.id || null,
                   trussTypeId: selectedTrussInstance?.trussTypeId || lastSystemInstance?.trussTypeId || null,
                   trussMaterial: selectedTrussInstance?.material || lastSystemInstance?.material || null,
@@ -840,8 +881,10 @@ export default function SvgCanvas() {
               editorDispatch({ type: 'SET_TOOL', tool: TOOLS.ELECTRICAL });
               return;
             case 'f':
-              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.FIXTURE });
-              editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { fixtureType: 'kitchenTop', previewRotation: 0 } });
+              enterTool(editorDispatch, {
+                tool: TOOLS.FIXTURE,
+                toolState: { fixtureType: 'kitchenTop', previewRotation: 0 },
+              });
               return;
             case 'g':
               editorDispatch({ type: 'SET_TOOL', tool: TOOLS.FILLET });
@@ -958,7 +1001,8 @@ export default function SvgCanvas() {
     return getProjectSectionScene(filteredProject, roofFloor.id, sectionCut.id);
   }, [activeFloorId, activeSectionCutId, filteredProject, modelTarget, project, viewMode]);
 
-  const roofSectionReason = roofHiddenByPhase
+  // A section cuts every roof, so it is hidden only when every roof is.
+  const roofSectionReason = allRoofsHiddenByPhase
     ? SECTION_VISIBILITY_REASONS.HIDDEN_BY_PHASE
     : roofSectionScene?.diagnostics?.roof?.reason || null;
   const roofSectionMessage = getSectionVisibilityMessage('roof', roofSectionReason);
@@ -984,11 +1028,10 @@ export default function SvgCanvas() {
     return getProjectSectionScene(filteredProject, filteredFloor.id, sectionCut.id);
   }, [activeSectionCutId, filteredFloor, filteredProject, modelTarget, viewMode]);
 
-  const floorRoofSectionReason = roofHiddenByPhase
+  const floorRoofSectionReason = allRoofsHiddenByPhase
     ? SECTION_VISIBILITY_REASONS.HIDDEN_BY_PHASE
     : floorSectionScene?.diagnostics?.roof?.reason || null;
-  const floorRoofSectionMessage =
-    hasProjectRoof || roofHiddenByPhase ? getSectionVisibilityMessage('roof', floorRoofSectionReason) : null;
+  const floorRoofSectionMessage = hasProjectRoof ? getSectionVisibilityMessage('roof', floorRoofSectionReason) : null;
   const floorRailingSectionReason = railingsHiddenByPhase
     ? SECTION_VISIBILITY_REASONS.HIDDEN_BY_PHASE
     : floorSectionScene?.diagnostics?.railing?.reason || null;
@@ -1084,6 +1127,7 @@ export default function SvgCanvas() {
                   {modelTarget === 'roof' ? (
                     <RoofScene
                       roofSystem={roofSystem}
+                      contextRoofSystems={contextRoofSystems}
                       roofHiddenByPhase={roofHiddenByPhase}
                       viewMode={viewMode}
                       selectedId={selectedId}
@@ -1132,7 +1176,7 @@ export default function SvgCanvas() {
                       previewContent={previewContent}
                       regionSelection={regionSelection}
                       activeSectionCutId={activeSectionCutId}
-                      roofHiddenByPhase={roofHiddenByPhase}
+                      roofHiddenByPhase={allRoofsHiddenByPhase}
                       hasProjectRoof={hasProjectRoof}
                       railingsHiddenByPhase={railingsHiddenByPhase}
                       hasProjectRailings={hasProjectRailings}

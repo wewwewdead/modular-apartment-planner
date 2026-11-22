@@ -16,9 +16,13 @@ export function resolveWalkFloorContext(sceneDescriptor, activeFloorId, eyeHeigh
     };
   }
 
+  // A walk starts on a storey, never on a roof: each roof is a `floors` entry
+  // of its own (keyed by the roof id), so the roof layers are left out.
+  const roofLayerIds = new Set(sceneDescriptor.roofLayerIds || []);
+  const storeys = sceneDescriptor.floors.filter((entry) => !roofLayerIds.has(entry.floorId));
   const floor =
-    sceneDescriptor.floors.find((entry) => entry.floorId === activeFloorId) ||
-    sceneDescriptor.floors.find((entry) => entry.floorId === sceneDescriptor.activeFloorId) ||
+    storeys.find((entry) => entry.floorId === activeFloorId) ||
+    storeys.find((entry) => entry.floorId === sceneDescriptor.activeFloorId) ||
     null;
 
   const floorId = floor?.floorId || activeFloorId || sceneDescriptor.activeFloorId || null;

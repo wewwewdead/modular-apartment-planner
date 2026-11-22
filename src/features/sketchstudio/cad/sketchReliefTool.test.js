@@ -84,6 +84,18 @@ describe('the Relief tool', () => {
     expect(reliefReadout(sketchReducer(state, { type: 'undo' })).value).toBe('Square 4 × 4');
   });
 
+  it('forgets what it cut once the tool ends: back on, the cursor not moved, the box says what a click does', () => {
+    const cut = run(relieving(), move([0, 0], [0.2, 0.1]), click([0, 0], [0.2, 0.1]));
+    expect(reliefReadout(cut).value).toBe('Square 4 × 4 cut');
+    for (const away of [{ type: 'escape' }, { type: 'tool', tool: 'line' }]) {
+      const ended = sketchReducer(cut, away);
+      expect(ended.reliefCut).toBe(null);
+      expect(reliefReadout(sketchReducer(ended, { type: 'tool', tool: 'relief' })).value).toBe(
+        'No inside corner here: move to the corner that needs the relief.',
+      );
+    }
+  });
+
   it('refuses a click away from a corner: the message, nothing changed', () => {
     const before = relieving();
     const state = sketchReducer(before, click([100, 50]));

@@ -171,7 +171,7 @@ export function createCeilingDetailPreviewProject(project, ceilingId) {
     ...project,
     floors: [previewFloor ? stablePreviewFloor(floor, previewFloor) : null, coverageFloor].filter(Boolean),
     ceilings: [ceiling],
-    roofSystem: null,
+    roofSystems: [],
     // Trusses stand above the ceiling and are no part of it; drawing them here
     // would only put chords between the viewer and the boards.
     trussSystems: [],

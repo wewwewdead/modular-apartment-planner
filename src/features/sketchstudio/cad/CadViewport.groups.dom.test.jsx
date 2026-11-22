@@ -171,6 +171,88 @@ it('Shift / Ctrl+click reports a toggle; a double-click on a part asks to open i
   expect(onSelect).not.toHaveBeenCalled();
 });
 
+it('a release within 4 px of its press is a click; further is a drag (the one click threshold)', () => {
+  const onSelect = vi.fn();
+  render(<CadViewport {...props({ onSelect, moveEnabled: false })} />);
+  const [x, y] = viewport().cadProject([250, 50, 20]);
+  pointer('pointerdown', [x, y], { button: 0 });
+  pointer('pointerup', [x + 4, y], { button: 0 });
+  expect(onSelect).toHaveBeenLastCalledWith('b');
+  onSelect.mockClear();
+  pointer('pointerdown', [x, y], { button: 0 });
+  pointer('pointerup', [x + 3, y + 3], { button: 0 });
+  expect(onSelect).not.toHaveBeenCalled();
+});
+
+it('a double-click opens a group only when its clicks reached the selection', () => {
+  const onSelect = vi.fn();
+  // Each mode the click order gives the click to before the selection (or not: Cut's picker lets a part through).
+  const modes = [
+    [{}, true],
+    [{ measureMode: true }, false],
+    [{ placement: { handles: [] } }, false],
+    [{ sketchMode: 'pick' }, false],
+    [{ sketchMode: 'draw' }, false],
+    [{ holeMode: 'place' }, false],
+    [{ shopPick: { station: 'paint', stage: 'part', pick: 'part', hint: 'Paint' } }, false],
+    [{ pivotPick: true, transformMode: 'rotate', moveEnabled: true }, false],
+    [{ onPickOutline: vi.fn() }, true],
+  ];
+  for (const [mode, opens] of modes) {
+    render(<CadViewport {...props({ onSelect, moveEnabled: false, ...mode })} />);
+    const onB = viewport().cadProject([250, 50, 20]);
+    // Press, press, double-click (state-machines rule 5).
+    click(onB);
+    click(onB);
+    pointer('dblclick', onB, { button: 0 });
+    const opened = onSelect.mock.calls.some((call) => call[1]?.open);
+    expect([mode, opened]).toEqual([mode, opens]);
+    onSelect.mockClear();
+    cleanup();
+  }
+});
+
+it('the double-click’s own list of modes, frozen, agrees with the click order wherever a click reaches the selection', () => {
+  // pointerUp's order (CadViewport.jsx) reduced to whether a click reaches
+  // the selection step, which is what sets `selectClick`.
+  const frozenReachesSelect = (m) =>
+    !m.measureMode &&
+    !m.placing &&
+    !m.stationOpen &&
+    !m.shopPick &&
+    m.sketchMode == null &&
+    !m.holeMode &&
+    !(m.pivotPick && m.rotate && m.movingId && m.pivotHit) &&
+    !m.ringClick;
+  // The double-click's guard before it deferred to that order.
+  const frozenOld = (m, selectClick) =>
+    selectClick &&
+    m.button === 0 &&
+    !(m.placing || m.sketchMode || m.holeMode || m.measureMode || m.shopPick) &&
+    !(m.pivotPick && m.rotate && m.movingId);
+  const now = (m, selectClick) => selectClick && m.button === 0;
+  const keys = ['measureMode', 'placing', 'stationOpen', 'shopPick', 'holeMode', 'pivotPick', 'rotate', 'movingId'];
+  const differences = [];
+  let combinations = 0;
+  for (let bits = 0; bits < 1 << keys.length; bits++)
+    for (const sketchMode of [null, 'pick', 'draw'])
+      for (const pivotHit of [false, true])
+        for (const ringClick of [false, true])
+          for (const button of [0, 2]) {
+            const m = { sketchMode, pivotHit, ringClick, button };
+            keys.forEach((key, i) => (m[key] = Boolean(bits & (1 << i))));
+            const selectClick = frozenReachesSelect(m);
+            combinations += 1;
+            if (frozenOld(m, selectClick) !== now(m, selectClick)) differences.push(m);
+          }
+  expect(combinations).toBe(256 * 3 * 2 * 2 * 2);
+  // The one difference: Rotate about Picked point, a click that missed the
+  // selection (no pivot picked) selected, and its double-click now opens too.
+  expect(differences.length).toBeGreaterThan(0);
+  for (const m of differences)
+    expect(m).toMatchObject({ pivotPick: true, rotate: true, movingId: true, pivotHit: false });
+});
+
 it('the gizmo sits at the union centre in World space and moves every member rigidly', () => {
   const onMove = vi.fn();
   const ref = createRef();

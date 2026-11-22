@@ -19,7 +19,7 @@ describe('the playground hip roof seats on its trusses (RT-4)', () => {
 
   const { project: loaded } = deserializeProject(demoData);
   const project = syncProjectStructures(loaded);
-  const roofSystem = project.roofSystem;
+  const roofSystem = project.roofSystems[0];
   const trussSystem = project.trussSystems.find((entry) => entry.id === roofSystem.trussAttachmentId);
   const trussGeometry = buildTrussSystemGeometry(trussSystem);
   const roofGeometry = buildRoofPlaneGeometry(roofSystem);

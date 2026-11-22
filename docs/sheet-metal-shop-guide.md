@@ -682,9 +682,65 @@ the stroke counts as one hit, and the sequence list shows it as "1 · UP 90°
 R1.6 · 2 flanges". The tabs must still be in line: once a crease (or any
 bend) between them has been made they are not, and the stroke is refused;
 bend them one at a time. With a line chosen, the material it crosses shows
-as segments on the card: **click a segment to leave it out of the hit** (or
-put it back). The control box's front wall is one gauge pick with the two
-side-flange ends clicked out.
+as pieces on the card and as a row of chips in the panel (below). The
+control box's front wall is one gauge pick with the two side-flange ends
+Ctrl+clicked out.
+
+**Bend one piece of a line.** A punch line often crosses more than the part
+you mean to bend: a small lip at the end of a line that also runs along a
+wide flange and another lip. The punch bends whatever is under it, so tell
+the brake which pieces: **click the piece on the sheet** (or on the flat
+blank) and it alone is in the hit; the sheet slides along the bed until that
+piece is under the punch, and the punch and die keep the length you gave
+them. On the sheet each piece of the line is drawn: the ones in the hit as
+the punch line, the ones left flat in grey; one in reach lights blue and
+says what a click does. The backgauge fingers stand behind the edge you
+gauge from (one finger behind a short lip). **Ctrl+click**
+(or Shift, or ⌘) adds a piece or leaves one flat. In the panel, **Pieces on
+the line** lists them, one chip each (`1 · 82 mm`, a piece already bent
+`1 · 82 mm · bent 90°`), pressed while it is in the hit; a chip click puts
+its piece in or leaves it flat, pointing at a chip lights that piece on the
+card, and **Every piece** puts them all back. The last piece in the hit
+cannot be left out. A new line starts with every piece in, except pieces
+already bent when the line also crosses pieces still flat (so after the
+first lip, the same line starts with the lip left flat and bends the rest).
+A new L keeps your pick while the line still crosses the same pieces (the
+fingers dragged, the card's line dragged, a typed L) and when the sheet is
+turned around; a new edge, two points or an etched line start afresh. A bend
+already made in several pieces (a flange with a slot) goes in and out of the
+hit whole. Typed a length first? It stays: 82 mm typed
+with every piece in, then the lip clicked, is a punch of 82 mm fitted to the
+lip; every piece again, and it is 82 mm standing in the middle. The card says
+when the punch is wrong for the pick: "The punch is 82 mm long and does not
+reach every piece this hit bends (3 pieces, 694 mm end to end). Click the
+piece to bend: it comes under the punch. Or fit the punch to the bend.", and
+a punch longer than the piece that reaches a piece left flat is refused ("The
+punch stands over 5 mm of a piece this hit leaves flat: it would bend that
+too."). One piece bends whole: to bend part of it alone, cut a relief across
+the bend line in the sketcher first.
+
+**Slide the sheet under the punch.** The punch stays where it is; the sheet
+slides along the bed, so the punch stands off the middle of what it bends.
+Two uses: a section longer than a lip (100 mm on an 82 mm lip) hung off the
+sheet's free end so it does not press the flange beside it, and a shortened
+punch kept clear of a standing side at one end. With a line picked, the
+**Slide sheet** arrow lies along the bed beside the two rings: drag it and
+the sheet follows the pointer (whole millimetres, a tenth with Alt; it
+catches where it is centred, where an end of the punch is flush with an end
+of the bend, and where the punch just stops short of a piece left flat);
+type a number while you hold it (a minus for the left) and Enter; Esc puts
+it back. A click on the arrow opens the panel's **Slide [ ] mm** under the
+punch's Length, positive to the right, with **Centre**. The card says when
+the punch would press a piece left flat and offers **Slide the sheet 5 mm to
+the left** (the smallest move that clears it), and a slide that leaves an
+end unpressed or takes the bend off the bed says so with **Centre the
+sheet**. The die stays under the bend: it goes with the sheet. The Length
+note says each end, a line each ("4 mm past the left," over "14 mm past the
+right"); the step is saved with its slide and listed as "100 mm, 5 mm off
+centre". A new edge, two points, a piece picked or Turn sheet around put the
+sheet back in the middle; a new L that keeps the pick keeps the slide. An
+offset bend is made centred: choosing Bend shape Offset puts the sheet back
+in the middle and the Slide field and the arrow are not offered for it.
 
 **Sectional tooling.** The punch, its holders and the die are set up only
 where the hit bends: one section per stretch of tabs (a gap with no material
@@ -837,7 +893,7 @@ the 3D view, the way Rotate part puts rings on a part in the workshop:
   clicking it on the flat-blank card. Near an edge (within about 10 px) it
   lights blue along its length, in parts where an earlier bend crosses it,
   and a card says "Edge 3 · 300 mm · click: to the backgauge". Two points,
-  etched lines and leaving a segment out stay on the card.
+  etched lines and picking the pieces of a line stay on the card.
 - **Drag the amber backgauge fingers** to set L, as on a real machine: L
   follows your hand along the bed's depth in whole millimetres (Alt: tenths),
   the sheet riding with the fingers, a card by the cursor reading "L 187 mm ·
@@ -1290,7 +1346,7 @@ checked again in that state, with whatever punch and die you now choose, and
   Undo takes all three back.
 
 **Cancel**, **Esc** (the first Esc only puts the armed cure down; your line
-stays), or a new line (another edge, L, points, a segment toggled, Flip sheet,
+stays), or a new line (another edge, L, points, a piece picked, Flip sheet,
 another bend shape) disarms it. Changing the punch, the die, a length or the
 angle keeps it armed, and the brake checks the hit again.
 

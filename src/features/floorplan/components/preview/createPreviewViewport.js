@@ -50,8 +50,10 @@ import { REFINE_PROFILES, createProgressiveRenderer } from './createProgressiveR
 import { canvasPixelRatio } from './previewResolution';
 import { compileScenePrograms, createBackgroundWarmup } from './compileScenePrograms';
 import { FRAME_ACTION, nextFrameAction, shouldPresizeRefine, wantsAnotherFrame } from './refineSchedule';
+import { createRenderScaleGovernor } from './renderScaleGovernor';
 import { PREVIEW_PERF_ENABLED, createPreviewPerfRecorder, publishPreviewPerf } from './previewPerf';
 import { DEFAULT_RENDER_STYLE, renderStyleConfig, toneMappingConstant } from './renderStyle';
+import { previewLoadMachine } from './loadPhase';
 import {
   SUN_PEAK_INTENSITY,
   diffuseFraction,
@@ -216,7 +218,37 @@ function releaseContextWhenIdle(renderer) {
   }, CONTEXT_RELEASE_DELAY_MS);
 }
 
-export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MODEL } = {}) {
+/*
+ * A start that throws (most often: the browser gives three no WebGL context)
+ * is caught by the panel, which shows its error and a Try again. Whatever the
+ * start had already built would otherwise stay behind on every attempt: the
+ * clock's listener on the document, the canvas in the pane, a context counting
+ * against the browser's limit, the walk's listeners on the window. `started`
+ * collects those as they are made, and a failed start hands each one back.
+ */
+export function createPreviewViewport(container, options) {
+  const started = {};
+  try {
+    return buildPreviewViewport(container, options, started);
+  } catch (error) {
+    try {
+      started.walkNavigation?.dispose();
+      started.inspectNavigation?.dispose();
+      started.timer?.dispose();
+      if (started.renderer) {
+        started.renderer.domElement.remove();
+        started.renderer.dispose();
+        releaseContextWhenIdle(started.renderer);
+      }
+    } catch {
+      // Half-built things may not tear down cleanly; the start's own error is
+      // the one worth reporting.
+    }
+    throw error;
+  }
+}
+
+function buildPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MODEL } = {}, started) {
   const materialPalette = createMaterialPalette({ look });
   // The ground's own colour in this look (see DEFAULT_GROUND_COLOR).
   const defaultGroundColor = look === PALETTE_LOOKS.CLASSIC ? CLASSIC_GROUND_COLOR : DEFAULT_GROUND_COLOR;
@@ -243,6 +275,7 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
   raycaster.layers.enable(SOURCE_ONLY_LAYER);
   const timer = new THREE.Timer();
   timer.connect(document);
+  started.timer = timer;
 
   let style = renderStyleConfig(DEFAULT_RENDER_STYLE);
   /*
@@ -296,9 +329,11 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
    * Where the pane is on its way to a first picture, for the panel's loading
    * state: 'building' until a world arrives, 'compiling' while its programs
    * link, 'ready' once a frame of it is on the canvas. Waking from suspension
-   * goes back through 'waking' until the catch-up frame is drawn.
+   * goes back through 'waking' until the catch-up frame is drawn, and a lost
+   * WebGL context ends in 'lost'. Every move is in `previewLoadMachine`
+   * (`loadPhase.js`); this file only sends it events.
    */
-  let loadPhase = 'building';
+  let loadPhase = previewLoadMachine.initial;
   let loadStatusHandler = null;
   const renderer = new THREE.WebGLRenderer({
     // Nothing is drawn to the default framebuffer except one full-screen quad,
@@ -308,11 +343,13 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     alpha: true,
     powerPreference: 'high-performance',
   });
+  started.renderer = renderer;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   // Without KHR_parallel_shader_compile the links run on this thread whatever
   // the gate does; the panel says so rather than pretending otherwise.
   const parallelShaderCompile = renderer.extensions.has('KHR_parallel_shader_compile');
-  const emitLoadPhase = (next) => {
+  const sendLoadEvent = (event) => {
+    const next = previewLoadMachine.next(loadPhase, event);
     if (loadPhase === next) return;
     loadPhase = next;
     loadStatusHandler?.({ phase: next, parallelShaderCompile });
@@ -354,6 +391,8 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
    * programs it links are the ones with the environment in them.
    */
   let disposed = false;
+  // Set once by `handleContextLost` and never cleared: see there.
+  let contextLost = false;
   let studioEnvironmentReady = false;
   const studioEnvironmentPrepared = environment.prepareStudioEnvironment().then(() => {
     studioEnvironmentReady = true;
@@ -365,6 +404,7 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     domElement: renderer.domElement,
     onChange: () => startRenderLoop(),
   });
+  started.inspectNavigation = inspectNavigation;
 
   // A trace of uniform fill, insurance for the case where prefiltering the
   // environment fails and there is nothing else lighting the shadowed side.
@@ -502,6 +542,7 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       walkExitHandler?.();
     },
   });
+  started.walkNavigation = walkNavigation;
 
   const markShadowsDirty = () => {
     shadowsDirty = true;
@@ -597,10 +638,17 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     }
   };
 
+  /*
+   * How many pixels a moving frame can afford, from the frame rate reaching the
+   * screen (`renderScaleGovernor.js`). The render loop reports every frame to
+   * it before drawing; the progressive renderer reads the answer.
+   */
+  const governor = createRenderScaleGovernor();
   const progressive = createProgressiveRenderer({
     renderer,
     scene,
     camera,
+    governor,
     onBeforeSample: (sampleIndex, totalSamples) => {
       aimKeyLight(sampleIndex, totalSamples);
       if (shadowsDirty) {
@@ -620,7 +668,15 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     });
   };
 
-  const emitCompassHeading = () => {
+  // Called every frame, but the handler writes a CSS variable, and a style
+  // write every frame of a still camera is a style recalc for nothing: only a
+  // heading that moved is passed on. "Moved" by more than a hundredth of a
+  // degree — orbit damping settles in ever smaller steps that never quite stop
+  // and are far below what an 84 px needle can show. `force` is for a newly
+  // set handler, which has to be told where the needle is.
+  let emittedCompassHeading = null;
+  const COMPASS_HEADING_STEP_DEG = 0.01;
+  const emitCompassHeading = ({ force = false } = {}) => {
     if (!compassHeadingHandler) return;
 
     activeCamera.getWorldDirection(forwardVector);
@@ -630,6 +686,11 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       lastCompassHeading = THREE.MathUtils.radToDeg(Math.atan2(horizontalForward.x, -horizontalForward.z));
     }
 
+    if (!force && emittedCompassHeading !== null) {
+      const turned = Math.abs(((lastCompassHeading - emittedCompassHeading + 540) % 360) - 180);
+      if (turned < COMPASS_HEADING_STEP_DEG) return;
+    }
+    emittedCompassHeading = lastCompassHeading;
     compassHeadingHandler(lastCompassHeading);
   };
 
@@ -716,6 +777,12 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
   let poseInitialised = false;
   let sceneDirty = true;
   let lastMovementAt = 0;
+  // Whether the frame being drawn follows the last one reported to the
+  // governor with no break in the loop between them, and how long that one
+  // kept the main thread. Every path that stops the loop, or skips the report
+  // for a frame, clears the first.
+  let frameChained = false;
+  let lastFrameWorkMs = 0;
 
   const cameraHasMoved = () => {
     const camera = activeCamera;
@@ -749,12 +816,13 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
 
   const renderFrame = (timestamp) => {
     // A frame already requested when the viewport was disposed: its renderer
-    // and render targets are gone.
-    if (disposed) {
+    // and render targets are gone. Or when its context was lost: nothing it
+    // draws reaches the canvas.
+    if (disposed || contextLost) {
       renderLoopRunning = false;
       return;
     }
-    const frameStartedAt = PREVIEW_PERF_ENABLED ? performance.now() : 0;
+    const frameStartedAt = performance.now();
     if (PREVIEW_PERF_ENABLED) renderer.info.reset();
     timer.update(timestamp);
     const deltaSeconds = Math.min(timer.getDelta(), 0.1);
@@ -772,6 +840,7 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     // the canvas would replace the picture it is holding. The camera keeps
     // moving underneath, and the first frame after the gate sees it as moved.
     if (lightCompileGate && navigationMode === 'inspect') {
+      frameChained = false;
       if (!suspended) animationFrame = window.requestAnimationFrame(renderFrame);
       else renderLoopRunning = false;
       return;
@@ -802,16 +871,25 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       nowMs: timestamp,
       lastMovementMs: lastMovementAt,
     });
+    // Before anything draws: a moving frame is drawn at the scale this settles.
+    governor.frame({
+      timestampMs: timestamp,
+      action,
+      sceneDirty,
+      continuous: frameChained,
+      submitMs: lastFrameWorkMs,
+    });
+    frameChained = true;
 
     if (action === FRAME_ACTION.INTERACTIVE) {
       sceneDirty = false;
       lastMovementAt = timestamp;
       progressive.reset();
       progressive.renderInteractive();
-      if (worldRoot) emitLoadPhase('ready');
+      if (worldRoot) sendLoadEvent('FRAME');
     } else if (action === FRAME_ACTION.REFINE) {
       progressive.renderSample();
-      if (worldRoot) emitLoadPhase('ready');
+      if (worldRoot) sendLoadEvent('FRAME');
     } else if (shouldPresizeRefine({ action, nowMs: timestamp, lastMovementMs: lastMovementAt })) {
       // Still nothing on the canvas — this only resizes the offscreen chain for
       // the refine that is a frame or two away, so the first sample is a render
@@ -821,6 +899,7 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     // SETTLE draws nothing at all: the frame already on screen is the right one,
     // and redrawing it is how the flicker got in.
     const keepGoing = wantsAnotherFrame(action);
+    lastFrameWorkMs = performance.now() - frameStartedAt;
 
     if (axisIndicatorInstance) {
       axisIndicatorInstance.render(renderer, activeCamera);
@@ -850,9 +929,11 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
 
   const startRenderLoop = () => {
     // Disposed: a compile or warm-up promise still settling after the pane
-    // closed must not start drawing into a disposed renderer.
-    if (disposed || suspended || renderLoopRunning) return;
+    // closed must not start drawing into a disposed renderer. Lost: the same
+    // for a context that has gone (`handleContextLost`).
+    if (disposed || contextLost || suspended || renderLoopRunning) return;
     renderLoopRunning = true;
+    frameChained = false;
     animationFrame = window.requestAnimationFrame(renderFrame);
   };
 
@@ -946,9 +1027,10 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     if (typeof compiling?.then !== 'function') return null;
     const gate = {};
     lightCompileGate = gate;
-    // Only on the way to a picture: a gate over a picture already on screen
-    // holds that picture, which is not a loading state.
-    if (loadPhase === 'building' || loadPhase === 'waking') emitLoadPhase('compiling');
+    // Only on the way to a picture (the table takes COMPILE from building and
+    // waking alone): a gate over a picture already on screen holds that
+    // picture, which is not a loading state.
+    sendLoadEvent('COMPILE');
     const release = () => {
       if (disposed || lightCompileGate !== gate) return;
       lightCompileGate = null;
@@ -1003,6 +1085,9 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     // the canvas's own pixel count rather than from CSS pixels, so the canvas
     // has to be the new size before it is asked.
     progressive.setSize();
+    // A different number of pixels is a different frame cost: what the frame
+    // rate said about the old size is no evidence about this one.
+    governor.reset();
     invalidate();
   };
 
@@ -1137,6 +1222,47 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
   renderer.domElement.addEventListener('pointerup', handlePointerUp);
   renderer.domElement.addEventListener('pointercancel', handlePointerCancel);
   renderer.domElement.addEventListener('pointerleave', handlePointerCancel);
+
+  /*
+   * A lost WebGL context (a GPU reset, a driver update, the browser dropping
+   * the oldest context past its limit) leaves a canvas that shows nothing.
+   * three marks itself lost and stops drawing; this stops everything of ours
+   * that would carry on as if it had not: the loop and with it the refine, the
+   * frame hold, the warm-up, and the walk's hold on the mouse. Then the panel
+   * hears `lost`, and so does Save image: the finished picture is gone.
+   *
+   * That is the end of this viewport. There is no in-place restore: every
+   * render target, the environment maps and every program would have to be
+   * rebuilt, and a fresh viewport (the panel's Try again remounts) is that
+   * rebuild on the path every first load takes. `preventDefault` is not called
+   * here: three's own listener already has, and nothing here waits for the
+   * restore it would allow.
+   */
+  const handleContextLost = () => {
+    if (disposed || contextLost) return;
+    contextLost = true;
+    window.cancelAnimationFrame(animationFrame);
+    animationFrame = 0;
+    renderLoopRunning = false;
+    if (shaderWarmupTimer) {
+      window.clearTimeout(shaderWarmupTimer);
+      shaderWarmupTimer = 0;
+    }
+    if (lightCompileGate) {
+      window.clearTimeout(lightCompileGate.timeout);
+      lightCompileGate = null;
+    }
+    // As Escape does: pointer lock on a dead canvas would keep the mouse from
+    // the Try again that is about to cover it.
+    if (navigationMode === 'walk') {
+      setNavigationMode('inspect');
+      walkExitHandler?.();
+    }
+    lastReportedConverged = false;
+    renderStatusHandler?.({ converged: false });
+    sendLoadEvent('LOSE');
+  };
+  renderer.domElement.addEventListener('webglcontextlost', handleContextLost);
 
   /**
    * Look through `nextCamera` from now on: the render passes, the controls, the
@@ -1966,9 +2092,14 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
             if (box.isEmpty()) return;
             const c = box.getCenter(new THREE.Vector3());
             const size = box.getSize(new THREE.Vector3());
+            const base = node.userData.baseMaterial || node.material;
             out.push({
               mesh: node.uuid,
-              paletteKey: (node.userData.baseMaterial || node.material)?.userData?.paletteKey || null,
+              paletteKey: base?.userData?.paletteKey || null,
+              // The colour the mesh's own material carries right now, so a
+              // script can read a roof's colour back off what is drawn
+              // (docs/multi-roof.md §6), not off the project.
+              colour: base?.color?.isColor ? `#${base.color.getHexString().toUpperCase()}` : null,
               sourceId: target.sourceId,
               floorId: target.floorId || null,
               center: c.toArray(),
@@ -2012,7 +2143,9 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
         return;
       }
 
-      if (loadPhase === 'ready') emitLoadPhase('waking');
+      // Only `ready` wakes: a pane put to sleep on its way to a first picture
+      // is still on that way.
+      sendLoadEvent('WAKE');
       invalidate();
     },
     setRenderStyle(styleName) {
@@ -2123,6 +2256,8 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       if (!hadWorld && navigationMode === 'inspect') {
         inspectNavigation.resetView();
       }
+      // A new world costs whatever it costs; the step-up wait starts again.
+      if (!isSameRoot) governor.reset();
 
       if (walkPose) {
         walkNavigation.restorePose(walkPose);
@@ -2161,14 +2296,15 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
      * the model.
      */
     /**
-     * The project's roof covering, trim, soffit and gable-infill colours (see
-     * `applyRoofAppearanceToPalette`). Cheap enough to call on every project
-     * change: it mutates the shared palette materials in place, so nothing is
-     * rebuilt and batching keeps its instanced draws; only an 'unpainted'
-     * finish flipping a material to bare metal asks for a program update.
+     * Each roof's covering, trim and soffit colours and each truss system's
+     * gable-infill colour (see `applyRoofAppearanceToPalette`). Cheap enough to
+     * call on every project change: it mutates each owner's palette materials
+     * in place, so nothing is rebuilt and batching keeps its instanced draws;
+     * only an 'unpainted' finish flipping a material to bare metal asks for a
+     * program update.
      */
-    applyRoofAppearance(appearance) {
-      const { changed, recompile } = applyRoofAppearanceToPalette(materialPalette, appearance);
+    applyRoofAppearance(appearances) {
+      const { changed, recompile } = applyRoofAppearanceToPalette(materialPalette, appearances);
       if (!changed) return;
       // A metalness flip changes the program, so warm it before it is drawn.
       if (recompile) scheduleShaderWarmup();
@@ -2276,8 +2412,8 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     },
     /**
      * Told `{ phase, parallelShaderCompile }` whenever the pane moves between
-     * 'building', 'compiling', 'waking' and 'ready'; called once at once with
-     * where it is now.
+     * 'building', 'compiling', 'waking', 'ready' and, for good, 'lost'
+     * (`loadPhase.js`); called once at once with where it is now.
      */
     setLoadStatusHandler(handler) {
       loadStatusHandler = typeof handler === 'function' ? handler : null;
@@ -2298,7 +2434,8 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
      * nothing has been accumulated yet it draws one plain frame first.
      */
     captureImage() {
-      if (!progressive.repaint()) {
+      // Never at a governed moving frame's reduced size: see `repaint`.
+      if (!progressive.repaint({ fullResolution: true })) {
         progressive.reset();
         progressive.renderInteractive();
       }
@@ -2382,7 +2519,7 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
     },
     setCompassHeadingHandler(handler) {
       compassHeadingHandler = typeof handler === 'function' ? handler : null;
-      emitCompassHeading();
+      emitCompassHeading({ force: true });
     },
     resize() {
       resize();
@@ -2411,6 +2548,8 @@ export function createPreviewViewport(container, { look = PALETTE_LOOKS.WHITE_MO
       renderer.domElement.removeEventListener('pointerup', handlePointerUp);
       renderer.domElement.removeEventListener('pointercancel', handlePointerCancel);
       renderer.domElement.removeEventListener('pointerleave', handlePointerCancel);
+      // Before `releaseContextWhenIdle` below loses the context on purpose.
+      renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
 
       if (selectionOverlay) {
         scene.remove(selectionOverlay);

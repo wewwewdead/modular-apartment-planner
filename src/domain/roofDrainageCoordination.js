@@ -1,4 +1,5 @@
 import { DESIGN_CONFIDENCE } from './trustModels';
+import { getProjectRoofs } from './projectRoofs';
 import { distance } from '@/geometry/point';
 import { pointInPolygon, polygonArea } from '@/geometry/polygon';
 import { buildDerivedRoofDrainage } from '@/roof/drainage';
@@ -46,26 +47,40 @@ function outletTarget(project, outletRef) {
   return null;
 }
 
+/**
+ * The building's roof drainage: counts summed over every roof. The planning
+ * profile is the first roof's (the lifecycle panel edits that one); the roof
+ * type lists each modelled type once.
+ */
 export function deriveRoofDrainageCoordination(project) {
-  const roofSystem = project?.roofSystem || null;
-  const profile = { ...DEFAULT_ROOF_DRAINAGE_PROFILE, ...(roofSystem?.drainageProfile || {}) };
-  const derived = buildDerivedRoofDrainage(roofSystem);
+  const roofSystems = getProjectRoofs(project);
+  const profile = { ...DEFAULT_ROOF_DRAINAGE_PROFILE, ...(roofSystems[0]?.drainageProfile || {}) };
+  let gutterCount = 0;
+  let downspoutCount = 0;
+  for (const roofSystem of roofSystems) {
+    const derived = buildDerivedRoofDrainage(roofSystem);
+    gutterCount += derived.gutters.length;
+    downspoutCount += derived.downspouts.length;
+  }
+  const drains = roofSystems.flatMap((roofSystem) => roofSystem.drains || []);
+  const roofTypes = [...new Set(roofSystems.map((roofSystem) => roofSystem.roofType).filter(Boolean))];
   return {
     profile,
-    roofType: roofSystem?.roofType || null,
-    drainCount: roofSystem?.drains?.length || 0,
-    gutterCount: derived.gutters.length,
-    downspoutCount: derived.downspouts.length,
-    routedDrainCount: (roofSystem?.drains || []).filter(
-      (entry) => entry.outletRef && (entry.routePoints || []).length >= 2,
-    ).length,
+    roofType: roofTypes.join(', ') || null,
+    drainCount: drains.length,
+    gutterCount,
+    downspoutCount,
+    routedDrainCount: drains.filter((entry) => entry.outletRef && (entry.routePoints || []).length >= 2).length,
     professionalReviewRequired: true,
   };
 }
 
+/** Every roof is checked on its own: its boundary, its slope, its drains, refs naming that roof. */
 export function validateRoofDrainageCoordination(project) {
-  const roof = project?.roofSystem;
-  if (!roof) return [];
+  return getProjectRoofs(project).flatMap((roof) => validateRoofDrainage(project, roof));
+}
+
+function validateRoofDrainage(project, roof) {
   const boundary = roof.boundaryPolygon || [];
   const refs = [{ type: 'roofSystem', id: roof.id }];
   const profile = { ...DEFAULT_ROOF_DRAINAGE_PROFILE, ...(roof.drainageProfile || {}) };

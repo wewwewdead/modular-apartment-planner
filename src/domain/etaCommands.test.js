@@ -85,16 +85,18 @@ describe('Eta coordinated site and equipment commands', () => {
       capacity: 2000,
       servedFloorIds: [floor.id],
     });
-    project.roofSystem = {
-      id: 'roof_eta',
-      roofType: 'flat',
-      boundaryPolygon: rectangle(6000, 5000),
-      finishSlope: 1,
-      roofPlanes: [],
-      roofEdges: [],
-      roofOpenings: [],
-      drains: [],
-    };
+    project.roofSystems = [
+      {
+        id: 'roof_eta',
+        roofType: 'flat',
+        boundaryPolygon: rectangle(6000, 5000),
+        finishSlope: 1,
+        roofPlanes: [],
+        roofEdges: [],
+        roofOpenings: [],
+        drains: [],
+      },
+    ];
     project = execute(project, {
       type: BUILDING_COMMANDS.CONFIGURE_EQUIPMENT_ZONE,
       zoneId: 'ac_roof',
@@ -137,7 +139,7 @@ describe('Eta coordinated site and equipment commands', () => {
     expect(project.building.systems.electrical.points[0].panelZoneId).toBe('panel_ground');
     expect(project.building.systems.water.equipmentZones[0]).toMatchObject({ id: 'tank_ground', capacity: 2000 });
     expect(project.building.systems.mechanical.outdoorUnitZones[0]).toMatchObject({ id: 'ac_roof', unitCount: 4 });
-    expect(project.roofSystem.drains[0]).toMatchObject({
+    expect(project.roofSystems[0].drains[0]).toMatchObject({
       id: 'roof_drain_eta',
       outletRef: { kind: 'plumbing_shaft', id: 'shaft_eta' },
     });

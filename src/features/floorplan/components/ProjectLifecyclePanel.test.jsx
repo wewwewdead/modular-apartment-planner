@@ -178,6 +178,39 @@ describe('ProjectLifecyclePanel', () => {
     ).toMatchObject({ state: 'ready', value: '12 stacks · realized' });
   });
 
+  it('asks for attention when a realized structure, systems or detailed spaces stage has gone stale', () => {
+    const project = createProject();
+    const stale = deriveLifecycleStatus(
+      project,
+      derivedFixture({
+        apartmentProgram: { configured: true, totalUnitInstances: 4, unitTypeSummaries: [] },
+        apartmentDesignCoordination: { state: { status: 'detailed' }, outOfDate: true },
+        structuralRealization: { state: { status: 'realized' }, generatedStackCount: 12, outOfDate: true },
+        servicesRealization: { state: { status: 'realized' }, actualEntityCounts: {}, outOfDate: true },
+      }),
+    );
+    expect(stale.spaces).toMatchObject({ state: 'attention', value: '4 units · detail outdated' });
+    expect(stale.structure).toMatchObject({ state: 'attention', value: 'Realization outdated' });
+    expect(stale.systems).toMatchObject({ state: 'attention', value: 'Realization outdated' });
+
+    const current = deriveLifecycleStatus(
+      project,
+      derivedFixture({
+        apartmentProgram: { configured: true, totalUnitInstances: 4, unitTypeSummaries: [] },
+        apartmentDesignCoordination: { state: { status: 'detailed' }, outOfDate: false },
+        structuralRealization: { state: { status: 'realized' }, generatedStackCount: 12, outOfDate: false },
+        servicesRealization: {
+          state: { status: 'realized' },
+          actualEntityCounts: { electricalPoints: 3 },
+          outOfDate: false,
+        },
+      }),
+    );
+    expect(current.spaces).toMatchObject({ state: 'ready', value: '4 units · detailed' });
+    expect(current.structure).toMatchObject({ state: 'ready', value: '12 stacks · realized' });
+    expect(current.systems).toMatchObject({ state: 'ready', value: '3 points · realized' });
+  });
+
   it('renders metric lot, orientation, frontage, and setback controls for the site stage', () => {
     const html = renderToStaticMarkup(
       <ProjectLifecyclePanel

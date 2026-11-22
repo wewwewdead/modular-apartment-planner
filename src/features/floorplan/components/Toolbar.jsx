@@ -4,6 +4,7 @@ import { useEditorState, useToolSettings } from '@/features/floorplan/context/Fl
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
 import { usePlanClipboardController } from '@/features/floorplan/hooks/usePlanClipboardController';
 import { TOOLS } from '@/editor/tools';
+import { enterTool } from '@/editor/toolSession';
 import { reconcileFloorRooms } from '@/domain/roomReconcile';
 import { isTypingTarget } from '@/utils/keyboard';
 import {
@@ -77,7 +78,7 @@ const toolItems = [
 ];
 
 /*
- * The Save button's "unsaved" dot breathes for as long as the project is dirty —
+ * The Save button's "unsaved" dot breathes for as long as the project is unsaved —
  * from the first edit of a session to the next save — so the loop must cost the
  * main thread nothing (docs/paint-edit-performance.md §2.1).
  *
@@ -147,9 +148,17 @@ function Toolbar({
   // Only which fixture is armed, never the ghost that follows the pointer: the
   // toolbar has nothing to say about a preview position.
   const { fixtureType: armedFixtureType } = useToolSettings();
-  const { project, isDirty, canUndo, canRedo, dispatch } = useProject();
+  const { project, isDirty, fileBehind, fileName, canUndo, canRedo, dispatch } = useProject();
   const saveButtonRef = useRef(null);
-  useSaveDotBreathing(saveButtonRef, isDirty);
+  // Unsaved is either copy behind the screen: the browser draft (`isDirty`) or
+  // the opened file, which autosave never writes (`fileBehind`).
+  const hasUnsavedWork = isDirty || fileBehind;
+  const saveLabel = isDirty
+    ? 'Save — not saved'
+    : fileBehind
+      ? `Save — saved as a browser draft, not yet in ${fileName}`
+      : 'Save';
+  useSaveDotBreathing(saveButtonRef, hasUnsavedWork);
   const { canCopySelection, canPaste, copySelection, cutSelection, beginPaste } = usePlanClipboardController();
   const isPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'floor';
   const isRoofPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'roof';
@@ -157,8 +166,7 @@ function Toolbar({
 
   const armFixture = useCallback(
     (fixtureType) => {
-      editorDispatch({ type: 'SET_TOOL', tool: TOOLS.FIXTURE });
-      editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { fixtureType, previewRotation: 0 } });
+      enterTool(editorDispatch, { tool: TOOLS.FIXTURE, toolState: { fixtureType, previewRotation: 0 } });
     },
     [editorDispatch],
   );
@@ -356,12 +364,12 @@ function Toolbar({
             <RedoIcon className={styles.icon} />
           </button>
         </Tooltip>
-        <Tooltip label="Save" shortcut="Ctrl+S">
+        <Tooltip label={saveLabel} shortcut="Ctrl+S">
           <button
             ref={saveButtonRef}
             className={styles.saveBtn}
             onClick={onSave}
-            data-dirty={isDirty}
+            data-dirty={hasUnsavedWork}
             aria-label="Save"
           >
             <SaveIcon className={styles.icon} />

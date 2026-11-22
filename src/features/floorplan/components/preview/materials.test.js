@@ -25,7 +25,9 @@ import {
   ghostMaterialFor,
   ghostMaterialsOf,
   ghostSourceOf,
+  ownerMaterialKeys,
   paletteMaterialFor,
+  pruneOwnerMaterials,
   pruneWallFinishMaterials,
   syncGhostMaterials,
   TONAL_FASTENER_SHADE,
@@ -33,6 +35,7 @@ import {
   wallFinishMaterialKeys,
 } from './materials';
 import { tierOf } from './viewMode';
+import { ownerMaterialKey } from '@/domain/roofCoveringCatalog';
 
 /** Relative luminance in linear light — how much of the light a surface sends back. */
 function reflectance(material) {
@@ -273,71 +276,245 @@ describe('the roof covering family and the edge kit', () => {
     expect(palette.roof_slab.roughness).toBe(0.9);
   });
 
-  it('applies the project colours to every roof key and leaves the walls alone', () => {
+  // One roof and the truss system under it, in the shape `resolveRoofAppearances`
+  // gives (docs/multi-roof.md §6). The colours land on the owners' own
+  // materials (`roof_metal@roof_a` …), never on the base keys.
+  const oneRoof = (covering, { trims = '#323233', soffit = '#E4E2D5', closure = '#E9E5DD' } = {}) => ({
+    roofs: [{ id: 'roof_a', covering, trims: { hex: trims }, soffit: { hex: soffit } }],
+    closures: closure ? [{ id: 'ts_a', hex: closure }] : [],
+  });
+  const ofRoof = (live, baseKey, id = 'roof_a') => paletteMaterialFor(live, ownerMaterialKey(baseKey, id));
+
+  it("applies a roof's colours to every one of its keys and leaves the walls and the base keys alone", () => {
     const live = createMaterialPalette();
-    const wallHex = live.wall.color.getHex();
-    const result = applyRoofAppearanceToPalette(live, {
-      covering: { kind: 'metal_corrugated', hex: '#5E1D0E', finish: 'gloss' },
-      trims: { hex: '#323233' },
-      soffit: { hex: '#E4E2D5' },
-      closures: [{ hex: '#E9E5DD' }],
-    });
+    const fresh = createMaterialPalette();
+    for (const key of [...ROOF_KEYS, 'roofTrim', 'roofSoffit']) ofRoof(live, key);
+    ofRoof(live, 'gableInfill', 'ts_a');
+    const result = applyRoofAppearanceToPalette(
+      live,
+      oneRoof({ kind: 'metal_corrugated', hex: '#5E1D0E', finish: 'gloss' }),
+    );
     expect(result.changed).toBe(true);
     expect(result.recompile).toBe(false);
-    for (const key of [...ROOF_KEYS, 'roof']) expect(live[key].color.getHex(), key).toBe(0x5e1d0e);
-    for (const key of ['roofTrim', 'roofGutter', 'roofDownpipe']) expect(live[key].color.getHex()).toBe(0x323233);
-    expect(live.roofSoffit.color.getHex()).toBe(0xe4e2d5);
-    expect(live.gableInfill.color.getHex()).toBe(0xe9e5dd);
-    expect(live.roof_metal.roughness).toBe(0.3);
-    expect(live.wall.color.getHex()).toBe(wallHex);
+    for (const key of ROOF_KEYS) expect(ofRoof(live, key).color.getHex(), key).toBe(0x5e1d0e);
+    for (const key of ['roofTrim', 'roofGutter', 'roofDownpipe'])
+      expect(ofRoof(live, key).color.getHex()).toBe(0x323233);
+    expect(ofRoof(live, 'roofSoffit').color.getHex()).toBe(0xe4e2d5);
+    expect(ofRoof(live, 'gableInfill', 'ts_a').color.getHex()).toBe(0xe9e5dd);
+    expect(ofRoof(live, 'roof_metal').roughness).toBe(0.3);
+    // The base keys are clone sources now, never recoloured.
+    for (const key of [...ROOF_KEYS, ...KIT_KEYS, 'roof', 'wall']) {
+      expect(live[key].color.getHex(), key).toBe(fresh[key].color.getHex());
+      expect(live[key].roughness, key).toBe(fresh[key].roughness);
+    }
     // The same appearance again changes nothing, so the viewport can skip a redraw.
     expect(
-      applyRoofAppearanceToPalette(live, {
-        covering: { kind: 'metal_corrugated', hex: '#5E1D0E', finish: 'gloss' },
-        trims: { hex: '#323233' },
-        soffit: { hex: '#E4E2D5' },
-        closures: [{ hex: '#E9E5DD' }],
-      }).changed,
+      applyRoofAppearanceToPalette(live, oneRoof({ kind: 'metal_corrugated', hex: '#5E1D0E', finish: 'gloss' }))
+        .changed,
     ).toBe(false);
   });
 
   it('turns an unpainted sheet into bare metal, and asks for a program update only then', () => {
     const live = createMaterialPalette();
-    const versionBefore = live.roof_metal.version;
-    const result = applyRoofAppearanceToPalette(live, {
-      covering: { kind: 'metal_corrugated', hex: '#A5A8A6', finish: 'unpainted' },
-      trims: { hex: '#A5A8A6' },
-      soffit: { hex: '#E4E2D5' },
-      closures: [],
-    });
+    const sheet = ofRoof(live, 'roof_metal');
+    ofRoof(live, 'roof_tile');
+    ofRoof(live, 'roofSoffit');
+    const versionBefore = sheet.version;
+    const result = applyRoofAppearanceToPalette(
+      live,
+      oneRoof({ kind: 'metal_corrugated', hex: '#A5A8A6', finish: 'unpainted' }, { trims: '#A5A8A6', closure: null }),
+    );
     expect(result.recompile).toBe(true);
-    expect(live.roof_metal.metalness).toBe(1);
-    expect(live.roof_metal.roughness).toBe(0.4);
-    expect(live.roof_metal.version).toBeGreaterThan(versionBefore);
+    expect(sheet.metalness).toBe(1);
+    expect(sheet.roughness).toBe(0.4);
+    expect(sheet.version).toBeGreaterThan(versionBefore);
     // Tiles and slabs are never metal; fibre cement neither.
-    expect(live.roof_tile.metalness).toBe(0);
-    expect(live.roofSoffit.metalness).toBe(0);
+    expect(ofRoof(live, 'roof_tile').metalness).toBe(0);
+    expect(ofRoof(live, 'roofSoffit').metalness).toBe(0);
+    expect(live.roof_metal.metalness).toBe(0);
   });
 
   it('paints the gable infill alone when a project has trusses but no roof', () => {
     const live = createMaterialPalette();
-    const roofHex = live.roof_metal.color.getHex();
-    applyRoofAppearanceToPalette(live, { covering: null, trims: null, soffit: null, closures: [{ hex: '#5E1D0E' }] });
-    expect(live.gableInfill.color.getHex()).toBe(0x5e1d0e);
-    expect(live.roof_metal.color.getHex()).toBe(roofHex);
-    expect(live.roof_metal.metalness).toBe(0);
+    const infill = ofRoof(live, 'gableInfill', 'ts_a');
+    const sheet = ofRoof(live, 'roof_metal');
+    const roofHex = sheet.color.getHex();
+    applyRoofAppearanceToPalette(live, { roofs: [], closures: [{ id: 'ts_a', hex: '#5E1D0E' }] });
+    expect(infill.color.getHex()).toBe(0x5e1d0e);
+    expect(sheet.color.getHex()).toBe(roofHex);
+    expect(sheet.metalness).toBe(0);
   });
 
   it('keeps a matte tile at its own roughness', () => {
     const live = createMaterialPalette();
-    applyRoofAppearanceToPalette(live, {
-      covering: { kind: 'concrete_tile', hex: '#703731', finish: 'matte' },
-      trims: { hex: '#703731' },
-      soffit: { hex: '#E4E2D5' },
-      closures: [],
-    });
-    expect(live.roof_tile.roughness).toBe(0.85);
-    expect(live.roof_metal.roughness).toBe(0.75);
+    applyRoofAppearanceToPalette(
+      live,
+      oneRoof({ kind: 'concrete_tile', hex: '#703731', finish: 'matte' }, { trims: '#703731', closure: null }),
+    );
+    expect(ofRoof(live, 'roof_tile').roughness).toBe(0.85);
+    expect(ofRoof(live, 'roof_metal').roughness).toBe(0.75);
+  });
+});
+
+describe('each roof and each truss system in its own materials (docs/multi-roof.md §6)', () => {
+  const twoRoofs = {
+    roofs: [
+      {
+        id: 'roof_a',
+        covering: { kind: 'metal_corrugated', hex: '#5E1D0E', finish: 'satin' },
+        trims: { hex: '#323233' },
+        soffit: { hex: '#E4E2D5' },
+      },
+      {
+        id: 'roof_b',
+        covering: { kind: 'metal_corrugated', hex: '#1F4E79', finish: 'satin' },
+        trims: { hex: '#F2F2F2' },
+        soffit: { hex: '#C9C2B0' },
+      },
+    ],
+    closures: [
+      { id: 'ts_a', hex: '#6B4A3A' },
+      { id: 'ts_b', hex: '#9DB0A1' },
+    ],
+  };
+
+  it('gives two roofs with different covering colours two instances carrying those colours', () => {
+    const live = createMaterialPalette();
+    const a = paletteMaterialFor(live, 'roof_metal@roof_a');
+    const b = paletteMaterialFor(live, 'roof_metal@roof_b');
+    applyRoofAppearanceToPalette(live, twoRoofs);
+    expect(a).not.toBe(b);
+    expect(a).not.toBe(live.roof_metal);
+    expect(a.color.getHex()).toBe(0x5e1d0e);
+    expect(b.color.getHex()).toBe(0x1f4e79);
+    // Kept under its key, so the next descriptor asking gets the same instance.
+    expect(live['roof_metal@roof_a']).toBe(a);
+    expect(paletteMaterialFor(live, 'roof_metal@roof_a')).toBe(a);
+  });
+
+  it('gives two truss systems their own gable infill colours', () => {
+    const live = createMaterialPalette();
+    applyRoofAppearanceToPalette(live, twoRoofs);
+    expect(paletteMaterialFor(live, 'gableInfill@ts_a').color.getHex()).toBe(0x6b4a3a);
+    expect(paletteMaterialFor(live, 'gableInfill@ts_b').color.getHex()).toBe(0x9db0a1);
+    expect(paletteMaterialFor(live, 'gableInfill@ts_a')).not.toBe(paletteMaterialFor(live, 'gableInfill@ts_b'));
+  });
+
+  it("answers an owner's gutter and downpipe with that owner's trim instance", () => {
+    const live = createMaterialPalette();
+    const trimA = paletteMaterialFor(live, 'roofTrim@roof_a');
+    expect(paletteMaterialFor(live, 'roofGutter@roof_a')).toBe(trimA);
+    expect(paletteMaterialFor(live, 'roofDownpipe@roof_a')).toBe(trimA);
+    expect(paletteMaterialFor(live, 'roofGutter@roof_b')).not.toBe(trimA);
+    expect(paletteMaterialFor(live, 'roofGutter@roof_b')).toBe(paletteMaterialFor(live, 'roofTrim@roof_b'));
+    // One instance, one key: the aliases resolve, they are never stored.
+    expect(Object.keys(live).filter((key) => key.includes('@'))).toEqual(['roofTrim@roof_a', 'roofTrim@roof_b']);
+  });
+
+  it('is born with its look when the appearances came first (effect, then build)', () => {
+    const live = createMaterialPalette();
+    applyRoofAppearanceToPalette(live, twoRoofs);
+    // Nothing was built by the apply: the scene had not asked yet.
+    expect(Object.keys(live).some((key) => key.includes('@'))).toBe(false);
+    expect(paletteMaterialFor(live, 'roof_metal@roof_b').color.getHex()).toBe(0x1f4e79);
+    expect(paletteMaterialFor(live, 'roof_metal@roof_b').roughness).toBe(0.5);
+    expect(paletteMaterialFor(live, 'roofGutter@roof_b').color.getHex()).toBe(0xf2f2f2);
+    expect(paletteMaterialFor(live, 'roofSoffit@roof_a').color.getHex()).toBe(0xe4e2d5);
+    expect(paletteMaterialFor(live, 'gableInfill@ts_b').color.getHex()).toBe(0x9db0a1);
+  });
+
+  it('takes its look when it was built first (build, then effect)', () => {
+    const live = createMaterialPalette();
+    const sheet = paletteMaterialFor(live, 'roof_metal@roof_b');
+    const infill = paletteMaterialFor(live, 'gableInfill@ts_b');
+    // Born as the base material looks, since nothing has been applied yet.
+    expect(sheet.color.getHex()).toBe(live.roof_metal.color.getHex());
+    const result = applyRoofAppearanceToPalette(live, twoRoofs);
+    expect(result.changed).toBe(true);
+    expect(sheet.color.getHex()).toBe(0x1f4e79);
+    expect(infill.color.getHex()).toBe(0x9db0a1);
+  });
+
+  it('leaves roof B alone when roof A changes colour', () => {
+    const live = createMaterialPalette();
+    applyRoofAppearanceToPalette(live, twoRoofs);
+    const a = paletteMaterialFor(live, 'roof_metal@roof_a');
+    const b = paletteMaterialFor(live, 'roof_metal@roof_b');
+    const bVersion = b.version;
+    const redder = {
+      ...twoRoofs,
+      roofs: [{ ...twoRoofs.roofs[0], covering: { ...twoRoofs.roofs[0].covering, hex: '#A12312' } }, twoRoofs.roofs[1]],
+    };
+    expect(applyRoofAppearanceToPalette(live, redder).changed).toBe(true);
+    expect(paletteMaterialFor(live, 'roof_metal@roof_a')).toBe(a);
+    expect(a.color.getHex()).toBe(0xa12312);
+    expect(paletteMaterialFor(live, 'roof_metal@roof_b')).toBe(b);
+    expect(b.color.getHex()).toBe(0x1f4e79);
+    expect(b.version).toBe(bVersion);
+  });
+
+  it('is a clone of its base in the same program family, owned by the palette, in skin', () => {
+    for (const look of [PALETTE_LOOKS.WHITE_MODEL, PALETTE_LOOKS.CLASSIC]) {
+      const live = createMaterialPalette({ look });
+      for (const baseKey of [
+        'roof_metal',
+        'roof_tile',
+        'roof_membrane',
+        'roof_slab',
+        'roofRidgeCap',
+        'roofTrim',
+        'roofSoffit',
+        'gableInfill',
+      ]) {
+        const key = ownerMaterialKey(baseKey, 'owner_1');
+        const material = paletteMaterialFor(live, key);
+        expect(material, `${look} ${key}`).toBeInstanceOf(THREE.MeshStandardMaterial);
+        expect(material.customProgramCacheKey()).toBe(live[baseKey].customProgramCacheKey());
+        expect(material.userData.detailFamily).toEqual(live[baseKey].userData.detailFamily);
+        expect(material.userData).toMatchObject({ paletteKey: key, tier: 'skin', ownedByPalette: true });
+        expect(tierOf(material)).toBe('skin');
+        // A classic pane's roof is the grey the roof always had there.
+        expect(material.color.getHex()).toBe(live[baseKey].color.getHex());
+      }
+    }
+  });
+
+  it('answers undefined for an owner key whose base the palette does not hold', () => {
+    const bare = { wall: createMaterialPalette().wall };
+    expect(paletteMaterialFor(bare, 'roof_metal@roof_a')).toBeUndefined();
+    expect(bare['roof_metal@roof_a']).toBeUndefined();
+  });
+
+  it('drops the owner materials nothing draws with, with their twins and tints', () => {
+    const live = createMaterialPalette();
+    applyRoofAppearanceToPalette(live, twoRoofs);
+    const keptTrim = paletteMaterialFor(live, 'roofTrim@roof_a');
+    const goneSheet = paletteMaterialFor(live, 'roof_metal@roof_b');
+    const goneInfill = paletteMaterialFor(live, 'gableInfill@ts_b');
+    paletteMaterialFor(live, 'roof_metal@roof_a');
+    paletteMaterialFor(live, 'gableInfill@ts_a');
+    const twin = ghostMaterialFor(live, goneSheet);
+    const tint = selectionMaterialFor(live, goneSheet, 'plan', () => {});
+    const disposed = [];
+    for (const material of [goneSheet, goneInfill, twin, tint]) {
+      material.addEventListener('dispose', () => disposed.push(material));
+    }
+
+    // Roof B and truss system B are gone; roof A's gutter is still drawn, which
+    // keeps its trim (the instance the gutter key answers with).
+    const removed = pruneOwnerMaterials(
+      live,
+      new Set(['roof_metal@roof_a', 'roofGutter@roof_a', 'gableInfill@ts_a', 'wall']),
+    );
+    expect(removed).toBe(2);
+    expect(ownerMaterialKeys(live).sort()).toEqual(['gableInfill@ts_a', 'roofTrim@roof_a', 'roof_metal@roof_a']);
+    expect(paletteMaterialFor(live, 'roofTrim@roof_a')).toBe(keptTrim);
+    expect(disposed).toEqual(expect.arrayContaining([goneSheet, goneInfill, twin, tint]));
+    expect(ghostMaterialsOf(live)).not.toContain(twin);
+    expect(selectionMaterialsOf(live)).not.toContain(tint);
+    // Built again on demand, still wearing its owner's remembered look.
+    expect(paletteMaterialFor(live, 'roof_metal@roof_b')).not.toBe(goneSheet);
+    expect(paletteMaterialFor(live, 'roof_metal@roof_b').color.getHex()).toBe(0x1f4e79);
   });
 });
 
@@ -398,17 +575,24 @@ describe('ghost twins for the see-through modes', () => {
 
   it('follows the roof appearance and the style relief', () => {
     const live = createMaterialPalette();
-    const twin = ghostMaterialFor(live, live.roof_metal);
+    const sheet = paletteMaterialFor(live, 'roof_metal@roof_a');
+    const twin = ghostMaterialFor(live, sheet);
     const before = twin.color.getHex();
     applyRoofAppearanceToPalette(live, {
-      covering: { kind: 'metal', hex: '#703731', finish: 'unpainted' },
-      trims: { hex: '#703731' },
-      soffit: { hex: '#E4E2D5' },
+      roofs: [
+        {
+          id: 'roof_a',
+          covering: { kind: 'metal', hex: '#703731', finish: 'unpainted' },
+          trims: { hex: '#703731' },
+          soffit: { hex: '#E4E2D5' },
+        },
+      ],
       closures: [],
     });
     expect(twin.color.getHex()).not.toBe(before);
-    expect(twin.metalness).toBe(live.roof_metal.metalness);
-    expect(twin.roughness).toBe(live.roof_metal.roughness);
+    expect(twin.metalness).toBe(sheet.metalness);
+    expect(twin.metalness).toBe(1);
+    expect(twin.roughness).toBe(sheet.roughness);
 
     applyRenderStyleToPalette(live, renderStyleConfig(RENDER_STYLES.SHADED));
     expect(twin.userData.detailScale).toBe(0);

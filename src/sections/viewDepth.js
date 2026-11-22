@@ -11,7 +11,7 @@ import { buildTrussSystemGeometry } from '@/geometry/trussGeometry';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { projectPointToSectionCut, sectionCutLength } from '@/geometry/sectionCutGeometry';
 
-function modelPoints(floors, project, roofSystem) {
+function modelPoints(floors, project, roofSystems) {
   const points = [];
   for (const floor of floors) {
     for (const wall of floor.walls || []) points.push(...getWallRenderData(wall, floor.columns || []).outline);
@@ -22,7 +22,7 @@ function modelPoints(floors, project, roofSystem) {
     for (const landing of floor.landings || []) points.push(...landingOutline(landing));
     for (const railing of floor.railings || []) points.push(...(getRailingRenderData(railing)?.outline || []));
   }
-  if (roofSystem) {
+  for (const roofSystem of roofSystems) {
     const geometry = buildRoofPlaneGeometry(roofSystem);
     points.push(...(geometry.roofOutline || []));
     for (const plane of geometry.planes || []) points.push(...(plane.outline || []));
@@ -44,12 +44,12 @@ function modelPoints(floors, project, roofSystem) {
   return points;
 }
 
-export function resolveSectionViewDepth(floors, sectionCut, project = null, roofSystem = null) {
+export function resolveSectionViewDepth(floors, sectionCut, project = null, roofSystems = []) {
   const mode = getSectionDepthMode(sectionCut);
   let depth = getSectionLimitedDepth(sectionCut);
   if (mode === 'full') {
     depth = 100;
-    for (const point of modelPoints(floors, project, roofSystem)) {
+    for (const point of modelPoints(floors, project, roofSystems)) {
       const offset = projectPointToSectionCut(sectionCut, point).offset;
       if (Number.isFinite(offset)) depth = Math.max(depth, Math.ceil(offset) + 1);
     }

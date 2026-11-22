@@ -2,6 +2,7 @@ import { getAngleDimensionGeometry } from './angleUtils';
 import { getArcSegments } from './arcUtils';
 import { getDimensionGeometry } from './dimensionUtils';
 import {
+  buildEntityIdLookup,
   getRectCorners,
   getTextCorners,
   resolveAngleDimensionPoints,
@@ -106,20 +107,60 @@ export function hitTestEllipse(entity, point, tolerance) {
   return normalized <= 1;
 }
 
+// True when `point` is farther than `tolerance` outside the box around
+// `points`: every chord drawn between points of that box (or, for an arc,
+// between samples of a curve that stays inside its control points' box) is
+// then farther than `tolerance` away, and the chords need not be built. The
+// slack, a billionth of the magnitudes involved, covers the rounding in the
+// samples and in the distance test; a NaN anywhere never rejects.
+function isOutsidePointBox(points, point, tolerance) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const { x, y } of points) {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+
+  const magnitude = Math.max(Math.abs(minX), Math.abs(minY), Math.abs(maxX), Math.abs(maxY));
+  const reach = tolerance + 1e-9 * (1 + Math.abs(tolerance) + Math.abs(point.x) + Math.abs(point.y) + magnitude);
+
+  return point.x < minX - reach || point.x > maxX + reach || point.y < minY - reach || point.y > maxY + reach;
+}
+
 export function hitTestPolyline(entity, point, tolerance) {
+  if (entity?.points?.length >= 2 && isOutsidePointBox(entity.points, point, tolerance)) {
+    return false;
+  }
+
   return getPolylineSegments(entity).some(
     (segment) => distancePointToSegment(point, segment.start, segment.end) <= tolerance,
   );
 }
 
 export function hitTestArc(entity, point, tolerance) {
+  if (
+    entity.start &&
+    entity.control &&
+    entity.end &&
+    isOutsidePointBox([entity.start, entity.control, entity.end], point, tolerance)
+  ) {
+    return false;
+  }
+
   return getArcSegments(entity).some(
     (segment) => distancePointToSegment(point, segment.start, segment.end) <= tolerance,
   );
 }
 
-export function hitTestDimension(entity, point, tolerance, entities) {
-  const { p1, p2 } = resolveLinearDimensionPoints(entity, entities);
+// `entityById` (buildEntityIdLookup(entities)) is optional: it answers as the
+// scan of `entities` would.
+export function hitTestDimension(entity, point, tolerance, entities, entityById = null) {
+  const { p1, p2 } = resolveLinearDimensionPoints(entity, entities, entityById);
   const geometry = getDimensionGeometry({
     p1,
     p2,
@@ -226,8 +267,8 @@ export function hitTestText(entity, point, tolerance) {
   );
 }
 
-export function hitTestAngleDimension(entity, point, tolerance, entities) {
-  const { vertex, p1, p2 } = resolveAngleDimensionPoints(entity, entities);
+export function hitTestAngleDimension(entity, point, tolerance, entities, entityById = null) {
+  const { vertex, p1, p2 } = resolveAngleDimensionPoints(entity, entities, entityById);
   const geometry = getAngleDimensionGeometry({ vertex, p1, p2, arcRadius: entity.arcRadius });
 
   // Check rays
@@ -261,7 +302,7 @@ export function hitTestAngleDimension(entity, point, tolerance, entities) {
   return false;
 }
 
-export function hitTestEntity(entity, point, tolerance, entities) {
+export function hitTestEntity(entity, point, tolerance, entities, entityById = null) {
   if (entity.type === 'line') {
     return hitTestLine(entity, point, tolerance);
   }
@@ -287,11 +328,11 @@ export function hitTestEntity(entity, point, tolerance, entities) {
   }
 
   if (entity.type === 'dimension') {
-    return hitTestDimension(entity, point, tolerance, entities);
+    return hitTestDimension(entity, point, tolerance, entities, entityById);
   }
 
   if (entity.type === 'angle-dimension') {
-    return hitTestAngleDimension(entity, point, tolerance, entities);
+    return hitTestAngleDimension(entity, point, tolerance, entities, entityById);
   }
 
   if (entity.type === 'feature') {
@@ -306,10 +347,22 @@ export function hitTestEntity(entity, point, tolerance, entities) {
 }
 
 export function findTopmostEntityAtPoint(entities, point, tolerance) {
+  // Dimension references resolve through one id lookup, built the first time
+  // a dimension is tested, instead of a scan of every entity per reference.
+  let entityById = null;
+
   for (let index = entities.length - 1; index >= 0; index -= 1) {
     const entity = entities[index];
 
-    if (entity.visible !== false && hitTestEntity(entity, point, tolerance, entities)) {
+    if (entity.visible === false) {
+      continue;
+    }
+
+    if ((entity.type === 'dimension' || entity.type === 'angle-dimension') && !entityById) {
+      entityById = buildEntityIdLookup(entities);
+    }
+
+    if (hitTestEntity(entity, point, tolerance, entities, entityById)) {
       return entity;
     }
   }

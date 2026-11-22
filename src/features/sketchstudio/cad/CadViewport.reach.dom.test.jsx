@@ -478,7 +478,7 @@ it('offers nothing while the station is not being set up, and no edges or finger
   expect(station().reach.edges).toEqual([]);
   expect(station().reach.fingers).toEqual([]);
   expect(document.querySelector('.cad-viewport-hint').textContent).toContain(
-    'Drag a ring on the sheet to flip or turn it',
+    'Drag a ring to flip or turn the sheet, the arrow to slide it',
   );
   const spots = viewport().cadBrakeSpots();
   // The blades still lead to their pickers there.

@@ -101,16 +101,18 @@ describe('Apartment Planner Eta acceptance', () => {
       capacity: 2000,
       servedFloorIds: [floor.id],
     });
-    project.roofSystem = {
-      id: 'eta_roof',
-      roofType: 'flat',
-      boundaryPolygon: rectangle(6000, 5000),
-      finishSlope: 1,
-      roofPlanes: [],
-      roofEdges: [],
-      roofOpenings: [],
-      drains: [],
-    };
+    project.roofSystems = [
+      {
+        id: 'eta_roof',
+        roofType: 'flat',
+        boundaryPolygon: rectangle(6000, 5000),
+        finishSlope: 1,
+        roofPlanes: [],
+        roofEdges: [],
+        roofOpenings: [],
+        drains: [],
+      },
+    ];
     project = execute(project, {
       type: BUILDING_COMMANDS.CONFIGURE_EQUIPMENT_ZONE,
       zoneId: 'eta_ac',

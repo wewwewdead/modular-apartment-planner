@@ -8,15 +8,19 @@
 // brake stroke, its records and the parts it hides).
 //
 // Shop order, as the stations enforce it: all blanks are cut, then bent, then
-// painted, then printed (after the paint). Copies of one part (the kiosk's
-// two face frames) go through the laser and the brake together: one scene
-// per blank definition, one per hit, said so in the scene. What is not made
-// here (bought-in items, fasteners) comes on in the finished scene.
+// painted, then printed (after the paint). The blanks of one lot (one outline,
+// stock and thickness: docs/sketch-studio-own-bends.md §4.7) go through the
+// laser together, one scene; on the brake, blanks of a lot go together only
+// while their bends are the very same records (made together, never bent
+// apart: the kiosk's two face frames), one scene per hit, said so in the
+// scene — a blank bent by hand plays its own hits. What is not made here
+// (bought-in items, fasteners) comes on in the finished scene.
 import { bendLabel, bendNumber, hitSequence, sheetMetalFeature } from './sheetMetal.js';
 import { foldOf } from './shopRoute.js';
 import { CURE_S, PRINT_HANDLING_S, cutSeconds, jobProducts, strokeSeconds } from './jobSheet.js';
 import { isFabricated } from './shopParts.js';
 import { memberIds, nodeName } from './groups.js';
+import { blankBaseName } from './model.js';
 import { DEFAULT_MACHINE, MACHINES, POWDER, machineOf, stockOf } from './shopCatalog.js';
 
 // How long a scene plays at normal speed, from the job sheet's estimate of the
@@ -91,10 +95,11 @@ function sharedNoun(names) {
   if (new Set(heads).size < heads.length) return null;
   return { noun: split[0].slice(-shared).join(' ').toLowerCase(), heads };
 }
-// "Kiosk face frame — sheet metal" → "face frame" (when the instances have no names of their own).
+// "Kiosk face frame — sheet metal" → "face frame" (when the instances have no names of their own);
+// a blank's number goes ("Tray #2" → "tray", own bends §4.7).
 const partWord = (part) =>
   lowerFirst(
-    String(part?.name || 'part')
+    blankBaseName(String(part?.name || 'part'))
       .replace(/\s+—\s+sheet metal$/i, '')
       .trim(),
   );
@@ -167,21 +172,34 @@ export function filmScenes(model, productId, { params = {}, instanceId = null } 
   const name = (id) => nodeName(model, id);
   const key = model.fabrication?.shop?.machine;
   const machine = machineOf(MACHINES[key] ? key : DEFAULT_MACHINE);
-  // The sheet-metal blanks, copies of one part together, in the product's order.
-  const blanks = [];
+  // The sheet-metal blanks in the product's order, by lot (own bends §4.7: one
+  // outline, stock and thickness; several instances of one part are one lot),
+  // and inside a lot by their bends (the same records, ids included, go
+  // together on the brake).
+  const lots = [];
   for (const id of instanceId ? [instanceId] : members) {
     const part = partOf(id);
-    if (!isFabricated(part) || !sheetMetalFeature(part)) continue;
+    const feature = sheetMetalFeature(part);
+    if (!isFabricated(part) || !feature) continue;
     const fold = foldOf(model, id, params);
     if (!fold) continue;
-    const group = !instanceId && blanks.find((b) => b.partId === part.id);
-    if (group) group.ids.push(id);
-    else blanks.push({ partId: part.id, part, fold, ids: [id] });
+    const lotKey = JSON.stringify([feature.sketchId, fold.stock, fold.thickness]);
+    const bendsKey = JSON.stringify(feature.bends || []);
+    let lot = !instanceId && lots.find((l) => l.key === lotKey);
+    if (!lot) lots.push((lot = { key: lotKey, partId: part.id, part, fold, ids: [], benders: [] }));
+    lot.ids.push(id);
+    const bender = lot.benders.find((b) => b.key === bendsKey);
+    if (bender) bender.ids.push(id);
+    else lot.benders.push({ key: bendsKey, partId: part.id, part, fold, ids: [id] });
   }
-  const groupWords = (blank, many = true) =>
+  const blanks = lots.flatMap((lot) => lot.benders);
+  // The cut scenes read each blank's name without its number ("Tray #2" → "Tray"); a group of
+  // blanks on the brake too, a blank alone there its own name.
+  const cutName = (id) => blankBaseName(name(id));
+  const groupWords = (blank, many = true, read = cutName) =>
     blank.ids.length > 1
-      ? partNames(blank.ids.map(name), { many })
-      : lowerFirst(name(blank.ids[0]) || partWord(blank.part));
+      ? partNames(blank.ids.map(read), { many })
+      : lowerFirst(read(blank.ids[0]) || partWord(blank.part));
   const scene = (station, fields, estimate) => ({
     station,
     ...fields,
@@ -189,15 +207,15 @@ export function filmScenes(model, productId, { params = {}, instanceId = null } 
     seconds: filmSeconds(station, estimate),
   });
   const scenes = [];
-  // The laser: one blank definition per scene, every copy nested on the sheet.
+  // The laser: one lot per scene, every blank of it nested on the sheet.
   if (!instanceId)
-    for (const blank of blanks) {
+    for (const blank of lots) {
       const { fold } = blank;
       const n = blank.ids.length;
-      const names = blank.ids.map(name);
+      const names = blank.ids.map(cutName);
       const shared = n > 1 ? sharedNoun(names) : null;
       // The copies' one name (else the part's) when it is a label, not words.
-      const whole = names.every((x) => x === names[0]) ? names[0] : blank.part?.name || 'the part';
+      const whole = names.every((x) => x === names[0]) ? names[0] : blankBaseName(blank.part?.name) || 'the part';
       const label = n > 1 && !shared && (isLabel(whole) || isLabel(partWord(blank.part))) ? whole : '';
       scenes.push(
         scene(
@@ -251,7 +269,7 @@ export function filmScenes(model, productId, { params = {}, instanceId = null } 
           hit: index + 1,
           hits: strokes.length,
           title: titles[index],
-          subject: `${groupWords(blank, false)} · hit ${index + 1} of ${strokes.length}`,
+          subject: `${groupWords(blank, false, blank.ids.length > 1 ? cutName : name)} · hit ${index + 1} of ${strokes.length}`,
           detail: `${stroke.again ? `bend ${bendNumber(fold, bend.id)} on: ${fmt(stroke.from[bend.id])}° → ${fmt(stroke.to[bend.id])}°` : Math.abs(stroke.to[bend.id] - bend.angle) > 1e-9 ? bendLabel({ ...bend, angle: stroke.to[bend.id] }) : bend.label}${stroke.bendIds.length > 1 ? ` · ${stroke.bendIds.length} flanges` : ''} · ${stroke.die}`,
         },
         estimate,

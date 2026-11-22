@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { buildSheetScene } from '@/sheets/layout';
 import { SHEET_COLORS, SHEET_TOKENS } from '@/sheets/standards';
 import { getViewportHandleRects, getViewportRotationHandle } from '@/sheets/hitTest';
@@ -96,8 +97,17 @@ function SheetNotesBlock({ notesBlock }) {
   );
 }
 
-export default function SheetRenderer({ project, sheet, selectedId, selectedType, resolveSource }) {
-  const scene = buildSheetScene(project, sheet, resolveSource ? { resolveSource } : undefined);
+/**
+ * One sheet, drawn from its scene. The sheet canvas builds the scene once and
+ * hands it to both of its renderers (the sheet on screen and the hidden PDF
+ * root), so neither builds it again; a caller that passes none gets it built
+ * here, as before.
+ */
+function SheetRenderer({ project, sheet, scene: givenScene, selectedId, selectedType, resolveSource }) {
+  const scene =
+    givenScene !== undefined
+      ? givenScene
+      : buildSheetScene(project, sheet, resolveSource ? { resolveSource } : undefined);
   if (!scene) return null;
 
   return (
@@ -227,3 +237,5 @@ export default function SheetRenderer({ project, sheet, selectedId, selectedType
     </g>
   );
 }
+
+export default memo(SheetRenderer);

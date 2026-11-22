@@ -4,9 +4,11 @@ import RoofSelectionOverlay from './RoofSelectionOverlay';
 import RoofPreviewLayer from './RoofPreviewLayer';
 import RoofSectionRenderer from './RoofSectionRenderer';
 import RoofElevationRenderer from './RoofElevationRenderer';
+import RoofContextLayer from './RoofContextLayer';
 
 const RoofScene = memo(function RoofScene({
   roofSystem,
+  contextRoofSystems = null,
   roofHiddenByPhase,
   viewMode,
   selectedId,
@@ -24,6 +26,8 @@ const RoofScene = memo(function RoofScene({
         {viewMode === 'plan' ? (
           roofSystem ? (
             <>
+              {/* The other roofs, under the one being edited (plan only). */}
+              <RoofContextLayer roofSystems={contextRoofSystems} zoom={viewport.zoom} />
               <RoofRenderer roofSystem={roofSystem} selectedId={selectedId} selectedType={selectedType} />
               <RoofSelectionOverlay
                 roofSystem={roofSystem}
@@ -98,19 +102,23 @@ const RoofScene = memo(function RoofScene({
   }
 
   return (
-    <g className="roof-empty-view">
-      <text
-        x={0}
-        y={0}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fill="var(--color-text-secondary)"
-        fontSize={180}
-        fontFamily="var(--font-blueprint)"
-      >
-        {roofHiddenByPhase ? 'Roof is hidden in the current phase view.' : 'Create a roof to edit roof geometry.'}
-      </text>
-    </g>
+    <>
+      {/* The roof being edited is hidden by the phase view; the others it shows stay. */}
+      {viewMode === 'plan' && <RoofContextLayer roofSystems={contextRoofSystems} zoom={viewport.zoom} />}
+      <g className="roof-empty-view">
+        <text
+          x={0}
+          y={0}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fill="var(--color-text-secondary)"
+          fontSize={180}
+          fontFamily="var(--font-blueprint)"
+        >
+          {roofHiddenByPhase ? 'Roof is hidden in the current phase view.' : 'Create a roof to edit roof geometry.'}
+        </text>
+      </g>
+    </>
   );
 });
 

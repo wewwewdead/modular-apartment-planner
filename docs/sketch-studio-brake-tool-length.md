@@ -298,7 +298,13 @@ field, **Fit to bend**, or a fix button on a card. Nothing else touches it.
     `(span − hold) / 2` (null within 1e-6); otherwise (no hold, several runs,
     no line yet, no station) the trim stays as it is;
   - a patch naming `skip` changes the runs: the trim stays, the hold is
-    re-read from it as for a patch naming the trim.
+    re-read from it as for a patch naming the trim. **Superseded by
+    `docs/sketch-studio-piece-pick.md` §5.2** (2026-11-21, PK-1): that rule
+    destroyed a held punch when pieces were left out after a length was
+    typed (hold −530 on the lip tray). A patch naming `skip` is now the same
+    to the tools as a new line: with a hold and one run the trim is derived
+    from the hold; with no hold the trim stays and the hold is read from it
+    only when that gives a length above 0; no hold is written at 0 or below.
 - `bendOnPatch` no longer names `punchTrim` / `dieTrim` (it is a new line
   like any other). `turnAround` already names neither. `fingerRestore` keeps
   naming both (Esc puts the line and its tools back).
@@ -349,7 +355,8 @@ Built 2026-11-17 as §9.4 has it.
   their segments have the same intervals, and the lengths agree to 1e-6 mm
   (rectangle by gauge and by two points, the three-tab comb whole, with its
   middle tab and with an end tab left flat, a line on a made bend).
-- `brakePatch` calls `holdTools` once the seat has moved the line: a patch
+- (The `skip` half of this item is superseded by piece pick §5.2, above.)
+  `brakePatch` calls `holdTools` once the seat has moved the line: a patch
   naming a trim or `skip` sets the hold from the trim (one run under the
   line, `exact(span − 2 × trim)`) or removes it (fitted, several runs, no
   station); a new line with a hold and one run derives the trim

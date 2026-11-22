@@ -10,7 +10,7 @@
 // three.js maths only.
 import { Quaternion, Matrix4, Vector3 } from 'three';
 import { brakePatch, brakeStation, turnAround } from './brakeStation.js';
-import { transformPoint } from './sheetMetal.js';
+import { bendArcPoint, pointInRing, transformPoint } from './sheetMetal.js';
 
 // ---------------------------------------------------------------- the turn rule (§5.3)
 // Two flat directions to the backgauge closer than this (2°) are the same edge.
@@ -152,8 +152,10 @@ export function nearestAxis(axis) {
 export const defaultGripAxis = (kind, lined) => (kind === 'turn' ? [0, 0, 1] : lined ? [0, 1, 0] : [1, 0, 0]);
 
 // ---------------------------------------------------------------- the drag (§5.2)
-// Pointer travel (px) below which a press and release is a click (the viewport's CLICK_PX).
-export const GRIP_CLICK_PX = 4;
+// Pointer travel (px) at or under which a press and release is a click, not a
+// drag: the one threshold of the CAD viewport (its clicks, the gizmo's ring
+// click, the print, the fingers) and of the grip's dead zone here.
+export const CLICK_PX = 4;
 // The swept angle at or past which a release commits.
 export const COMMIT_DEGREES = 90;
 
@@ -165,13 +167,13 @@ export const COMMIT_DEGREES = 90;
  * now `commit`s at 90° or more.
  */
 export function gripDrag({ travel, degrees }) {
-  const dragging = travel > GRIP_CLICK_PX;
+  const dragging = travel > CLICK_PX;
   const swept = dragging ? Math.abs(degrees) || 0 : 0;
   return { dragging, swept, progress: Math.min(1, swept / 180), commit: dragging && swept >= COMMIT_DEGREES - 1e-9 };
 }
 
 // ---------------------------------------------------------------- words (§4.3, §5.2)
-export const GRIP_NAMES = Object.freeze({ flip: 'Flip sheet', turn: 'Turn sheet around' });
+export const GRIP_NAMES = Object.freeze({ flip: 'Flip sheet', turn: 'Turn sheet around', slide: 'Slide sheet' });
 export const GRIP_KEYS = Object.freeze({ flip: 'F', turn: 'T' });
 const DONE = { flip: 'Flipped over', turn: 'Turned around' };
 const VERB = { flip: 'flip', turn: 'turn it around' };
@@ -243,14 +245,19 @@ export function dragChip(kind, degrees) {
 /**
  * The viewport's hint line at the brake (§5.5), before the orbit / pan / zoom
  * hint. With no line (HO-2 §6.1) an edge is clicked on the sheet; two points
- * are still clicked on the flat blank (`mode` 'points').
+ * are still clicked on the flat blank (`mode` 'points'). With more than one
+ * piece on the line (`pieces`, piece pick §6.4) the pieces' sentence takes
+ * the rings' place.
  */
-export const brakeHint = (lined, mode = 'gauge') =>
-  lined
-    ? 'Drag a ring on the sheet to flip or turn it · F flip · T turn around · Enter bends · Esc clears the line'
-    : mode === 'points'
-      ? 'Click two points on the flat blank · F flips the sheet'
-      : 'Click an edge of the sheet: it goes to the backgauge · F flips the sheet';
+export const brakeHint = (lined, mode = 'gauge', pieces = 0) =>
+  lined && pieces > 1
+    ? 'Click a piece of the line to bend only it · Ctrl+click adds or leaves out · F flip · T turn around · Enter bends · Esc clears the line'
+    : lined
+      ? // The arrow slides it (docs/sketch-studio-sheet-slide.md §6.4).
+        'Drag a ring to flip or turn the sheet, the arrow to slide it · F flip · T turn around · Enter bends · Esc clears the line'
+      : mode === 'points'
+        ? 'Click two points on the flat blank · F flips the sheet'
+        : 'Click an edge of the sheet: it goes to the backgauge · F flips the sheet';
 
 // ---------------------------------------------------------------- the acts and keys (§5.4, §5.5)
 /**
@@ -284,7 +291,8 @@ export function brakeHandOutcomes({ model, session, params, station, kinds = ['f
   const after = (kind) => {
     const patch = brakeActPatch(kind, station, session);
     if (!patch) return null;
-    return brakeOutcome(brakeStation({ model, session: brakePatch(session, patch), params, advise: false }));
+    // With the station, as the workspace applies it (its pieces, piece pick §5.3).
+    return brakeOutcome(brakeStation({ model, session: brakePatch(session, patch, station), params, advise: false }));
   };
   return Object.fromEntries(kinds.map((kind) => [kind, after(kind)]));
 }
@@ -348,12 +356,13 @@ export function placementGap(A, B, pieces) {
 export const EDGE_PICK_PX = 10;
 // What is under the pointer, asked in this order (§6.3): the grip's handles,
 // the backgauge fingers, the blades and the machine (the only pick that
-// casts a ray at the station's meshes), the sheet's edges.
-export const HAND_ORDER = Object.freeze(['grip', 'fingers', 'blade', 'edge']);
+// casts a ray at the station's meshes), the pieces of the line (piece pick
+// §6.1: unless an edge is nearer), the sheet's edges.
+export const HAND_ORDER = Object.freeze(['grip', 'fingers', 'blade', 'piece', 'edge']);
 
 /**
  * The first thing under the pointer (§6.3): each of `pickers` ({ grip,
- * fingers, blade, edge }: () => a target or null) asked in HAND_ORDER, no
+ * fingers, blade, piece, edge }: () => a target or null) asked in HAND_ORDER, no
  * further than the first that finds one. { kind, ...target } or null.
  */
 export function pickInOrder(pickers) {
@@ -435,6 +444,221 @@ export function reachRect(rect, min = 24) {
 /** Whether a canvas point (px) lies in any of `rects`. */
 export const inRects = (rects, [x, y]) => rects.some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
 
+// ---------------------------------------------------------------- PK-2: the pieces in reach (docs/sketch-studio-piece-pick.md §6)
+// A piece of the line lights within this reach of the pointer (px), its stretch on the sheet.
+export const PIECE_PICK_PX = 12;
+/**
+ * A piece of the punch line on the sheet as posed (§6.1): its stretch, on the
+ * face that looks up in the machine (the punch's side), carried through the
+ * piece's matrix (or, for a piece a bend owns — the hit's own, or a made
+ * one's — along the middle of that bend's zone) and then `matrix` (the
+ * machine frame, column-major; none: the part's own frame). `posed`: a posed
+ * fold; `piece`: { a, b } flat mm (brakeStation.js segments). [[p0, p1]], or
+ * [] when the stretch lies in no piece the pose has.
+ */
+export function pieceSegments(posed, piece, matrix = null, tolerance = 0.05) {
+  const t = posed.thickness;
+  const place = (p) => (matrix ? transformPoint(matrix, p) : p);
+  const upper = (pairs) => {
+    const [low, high] = pairs.map((pair) => pair.map(place));
+    const z = (pair) => pair[0][2] + pair[1][2];
+    const top = z(high) >= z(low) ? high : low;
+    return [top.map(([x, y, zz]) => [x, y, zz + 0.15])];
+  };
+  // A bend that owns it: its line through both ends, an interval along the piece.
+  for (const bend of posed.bends || []) {
+    const off = (p) => Math.abs((p[0] - bend.a[0]) * bend.n[0] + (p[1] - bend.a[1]) * bend.n[1]);
+    if (off(piece.a) > tolerance || off(piece.b) > tolerance) continue;
+    const s = (p) => (p[0] - bend.a[0]) * bend.u[0] + (p[1] - bend.a[1]) * bend.u[1];
+    const [s0, s1] = [s(piece.a), s(piece.b)].sort((p, q) => p - q);
+    const own = bend.intervals.find(([i0, i1]) => Math.min(s1, i1) - Math.max(s0, i0) > 1e-6);
+    if (!own) continue;
+    const lo = Math.max(s0, own[0]),
+      hi = Math.min(s1, own[1]);
+    const at = (v, z) => transformPoint(bend.fixedMatrix, bendArcPoint(bend, t, bend.transform, v, 0.5, z));
+    return upper([0, t].map((z) => [at(lo, z), at(hi, z)]));
+  }
+  // Flat material: the piece of the pose it lies in.
+  const middle = [(piece.a[0] + piece.b[0]) / 2, (piece.a[1] + piece.b[1]) / 2];
+  const host = (posed.pieces || []).find((p) => pointInRing(middle, p.outer));
+  if (!host) return [];
+  return upper([0, t].map((z) => [piece.a, piece.b].map(([x, y]) => transformPoint(host.matrix, [x, y, z]))));
+}
+
+/**
+ * The pieces the workspace offers on the sheet (§6.1): the station's
+ * `segments` as [{ index, a, b (flat mm), length, skipped, made (a made bend's
+ * piece), bend (its id, or null) }].
+ */
+export const pieceOffer = (segments) =>
+  (segments || []).map((s) => ({
+    index: s.index,
+    a: s.a,
+    b: s.b,
+    length: s.s1 - s.s0,
+    skipped: Boolean(s.skipped),
+    made: s.made != null,
+    bend: s.bend ?? null,
+  }));
+
+/**
+ * The piece nearest the pointer `p` (px) within PIECE_PICK_PX (§6.1), or
+ * null: one nearest test over the pieces and the edges, so an edge nearer
+ * the pointer than any piece wins (a lip's own edge 15 mm from the line stays
+ * clickable). `pieces`, `edges`: [{ index, segments: [[a, b], …] }] on the
+ * canvas (px).
+ */
+export function nearestPiece(pieces, edges, p) {
+  const nearestOf = (lines, reach) => {
+    let best = null,
+      nearest = reach;
+    for (const line of lines)
+      for (const segment of line.segments) {
+        const distance = polylineDistance(segment, p);
+        if (distance <= nearest) [best, nearest] = [line.index, distance];
+      }
+    return { index: best, distance: nearest };
+  };
+  const piece = nearestOf(pieces, PIECE_PICK_PX);
+  if (piece.index == null) return null;
+  const edge = nearestOf(edges, EDGE_PICK_PX);
+  return edge.index != null && edge.distance < piece.distance ? null : piece.index;
+}
+
+/**
+ * What a piece in reach says by the cursor (§6.1): `Piece 1 of 3 · 82 mm`
+ * and what a click does — in the hit with others, "click to bend only this";
+ * the hit's only piece (or its made bend's pieces alone), "in this hit ·
+ * Ctrl+click another to add it"; left flat, "left flat · click to bend only
+ * this · Ctrl+click adds it". `pieces`: the grip's [{ index, length, skipped,
+ * bend }].
+ */
+export function pieceChip(pieces, index) {
+  const piece = pieces.find((p) => p.index === index);
+  if (!piece) return '';
+  const head = `Piece ${index + 1} of ${pieces.length} · ${fmtMm(piece.length, 1)} mm`;
+  if (piece.skipped) return `${head} · left flat · click to bend only this · Ctrl+click adds it`;
+  const alone = pieces.every((p) => p.skipped || p.index === index || (piece.bend != null && p.bend === piece.bend));
+  return alone ? `${head} · in this hit · Ctrl+click another to add it` : `${head} · click to bend only this`;
+}
+
+/**
+ * Where the backgauge fingers stand along the bed (§6.3, view only): within
+ * the gauge edge's own run on the sheet (`run`: [x0, x1], machine X), about
+ * its middle, today's spread (`width`: the bend's extent; `bed`) capped so each
+ * finger keeps half its width clear of the run's ends; an edge too short for
+ * two that way gets one finger at its middle. No run (two points, turned):
+ * today's pair about the bend's middle. The finger centres, [x] or [x0, x1].
+ */
+export function fingerPlacement(run, width, bed, finger = 24) {
+  const spread = Math.max(finger, Math.min(width * 0.3, bed * 0.35));
+  if (!run) return [-spread, spread];
+  const middle = (run[0] + run[1]) / 2,
+    room = (run[1] - run[0]) / 2 - finger;
+  if (room < finger) return [middle];
+  const s = Math.min(spread, room);
+  return [middle - s, middle + s];
+}
+
+// ---------------------------------------------------------------- PK-3: the sheet slid by hand (docs/sketch-studio-sheet-slide.md §6.1)
+// A detent catches the drag within this reach (px); Alt passes through.
+export const SLIDE_DETENT_PX = 6;
+// Less of the punch than this over the pieces in the hit stops the drag (mm: shopCatalog's SHORTEST_SECTION).
+const SLIDE_LEAST = 10;
+/**
+ * What the slide handle offers (§6.1), in the sheet's move along the bed as
+ * the operator sees it (machine X, mm, positive to the right; with the frame
+ * centred on the punch, `value` is the sheet's own shift): { offered, value,
+ * right (the station's session slide → sheet move, ±1), punch ([x0, x1], the
+ * punch's runs' extent, fixed), bent ([x0, x1], the pieces in the hit centred),
+ * flat ([[x0, x1], …] the pieces left flat, centred), min, max (where the drag
+ * stops), detents ([x]: centred; an end of the punch flush with an end of the
+ * pieces; an end of the punch at the near end of a piece left flat) }, or
+ * { offered: false }. `tooling`: the pending hit's (brakeStation `tooling`,
+ * with `sign`, `right`); `slide`: the session's.
+ */
+export function slideOffer(tooling, slide) {
+  if (!tooling?.bent?.length || tooling.sign == null || tooling.right == null) return { offered: false };
+  const { sign } = tooling;
+  const toX = ([a, b]) => [sign * a, sign * b].sort((p, q) => p - q);
+  const along = Number(tooling.slide) || 0;
+  // The punch as it stands on the bed (the frame centred on it), and the sheet's pieces centred.
+  const punchRuns = tooling.punch.map(([a, b]) => toX([a - along, b - along]));
+  if (!punchRuns.length) return { offered: false };
+  const bentRuns = tooling.bent.flat().map(toX);
+  const flat = (tooling.flat || []).map(toX).sort((p, q) => p[0] - q[0]);
+  const punch = [Math.min(...punchRuns.map((r) => r[0])), Math.max(...punchRuns.map((r) => r[1]))];
+  const bent = [Math.min(...bentRuns.map((r) => r[0])), Math.max(...bentRuns.map((r) => r[1]))];
+  const detents = [0, punch[0] - bent[0], punch[1] - bent[1]];
+  for (const [f0, f1] of flat) {
+    if (f0 >= bent[1] - 1e-6) detents.push(punch[1] - f0);
+    if (f1 <= bent[0] + 1e-6) detents.push(punch[0] - f1);
+  }
+  const min = punch[0] - bent[1] + SLIDE_LEAST,
+    max = punch[1] - bent[0] - SLIDE_LEAST;
+  const round = (v) => Math.round(v * 1e6) / 1e6;
+  return {
+    offered: true,
+    value: round(tooling.right * (Number(slide) || 0)),
+    right: tooling.right,
+    punch,
+    bent,
+    flat,
+    min: round(Math.min(min, 0)),
+    max: round(Math.max(max, 0)),
+    detents: [...new Set(detents.map(round))].filter((v) => v >= min - 1e-6 && v <= max + 1e-6).sort((p, q) => p - q),
+  };
+}
+
+/**
+ * The slide a drag reaches (§6.1): `raw` (the sheet's move, mm) kept within the
+ * offer's min … max, caught by the nearest detent within SLIDE_DETENT_PX
+ * (`pxPerMm`: the bed's axis on the canvas) unless `free` (Alt), else in whole
+ * mm (a tenth with Alt).
+ */
+export function slideSnap(raw, offer, pxPerMm, { free = false } = {}) {
+  const kept = Math.min(offer.max, Math.max(offer.min, raw));
+  if (!free && pxPerMm > 0) {
+    let best = null;
+    for (const detent of offer.detents) {
+      const px = Math.abs(detent - kept) * pxPerMm;
+      if (px <= SLIDE_DETENT_PX && (!best || px < best.px)) best = { detent, px };
+    }
+    if (best) return best.detent;
+  }
+  const step = free ? FINGER_FREE_STEP : FINGER_STEP;
+  return Math.min(offer.max, Math.max(offer.min, Math.round(Math.round(kept / step) * step * 1e6) / 1e6));
+}
+
+// The punch's ends against the pieces in the hit with the sheet moved `value` (sheet slide §6.1).
+function slideEnds(offer, value) {
+  const left = offer.punch[0] - (offer.bent[0] + value),
+    right = offer.bent[1] + value - offer.punch[1];
+  const words = (v, side) =>
+    v > 0.05
+      ? `${fmtMm(v, 1)} mm short of the ${side} end`
+      : v < -0.05
+        ? `${fmtMm(-v, 1)} mm past the ${side} end`
+        : `flush at the ${side}`;
+  return `${words(left, 'left')}, ${words(right, 'right')}`;
+}
+/** The readout by the cursor while the arrow is dragged: `Slide 9 mm right · punch 18 mm past the left end, flush at the right`; centred `Slide 0 · centred`. */
+export function slideReadout(offer, value) {
+  if (Math.abs(value) < 1e-6) return 'Slide 0 · centred';
+  return `Slide ${fmtMm(Math.abs(value), 1)} mm ${value > 0 ? 'right' : 'left'} · punch ${slideEnds(offer, value)}`;
+}
+/** The chip on approach (§6.1): `Slide sheet · drag along the bed · centred`, or `… · 9 mm to the right`. */
+export function slideChip(offer) {
+  const value = offer?.value || 0;
+  return `${GRIP_NAMES.slide} · drag along the bed · ${Math.abs(value) < 1e-6 ? 'centred' : `${fmtMm(Math.abs(value), 1)} mm to the ${value > 0 ? 'right' : 'left'}`}`;
+}
+/** A typed slide while the arrow is in the hand (§6.1): digits, a leading minus for the left; a number or null. */
+export function typedSlide(text) {
+  if (!/^-?(\d*\.?\d+|\d+\.)$/.test(String(text))) return null;
+  const value = Number(text);
+  return Number.isFinite(value) ? value : null;
+}
+
 // L in the hand (§6.2): whole millimetres, a tenth with Alt.
 export const FINGER_STEP = 1;
 export const FINGER_FREE_STEP = 0.1;
@@ -475,7 +699,9 @@ export function typedL(text) {
  * a patch naming `skip` is not a new line, so this restores them exactly.
  * `seated` (tight bends §7.4 (f)) goes back with the line, so the note
  * does (undefined for a session that never seated). `stop` (skin gauge
- * §4.5) goes back with L: the L is read off it.
+ * §4.5) goes back with L: the L is read off it. The holds go back with the
+ * trims (piece pick §5.2: a lip picked alone holds its length with the trim
+ * fitted, which a trim alone would not say; undefined for none).
  */
 export const fingerRestore = (session) => ({
   distance: session.distance,
@@ -484,6 +710,10 @@ export const fingerRestore = (session) => ({
   turned: Boolean(session.turned),
   punchTrim: session.punchTrim ?? null,
   dieTrim: session.dieTrim ?? null,
+  punchHold: session.punchHold,
+  dieHold: session.dieHold,
+  // The sheet's slide goes back with the line (docs/sketch-studio-sheet-slide.md §5).
+  slide: session.slide,
   seated: session.seated,
 });
 
@@ -570,7 +800,8 @@ export const MACHINE_NAMES = Object.freeze({
  * fingerOffer; `edges`: the station's gauge edges; `picked`: the edge at the
  * backgauge (its index) or null.
  */
-export function reachChip(target, { fingers = null, edges = [], picked = null } = {}) {
+export function reachChip(target, { fingers = null, edges = [], picked = null, pieces = [] } = {}) {
+  if (target?.kind === 'piece') return { title: pieceChip(pieces, target.index), line: null };
   if (target?.kind === 'fingers')
     return fingers?.offered
       ? { title: `Backgauge · L ${fmtMm(fingers.L, 1)} · drag, or click to type`, line: null }

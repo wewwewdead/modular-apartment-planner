@@ -24,12 +24,39 @@ export function isEntityEditable(document, entity) {
   return layer ? layer.locked !== true : true;
 }
 
+// One id -> layer lookup per call instead of a `layers.find` per entity. It
+// answers as `find` does: the first layer with the id, none for NaN.
+// Built on the first lookup, so an empty drawing never reads the layers.
+function buildLayerLookup(layers) {
+  let byId = null;
+  return (layerId) => {
+    if (!byId) {
+      byId = new Map();
+      for (const layer of layers) {
+        if (!byId.has(layer.id)) byId.set(layer.id, layer);
+      }
+    }
+    return Number.isNaN(layerId) ? null : (byId.get(layerId) ?? null);
+  };
+}
+
 export function getVisibleEntities(document) {
-  return document.entities.filter((entity) => isEntityVisible(document, entity));
+  const layerById = buildLayerLookup(document.layers);
+  return document.entities.filter((entity) => {
+    if (entity.visible === false) return false;
+    const layer = layerById(entity.layerId);
+    return layer ? layer.visible !== false : true;
+  });
 }
 
 export function getEditableEntities(document) {
-  return document.entities.filter((entity) => isEntityEditable(document, entity));
+  const layerById = buildLayerLookup(document.layers);
+  return document.entities.filter((entity) => {
+    if (entity.visible === false || entity.locked) return false;
+    const layer = layerById(entity.layerId);
+    if (layer && layer.visible === false) return false;
+    return layer ? layer.locked !== true : true;
+  });
 }
 
 export function createLayer(layers, name = '') {

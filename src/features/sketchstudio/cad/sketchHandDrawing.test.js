@@ -87,6 +87,20 @@ describe('selection in the reducer', () => {
     expect(state.history.undo).toEqual([]);
   });
 
+  it('takes no box and no click selection under a tool or an action', () => {
+    const box = { type: 'box', from: [20, 40], to: [110, 80], mode: 'inside', add: false };
+    const drawing = run(createSketchState(plate), { type: 'tool', tool: 'line' });
+    expect(run(drawing, box, { type: 'box-end' })).toBe(drawing);
+    expect(sketchReducer(drawing, { type: 'select', id: 'e2' })).toBe(drawing);
+    expect(sketchReducer(drawing, { type: 'select', dimensionId: 'd1' })).toBe(drawing);
+    const moving = run(createSketchState(plate), { type: 'select', id: 'e2' }, { type: 'op', kind: 'move' });
+    expect(run(moving, box, { type: 'box-end' })).toBe(moving);
+    expect(sketchReducer(moving, { type: 'select', id: null })).toBe(moving);
+    // A box a tool met on its way is dropped on the release, selecting nothing.
+    const stale = { ...drawing, box: { from: [20, 40], to: [110, 80], mode: 'inside', add: false } };
+    expect(sketchReducer(stale, { type: 'box-end' })).toMatchObject({ box: null, selectedIds: [], tool: 'line' });
+  });
+
   it('deletes five in one step, and the tool switch clears the selection', () => {
     let state = run(createSketchState(plate), { type: 'box', from: [-1, 40], to: [201, 70], mode: 'inside' });
     state = run(state, { type: 'box-end' });

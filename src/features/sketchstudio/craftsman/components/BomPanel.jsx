@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { exportBomWithCost, downloadAsFile, getBomEstimateSummary } from '../../utils/bomExportUtils';
 import { isHardwareBomRow } from '../utils/entityBomAdapter';
 import styles from '../styles/craftsman.module.css';
@@ -134,7 +134,7 @@ function HardwareTable({ rows }) {
   );
 }
 
-export default function BomPanel({ bomRows, totalCost, costByMaterial, onRemoveRow, onDuplicateRow }) {
+function BomPanel({ bomRows, totalCost, costByMaterial, onRemoveRow, onDuplicateRow }) {
   const handleExportCSV = useCallback(() => {
     const content = exportBomWithCost(bomRows, 'csv', { rows: bomRows, totalCost, costByMaterial });
     downloadAsFile(content, 'cutting-list.csv', 'text/csv');
@@ -217,3 +217,6 @@ export default function BomPanel({ bomRows, totalCost, costByMaterial, onRemoveR
     </div>
   );
 }
+
+// Memoised: a large cutting list is not redrawn while a drag holds its rows.
+export default memo(BomPanel);

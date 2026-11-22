@@ -464,3 +464,24 @@ it('drags a print on its face and reports its new centre in the part frame; Esc 
   pointer('pointerup', from);
   expect(onShopPrintMove).toHaveBeenCalledTimes(1);
 });
+
+it('a press a drag took is no click: Esc mid print drag, then a release where an earlier click was, picks nothing', () => {
+  const onShopPrintMove = vi.fn(),
+    onShopPick = vi.fn();
+  const shopPick = { station: 'print', stage: 'artwork', pick: 'face', hint: 'Print', printId: 't1' };
+  render(<CadViewport {...props({ onShopPrintMove, onShopPick, shopPick })} />);
+  // An ordinary click on the plate, off the print: a face pick.
+  const elsewhere = viewport().cadProject([-50, 0, 1.5]);
+  click(elsewhere);
+  expect(onShopPick).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'face', instanceId: 'plate' }));
+  onShopPick.mockClear();
+  // The print taken by the hand, dragged there, Esc, and let go: the press was the drag's.
+  const decal = viewport().cadProject([70, 0, 1.54]);
+  pointer('pointerdown', decal);
+  pointer('pointermove', elsewhere);
+  expect(shop().pick.dragging).toBe(true);
+  act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+  pointer('pointerup', elsewhere);
+  expect(onShopPick).not.toHaveBeenCalled();
+  expect(onShopPrintMove).not.toHaveBeenCalled();
+});

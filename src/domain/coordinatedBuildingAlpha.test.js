@@ -178,12 +178,14 @@ describe('Apartment Planner Alpha acceptance scenario', () => {
       },
     ];
     ground.sectionCuts = [{ ...createSectionCut({ x: -1000, y: 3500 }, { x: 13_000, y: 3500 }), id: 'alpha_section' }];
-    project.roofSystem = createRoofSystem('Flat Roof', {
-      id: 'alpha_roof',
-      roofType: 'flat',
-      baseElevation: 6000,
-      boundaryPolygon: rectangle(0, 0, 12_000, 7000),
-    });
+    project.roofSystems = [
+      createRoofSystem('Flat Roof', {
+        id: 'alpha_roof',
+        roofType: 'flat',
+        baseElevation: 6000,
+        boundaryPolygon: rectangle(0, 0, 12_000, 7000),
+      }),
+    ];
     project = syncCanonicalBuilding(project);
 
     for (const floor of project.floors) {

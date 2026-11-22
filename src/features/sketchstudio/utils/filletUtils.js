@@ -24,13 +24,7 @@ export function getLineOtherEndpoint(entity, endpointKey) {
   return { x: entity.x1, y: entity.y1 };
 }
 
-function findLineLineCorner(entities, worldPoint, tolerance) {
-  const lines = entities.filter((entity) => entity.type === 'line');
-
-  if (lines.length < 2) {
-    return null;
-  }
-
+function groupLineEndpoints(lines, tolerance) {
   const endpoints = [];
 
   for (const line of lines) {
@@ -65,21 +59,72 @@ function findLineLineCorner(entities, worldPoint, tolerance) {
     groups.push(group);
   }
 
+  // What the corner search reads of each group, worked out once.
+  return groups.map((group) => ({
+    group,
+    distinctEntityCount: new Set(group.map((ep) => ep.entity.id)).size,
+    centroid: {
+      x: group.reduce((sum, ep) => sum + ep.point.x, 0) / group.length,
+      y: group.reduce((sum, ep) => sum + ep.point.y, 0) / group.length,
+    },
+  }));
+}
+
+// The endpoint grouping is quadratic in the number of line ends and the hover
+// preview runs it on every pointer move, so the last grouping is kept. It is
+// reused only for the same merge distance and lines that are the same objects
+// with the same end coordinates, checked in order on every call -- which is
+// exactly what the grouping reads -- so it answers as a fresh grouping would.
+let lineEndpointGroupCache = null;
+
+function getLineEndpointGroups(lines, tolerance) {
+  const mergeDistance = Math.max(tolerance, ENDPOINT_MERGE_TOLERANCE);
+  const cache = lineEndpointGroupCache;
+
+  if (
+    cache &&
+    Object.is(cache.mergeDistance, mergeDistance) &&
+    cache.lines.length === lines.length &&
+    lines.every((line, index) => {
+      const cached = cache.lines[index];
+      return (
+        cached.entity === line &&
+        Object.is(cached.x1, line.x1) &&
+        Object.is(cached.y1, line.y1) &&
+        Object.is(cached.x2, line.x2) &&
+        Object.is(cached.y2, line.y2) &&
+        Object.is(cached.id, line.id)
+      );
+    })
+  ) {
+    return cache.groups;
+  }
+
+  const groups = groupLineEndpoints(lines, tolerance);
+  lineEndpointGroupCache = {
+    mergeDistance,
+    lines: lines.map((line) => ({ entity: line, x1: line.x1, y1: line.y1, x2: line.x2, y2: line.y2, id: line.id })),
+    groups,
+  };
+  return groups;
+}
+
+function findLineLineCorner(entities, worldPoint, tolerance) {
+  const lines = entities.filter((entity) => entity.type === 'line');
+
+  if (lines.length < 2) {
+    return null;
+  }
+
   // Find closest group with exactly 2 distinct lines
   let bestGroup = null;
   let bestDist = Infinity;
 
-  for (const group of groups) {
-    const entityIds = new Set(group.map((ep) => ep.entity.id));
-
-    if (entityIds.size !== 2) {
+  for (const { group, distinctEntityCount, centroid } of getLineEndpointGroups(lines, tolerance)) {
+    if (distinctEntityCount !== 2) {
       continue;
     }
 
-    const centroid = {
-      x: group.reduce((sum, ep) => sum + ep.point.x, 0) / group.length,
-      y: group.reduce((sum, ep) => sum + ep.point.y, 0) / group.length,
-    };
     const dist = calculateDistance(worldPoint, centroid);
 
     if (dist < bestDist && dist <= tolerance) {

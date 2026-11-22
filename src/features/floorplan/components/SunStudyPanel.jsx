@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { BUILDING_COMMANDS } from '@/domain/buildingCommands';
 import { generateId } from '@/domain/ids';
 import { solarPosition, sunTimes, siteInstant, siteClock } from '@/analysis/solarPosition';
@@ -138,7 +138,7 @@ function ThresholdHoursInput({ value, onCommit }) {
  *   2. Located, off → one summary line. Out of the way.
  *   3. Running      → mode, date, time. Sampling settings stay folded away.
  */
-export default function SunStudyPanel({
+function SunStudyPanel({
   project,
   sunStudy,
   study = null,
@@ -155,12 +155,25 @@ export default function SunStudyPanel({
   // Identity of the stored location. Editing is tracked against this rather
   // than as a boolean so the form closes itself the moment a command actually
   // lands, with no effect and no cascading render: a successful save changes
-  // the key, a rejected one leaves it alone and the form stays open.
+  // the key, a rejected one leaves it alone and the form stays open. A save
+  // that changes nothing the key holds is closed by `locationSubmission` below.
   const siteKey = `${site?.latitude}|${site?.longitude}|${site?.timeZone}|${site?.northAngle}`;
   const [editingFromKey, setEditingFromKey] = useState(null);
   const editingLocation = editingFromKey !== null && editingFromKey === siteKey;
   const [dismissedCommand, setDismissedCommand] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // A Save on its way, holding the `lastCommand` it was sent after. The key
+  // alone cannot tell a save that changed only the label, or nothing, from no
+  // save at all, and a save that never clears the editing key leaves it to
+  // match again when an undo puts the old location back. So an accepted save
+  // closes the form itself.
+  const [locationSubmission, setLocationSubmission] = useState(null);
+  if (locationSubmission && lastCommand !== locationSubmission.sentAfter) {
+    setLocationSubmission(null);
+    if (lastCommand?.ok && lastCommand.commandType === BUILDING_COMMANDS.CONFIGURE_SITE_LOCATION) {
+      setEditingFromKey(null);
+    }
+  }
 
   const [draft, setDraft] = useState(() => ({
     latitude: site?.latitude ?? '',
@@ -172,6 +185,27 @@ export default function SunStudyPanel({
   const [draftError, setDraftError] = useState(null);
   const [targetDraft, setTargetDraft] = useState({ name: '', kind: 'neighbor', points: '' });
   const [targetDraftError, setTargetDraftError] = useState(null);
+
+  /*
+   * A new mask is adopted (chosen in the select, its form cleared) only once
+   * its command has run and been accepted. The command answers the way the
+   * location's does, through `lastCommand`, a new record each time one runs:
+   * a rejection (a bow-tie, three points in a line) leaves the typed points
+   * where they were with the reason under them, and the mask choice alone.
+   * Settled here, during render, from the record; the patch is the editor's
+   * state, so it goes out from the effect below.
+   */
+  const [targetSubmission, setTargetSubmission] = useState(null);
+  if (targetSubmission && !targetSubmission.settled && lastCommand !== targetSubmission.sentAfter) {
+    const accepted =
+      Boolean(lastCommand?.ok) && lastCommand.commandType === BUILDING_COMMANDS.UPSERT_SOLAR_STUDY_TARGET;
+    setTargetSubmission({ ...targetSubmission, settled: true, accepted });
+    if (accepted) setTargetDraft({ name: '', kind: 'neighbor', points: '' });
+  }
+  const adoptTarget = useEffectEvent((id) => onPatch({ targetId: id }));
+  useEffect(() => {
+    if (targetSubmission?.accepted) adoptTarget(targetSubmission.id);
+  }, [targetSubmission]);
 
   // The command owns the range rules, so let its rejection message through
   // rather than restating those rules here and letting the two drift apart.
@@ -250,6 +284,7 @@ export default function SunStudyPanel({
     }
 
     setDraftError(null);
+    setLocationSubmission({ sentAfter: lastCommand });
     onExecuteCommand({
       type: BUILDING_COMMANDS.CONFIGURE_SITE_LOCATION,
       latitude,
@@ -337,6 +372,7 @@ export default function SunStudyPanel({
     }
     const id = generateId('solar_target');
     setTargetDraftError(null);
+    setTargetSubmission({ id, sentAfter: lastCommand, settled: false, accepted: false });
     onExecuteCommand({
       type: BUILDING_COMMANDS.UPSERT_SOLAR_STUDY_TARGET,
       id,
@@ -344,8 +380,6 @@ export default function SunStudyPanel({
       kind: targetDraft.kind,
       polygon,
     });
-    onPatch({ targetId: id });
-    setTargetDraft({ name: '', kind: 'neighbor', points: '' });
   };
 
   return (
@@ -717,3 +751,6 @@ export default function SunStudyPanel({
     </section>
   );
 }
+
+// Memoised: the sidebar hands it a project that lags a drag (see Sidebar.jsx).
+export default memo(SunStudyPanel);

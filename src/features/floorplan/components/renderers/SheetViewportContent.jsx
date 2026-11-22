@@ -125,6 +125,21 @@ function PlanViewportContent({ floor }) {
   );
 }
 
+// The load path of the project a structural viewport draws, kept per project
+// object: both of the sheet canvas's renderers draw the same scene, and every
+// structural viewport on a sheet shares its project. Read-only to its consumers.
+const loadPathCache = new WeakMap();
+
+function cachedConceptualLoadPath(project) {
+  if (!project || typeof project !== 'object') return deriveConceptualLoadPath(project);
+  let loadPath = loadPathCache.get(project);
+  if (!loadPath) {
+    loadPath = deriveConceptualLoadPath(project);
+    loadPathCache.set(project, loadPath);
+  }
+  return loadPath;
+}
+
 function StructuralPlanViewportContent({ source }) {
   const floor = source.floor;
   return (
@@ -137,7 +152,7 @@ function StructuralPlanViewportContent({ source }) {
       <StructuralGridOverlay
         structuralSystem={source.project?.building?.systems?.structural}
         floor={floor}
-        loadPath={deriveConceptualLoadPath(source.project)}
+        loadPath={cachedConceptualLoadPath(source.project)}
       />
     </>
   );
@@ -249,8 +264,11 @@ export default function SheetViewportContent({ source }) {
     return <BuildingReportRenderer report={source.report} />;
   }
 
+  // Every roof of the building, drawn into the one view.
   if (source.kind === 'roof_plan') {
-    return <RoofRenderer roofSystem={source.roofSystem} interactive={false} />;
+    return source.roofSystems.map((roofSystem) => (
+      <RoofRenderer key={roofSystem.id} roofSystem={roofSystem} interactive={false} />
+    ));
   }
 
   if (source.kind === 'truss_plan') {
@@ -268,7 +286,9 @@ export default function SheetViewportContent({ source }) {
   }
 
   if (source.kind === 'roof_drainage') {
-    return <RoofDrainageRenderer roofSystem={source.roofSystem} interactive={false} />;
+    return source.roofSystems.map((roofSystem) => (
+      <RoofDrainageRenderer key={roofSystem.id} roofSystem={roofSystem} interactive={false} />
+    ));
   }
 
   if (source.kind === 'roof_schedule') {

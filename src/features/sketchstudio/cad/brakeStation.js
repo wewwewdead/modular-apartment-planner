@@ -55,6 +55,7 @@ import {
   gaugeBendLine,
   gaugeEdges,
   gaugeReading,
+  frameSign,
   gaugeStops,
   lineTooling,
   machineFrom,
@@ -92,7 +93,8 @@ export const brakeSessionDefaults = () => ({
   lastHit: null,
   scrub: null,
   stroke: null,
-  // Segments of the punch line left out of the hit (shop floor §6.2), reset when the line changes.
+  // Pieces of the punch line left flat in this hit (shop floor §6.2; docs/sketch-studio-piece-pick.md
+  // §5.3: a new line starts with pieceDefault's, a new L keeps the pick where the pieces are the same).
   skip: [],
   // A round bend (docs/sketch-studio-round-bend.md §6): its inside radius and
   // hits (null: automatic), made by bump bending — or, when `punch` is a
@@ -138,6 +140,11 @@ export const brakeSessionDefaults = () => ({
   // automatic (§4.4). Neither is carried to the next part.
   stop: null,
   stopHold: null,
+  // The sheet slid under the punch (docs/sketch-studio-sheet-slide.md §3): mm
+  // along the session's line a → b from the middle of the pieces in the hit to
+  // the middle of the punch's runs; 0 centred. On the record only when not 0;
+  // back to 0 when the sheet is placed again (brakePatch); never carried.
+  slide: 0,
 });
 
 /**
@@ -184,28 +191,136 @@ function oneRun(station, session) {
   return runs.length === 1 ? runs[0][1] - runs[0][0] : null;
 }
 /**
- * The lengths stay as set (brake tool length §9.3, §9.4): `next` (the
- * session after `patch`) gets its trims and holds. A patch naming a trim
- * takes it as given: with one run under the line the hold is that length (a
- * null trim, fitted, removes it); several runs or no station, the hold goes
- * and the trim itself stays. A new line keeps the trim, or, with a hold and
- * one run under it, derives the trim from the hold. A patch naming `skip`
- * keeps the trim and re-reads the hold from it. A session that never sets a
- * length gains no key.
+ * The lengths stay as set (brake tool length §9.3, §9.4; piece pick §5.2):
+ * `next` (the session after `patch`) gets its trims and holds. A patch naming
+ * a trim takes it as given: with one run under the line the hold is that
+ * length (a null trim, fitted, removes it); several runs or no station, the
+ * hold goes and the trim itself stays. A new line or a patch naming `skip` is
+ * the same to the tools (the punch stays in the machine): with a hold and one
+ * run under the kept pieces the trim is derived from the hold; with no hold
+ * a `skip` patch keeps the trim and reads the hold from it. A hold is never
+ * written at 0 or below. A patch naming the hold itself (Esc on a drag,
+ * brakeHands.js fingerRestore) puts it back as given. A session that never
+ * sets a length gains no key.
  */
 function holdTools(next, patch, newLine, station) {
   let span;
   const run = () => (span === undefined ? (span = oneRun(station, next)) : span);
+  // The length a trim leaves on the one run under the line: a hold, or null (0 or below is none).
+  const heldBy = (value) => {
+    if (!trimSet(value) || run() == null) return null;
+    const length = exact(run() - 2 * Number(value));
+    return length > 0 ? length : null;
+  };
   for (const [trim, hold] of HELD_TOOLS) {
-    if (trim in patch || 'skip' in patch) {
-      if (!trimSet(next[trim]) || run() == null) delete next[hold];
-      else next[hold] = exact(run() - 2 * Number(next[trim]));
-    } else if (newLine && Number.isFinite(next[hold]) && run() != null) {
+    if (hold in patch) {
+      if (!(Number(next[hold]) > 0)) delete next[hold];
+    } else if (trim in patch) {
+      const length = heldBy(next[trim]);
+      if (length == null) delete next[hold];
+      else next[hold] = length;
+    } else if ((newLine || 'skip' in patch) && Number.isFinite(next[hold]) && run() != null) {
       const derived = exact((run() - next[hold]) / 2);
       next[trim] = Math.abs(derived) < 1e-6 ? null : derived;
+    } else if ('skip' in patch && !Number.isFinite(next[hold])) {
+      // Several runs before (no hold): the trim stays, and now one run stands under the line the hold is read.
+      const length = heldBy(next[trim]);
+      if (length != null) next[hold] = length;
     }
   }
 }
+
+// ---------------------------------------------------------------- the pieces in the hit (docs/sketch-studio-piece-pick.md §5)
+/**
+ * The next `skip` when piece `index` (of `count` on the line) is picked
+ * (§5.1), or null when nothing changes. Plain: only that piece is in the hit.
+ * `add` (Ctrl, Shift or Meta held; a panel chip): that piece goes into the
+ * hit or out of it; the last piece in the hit is never taken out.
+ * `together` (the PK-1 audit): groups of indexes that go into the hit and
+ * out of it as one — a made bend's pieces, bent on whole (piecesTogether); a
+ * piece in none is a group of its own.
+ */
+export function pieceChoice(count, skip, index, { add = false, together = null } = {}) {
+  if (!Number.isInteger(index) || index < 0 || index >= count) return null;
+  const out = new Set((skip || []).filter((i) => Number.isInteger(i) && i >= 0 && i < count));
+  const all = Array.from({ length: count }, (_, i) => i);
+  const group = new Set((together || []).find((g) => g.includes(index)) || [index]);
+  const inHit = !out.has(index);
+  const next = !add
+    ? all.filter((i) => !group.has(i))
+    : inHit
+      ? all.filter((i) => out.has(i) || group.has(i))
+      : all.filter((i) => out.has(i) && !group.has(i));
+  // The last piece in the hit stays in it.
+  if (next.length >= count) return null;
+  const same = next.length === out.size && next.every((i) => out.has(i));
+  return same ? null : next;
+}
+/** The pieces that go together (pieceChoice's `together`): each made bend's pieces on the line, where it has more than one. */
+export const piecesTogether = (pieces) =>
+  Object.values(
+    (pieces || []).reduce((groups, p) => {
+      if (p.bend != null) (groups[p.bend] ||= []).push(p.index);
+      return groups;
+    }, {}),
+  ).filter((g) => g.length > 1);
+// The pieces a line crosses (sheetMetal.js lineSegments), each with `made` (the
+// angle it stands at) and `bend` (its id) when a made bend owns it (pieceOwner,
+// madeLine's own first test), else null.
+function linePieces(fold, polygon, line) {
+  if (!line || !polygon) return [];
+  return lineSegments(polygon, line).map((p) => {
+    const owner = pieceOwner(fold, p);
+    return { ...p, made: owner ? owner.angle : null, bend: owner ? owner.id : null };
+  });
+}
+/**
+ * The `skip` a line starts with (§5.3): every piece in, except the pieces
+ * already bent on this line when it also crosses pieces not bent yet (they
+ * start left flat); every piece made already, every piece in (the hit is
+ * Bend on). `station`: brakeStation() (its fold and polygon); `line` a punch
+ * line, or omitted for the station's own (its `segments`).
+ */
+export function pieceDefault(station, line) {
+  const pieces = line === undefined ? station?.segments || [] : linePieces(station?.fold, station?.polygon, line);
+  const made = pieces.filter((p) => p.made != null);
+  return made.length && made.length < pieces.length ? made.map((p) => p.index) : [];
+}
+// Only L moved (§5.3), or Turn sheet around (the same line from the other
+// side, the PK-1 audit): the pick stays when the new line crosses as many
+// pieces and each is one old piece again, overlapping it along the line by
+// more than half of the shorter of the two (matched by where they lie on
+// the flat blank, so a turned line's order may run the other way). The kept
+// `skip` (the new line's indexes), or null (the line starts afresh). A pick of
+// every piece is no pick to keep: the new line takes its default. `before`:
+// the session the pick was made on (a drag's start, `dragFrom`).
+function keptPick(station, before, next) {
+  const skip = before.skip || [];
+  if (!skip.length || !station?.polygon || !station.edges) return null;
+  const was = sessionLine(station, before).line;
+  const now = sessionLine(station, next).line;
+  if (!was || !now) return null;
+  const old = lineSegments(station.polygon, was);
+  const pieces = lineSegments(station.polygon, now);
+  if (old.length !== pieces.length) return null;
+  const length = Math.hypot(now.b[0] - now.a[0], now.b[1] - now.a[1]) || 1;
+  const u = [(now.b[0] - now.a[0]) / length, (now.b[1] - now.a[1]) / length];
+  const span = ({ a, b }) => [a[0] * u[0] + a[1] * u[1], b[0] * u[0] + b[1] * u[1]].sort((p, q) => p - q);
+  const overlap = (p, q) => {
+    const [p0, p1] = span(p),
+      [q0, q1] = span(q);
+    return Math.min(p1, q1) - Math.max(p0, q0) - Math.min(p1 - p0, q1 - q0) / 2;
+  };
+  const match = pieces.map((piece) => old.find((o) => overlap(o, piece) > 0) ?? null);
+  if (match.some((o) => !o) || new Set(match).size !== match.length) return null;
+  return pieces.filter((_, k) => skip.includes(match[k].index)).map((p) => p.index);
+}
+/**
+ * Turn sheet around's patch to the opposite edge (turnAround): it names a new
+ * `edge` with `turned` (no other patch does both). brakePatch keeps the pick
+ * across it, the same line seen from the other side (the PK-1 audit).
+ */
+const turnPatch = (patch) => 'edge' in patch && 'turned' in patch && !('skip' in patch);
 
 /**
  * The session patch that puts the punch `key` in (brake blades §4.1): the one
@@ -226,11 +341,14 @@ export function punchChoice(session, key) {
 /**
  * The session after a patch, as the workspace applies every pick
  * (docs/sketch-studio-brake-hands-on.md §5.4: the one copy of the rule). A
- * new line (an edge, L, points or the mode) puts every segment back in the
- * hit (shop floor §6.2) and starts the right way round (Turn sheet around,
- * brake flip tooling §5.2); the punch and die keep their lengths (brake tool
- * length §9.3, holdTools); a patch naming `skip` is a segment toggle on the
- * same line.
+ * new line (an edge, L, points or the mode) starts the right way round (Turn
+ * sheet around, brake flip tooling §5.2) with the pieces of piece pick §5.3:
+ * only L moved (none of a new edge, mode or points), the pick stays where
+ * the line crosses the same pieces (keptPick); else, after the seat,
+ * `pieceDefault` (every piece in, but made ones beside unbent ones; without
+ * a station every piece, as before). The punch and die keep their lengths
+ * (brake tool length §9.3, holdTools); a patch naming `skip` picks pieces on
+ * the same line (pieceChoice).
  * `station` (brakeStation(), docs/sketch-studio-tight-bends.md §4.4): a line
  * that arrives on a made bend's line with an angle not above the bend's sets
  * the angle to 90° (to 180° for a bend at 90° or more), once, on arriving;
@@ -260,19 +378,53 @@ export function brakePatch(session, patch, station = null) {
     ...patch,
   };
   if ('dragStop' in next) delete next.dragStop;
+  if ('dragFrom' in next) delete next.dragFrom;
   // Which stop L is read from (skin gauge §4.5 steps 1, 2), before the line is
   // found: named, held (Gauge off), a finger drag's own, or automatic (§4.4).
   if (newLine) stopOfPatch(next, patch, session, station);
+  // Only L moved (piece pick §5.3: the finger drag, the card's line drag, a
+  // typed L), or Turn sheet around (the PK-1 audit): the pieces picked stay in
+  // the hit where they are the same pieces. A drag's patch names `dragFrom`
+  // (a patch-only key: fingerRestore of the session it started on), and the
+  // pick is matched against the line it started from, so coming back to the
+  // same pieces has the pick again.
+  const sameLine =
+    turnPatch(patch) ||
+    (!('points' in patch) &&
+      (!('edge' in patch) || patch.edge === session.edge) &&
+      (!('mode' in patch) || patch.mode === session.mode));
+  const from = patch.dragFrom ? { ...session, ...patch.dragFrom } : session;
+  const kept = newLine && station && sameLine ? keptPick(station, from, next) : null;
+  if (kept) next.skip = kept;
   // A bent line seats itself in the die (§7.4 (b)): before the arrival rule,
   // which then runs on the seated line as on an exact one; an etched mark's
   // patch names the angle too, and seats all the same.
+  let seatedNow = false;
   if (newLine && !('seated' in patch)) {
     const seat = station ? seatOf(station, next) : null;
     if (seat) {
       const from = next.mode === 'gauge' ? Number(next.distance) : null;
       Object.assign(next, seat.patch);
       next.seated = { number: seat.number, off: seat.off, from };
+      seatedNow = true;
     } else if (next.seated) next.seated = null;
+  }
+  // A line that starts afresh (piece pick §5.3), after the seat (which names its own pieces): the default pick.
+  if (newLine && !kept && !seatedNow && station?.fold && station.polygon && station.edges)
+    next.skip = pieceDefault(station, sessionLine(station, next).line);
+  // The sheet's slide (docs/sketch-studio-sheet-slide.md §5): a patch naming it
+  // takes it as given; it stays when only L moved with the pick kept (a drag's
+  // own start gives its slide back with its pick, `dragFrom`), and through the
+  // angle, Flip sheet and the tools; it goes back to 0 when the sheet is placed
+  // again: a new edge, the mode, the points, a piece picked, Turn sheet around
+  // (either kind), a new L whose pieces changed; and when the shape becomes an
+  // offset, whose pair is made centred. A session that never slid gains no key.
+  if (!('slide' in patch)) {
+    const turning = 'turned' in patch && !('skip' in patch);
+    const offset = 'shape' in patch && next.shape === 'offset';
+    if (kept && patch.dragFrom && 'slide' in patch.dragFrom) {
+      if ((patch.dragFrom.slide || 0) !== (next.slide || 0)) next.slide = patch.dragFrom.slide || 0;
+    } else if (('skip' in patch || turning || offset || (newLine && !kept)) && next.slide) next.slide = 0;
   }
   // The tools' lengths (brake tool length §9.4), on the line as it now stands.
   holdTools(next, patch, newLine, station);
@@ -283,7 +435,7 @@ export function brakePatch(session, patch, station = null) {
   if (
     next.armed &&
     !('armed' in patch) &&
-    ['edge', 'distance', 'points', 'mode', 'skip', 'flip', 'shape'].some((k) => k in patch)
+    ['edge', 'distance', 'points', 'mode', 'skip', 'flip', 'shape', 'slide'].some((k) => k in patch)
   )
     next.armed = null;
   if (next.notice && !('notice' in patch)) next.notice = null;
@@ -526,6 +678,14 @@ const runsOf = (bend) =>
   bend.intervals.map((interval) => interval.map((s) => [bend.a[0] + bend.u[0] * s, bend.a[1] + bend.u[1] * s]));
 const nearPoint = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= MADE_LINE_TOLERANCE;
 const sameRun = ([p, q], [r, s]) => (nearPoint(p, r) && nearPoint(q, s)) || (nearPoint(p, s) && nearPoint(q, r));
+/**
+ * The made bend a piece of a punch line is a piece of (§4.4 (a), madeLine's
+ * first test; docs/sketch-studio-piece-pick.md §5.3): the fold bend one of
+ * whose runs is that piece, every end within MADE_LINE_TOLERANCE, or null.
+ * `segment`: a lineSegments entry ({ a, b }).
+ */
+export const pieceOwner = (fold, segment) =>
+  fold?.bends?.find((bend) => runsOf(bend).some((run) => sameRun(run, [segment.a, segment.b]))) || null;
 
 /**
  * The made bends a punch line hits again (§4.4 (a)): `line` (less the
@@ -542,7 +702,7 @@ export function madeLine(fold, polygon, line, skip = []) {
   if (!kept.length) return null;
   const members = [];
   for (const segment of kept) {
-    const owner = fold.bends.find((bend) => runsOf(bend).some((run) => sameRun(run, [segment.a, segment.b])));
+    const owner = pieceOwner(fold, segment);
     if (!owner) return null;
     if (!members.includes(owner)) members.push(owner);
   }
@@ -556,8 +716,7 @@ export function madeLine(fold, polygon, line, skip = []) {
   if (members.some((b) => Math.abs(b.angle - from) > 1e-6))
     return {
       ...made,
-      error:
-        'These flanges stand at different angles: bend them on one at a time. Click the others on the flat blank to leave them out.',
+      error: 'These flanges stand at different angles: bend them on one at a time. Click one to bend only it.',
     };
   if (from >= 180 - 1e-9) return { ...made, error: `Bend ${number} is already at 180°: it cannot be bent further.` };
   return made;
@@ -765,13 +924,15 @@ function crossingRefusal(error, { fold, line, segments }) {
   const key = bendOnKey(fold, bend.id);
   if (!crossing.along)
     return {
-      error: `This line runs across bend ${n}, which is already made: the brake cannot bend across a formed bend.${segments.length > 1 ? ' Click that piece on the flat blank to leave it out of this hit.' : ''}`,
+      // A plain click on a piece bends only it (piece pick §5.6): leaving one out is Ctrl+click.
+      error: `This line runs across bend ${n}, which is already made: the brake cannot bend across a formed bend.${segments.length > 1 ? ' Ctrl+click that piece to leave it out of this hit.' : ''}`,
     };
   return {
     error:
       off > MADE_LINE_TOLERANCE
         ? `This line is ${fmt(off)} mm from bend ${n}'s line: too close for a new bend.${key ? ` To bend bend ${n} further, bend it on.` : ''}`
-        : `This line is bend ${n}'s line, but the pieces in this hit are not the ones bend ${n} bends: a made bend is bent on whole, and nothing else with it.${segments.length > 1 ? ' Click a piece on the flat blank to leave it out of this hit.' : ''}`,
+        : // Reached now only by adding a made piece back (piece pick §5.3, §5.4).
+          `This line is bend ${n}'s line, but the pieces in this hit are not the ones bend ${n} bends: a made bend is bent on whole, and nothing else with it.${segments.length > 1 ? ' Click a piece to bend only it.' : ''}`,
     ...(key ? { seat: { key, number: n, off, label: `Bend ${n} on instead` } } : {}),
   };
 }
@@ -781,9 +942,12 @@ export const punchReversed = (session) => Boolean(session.reverse) && !punchSymm
 
 /**
  * The shop-order rule (§9 SM-2 item 9): what keeps a part off the brake, its
- * paint and prints. The part is one definition, so every instance of it
- * counts. Returns null, or { finishes, prints } (the rows), a message and the
- * model with them removed.
+ * paint and prints. One piece of metal is one part
+ * (docs/sketch-studio-own-bends.md §4.5), so these are the blank's own:
+ * painting one blank never keeps another of its lot off the brake. A model
+ * that still has several instances of one part counts them all. Returns null,
+ * or { finishes, prints } (the rows), a message and the model with them
+ * removed.
  */
 export function shopOrderBlock(model, partId) {
   const ids = new Set(model.instances.filter((i) => i.partId === partId).map((i) => i.id));
@@ -812,10 +976,12 @@ export function shopOrderBlock(model, partId) {
 
 /**
  * What one instance has had done to it after the brake (shop floor §8.1, the
- * SF-4 audit): its own finish and prints, and the other copies of its part —
- * shopOrderBlock counts the part's records, every copy's together, which the
- * instance alone does not carry. { finish (name or colour, or null),
- * finishKind, prints, copies: [names of the other instances of the part] }.
+ * SF-4 audit): its own finish and prints, and the other instances of its part
+ * — none since one piece of metal is one part (own bends §4.5); a model that
+ * still has copies of one part counts their records together in
+ * shopOrderBlock, which the instance alone does not carry. { finish (name or
+ * colour, or null), finishKind, prints, copies: [names of the other instances
+ * of the part] }.
  */
 export function finishedHere(model, instanceId) {
   const instance = model.instances.find((i) => i.id === instanceId);
@@ -974,6 +1140,22 @@ export const HOOKED =
   'The part stands over the horns: slide it onto them under the punch, and off again along the punch (or spring it off). The brake checks the stroke, not that.';
 // A session trim that is set: a number other than 0 (null, '' and 0 are fitted).
 const trimSet = (value) => value != null && value !== '' && Number.isFinite(Number(value)) && Number(value) !== 0;
+// The session's slide (along its line a → b) on a record along the record's own
+// a → b (docs/sketch-studio-sheet-slide.md §3: one flat stretch, whoever asks):
+// { slide } only when not 0.
+function slideAlong(slide, line, a, b) {
+  const value = Number(slide) || 0;
+  if (!value || !line) return {};
+  const along = (line.b[0] - line.a[0]) * (b[0] - a[0]) + (line.b[1] - line.a[1]) * (b[1] - a[1]);
+  return { slide: exact(along >= 0 ? value : -value) };
+}
+// A bend-on record's slide: along the made bend's own record (its a → b as stored).
+function madeSlide(feature, bendId, slide, line, params) {
+  const record = (feature.bends || []).find((r) => r.id === bendId && r.again == null);
+  if (!record || !(Number(slide) || 0)) return {};
+  const point = (p) => p.map((v) => numeric(v, params));
+  return slideAlong(slide, line, point(record.a), point(record.b));
+}
 const mid = (edge) => [(edge.a[0] + edge.b[0]) / 2, (edge.a[1] + edge.b[1]) / 2];
 const exact = (value) => Math.round(value * 1e6) / 1e6;
 const fmt = (value) => Number(value.toFixed(2)).toString();
@@ -1283,6 +1465,19 @@ function lengthFix({ model, session, params, pending }) {
   if (!kind || !pending.tooling) return { kind, fix: null, tried: [] };
   const key = trimKey[kind];
   const now = Number(session[key]) || 0;
+  // The sheet slid (docs/sketch-studio-sheet-slide.md §4): the centred sheet tried first, a
+  // button only when it passes; the other trials keep the session's slide. No slide is searched.
+  if (kind === 'punch' && Number(session.slide)) {
+    const centred = brakeStation({
+      model,
+      session: { ...session, slide: 0 },
+      params,
+      advise: false,
+      thickness: false,
+    }).pending;
+    if (centred && !centred.error && !centred.refusals.length && !centred.collision?.hit)
+      return { kind, fix: { label: 'Centre the sheet under the punch', session: { slide: 0 } }, tried: [] };
+  }
   const passes = (trim) => {
     const tried = brakeStation({
       model,
@@ -2442,7 +2637,8 @@ function dieWays(hit, ways) {
  * { instance, part, feature, profile, polygon, fold, machine, machineKnown,
  * edges, gauge, segments, pending, view }.
  * segments: the material the punch line crosses (sheetMetal.js lineSegments,
- * each with `skipped`), for the flat blank's segment toggles (§6.2).
+ * each with `skipped` and `made`: the angle of the made bend it is a piece of,
+ * else null), for the flat blank's pieces and the panel's chips (piece pick §5.5).
  * pending: null (no line picked), { error, data }, or brakeHit's result plus
  * { data (the stroke's bends to commit: one per tab the line bends, ids
  * pendingIds), bendIds, collision }. A collision whose advice names another
@@ -2472,7 +2668,8 @@ export function brakeStation({ model, session, params = {}, advise = true, check
   const flat = edge ? flatDistance({ fold }, session, edge) : null;
   const stops = edge ? edgeStops(fold, edge) : [];
   const skip = session.skip || [];
-  const segments = line ? lineSegments(polygon, line).map((s) => ({ ...s, skipped: skip.includes(s.index) })) : [];
+  // The pieces on the line (piece pick §5.5): which are left flat, and which a made bend's (its angle, `made`).
+  const segments = line ? linePieces(fold, polygon, line).map((s) => ({ ...s, skipped: skip.includes(s.index) })) : [];
   let pending = null,
     gauge = null;
   // A round bend: the automatic hit count for the session's radius and tooling (the panel's placeholder).
@@ -2502,6 +2699,9 @@ export function brakeStation({ model, session, params = {}, advise = true, check
   // Bend shape Offset (§5.3): two hits, flipped between (not with a radius punch, the one source of truth).
   const offsetShape = session.shape === 'offset' && !radiusPunch;
   if (line) {
+    // The session line's way along a fold bend's u (sheet slide §3): +1 or −1.
+    const alongLine = (bend) =>
+      !bend || (line.b[0] - line.a[0]) * bend.u[0] + (line.b[1] - line.a[1]) * bend.u[1] >= 0 ? 1 : -1;
     const base = {
       angle: Number(session.angle),
       direction: session.flip ? 'down' : 'up',
@@ -2539,6 +2739,8 @@ export function brakeStation({ model, session, params = {}, advise = true, check
         ...(trimSet(session.punchTrim) ? { punchTrim: Number(session.punchTrim) } : {}),
         ...(trimSet(session.dieTrim) ? { dieTrim: Number(session.dieTrim) } : {}),
         ...(hornsOn ? { horns: hornSetting(hornsOn) } : {}),
+        // The sheet's slide along the made bend's own record a → b (sheet slide §3).
+        ...madeSlide(feature, bendId, session.slide, line, params),
       }));
       folded = made.error
         ? { error: made.error }
@@ -2578,12 +2780,19 @@ export function brakeStation({ model, session, params = {}, advise = true, check
       // An offset is made on one tab at a time.
       if (offsetShape && !lines.error && lines.length > 1)
         lines = {
-          error: `The line crosses ${lines.length} separate tabs: an offset is made on one at a time. Click the others on the flat blank to leave them out.`,
+          error: `The line crosses ${lines.length} separate tabs: an offset is made on one at a time. Click the one to offset: the others are left flat.`,
         };
       ids = lines.error ? [PENDING_BEND] : pendingIds(lines.length);
       data = lines.error
         ? [{ id: PENDING_BEND, a: line.a, b: line.b, ...base }]
-        : lines.map((l, i) => ({ id: ids[i], a: l.a, b: l.b, ...base }));
+        : lines.map((l, i) => ({
+            id: ids[i],
+            a: l.a,
+            b: l.b,
+            ...base,
+            // The sheet's slide along the record's own a → b (sheet slide §3; not an offset's pair).
+            ...(offsetShape ? {} : slideAlong(session.slide, line, l.a, l.b)),
+          }));
       // The reading first (the backgauge's reach is one of the checks).
       folded = lines.error
         ? lines
@@ -2591,7 +2800,15 @@ export function brakeStation({ model, session, params = {}, advise = true, check
           ? null
           : armed
             ? armedHit({ feature, profile, params, data, ids, armed, machine, dieAuto: !base.die })
-            : brakeHit({ feature, profile, params, bend: data, machine });
+            : brakeHit({
+                feature,
+                profile,
+                params,
+                bend: data,
+                machine,
+                side: { gaugePoint, turned },
+                lineSign: alongLine,
+              });
     }
     if (folded?.error)
       pending = {
@@ -2646,6 +2863,9 @@ export function brakeStation({ model, session, params = {}, advise = true, check
               label: 'This hit',
               // The part before the stroke: a bend bent on stands at its angle (§4.4).
               angles: { ...others, ...Object.fromEntries(ids.map((id) => [id, again ? again.from : 0])) },
+              // The sheet slid (sheet slide §3): left and right, and a fix's slide on the session's line.
+              side: { gaugePoint, turned },
+              lineSign: alongLine(folded.fold.bends.find((b) => b.id === ids[0])),
             })
           : folded;
       // A held stop the line has left (skin gauge §4.5 step 4): the fingers would not read the field's L, so refused in words.
@@ -2720,6 +2940,17 @@ export function brakeStation({ model, session, params = {}, advise = true, check
       }
       // Brake tool length (§3.2): where the punch and die stand along the line, for the panel's lengths.
       pending.tooling = strokeTooling(hit.fold, ids, { bed: machine.bed });
+      // The sheet slid (sheet slide §3): machine X along the first bend (sign), the session line
+      // along it (lineSign), and the session slide → the sheet's move to the operator's right
+      // (right, ±1: the sheet moves against the punch's offset). An offset's pair is made
+      // centred (no slide on its records): no `right`, so nothing offers a slide for it.
+      {
+        const first = hit.fold.bends.find((b) => b.id === ids[0]);
+        const sign = frameSign(first, { gaugePoint, turned }),
+          lineSign = alongLine(first);
+        const pair = offsetShape && !pending.again;
+        Object.assign(pending.tooling, { sign, lineSign, ...(pair ? {} : { right: -sign * lineSign }) });
+      }
       // Metal inside metal at the end (corner gaps §5) is the outline's: no punch, turn or order cures it.
       const thick = Boolean(pending.collision.hit?.thickness);
       const punchTry =
@@ -2738,8 +2969,8 @@ export function brakeStation({ model, session, params = {}, advise = true, check
         const patch = turnAround({ edges, edge, fold }, session);
         const tried = brakeStation({
           model,
-          // A new edge is a new line, as the workspace takes it: every segment back, the tooling fitted.
-          session: brakePatch(session, patch),
+          // A new edge is a new line, as the workspace takes it (with this station: its pieces, piece pick §5.3).
+          session: brakePatch(session, patch, { fold, polygon, edges }),
           params,
           advise: false,
           thickness: false,

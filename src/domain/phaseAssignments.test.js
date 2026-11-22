@@ -27,7 +27,7 @@ function projectFixture() {
         sectionCuts: [],
       },
     ],
-    roofSystem: null,
+    roofSystems: [],
     trussSystems: [{ id: 'truss_p1', phaseId: 'p1' }],
     ceilings: [
       { id: 'ceiling_p1', floorId: 'floor-1', phaseId: 'p1' },
@@ -63,5 +63,26 @@ describe('project-level phase assignments include ceilings', () => {
 
     expect(sanitized.ceilings[0]).toBe(project.ceilings[0]);
     expect(sanitized.ceilings[1].phaseId).toBeNull();
+  });
+
+  it('counts, clears and sanitises every roof on its own', () => {
+    const project = {
+      ...projectFixture(),
+      roofSystems: [
+        { id: 'roof_p1', phaseId: 'p1' },
+        { id: 'roof_p2', phaseId: 'p2' },
+        { id: 'roof_gone', phaseId: 'p_gone' },
+      ],
+    };
+    expect(countObjectsInProjectPhase(project, 'p1')).toBe(countObjectsInProjectPhase(projectFixture(), 'p1') + 1);
+    expect(countObjectsInProjectPhase(project, 'p2')).toBe(countObjectsInProjectPhase(projectFixture(), 'p2') + 1);
+
+    const cleared = clearProjectPhaseReferences(project, 'p1');
+    expect(cleared.roofSystems.map((roof) => roof.phaseId)).toEqual([null, 'p2', 'p_gone']);
+    expect(cleared.roofSystems[1]).toBe(project.roofSystems[1]);
+
+    const sanitized = sanitizeProjectPhaseReferences(project, new Set(['p1', 'p2']));
+    expect(sanitized.roofSystems.map((roof) => roof.phaseId)).toEqual(['p1', 'p2', null]);
+    expect(sanitized.roofSystems[0]).toBe(project.roofSystems[0]);
   });
 });

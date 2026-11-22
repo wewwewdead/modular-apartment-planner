@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { useProject } from '@/features/floorplan/context/FloorplanContext';
+import { useFloorplanSelectors, useProject } from '@/features/floorplan/context/FloorplanContext';
 import { useEditorState, useToolSettings, useToolState } from '@/features/floorplan/context/FloorplanContext';
 import { useConfirmDialog } from '@/ui/ConfirmDialog';
 import { BUILDING_COMMANDS } from '@/domain/buildingCommands';
@@ -13,7 +13,7 @@ import {
   enterPickCeilingBeamsUnderSlab,
 } from '@/features/floorplan/utils/addCeilingEntry';
 import { getOrderedFloors } from '@/domain/floorModels';
-import { filterProjectByPhase } from '@/domain/phaseFilter';
+import { getProjectRoof, resolveActiveRoof } from '@/domain/projectRoofs';
 import { findTrussInstance, getProjectTrussSystems } from '@/domain/trussModels';
 import { TOOLS } from '@/editor/tools';
 import { getOrderedPhases } from '@/domain/phaseModels';
@@ -144,6 +144,7 @@ function PropertiesPanel() {
     activeTool,
     activePhaseId,
     phaseViewMode,
+    activeRoofId,
     hiddenWallBoards,
     hiddenCeilingBoards,
     dispatch: editorDispatch,
@@ -155,21 +156,21 @@ function PropertiesPanel() {
   const orderedFloors = useMemo(() => getOrderedFloors(project), [project]);
   const confirm = useConfirmDialog();
   const phases = useMemo(() => getOrderedPhases(project), [project]);
-  const filteredProject = useMemo(
-    () => filterProjectByPhase(project, activePhaseId, phaseViewMode),
-    [project, activePhaseId, phaseViewMode],
-  );
+  // Filtered once by the workspace, from the same project and phase view.
+  const { filteredProject } = useFloorplanSelectors();
   const floor = useMemo(
     () => orderedFloors.find((entry) => entry.id === activeFloorId) || null,
     [orderedFloors, activeFloorId],
   );
-  const roofSystem = project.roofSystem || null;
+  // The roof the roof workspace edits (docs/multi-roof.md §5.1).
+  const roofSystem = resolveActiveRoof(project, activeRoofId);
   const floorTrussSystems = useMemo(() => getProjectTrussSystems(project, activeFloorId), [project, activeFloorId]);
   const visibleFloorTrussSystems = useMemo(
     () => getProjectTrussSystems(filteredProject, activeFloorId),
     [filteredProject, activeFloorId],
   );
-  const visibleRoofSystem = filteredProject.roofSystem || null;
+  // The roof being edited, as the phase view shows it (null when hidden).
+  const visibleRoofSystem = getProjectRoof(filteredProject, roofSystem?.id);
   const isRoofHiddenByPhase = Boolean(roofSystem && !visibleRoofSystem);
   const visibleTrussIds = useMemo(
     () => new Set((filteredProject.trussSystems || []).map((entry) => entry.id)),
@@ -345,7 +346,7 @@ function PropertiesPanel() {
     } else if (selectedType === 'room') {
       dispatch({ type: 'ROOM_DELETE', floorId: activeFloorId, roomId: selectedId });
     } else if (selectedType === 'roofSystem') {
-      dispatch({ type: 'ROOF_DELETE' });
+      dispatch({ type: 'ROOF_DELETE', roofId: selectedId });
     } else if (selectedType === 'parapet') {
       dispatch({ type: 'PARAPET_DELETE', parapetId: selectedId });
     } else if (selectedType === 'drain') {
@@ -355,7 +356,7 @@ function PropertiesPanel() {
     } else if (selectedType === 'roofPlane') {
       dispatch({ type: 'ROOF_PLANE_DELETE', roofPlaneId: selectedId });
     } else if (selectedType === 'roofEdge') {
-      dispatch({ type: 'ROOF_EDGE_DELETE', roofEdgeId: selectedId });
+      dispatch({ type: 'ROOF_EDGE_DELETE', roofId: roofSystem?.id || null, roofEdgeId: selectedId });
     } else if (selectedType === 'trussSystem') {
       dispatch({ type: 'TRUSS_SYSTEM_DELETE', trussSystemId: selectedId });
     } else if (selectedType === 'trussInstance') {
@@ -819,10 +820,9 @@ function PropertiesPanel() {
               onChange={(v) => {
                 const mm = u.fromDisplay(v);
                 const clamped = Math.max(FILLET_MIN_RADIUS, Math.min(FILLET_MAX_RADIUS, mm));
-                // UPDATE_TOOL_STATE merges, so the radius goes in on its own
-                // rather than spreading a slice that no longer holds the
-                // pointer-driven fields.
-                editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { radius: clamped } });
+                // The store redraws the preview at the new radius for the
+                // corner under the cursor, which this panel does not follow.
+                editorDispatch({ type: 'SET_FILLET_RADIUS', radius: clamped });
               }}
             />
             <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '8px 0 0', lineHeight: 1.4 }}>

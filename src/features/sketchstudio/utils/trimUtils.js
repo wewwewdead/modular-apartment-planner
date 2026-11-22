@@ -456,6 +456,21 @@ function buildSpanEntities(path, spans, sourceEntity, entities) {
  * @returns null when the entity cannot be trimmed, otherwise
  *   `{ removedIds, addedEntities, entities, removedSpanPoints, deletesEntity }`.
  */
+/**
+ * Where everything else crosses `targetEntity`: the cut points a trim of it
+ * works from. They depend only on the entities and the target, not on where
+ * the click lands, so the hover preview collects them once per target and
+ * passes them back in as `options.cutPoints`.
+ */
+export function collectTrimCutPoints(entities, targetEntity, options = {}) {
+  const cutters = (options.cutters ?? entities).filter(
+    (entity) => entity && entity.id !== targetEntity.id && entity.visible !== false,
+  );
+  return collectEntityIntersections(targetEntity, cutters, {
+    tolerance: options.tolerance ?? ARC_FLATTEN_TOLERANCE,
+  });
+}
+
 export function computeSketchTrim(entities, targetEntity, clickPoint, options = {}) {
   const path = buildTrimPath(targetEntity);
 
@@ -463,12 +478,7 @@ export function computeSketchTrim(entities, targetEntity, clickPoint, options = 
     return null;
   }
 
-  const cutters = (options.cutters ?? entities).filter(
-    (entity) => entity && entity.id !== targetEntity.id && entity.visible !== false,
-  );
-  const cutPoints = collectEntityIntersections(targetEntity, cutters, {
-    tolerance: options.tolerance ?? ARC_FLATTEN_TOLERANCE,
-  });
+  const cutPoints = options.cutPoints ?? collectTrimCutPoints(entities, targetEntity, options);
   const spans = resolveTrimSpans(
     path,
     cutPoints.map((point) => getPathParameter(path, point)),

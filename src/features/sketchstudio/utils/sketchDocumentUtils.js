@@ -5,6 +5,7 @@ import {
   removeBlanklessParts,
   removeEmptyParts,
   removeOrphanedConnections,
+  separateSheetBlanks,
 } from '../cad/model';
 import { cloneJoint as cloneJoineryJoint } from '../joinery';
 import { normalizeEntityGroupMemberships } from './groupUtils';
@@ -95,7 +96,24 @@ function stripDimensionDrivingFields(entities = []) {
   return changed ? next : entities;
 }
 
-export function normalizeSketchDocument(document) {
+// The object-valued fields a normalisation produced, for the fields whose
+// normalisation is idempotent (`sketchDocumentUtils.idempotency.test.js` pins
+// it on every template and CAD example): one of these handed back in
+// normalises to an equal value. Not the joints -- a raw joint's missing
+// `tolerance.clearanceMm` reads null after one pass and 0 after a second -- and
+// not the entities: both are always normalised, exactly as before.
+const NORMALIZED_FIELD_KEYS = ['metadata', 'objectDefinition', 'variables', 'layers', 'model'];
+const normalizedFields = new WeakSet();
+
+/**
+ * `options.reuseNormalized`: a field that is itself the output of an earlier
+ * normalisation is taken as it is instead of being normalised again. The
+ * result is equal either way; reuse skips the work (the whole 3D model chain)
+ * and keeps the field's identity. Callers that run many times on one document
+ * (a drag frame, the dirty check) pass it; loading files never does, and a
+ * field that came from anywhere else is always normalised.
+ */
+export function normalizeSketchDocument(document, { reuseNormalized = false } = {}) {
   const source = document && typeof document === 'object' ? document : {};
   if (source.version > SKETCH_DOCUMENT_SCHEMA_VERSION) throw new Error('This sketch uses a newer document schema.');
   // `constraints` is dropped on load: see the schema note above.
@@ -104,8 +122,9 @@ export function normalizeSketchDocument(document) {
     ? [...sourceWithoutRuntimeFields.entities]
     : [];
   const normalizedEntities = stripDimensionDrivingFields(normalizeEntityGroupMemberships(sourceEntities));
+  const reusable = (value) => reuseNormalized && value != null && normalizedFields.has(value);
 
-  return {
+  const normalized = {
     ...sampleDocument,
     ...sourceWithoutRuntimeFields,
     version: SKETCH_DOCUMENT_SCHEMA_VERSION,
@@ -115,20 +134,27 @@ export function normalizeSketchDocument(document) {
         : sampleDocument.id,
     name: normalizeCommittedSketchName(sourceWithoutRuntimeFields.name || sampleDocument.name),
     units: sourceWithoutRuntimeFields.units || sampleDocument.units || 'mm',
-    metadata: {
-      ...(sampleDocument.metadata || {}),
-      ...(sourceWithoutRuntimeFields.metadata || {}),
-    },
-    objectDefinition: {
-      ...(sampleDocument.objectDefinition || {}),
-      ...(sourceWithoutRuntimeFields.objectDefinition || {}),
-    },
-    variables: Array.isArray(sourceWithoutRuntimeFields.variables)
-      ? sourceWithoutRuntimeFields.variables.map(cloneVariable)
-      : [],
+    metadata: reusable(sourceWithoutRuntimeFields.metadata)
+      ? sourceWithoutRuntimeFields.metadata
+      : {
+          ...(sampleDocument.metadata || {}),
+          ...(sourceWithoutRuntimeFields.metadata || {}),
+        },
+    objectDefinition: reusable(sourceWithoutRuntimeFields.objectDefinition)
+      ? sourceWithoutRuntimeFields.objectDefinition
+      : {
+          ...(sampleDocument.objectDefinition || {}),
+          ...(sourceWithoutRuntimeFields.objectDefinition || {}),
+        },
+    variables: reusable(sourceWithoutRuntimeFields.variables)
+      ? sourceWithoutRuntimeFields.variables
+      : Array.isArray(sourceWithoutRuntimeFields.variables)
+        ? sourceWithoutRuntimeFields.variables.map(cloneVariable)
+        : [],
     joints: Array.isArray(sourceWithoutRuntimeFields.joints) ? sourceWithoutRuntimeFields.joints.map(cloneJoint) : [],
-    layers:
-      Array.isArray(sourceWithoutRuntimeFields.layers) && sourceWithoutRuntimeFields.layers.length
+    layers: reusable(sourceWithoutRuntimeFields.layers)
+      ? sourceWithoutRuntimeFields.layers
+      : Array.isArray(sourceWithoutRuntimeFields.layers) && sourceWithoutRuntimeFields.layers.length
         ? sourceWithoutRuntimeFields.layers.map(cloneLayer)
         : (sampleDocument.layers || []).map(cloneLayer),
     entities: normalizedEntities,
@@ -137,11 +163,27 @@ export function normalizeSketchDocument(document) {
     // parts left with no blank (removeBlanklessParts, docs/sketch-studio-cut-pick.md
     // §3: their outlines come back). Part groups are repaired before
     // validation (a dangling groupId or parent is dropped, not refused) and
-    // pruned again after parts were removed (pruneGroups).
-    model: pruneGroups(
-      removeBlanklessParts(removeEmptyParts(removeOrphanedConnections(normalizeModel(pruneGroups(source.model))))),
-    ),
+    // pruned again after parts were removed (pruneGroups). A sheet-metal part
+    // saved with several instances opens as that many parts, each bent as it
+    // stood (separateSheetBlanks, docs/sketch-studio-own-bends.md §4.2: one
+    // piece of metal is one part).
+    model: reusable(source.model)
+      ? source.model
+      : pruneGroups(
+          separateSheetBlanks(
+            removeBlanklessParts(
+              removeEmptyParts(removeOrphanedConnections(normalizeModel(pruneGroups(source.model)))),
+            ),
+          ),
+        ),
   };
+
+  for (const key of NORMALIZED_FIELD_KEYS) {
+    const value = normalized[key];
+    if (value && typeof value === 'object') normalizedFields.add(value);
+  }
+
+  return normalized;
 }
 
 export function createBlankSketchDocument(overrides = {}) {

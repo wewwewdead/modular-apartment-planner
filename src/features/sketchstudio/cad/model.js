@@ -18,8 +18,13 @@ export const DEFAULT_SHOP = Object.freeze({ machine: 'brake-50-2000', laser: 'fi
 // built solids (useCadModel skips the rebuild). `fabrication` (kerf, stock and
 // sheet sizes, the shop's machines) is read only on the main thread, from the
 // current model (cut list, workshop ZIP, the press brake): the kernel, the
-// sketch solver and the projection never see it.
-export const KERNEL_INERT_KEYS = Object.freeze(['finishes', 'prints', 'fabrication']);
+// sketch solver and the projection never see it. `marks` (Measure marks) are
+// display and snapping only; the worker still validates them on a real build,
+// and every commit validates them first (normalizeModel).
+export const KERNEL_INERT_KEYS = Object.freeze(['finishes', 'prints', 'fabrication', 'marks']);
+// An instance's keys the kernel never reads: its group (groups.js), Hide /
+// Show and its own tree name. Its part, pose and attachments are read.
+const KERNEL_INERT_INSTANCE_KEYS = Object.freeze(['groupId', 'visible', 'name']);
 // The records kernelPayload leaves on the main thread.
 const SHOP_RECORD_KEYS = Object.freeze(['finishes', 'prints']);
 /**
@@ -27,8 +32,9 @@ const SHOP_RECORD_KEYS = Object.freeze(['finishes', 'prints']);
  * top-level key is ===). A group edit counts as inert too: the kernel never
  * reads `groups` or an instance's `groupId` (groups.js). So
  * `groups` may differ, and `instances` may be a new list when it has the same
- * length and every record is === or was rewritten with only its `groupId`
- * changed (at least one such record: a plain copy of the list still rebuilds).
+ * length and every record is === or was rewritten with only its `groupId`,
+ * `visible` or `name` changed (at least one such record: a plain copy of the
+ * list still rebuilds).
  */
 export function sameKernelInput(a, b) {
   if (a === b) return true;
@@ -37,20 +43,21 @@ export function sameKernelInput(a, b) {
   for (const key of keys) {
     if (KERNEL_INERT_KEYS.includes(key) || a[key] === b[key]) continue;
     if (key === 'groups') continue;
-    if (key === 'instances' && onlyGroupsMoved(a.instances, b.instances)) continue;
+    if (key === 'instances' && onlyInertInstanceEdits(a.instances, b.instances)) continue;
     return false;
   }
   return true;
 }
-// Two instance lists that differ only in which group some records name.
-function onlyGroupsMoved(a, b) {
+// Two instance lists that differ only in which group some records name, or
+// in whether they are shown and what they are called.
+function onlyInertInstanceEdits(a, b) {
   if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
   let moved = 0;
   for (let i = 0; i < a.length; i++) {
     if (a[i] === b[i]) continue;
     if (!a[i] || !b[i] || typeof a[i] !== 'object' || typeof b[i] !== 'object') return false;
     const keys = new Set([...Object.keys(a[i]), ...Object.keys(b[i])]);
-    for (const key of keys) if (key !== 'groupId' && a[i][key] !== b[i][key]) return false;
+    for (const key of keys) if (!KERNEL_INERT_INSTANCE_KEYS.includes(key) && a[i][key] !== b[i][key]) return false;
     moved++;
   }
   return moved > 0;
@@ -518,6 +525,93 @@ export function removeInstances(model, ids) {
     [...gone].reduce((next, id) => removeInstance(next, id), model),
     touched,
   );
+}
+
+// ---------------------------------------------------------------- one piece of metal is one part
+// docs/sketch-studio-own-bends.md §3: a sheet-metal part never has two
+// instances. A bend is a record on the part, so copies of one part would fold
+// together; each blank is its own part, and the blanks of one outline share
+// its sketch.
+
+/**
+ * A copy of a part (§4.1): a new id, `name`, every other key deep-copied with
+ * its feature, bend and mark ids KEPT (ids are only unique inside a part, so
+ * connections, `again` and `stroke` hold as they are). `flat`: a blank fresh
+ * off the laser — only the sheet-metal feature, with no bends (its marks,
+ * base, K-factor, stock, thickness and sketch stay).
+ */
+export function blankCopy(part, { name = part.name, flat = false } = {}) {
+  const copy = { ...clone(part), id: uid('part'), name };
+  if (!flat) return copy;
+  const sheet = copy.features.find((f) => f?.type === 'sheetmetal');
+  return { ...copy, features: sheet ? [{ ...sheet, bends: [] }] : [] };
+}
+/** A blank's name without its number (§4.1): "Tray #3" → "Tray". */
+export const blankBaseName = (name) => String(name ?? '').replace(/ #\d+$/, '');
+/** "{base} #k" (§4.1), k the smallest from 2 whose name is not in `taken` (a Set of part names). */
+export function blankName(base, taken) {
+  let k = 2;
+  while (taken.has(`${base} #${k}`)) k += 1;
+  return `${base} #${k}`;
+}
+
+/**
+ * The keeper (§4.1, §4.2): every sheet-metal part with more than one instance
+ * keeps its first (model order); each later instance gets a part of its own,
+ * bent as the part stands (blankCopy), placed after the part and its earlier
+ * copies. Its name: the part's when the instance has a name of its own (the
+ * kiosk's "Front face frame" / "Rear face frame"), else the next "{base} #k".
+ * A sheet annotation naming a moved instance follows it: on an assembly sheet
+ * its `partId` becomes the new part's, on a part sheet its `instanceId`
+ * becomes the kept instance's. Nothing else changes: connections, groups,
+ * finishes, prints and marks name instances; part sheets and Boolean-tool
+ * references stay with the original part. Returns the same object when there
+ * is nothing to separate. Runs at every commit and on every load.
+ */
+export function separateSheetBlanks(model) {
+  if (!model || !Array.isArray(model.parts) || !Array.isArray(model.instances)) return model;
+  const counts = new Map();
+  for (const instance of model.instances) counts.set(instance?.partId, (counts.get(instance?.partId) || 0) + 1);
+  const shared = new Map(model.parts.filter((p) => isSheetPart(p) && counts.get(p.id) > 1).map((p) => [p.id, p]));
+  if (!shared.size) return model;
+  const taken = new Set(model.parts.map((p) => p.name));
+  const kept = new Map(); // partId → the instance that keeps the part
+  const copies = new Map(); // partId → its new parts, in order
+  const moved = new Map(); // instanceId → { partId (the new part), from (the old one) }
+  for (const instance of model.instances) {
+    const part = shared.get(instance?.partId);
+    if (!part) continue;
+    if (!kept.has(part.id)) {
+      kept.set(part.id, instance.id);
+      continue;
+    }
+    const name = instance.name ? part.name : blankName(blankBaseName(part.name), taken);
+    taken.add(name);
+    const copy = blankCopy(part, { name });
+    copies.set(part.id, [...(copies.get(part.id) || []), copy]);
+    moved.set(instance.id, { partId: copy.id, from: part.id });
+  }
+  return {
+    ...model,
+    parts: model.parts.flatMap((p) => [p, ...(copies.get(p.id) || [])]),
+    instances: model.instances.map((i) => (moved.has(i.id) ? { ...i, partId: moved.get(i.id).partId } : i)),
+    ...(Array.isArray(model.sheets)
+      ? {
+          sheets: model.sheets.map((sheet) => {
+            if (!Array.isArray(sheet?.annotations) || !sheet.annotations.some((a) => moved.has(a?.instanceId)))
+              return sheet;
+            return {
+              ...sheet,
+              annotations: sheet.annotations.map((a) => {
+                const to = moved.get(a?.instanceId);
+                if (!to) return a;
+                return sheet.partId ? { ...a, instanceId: kept.get(to.from) } : { ...a, partId: to.partId };
+              }),
+            };
+          }),
+        }
+      : {}),
+  };
 }
 
 // Drawing sheets (Phase S, docs/sketch-studio-sheet-manager.md §3). A model

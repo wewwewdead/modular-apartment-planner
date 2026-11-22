@@ -220,6 +220,15 @@
   opacity: 0.55;
 }
 
+/* A row label that may outrun the sidebar ("Add roof to <a long system
+   name>"): one line, ellipsized; the row's title carries the full text. */
+.itemLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .itemSelected {
   background: var(--color-active-glow-subtle);
   color: var(--color-active-glow);

@@ -58,13 +58,14 @@ export const laserAutoView = (station) => (station.blanks.length === 1 && !stati
  * The laser station's panel. `station`: laserStation(); `session`: the
  * workspace's shopSession (station 'laser'); `shell`: the station shell's
  * subject and Back / Next. Callbacks: onSheet(key) (a model commit,
- * kernel-inert), onQuantity(n) (SN-1 §4.3: a model commit, the lead part's
- * instances), onLead(instanceId) (a This cut row: that part leads, session),
+ * kernel-inert), onQuantity(n) (SN-1 §4.3: a model commit, the lead's lot,
+ * docs/sketch-studio-own-bends.md §4.4), onLead(instanceId) (a This cut row,
+ * one per lot: that lot's first blank leads, session),
  * onDraw (Draw another part), onCutAnother (Cut's picker, shown while
  * `waiting` outlines are ready to cut), onCut, onStop, onEtch / onClearMarks (model
  * commits of the feature's marks), onLeave; onEditOutline (the blank's
  * sketch in the sketcher, off with `editProblem`). `warning`: Quantity's
- * card when fewer copies could go than asked. `params`: for the thumbnails.
+ * card when fewer blanks could go than asked. `params`: for the thumbnails.
  */
 export function LaserPanel({
   station,

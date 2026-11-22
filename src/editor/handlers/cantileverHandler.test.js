@@ -786,6 +786,66 @@ describe('applyProjectingBay', () => {
   });
 });
 
+/*
+ * Every way the tool hands back to the select tool, as the exact actions it
+ * sends. SET_TOOL clears the selection and the status line, so the order is
+ * part of the contract: reset, tool, plate, report.
+ */
+describe('the actions each way back to the select tool sends', () => {
+  const RESET = { type: 'UPDATE_TOOL_STATE', payload: { cantileverHoverEdge: null, cantileverPick: null } };
+  const TO_SELECT = { type: 'SET_TOOL', tool: 'select' };
+  const PLATE_BACK = { type: 'SELECT_OBJECT', id: 'slab_upper', objectType: 'slab' };
+
+  it('applying a cantilever', () => {
+    const harness = createHarness();
+    harness.click(ON_TOP_EDGE);
+    harness.editorActions.length = 0;
+
+    harness.key('Enter');
+
+    expect(harness.editorActions).toEqual([
+      RESET,
+      TO_SELECT,
+      PLATE_BACK,
+      { type: 'SET_STATUS_MESSAGE', message: 'Cantilever applied — 600 mm from current edge.' },
+    ]);
+  });
+
+  it('applying a bay', () => {
+    const harness = createHarness({ mode: 'bay' });
+    harness.click(ON_TOP_EDGE);
+    harness.editorActions.length = 0;
+
+    harness.key('Enter');
+
+    expect(harness.editorActions).toEqual([
+      RESET,
+      TO_SELECT,
+      PLATE_BACK,
+      {
+        type: 'SET_STATUS_MESSAGE',
+        message: 'Bay added — 2400 mm wide, projecting 600 mm, with three walls.',
+      },
+    ]);
+  });
+
+  it('the second Escape', () => {
+    const harness = createHarness();
+
+    harness.key('Escape');
+
+    expect(harness.editorActions).toEqual([RESET, TO_SELECT, PLATE_BACK]);
+  });
+
+  it('standing down when the plate has gone', () => {
+    const harness = createHarness({ selected: false });
+
+    harness.move(ON_TOP_EDGE);
+
+    expect(harness.editorActions).toEqual([RESET, TO_SELECT]);
+  });
+});
+
 describe('the cantilever tool in bay mode', () => {
   it('remembers where along the edge the click landed', () => {
     const harness = createHarness({ mode: 'bay' });

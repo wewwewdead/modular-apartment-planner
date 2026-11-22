@@ -36,7 +36,7 @@ const counts = {
   editor: 0,
 };
 
-const box = { dispatch: null, editor: null };
+const box = { dispatch: null, editor: null, project: null };
 
 /*
  * Counted from an effect rather than during render, so the probes stay pure. An
@@ -51,11 +51,13 @@ function useCommitCount(key) {
 }
 
 function ProjectProbe() {
-  const { dispatch } = useProject();
+  const project = useProject();
+  const { dispatch } = project;
   useCommitCount('project');
 
   useEffect(() => {
     box.dispatch = dispatch;
+    box.project = project;
   });
 
   return null;
@@ -177,6 +179,16 @@ describe('FloorplanContext layering', () => {
     expect(rendered.editorState).toBe(1);
     expect(rendered.project).toBe(0);
     expect(rendered.viewport).toBe(0);
+  });
+
+  it('the project facade says whether the opened file is behind, beside isDirty', () => {
+    renderProbes();
+
+    // No file bound: nothing on disk to be behind, and no name to show.
+    expect(box.project).toMatchObject({ isDirty: false, fileBehind: false, fileName: null });
+
+    act(() => box.dispatch({ type: 'PROJECT_SET_NAME', name: 'Edited' }));
+    expect(box.project).toMatchObject({ isDirty: true, fileBehind: false, fileName: null });
   });
 
   it('useEditor still hands back the flat editor slice', () => {

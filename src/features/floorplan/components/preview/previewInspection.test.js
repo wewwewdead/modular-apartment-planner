@@ -118,7 +118,7 @@ describe('getPreviewInspection — the roof and its trims', () => {
       boundaryPolygon: rectangle(10000, 8000),
       ...roofOptions,
     });
-    return { floors: [floor], roofSystem };
+    return { floors: [floor], roofSystems: [roofSystem] };
   }
 
   it('lists what the edge kit draws, and the covering', async () => {
@@ -162,7 +162,7 @@ describe('getPreviewInspection — truss system end closures', () => {
         },
       ],
     });
-    return { floors: [floor], trussSystems: [trussSystem], roofSystem: null };
+    return { floors: [floor], trussSystems: [trussSystem], roofSystems: [] };
   }
 
   it('says what closes each end, and the infill area', async () => {

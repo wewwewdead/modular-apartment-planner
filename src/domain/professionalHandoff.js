@@ -1,4 +1,6 @@
 import { DESIGN_CONFIDENCE } from './trustModels';
+import { getProjectRoofs } from './projectRoofs';
+import { memoizePerProject } from './projectMemo';
 
 export const REVIEW_DISCIPLINES = Object.freeze([
   'architectural',
@@ -102,8 +104,27 @@ function hashValue(value) {
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
+/*
+ * A value's fingerprint, kept per object. The revision records fingerprint
+ * every entity in the project, and the handoff and every revision capture ask
+ * for them again on each edit, though an edit replaces only the objects it
+ * changed: the store never mutates one in place, so an object's serialisation,
+ * and so its fingerprint, is fixed for as long as the object lives.
+ */
+const fingerprints = new WeakMap();
+
+function fingerprintOf(value) {
+  if (value === null || typeof value !== 'object') return hashValue(value);
+  let fingerprint = fingerprints.get(value);
+  if (fingerprint === undefined) {
+    fingerprint = hashValue(value);
+    fingerprints.set(value, fingerprint);
+  }
+  return fingerprint;
+}
+
 function record(kind, id, value, floorId = null) {
-  return { key: `${kind}:${id}`, kind, id, floorId, fingerprint: hashValue(value) };
+  return { key: `${kind}:${id}`, kind, id, floorId, fingerprint: fingerprintOf(value) };
 }
 
 export function deriveRevisionEntityRecords(project) {
@@ -204,7 +225,7 @@ export function deriveRevisionEntityRecords(project) {
   ]) {
     for (const entity of entities || []) if (entity?.id) records.push(record(kind, entity.id, entity, entity.floorId));
   }
-  if (project?.roofSystem?.id) records.push(record('roofSystem', project.roofSystem.id, project.roofSystem));
+  for (const entity of getProjectRoofs(project)) if (entity?.id) records.push(record('roofSystem', entity.id, entity));
   for (const entity of project?.trussSystems || [])
     if (entity?.id) records.push(record('trussSystem', entity.id, entity));
   for (const entity of project?.ceilings || [])
@@ -283,7 +304,19 @@ function issue(ruleId, severity, message, entityRefs, inputs) {
   };
 }
 
+/*
+ * Memoised per project object (projectMemo.js): the store, the documentation
+ * realization, the document package and the validator each ask for it.
+ */
+const professionalHandoffPerProject = memoizePerProject('deriveProfessionalHandoff', (project) =>
+  computeProfessionalHandoff(project),
+);
+
 export function deriveProfessionalHandoff(project) {
+  return professionalHandoffPerProject(project);
+}
+
+function computeProfessionalHandoff(project) {
   const documentation = createDocumentationModel(project?.building?.documentation);
   const assumptions = (project?.building?.assumptions || []).map(createDesignAssumption);
   const openReviewItems = documentation.reviewItems.filter((entry) => entry.status === 'open');

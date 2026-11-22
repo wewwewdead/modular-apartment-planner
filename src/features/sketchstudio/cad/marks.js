@@ -292,6 +292,18 @@ export function measureCandidates({
     m = new Vector3(),
     onRay = new Vector3(),
     onSegment = new Vector3();
+  // A segment whose ends both lie in front of the eye projects to the screen
+  // segment between them, its midpoint and its point nearest the ray included:
+  // with the pointer farther than snapPx (and a pixel to spare for rounding)
+  // outside the box of its two ends, none of its candidates can be in reach,
+  // so the midpoint, the ray test and their projections are skipped
+  // (docs/perf-pass-3.md §5 B1.4). Same candidates, in the same order.
+  const reach = snapPx + 1;
+  const outOfReach = (sa, sb) =>
+    pointer[0] < Math.min(sa[0], sb[0]) - reach ||
+    pointer[0] > Math.max(sa[0], sb[0]) + reach ||
+    pointer[1] < Math.min(sa[1], sb[1]) - reach ||
+    pointer[1] > Math.max(sa[1], sb[1]) + reach;
   for (const group of groups) {
     const positions = group.positions;
     if (group.visible === false || !positions?.length || !near(group)) continue;
@@ -301,6 +313,7 @@ export function measureCandidates({
       b.set(positions[i + 3], positions[i + 4], positions[i + 5]).applyMatrix4(group.matrix);
       const sa = project(a),
         sb = project(b);
+      if (depthOf(a) > 0 && depthOf(b) > 0 && outOfReach(sa, sb)) continue;
       consider(a, sa, 'vertex', source);
       consider(b, sb, 'vertex', source);
       if (Math.hypot(sa[0] - sb[0], sa[1] - sb[1]) >= MIDPOINT_MIN_PX) {

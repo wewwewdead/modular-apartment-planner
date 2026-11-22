@@ -67,7 +67,10 @@ export function createElectricalPlaceHandler({ dispatch, editorDispatch, getFloo
         const offset = projectPointOnWall(wall, modelPos);
         const snappedOffset = snapOffsetToWallColumns(wall, offset, floor.columns, ELECTRICAL_PLATE.width);
         const clampedOffset = clampWallOpeningOffset(wallLength(wall), ELECTRICAL_PLATE.width, snappedOffset);
-        const side = wallSideOfPoint(wall, modelPos);
+        // A face flipped with F holds while the cursor stays on that wall; on
+        // another wall the cursor decides again and the flip is forgotten.
+        const held = toolState.sideHeld?.wallId === wall.id ? toolState.sideHeld : null;
+        const side = held ? held.side : wallSideOfPoint(wall, modelPos);
 
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
@@ -77,6 +80,7 @@ export function createElectricalPlaceHandler({ dispatch, editorDispatch, getFloo
             previewSide: side,
             previewBlocked: isBlocked(wall.id, clampedOffset, side, floor),
             deviceType,
+            sideHeld: held,
           },
         });
       } else {
@@ -126,7 +130,10 @@ export function createElectricalPlaceHandler({ dispatch, editorDispatch, getFloo
         const flipped = toolState.previewSide === 'left' ? 'right' : 'left';
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
-          payload: { previewSide: flipped },
+          payload: {
+            previewSide: flipped,
+            sideHeld: toolState.previewWallId ? { wallId: toolState.previewWallId, side: flipped } : null,
+          },
         });
       }
     },

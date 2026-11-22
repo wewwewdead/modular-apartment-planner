@@ -99,7 +99,7 @@ function mountSystem(system = trussSystem(), { withRoof = false } = {}) {
   act(() =>
     createRoot(container).render(
       <TrussSystemProperties
-        project={{ ...base, roofSystem }}
+        project={{ ...base, roofSystems: roofSystem ? [roofSystem] : [] }}
         trussSystem={system}
         dispatch={(action) => actions.push(action)}
         editorDispatch={() => {}}
@@ -119,7 +119,7 @@ function mountInstance(system = trussSystem(), { roofSystem = null } = {}) {
   act(() =>
     createRoot(container).render(
       <TrussInstanceProperties
-        project={{ floors: [floor], trussSystems: [system], roofSystem }}
+        project={{ floors: [floor], trussSystems: [system], roofSystems: roofSystem ? [roofSystem] : [] }}
         trussSystem={system}
         trussInstance={system.trussInstances[0]}
         dispatch={(action) => actions.push(action)}

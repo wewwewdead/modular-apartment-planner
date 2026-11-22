@@ -15,7 +15,7 @@
 // (`sheetNest`), a blank is an instance, and one cut is a job of blanks that
 // may come from several parts.
 import { foldSheet, polygonBounds, profilePolygon, sheetMetalFeature } from './sheetMetal.js';
-import { numeric, uid } from './model.js';
+import { blankBaseName, numeric, uid } from './model.js';
 import {
   DEFAULT_LASER_SHEET,
   LASER_PART_GAP,
@@ -460,6 +460,34 @@ export function nestBlanks({ bounds, area, quantity, sheet }) {
 
 // One stock, one thickness: equal within 1e-6 mm (§4.1).
 const sameThickness = (a, b) => Math.abs(a - b) <= 1e-6;
+const thicknessOf = (feature, params) => {
+  try {
+    return numeric(feature.thickness, params);
+  } catch {
+    return NaN;
+  }
+};
+/**
+ * Two sheet-metal features of one lot (docs/sketch-studio-own-bends.md §3):
+ * cut from the same outline (`sketchId`) in the same stock and thickness
+ * (sameThickness; a thickness that does not read as a number only matches the
+ * same text). The one rule: shopRoute.js lotOf and the station's Quantity use it.
+ */
+export function sameLot(a, b, params = {}) {
+  if (!a || !b || a.sketchId !== b.sketchId || (a.stock || 'spcc') !== (b.stock || 'spcc')) return false;
+  const [ta, tb] = [thicknessOf(a, params), thicknessOf(b, params)];
+  if (Number.isFinite(ta) && Number.isFinite(tb)) return sameThickness(ta, tb);
+  return !Number.isFinite(ta) && !Number.isFinite(tb) && String(a.thickness) === String(b.thickness);
+}
+/** The instances of `feature`'s lot in the model, in model order (sameLot). */
+export function lotInstances(model, feature, params = {}) {
+  const parts = new Map(model.parts.map((p) => [p.id, p]));
+  const member = new Map();
+  return model.instances.filter((i) => {
+    if (!member.has(i.partId)) member.set(i.partId, sameLot(feature, sheetMetalFeature(parts.get(i.partId)), params));
+    return member.get(i.partId);
+  });
+}
 /**
  * Every instance, in model order, whose part's sheet-metal blank is `stock`
  * at `thickness` and folds: [{ instance, part, feature, profile, fold }].
@@ -577,7 +605,8 @@ const partName = (instance, part) => instance?.name || part?.name || 'Part';
  * The station for `session` on `model` (SN-1 §4.2). `session`: { instanceId
  * (the lead: Quantity, Edit outline and the etched marks act on its part),
  * instanceIds (the job's instances when the session names them — a batch,
- * the replay's scene — else null: every instance of the lead's part),
+ * the replay's scene — else null: every blank of the lead's lot,
+ * docs/sketch-studio-own-bends.md §4.4),
  * sheetIndex (the sheet shown, null: the one holding the lead), cutIds (the
  * replay: the instances already cut; null: every one on the sheet exists, so
  * is cut) }.
@@ -587,14 +616,16 @@ const partName = (instance, part) => instance?.name || part?.name || 'Part';
  * SN-1 — { instance, part, feature, polygon, fold, flat, thickness, stock,
  * sheet, sheetKey, sheetKnown, contours (one blank, cutting order), checks
  * (the lead's, for the readouts), marks } — and the job's: job (instance ids,
- * model order), parts ([{ partId, instanceId (its first in the job), name,
- * copies, flat, profile, numbers, lead }], job order), quantity (the lead
- * part's instances in the model), numbers (the lead row's), time (the job's
+ * model order), parts (one row per lot in the job, job order: [{ partId,
+ * instanceId (its first blank in the job), name (without its " #k"), copies
+ * (its blanks in the job), flat, profile, numbers, lead }]), quantity (the
+ * lead's lot in the model), numbers (the lead row's), time (the job's
  * machine time, every sheet), refusals / warnings (every job part's checks,
  * each with its partId, the message led by the part's name when the job holds
  * more than one part), nest (sheetNest), sheetIndex, blanks (the job's
- * instances on the shown sheet, nest order: { copy, instanceId, partId, name,
- * offset, marks, lead }), plan (each blank's contours moved by its offset,
+ * instances on the shown sheet, nest order: { copy, instanceId, partId, name
+ * (the instance's, else its own part's: "Tray #2"), offset, marks, lead (of
+ * the lead's lot) }), plan (each blank's contours moved by its offset,
  * with its instanceId and copy), timeline, others (the other blanks on the
  * shown sheet: { instanceId, partId, name, rings, cut }), elsewhere ([{ index,
  * count }]: the job's blanks on the other sheets) and shownUse (the shown
@@ -626,20 +657,25 @@ export function laserStation({ model, session, params = {} }) {
   const eligible = stockBlanks(model, { stock, thickness, params, folds });
   if (!eligible.some((e) => e.instance.id === instance.id))
     eligible.unshift({ instance, part, feature, profile, fold });
+  // The lot (docs/sketch-studio-own-bends.md §4.4): one piece of metal is one
+  // part, so the blanks of the lead's outline are counted together. Every
+  // entry here is of one stock and thickness, so a lot is one `sketchId`.
+  const lotKey = (entry) => entry.feature.sketchId;
+  const leadLot = feature.sketchId;
   const named = Array.isArray(session.instanceIds) ? new Set(session.instanceIds) : null;
   const job = eligible.filter(
-    (e) => e.instance.id === instance.id || (named ? named.has(e.instance.id) : e.part.id === part.id),
+    (e) => e.instance.id === instance.id || (named ? named.has(e.instance.id) : lotKey(e) === leadLot),
   );
   const inJob = new Set(job.map((e) => e.instance.id));
 
-  // Per part: its polygon, cut order and checks, worked out once.
-  const geometry = new Map([[part.id, { polygon, contours, checks }]]);
+  // Per outline (§4.4): its polygon, cut order and checks, worked out once.
+  const geometry = new Map([[leadLot, { polygon, contours, checks }]]);
   const geometryOf = (entry) => {
-    let g = geometry.get(entry.part.id);
+    let g = geometry.get(lotKey(entry));
     if (!g) {
       const p = profilePolygon(entry.profile, params);
       g = { polygon: p, contours: cutPlan(p), checks: null };
-      geometry.set(entry.part.id, g);
+      geometry.set(lotKey(entry), g);
     }
     if (g.stretch == null) {
       const sampled = g.contours.reduce((sum, c) => sum + c.length, 0);
@@ -648,23 +684,25 @@ export function laserStation({ model, session, params = {} }) {
     return g;
   };
 
-  // The job's parts, in job order, each with its copies and machine numbers.
+  // The job's lots (§4.4), in job order, each with its blanks and machine
+  // numbers: its first blank's part and instance, the name without its number.
   const rows = new Map();
   for (const e of job) {
-    const row = rows.get(e.part.id);
+    const row = rows.get(lotKey(e));
     if (row) row.copies++;
     else
-      rows.set(e.part.id, {
+      rows.set(lotKey(e), {
         partId: e.part.id,
         instanceId: e.instance.id,
-        name: e.part.name,
+        name: blankBaseName(e.part.name),
         copies: 1,
         flat: e.fold.flat,
         profile: e.profile,
-        lead: e.part.id === part.id,
+        lead: lotKey(e) === leadLot,
         entry: e,
       });
   }
+  const entries = new Map([...rows.values()].map((row) => [row.partId, row.entry]));
   const parts = [...rows.values()].map(({ entry: _entry, ...row }) => ({
     ...row,
     numbers: laserNumbers({
@@ -678,12 +716,13 @@ export function laserStation({ model, session, params = {} }) {
   const leadRow = parts.find((r) => r.lead);
   const numbers = leadRow.numbers;
   const time = parts.reduce((sum, r) => sum + r.numbers.time, 0);
-  const quantity = model.instances.filter((i) => i.partId === part.id).length;
+  // The lead's lot in the model, whatever the job names (§4.4).
+  const quantity = lotInstances(model, feature, params).length;
   const many = parts.length > 1;
   const refusals = [],
     warnings = [];
   for (const row of parts) {
-    const g = geometryOf(rows.get(row.partId).entry);
+    const g = geometryOf(entries.get(row.partId));
     g.checks ||= laserChecks({ polygon: g.polygon, thickness, sheet, flat: row.flat, profile: row.profile, params });
     const lead = (m) => (many ? `${row.name}: ${m}` : m);
     refusals.push(...g.checks.refusals.map((r) => ({ ...r, message: lead(r.message), partId: row.partId })));
@@ -714,7 +753,7 @@ export function laserStation({ model, session, params = {} }) {
         name,
         offset: b.offset,
         marks: featureMarks(e.feature),
-        lead: b.partId === part.id,
+        lead: lotKey(e) === leadLot,
       });
     else {
       const g = geometryOf(e);

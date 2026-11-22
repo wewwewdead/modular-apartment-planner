@@ -44,7 +44,7 @@ function buildProject(ceilingOverrides = {}) {
       id: 'project',
       floors: [floor],
       ceilings: [ceiling],
-      roofSystem: { id: 'roof_1' },
+      roofSystems: [{ id: 'roof_1' }],
       trussSystems: [
         { id: 'truss_1', floorId: floor.id, trussInstances: [] },
         { id: 'truss_2', floorId: floor.id, trussInstances: [] },
@@ -94,7 +94,7 @@ describe('createCeilingDetailPreviewProject', () => {
     const preview = createCeilingDetailPreviewProject(project, ceiling.id);
 
     expect(preview.ceilings).toEqual([ceiling]);
-    expect(preview.roofSystem).toBeNull();
+    expect(preview.roofSystems).toEqual([]);
     expect(preview.building.systems).toEqual({});
   });
 

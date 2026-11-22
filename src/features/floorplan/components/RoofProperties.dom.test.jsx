@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { createFloor } from '@/domain/models';
 import { createRoofSystem, createRoofSystemForProject } from '@/domain/roofModels';
 import { createTrussSystem } from '@/domain/trussModels';
-import { RoofSystemProperties } from './RoofProperties';
+import { RoofEmptyState, RoofSystemProperties } from './RoofProperties';
 
 const u = {
   unit: 'mm',
@@ -285,5 +285,89 @@ describe('RoofSystemProperties — unequal truss tails on a hip', () => {
     const { roofSystem } = mount({}, { trussSystems: [trusses('truss_type_gable', { start: 300, end: 450 })] });
     expect(roofSystem.roofType).toBe('gable');
     expect(container.querySelector('[data-hip-tail-warning]')).toBeNull();
+  });
+});
+
+/*
+ * One roof per truss system (docs/multi-roof.md §5.3): the Truss Link select
+ * used to be the other way to move the one roof off its trusses. A system
+ * another roof sits on is now shown and refused in place.
+ */
+describe('RoofSystemProperties — Truss Link with several roofs', () => {
+  function gableSystem(id, name, y) {
+    return createTrussSystem(name, {
+      id,
+      floorId: 'floor_1',
+      baseElevation: 3000,
+      trussInstances: [
+        {
+          id: `${id}_ti`,
+          trussTypeId: 'truss_type_gable',
+          span: 7200,
+          rise: 1800,
+          spacing: 900,
+          count: 5,
+          startPoint: { x: 0, y },
+          endPoint: { x: 3600, y },
+        },
+      ],
+    });
+  }
+
+  function twoRoofProject() {
+    const floor = { ...createFloor('Ground', 0), id: 'floor_1' };
+    let project = {
+      floors: [floor],
+      trussSystems: [
+        gableSystem('ts_a', 'Main trusses', 0),
+        gableSystem('ts_b', 'Garage trusses', 12000),
+        gableSystem('ts_c', 'Porch trusses', 24000),
+      ],
+      roofSystems: [],
+    };
+    for (const trussAttachmentId of ['ts_a', 'ts_b']) {
+      const roof = createRoofSystemForProject(project, { trussAttachmentId });
+      project = { ...project, roofSystems: [...project.roofSystems, roof] };
+    }
+    return project;
+  }
+
+  function render(element) {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => root.render(element));
+  }
+
+  it('disables the systems that carry another roof, and says so', () => {
+    const project = twoRoofProject();
+    render(
+      <RoofSystemProperties
+        project={project}
+        roofSystem={project.roofSystems[0]}
+        dispatch={() => {}}
+        editorDispatch={() => {}}
+        u={u}
+        phases={[]}
+      />,
+    );
+    const label = [...container.querySelectorAll('label')].find((node) => node.textContent.trim() === 'Truss Link');
+    const options = [...label.parentElement.querySelectorAll('option')].map((option) => ({
+      value: option.value,
+      text: option.textContent,
+      disabled: option.disabled,
+    }));
+    expect(options).toEqual([
+      { value: 'ts_a', text: 'Main trusses', disabled: false },
+      { value: 'ts_b', text: 'Garage trusses (has a roof)', disabled: true },
+      { value: 'ts_c', text: 'Porch trusses', disabled: false },
+    ]);
+  });
+
+  it('offers only roofless systems when creating a roof', () => {
+    const project = twoRoofProject();
+    render(<RoofEmptyState project={project} dispatch={() => {}} editorDispatch={() => {}} />);
+    const options = [...container.querySelectorAll('select option')].map((option) => option.value);
+    expect(options).toEqual(['ts_c']);
   });
 });

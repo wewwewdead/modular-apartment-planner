@@ -1,4 +1,5 @@
 import { DESIGN_CONFIDENCE } from './trustModels';
+import { getProjectRoofs } from './projectRoofs';
 import { rotate, distance } from '@/geometry/point';
 import { polygonArea } from '@/geometry/polygon';
 import { intersectionArea } from '@/geometry/polygonBoolean';
@@ -86,8 +87,25 @@ function issue(ruleId, severity, message, entityRefs, inputs, resultKind = 'veri
   };
 }
 
-function hostedArea(project, zone) {
-  if (zone.location === 'roof') return project.roofSystem?.boundaryPolygon || [];
+// A roof-hosted zone stands on whichever roof holds most of it: it is hosted
+// when ANY one roof's boundary takes it whole.
+function roofHostArea(project, polygon) {
+  let best = [];
+  let bestOverlap = -1;
+  for (const roofSystem of getProjectRoofs(project)) {
+    const boundary = roofSystem.boundaryPolygon || [];
+    if (boundary.length < 3) continue;
+    const overlap = intersectionArea(polygon, boundary);
+    if (overlap > bestOverlap) {
+      best = boundary;
+      bestOverlap = overlap;
+    }
+  }
+  return best;
+}
+
+function hostedArea(project, zone, polygon) {
+  if (zone.location === 'roof') return roofHostArea(project, polygon);
   if (zone.location === 'ground') return project.building?.site?.boundary || [];
   const floor = (project.floors || []).find((entry) => entry.id === zone.floorId);
   return (
@@ -127,7 +145,7 @@ export function validateEquipmentCoordination(project) {
   for (const zone of derived.zones) {
     const polygon = equipmentZonePolygon(zone);
     const area = polygonArea(polygon);
-    const host = hostedArea(project, zone);
+    const host = hostedArea(project, zone, polygon);
     if (zone.location === 'floor' && !floorIds.has(zone.floorId)) {
       issues.push(
         issue(

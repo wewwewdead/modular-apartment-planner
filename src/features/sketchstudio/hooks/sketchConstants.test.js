@@ -5,11 +5,25 @@ import {
   constrainAnglePoint,
   getDraftPreviewEntity,
   getSourceRefEntities,
+  HOVER_ENTITY_TOOLS,
   resolveAngleIsometricPlane,
   shouldSnapOverrideOrtho,
   TOOL_DEFINITIONS,
   TOOL_SHORTCUT_MAP,
 } from './sketchConstants';
+
+describe('the tools that resolve the entity under the cursor', () => {
+  // The rule as the viewport hook wrote it before it had a name.
+  const frozenShouldHoverEntities = (activeTool) =>
+    activeTool === 'select' || activeTool === 'offset' || activeTool === 'fillet';
+
+  it('are the old list plus mirror and fastener, and nothing else changes', () => {
+    const tools = [...TOOL_DEFINITIONS.map((tool) => tool.id), null, undefined, 'unknown'];
+    const changed = tools.filter((tool) => frozenShouldHoverEntities(tool) !== HOVER_ENTITY_TOOLS.has(tool));
+    expect(changed.sort()).toEqual(['fastener', 'mirror']);
+    expect(changed.every((tool) => HOVER_ENTITY_TOOLS.has(tool))).toBe(true);
+  });
+});
 
 const ISO_AXES = {
   right: { x: Math.cos(Math.PI / 6), y: Math.sin(Math.PI / 6) },

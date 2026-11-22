@@ -33,6 +33,8 @@ const projectState = {
     trussSystems: [],
   },
   isDirty: false,
+  fileBehind: false,
+  fileName: null,
   canUndo: false,
   canRedo: false,
   dispatch: vi.fn(),
@@ -149,15 +151,16 @@ describe('Toolbar furniture popover', () => {
       'Plant',
     ]);
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    editorState.dispatch.mockClear();
 
     act(() => {
       fireEvent.click(items.find((item) => item.textContent === 'Plant'));
     });
-    expect(editorState.dispatch).toHaveBeenCalledWith({ type: 'SET_TOOL', tool: TOOLS.FIXTURE });
-    expect(editorState.dispatch).toHaveBeenCalledWith({
-      type: 'UPDATE_TOOL_STATE',
-      payload: { fixtureType: 'plant', previewRotation: 0 },
-    });
+    // In this order: SET_TOOL clears the tool state the piece goes into.
+    expect(editorState.dispatch.mock.calls.map(([action]) => action)).toEqual([
+      { type: 'SET_TOOL', tool: TOOLS.FIXTURE },
+      { type: 'UPDATE_TOOL_STATE', payload: { fixtureType: 'plant', previewRotation: 0 } },
+    ]);
     expect(document.querySelector('[role="menu"]')).toBeNull();
   });
 
@@ -211,6 +214,8 @@ describe('Toolbar unsaved dot (docs/paint-edit-performance.md §2.1)', () => {
     delete HTMLElement.prototype.animate;
     delete window.matchMedia;
     projectState.isDirty = false;
+    projectState.fileBehind = false;
+    projectState.fileName = null;
   });
 
   const saveButton = (container) => container.querySelector('button[aria-label="Save"]');
@@ -249,5 +254,38 @@ describe('Toolbar unsaved dot (docs/paint-edit-performance.md §2.1)', () => {
     projectState.isDirty = true;
     renderToolbar();
     expect(animate).not.toHaveBeenCalled();
+  });
+  // The tooltip is the Save button's title; it shows on hover.
+  const saveTitle = (container) => {
+    act(() => {
+      fireEvent.pointerEnter(saveButton(container).parentElement);
+    });
+    return document.body.lastElementChild.textContent;
+  };
+
+  it('shows the dot while an opened file is behind the browser draft, and says which', () => {
+    projectState.fileBehind = true;
+    projectState.fileName = 'plan.json';
+    const container = renderToolbar();
+
+    expect(saveButton(container).getAttribute('data-dirty')).toBe('true');
+    expect(animate).toHaveBeenCalledTimes(1);
+    expect(saveTitle(container)).toContain('saved as a browser draft, not yet in plan.json');
+  });
+
+  it('tells a project not saved at all from one that is only behind in its file', () => {
+    projectState.isDirty = true;
+    projectState.fileBehind = true;
+    projectState.fileName = 'plan.json';
+    let container = renderToolbar();
+    expect(saveTitle(container)).toContain('not saved');
+    expect(saveTitle(container)).not.toContain('browser draft');
+    cleanup();
+
+    projectState.isDirty = false;
+    projectState.fileBehind = false;
+    container = renderToolbar();
+    expect(saveButton(container).getAttribute('data-dirty')).toBe('false');
+    expect(saveTitle(container)).toBe('SaveCtrl+S');
   });
 });

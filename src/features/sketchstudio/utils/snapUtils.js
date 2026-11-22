@@ -464,11 +464,46 @@ export function findNearestSnapPoint(snapPoints, worldPoint, tolerance) {
   return nearestPoint;
 }
 
+// Slack for the rounding in the crossing point and in the distance test below:
+// a billionth of the magnitudes involved, millions of times the float error.
+function getIntersectionCullSlack(segment, worldPoint, tolerance) {
+  return (
+    1e-9 *
+    (1 +
+      tolerance +
+      Math.abs(worldPoint.x) +
+      Math.abs(worldPoint.y) +
+      Math.abs(segment.start.x) +
+      Math.abs(segment.start.y) +
+      Math.abs(segment.end.x) +
+      Math.abs(segment.end.y))
+  );
+}
+
+// Every pair used to be tested on every pointer move. The crossing point is
+// computed along the EARLIER segment of a pair (`a1 + ua * (a2 - a1)`, with
+// `ua` in [0, 1]), so a crossing within `tolerance` of the cursor puts that
+// segment within `tolerance` of the cursor, up to rounding: a segment farther
+// away cannot open a winning pair and its row is skipped. The partner is still
+// taken from the whole list -- for nearly parallel segments the computed point
+// can sit off the later segment's span by much more than rounding, so a
+// distance cull there would not be safe. Pairs keep their original order, so
+// the strict `<` keeps the same winner among equally near crossings.
 export function findIntersectionSnapPoint(segments, worldPoint, tolerance) {
   let nearest = null;
   let nearestDistance = Number.POSITIVE_INFINITY;
 
   for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    if (
+      !(
+        distancePointToSegment(worldPoint, segment.start, segment.end) <=
+        tolerance + getIntersectionCullSlack(segment, worldPoint, tolerance)
+      )
+    ) {
+      continue;
+    }
+
     for (let otherIndex = index + 1; otherIndex < segments.length; otherIndex += 1) {
       const intersection = getSegmentIntersectionPoint(
         segments[index].start,
@@ -590,6 +625,16 @@ export function findPerpendicularSnapPoint(segments, worldPoint, anchorPoint, to
   return nearest;
 }
 
+export function collectSnapSources(entities) {
+  return {
+    points: collectSnapPointsFromEntities(entities),
+    segments: collectSnapSegmentsFromEntities(entities),
+  };
+}
+
+// `sources` is `collectSnapSources(entities)` collected earlier, for callers
+// that snap many times against one entities array (the canvas, once per
+// document); without it the points and segments are collected here.
 export function snapWorldPoint({
   worldPoint,
   entities,
@@ -598,13 +643,13 @@ export function snapWorldPoint({
   anchorPoint = null,
   enableIsometricGrid = false,
   viewportZoom = 1,
+  sources = null,
 }) {
   if (!enabled) {
     return buildEmptySnap();
   }
 
-  const snapPoints = collectSnapPointsFromEntities(entities);
-  const snapSegments = collectSnapSegmentsFromEntities(entities);
+  const { points: snapPoints, segments: snapSegments } = sources ?? collectSnapSources(entities);
   const nearestPoint = findNearestSnapPoint(snapPoints, worldPoint, toleranceWorld);
 
   if (nearestPoint) {

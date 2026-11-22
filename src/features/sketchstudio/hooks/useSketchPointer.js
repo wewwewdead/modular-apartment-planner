@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { calculateDistance, pixelsToWorldUnits } from '../utils/canvasMath';
 import { duplicateEntitiesByIds, updateEntityInList } from '../utils/entityUtils';
 import { inferDimensionSubtype } from '../utils/dimensionUtils';
@@ -7,7 +7,7 @@ import { applyIsometricOrthoPoint } from '../utils/isometricUtils';
 import { findTopmostEntityAtPoint } from '../utils/hitTest';
 import { findFilletableCorner, computeSketchFillet, DEFAULT_FILLET_RADIUS } from '../utils/filletUtils';
 import { computeSketchChamfer, findChamferableCorner, DEFAULT_CHAMFER_DISTANCE } from '../utils/chamferUtils';
-import { computeSketchTrim, isTrimmableEntity } from '../utils/trimUtils';
+import { collectTrimCutPoints, computeSketchTrim, isTrimmableEntity } from '../utils/trimUtils';
 import { computeSketchExtend, findExtendCandidate } from '../utils/extendUtils';
 import { resolveFastenerTargetPartId } from '../utils/fastenerUtils';
 import { expandGroupedSelection } from '../utils/groupUtils';
@@ -17,7 +17,6 @@ import { getEntityIdsInSelectionBox, normalizeSelectionBox } from '../utils/sele
 import { resolveSelectPointerDownAction } from './selectPointerUtils';
 import {
   clearPointerDecorations,
-  endAnchorDrag,
   endHandleDrag,
   endPan,
   endSelectionBox,
@@ -25,7 +24,6 @@ import {
   patchDraft,
   patchTransform,
   setDocumentEntities,
-  setPointerDown,
   setSelection,
   setSuppressNextClick,
   startDraft,
@@ -36,7 +34,7 @@ import {
   updatePan,
   updateSelectionBox,
 } from '../store/sketchStudioActions';
-import { interactionEndAction } from '../store/interactionEnd';
+import { interactionEndAction, isInteractionInFlight } from '../store/interactionEnd';
 import {
   PROFILE_CLOSE_TOLERANCE_PX,
   TRANSFORM_DRAG_THRESHOLD_PX,
@@ -48,8 +46,21 @@ import {
 } from './sketchConstants';
 
 export default function useSketchPointer(state, dispatch, viewportHook, options) {
-  const { activeTool, editableEntities, isSpacePanActiveRef, selectionBounds, getConstrainedDraftPoint } = options;
+  const {
+    activeTool,
+    editableEntities,
+    isSpacePanActiveRef,
+    selectionBounds,
+    getConstrainedDraftPoint,
+    cursorChannel = null,
+  } = options;
   const { readCanvasPoint, readWorldPoint, getOrthoReferencePoint, resolveSnap, resolvePointerState } = viewportHook;
+  // The trim and extend previews recompute on every move what depends only on
+  // the document and the hovered target: the trim's cut points, the whole
+  // extension. Kept here per (entities, target) -- the same arguments the click
+  // passes, so the preview still shows exactly what the click commits.
+  const trimCutPointsRef = useRef(null);
+  const extendPreviewRef = useRef(null);
 
   const handlePointerDown = useCallback(
     (event) => {
@@ -129,8 +140,6 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
           return;
         }
       }
-
-      dispatch(setPointerDown(true));
     },
     [
       activeTool,
@@ -149,6 +158,15 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
 
   const handlePointerMove = useCallback(
     (event) => {
+      // A move with no button held means the release was lost (it happened
+      // over another window, or during an OS dialog). The drag ends the way a
+      // pointer-cancel ends it, instead of following the cursor until the next
+      // click. `buttons` is 0 only when the browser says so.
+      if (event.buttons === 0 && isInteractionInFlight(state.interaction.mode)) {
+        dispatch(interactionEndAction(state.interaction.mode, 'abort'));
+        return;
+      }
+
       const screenPoint = readCanvasPoint(event);
 
       if (state.interaction.mode === 'panning') {
@@ -157,12 +175,15 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
           panX: state.interaction.panStartViewport.panX + (screenPoint.x - state.interaction.panStartScreen.x),
           panY: state.interaction.panStartViewport.panY + (screenPoint.y - state.interaction.panStartScreen.y),
         };
+        const panWorldPoint = readWorldPoint(screenPoint, nextViewport);
+        // UPDATE_PAN ignores another pointer; so does the readout.
+        if (state.interaction.pointerId === event.pointerId) cursorChannel?.publish(screenPoint, panWorldPoint);
         dispatch(
           updatePan({
             pointerId: event.pointerId,
             viewport: nextViewport,
             screenPoint,
-            worldPoint: readWorldPoint(screenPoint, nextViewport),
+            worldPoint: panWorldPoint,
           }),
         );
         return;
@@ -208,6 +229,7 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
             ),
           ),
         );
+        cursorChannel?.publish(screenPoint, nextPoint);
         dispatch(syncPointer({ screenPoint, worldPoint: nextPoint, hoveredId: draggedEntity.id, snap: nextSnap }));
         return;
       }
@@ -223,6 +245,7 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
           let moveStartEntities = transformState.startEntities;
           if (transformState.copyMode === 'pending') {
             if (dragDistance <= dragThreshold) {
+              cursorChannel?.publish(screenPoint, rawWorldPoint);
               dispatch(
                 syncPointer({
                   screenPoint,
@@ -277,6 +300,7 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
           );
         }
 
+        cursorChannel?.publish(screenPoint, rawWorldPoint);
         dispatch(
           syncPointer({
             screenPoint,
@@ -327,7 +351,16 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
         if (!state.draft.type) dispatch(startDraft({ type: 'trim' }));
         const trimTolerance = pixelsToWorldUnits(HIT_TOLERANCE_PX, state.viewport.zoom);
         const target = findTopmostEntityAtPoint(editableEntities.filter(isTrimmableEntity), worldPoint, trimTolerance);
-        const result = target ? computeSketchTrim(state.document.entities, target, worldPoint) : null;
+        let result = null;
+        if (target) {
+          const cached = trimCutPointsRef.current;
+          const cutPoints =
+            cached?.entities === state.document.entities && cached.target === target
+              ? cached.cutPoints
+              : collectTrimCutPoints(state.document.entities, target);
+          trimCutPointsRef.current = { entities: state.document.entities, target, cutPoints };
+          result = computeSketchTrim(state.document.entities, target, worldPoint, { cutPoints });
+        }
         dispatch(
           patchDraft({
             currentPoint: worldPoint,
@@ -342,7 +375,22 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
         if (!state.draft.type) dispatch(startDraft({ type: 'extend' }));
         const extendTolerance = pixelsToWorldUnits(HIT_TOLERANCE_PX * 2, state.viewport.zoom);
         const candidate = findExtendCandidate(editableEntities, worldPoint, extendTolerance);
-        const result = candidate ? computeSketchExtend(state.document.entities, candidate) : null;
+        let result = null;
+        if (candidate) {
+          const cached = extendPreviewRef.current;
+          result =
+            cached?.entities === state.document.entities &&
+            cached.entity === candidate.entity &&
+            cached.endKey === candidate.endKey
+              ? cached.result
+              : computeSketchExtend(state.document.entities, candidate);
+          extendPreviewRef.current = {
+            entities: state.document.entities,
+            entity: candidate.entity,
+            endKey: candidate.endKey,
+            result,
+          };
+        }
         dispatch(
           patchDraft({
             currentPoint: worldPoint,
@@ -429,6 +477,7 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
       );
     },
     [
+      cursorChannel,
       dispatch,
       editableEntities,
       getConstrainedDraftPoint,
@@ -492,10 +541,6 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
         dispatch(endHandleDrag());
         return;
       }
-      if (state.interaction.mode === 'anchor-drag') {
-        dispatch(endAnchorDrag());
-        return;
-      }
 
       if (state.interaction.mode === 'transform') {
         if (event.currentTarget.hasPointerCapture(event.pointerId))
@@ -507,10 +552,7 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
           dispatch(setSuppressNextClick(true));
         }
         dispatch(endTransform());
-        return;
       }
-
-      dispatch(setPointerDown(false));
     },
     [
       dispatch,
@@ -526,11 +568,7 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
 
   const handlePointerCancel = useCallback(() => {
     const endAction = interactionEndAction(state.interaction.mode, 'abort');
-    if (endAction) {
-      dispatch(endAction);
-      return;
-    }
-    dispatch(setPointerDown(false));
+    if (endAction) dispatch(endAction);
   }, [dispatch, state.interaction.mode]);
 
   const handlePointerLeave = useCallback(() => {

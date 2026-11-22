@@ -555,8 +555,9 @@ export function StationGate({ gate, params, shell, onPick, onGo }) {
 const QUEUE_MARKS = { flat: 'todo', bent: 'done', finished: 'done', problem: 'todo' };
 /**
  * The press brake's queue (docs/sketch-studio-outline-edit-sheet-nest.md
- * §7.2): every sheet-metal part, one row per part (its copies fold with it),
- * under the shell's head in every state of Bend that has a part. `rows`:
+ * §7.2): every sheet-metal part, one row per part — one piece of metal is one
+ * part (docs/sketch-studio-own-bends.md §4.5), so a row is a blank, bent by
+ * itself — under the shell's head in every state of Bend that has a part. `rows`:
  * shopRoute.js bendQueue (shown from two rows); `current`: the part on the
  * brake (its partId); `disabled`: a stroke runs (or the route waits).
  * onRow(instanceId): Previous part, Next part and a row all go through the

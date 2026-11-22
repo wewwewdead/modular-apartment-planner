@@ -44,6 +44,7 @@ import { POLYGON_MAX, POLYGON_MIN } from './sketchShapes.js';
 import { boxSelect, describeSelection } from './sketchSelect.js';
 import { entityFields } from './sketchEdit.js';
 import { checkDrawing } from './sketchCheck.js';
+import { sketchMode } from './sketchMode.js';
 import { fromZero, isOrigin, toZero } from './sketchZero.js';
 import { describeDimension, dimensionGeometry, dimensionPoints, hitDimension } from './sketchDimensions.js';
 import { RELIEF_FIELDS, RELIEF_SHAPES, chosenSizes } from './sketchRelief.js';
@@ -359,6 +360,13 @@ export default function CadSketcher({
   // dragged past CLICK_PIXELS) }; null when none. Esc during a box or a drag
   // clears it here too, so the release selects or moves nothing.
   const press = useRef(null);
+  // The press is the box's or the drag's other half: whatever ends them in the
+  // state (a tool key, Ctrl+A, Ctrl+Z, an action, a Check row) ends it too,
+  // before the next move could start them again or the release apply them.
+  useLayoutEffect(() => {
+    const started = press.current;
+    if (started && ((started.box && !state.box) || (started.dragging && !state.drag))) press.current = null;
+  }, [state.box, state.drag]);
 
   // Pointer input on the canvas: moves update the snapped cursor, short
   // left clicks place points (or select an entity when no tool is active).
@@ -550,7 +558,7 @@ export default function CadSketcher({
   // A tool's button or key: turns it on, or off when it is the one on.
   const toggle = (tool) => dispatch({ type: 'tool', tool: latest.current.state.tool === tool ? null : tool });
   // Keys with focus outside the HUD: Esc drops a box being dragged, then the
-  // tool, then the selection, then exits; Enter ends a polyline; Delete
+  // tool, then the selection, then finishes the sketch; Enter ends a polyline; Delete
   // removes the selection or the selected dimension; Ctrl+A selects every
   // entity; X is Construction; a tool's key (SKETCH_KEYS: L, R, Shift+R, C,
   // A, S, P, D, B) toggles it; M, K, Q, I, G start or end an action on the
@@ -564,15 +572,7 @@ export default function CadSketcher({
         event.preventDefault();
         // A box or a drag goes first: its release must then select or move nothing.
         if (current.box || current.drag) press.current = null;
-        if (
-          current.box ||
-          current.drag ||
-          current.op ||
-          current.tool ||
-          current.selectedIds.length ||
-          current.selectedDimensionId
-        )
-          dispatch({ type: 'escape' });
+        if (sketchMode(current) !== 'idle') dispatch({ type: 'escape' });
         else finish();
       } else if (event.key === 'Enter') {
         event.preventDefault();
@@ -777,7 +777,7 @@ export default function CadSketcher({
         : toolHint
       : selecting
         ? 'Shift+click adds or takes out · drag a box to the right for what is inside, to the left for what it touches · Esc clears the selection'
-        : 'Choose a tool · click to select · drag a box to the right for what is inside, to the left for what it touches · Esc exits the sketch';
+        : 'Choose a tool · click to select · drag a box to the right for what is inside, to the left for what it touches · Esc finishes the sketch';
   const relieving = state.tool === 'relief';
   const editing = EDIT_TOOLS.has(state.tool);
   const readout = relieving ? reliefReadout(state) : editing ? editReadout(state) : dimensionReadout(state);

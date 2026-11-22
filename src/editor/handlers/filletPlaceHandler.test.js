@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FILLET_DEFAULT_RADIUS, FILLET_RADIUS_STEP } from '@/domain/defaults';
-import { createFloor, createWall } from '@/domain/models';
+import { createFloor, createProject, createWall } from '@/domain/models';
+import floorplanReducer, { initializeFloorplanState } from '@/features/floorplan/store/floorplanReducer';
 import { computeFilletGeometry } from '@/geometry/filletGeometry';
 import { createFilletPlaceHandler } from './filletPlaceHandler';
 
@@ -73,6 +74,53 @@ describe('fillet radius keys', () => {
       tangentPoint1: expected.tangentPoint1,
       tangentPoint2: expected.tangentPoint2,
     });
+  });
+
+  it('the radius field redraws the preview the same way, and a click applies it', () => {
+    let state = initializeFloorplanState(createProject('Fillet'));
+    const floorId = state.project.floors[0].id;
+    state = floorplanReducer(state, {
+      type: 'PROJECT_LOAD',
+      project: {
+        ...state.project,
+        floors: state.project.floors.map((floor) =>
+          floor.id === floorId
+            ? {
+                ...floor,
+                walls: [
+                  { ...createWall({ x: 0, y: 0 }, { x: 4000, y: 0 }), id: 'wall_x' },
+                  { ...createWall({ x: 0, y: 0 }, { x: 0, y: 4000 }), id: 'wall_y' },
+                ],
+              }
+            : floor,
+        ),
+      },
+    });
+    state = floorplanReducer(state, { type: 'SET_TOOL', tool: 'fillet' });
+    const dispatched = [];
+    const send = (action) => {
+      state = floorplanReducer(state, action);
+    };
+    const handler = createFilletPlaceHandler({
+      dispatch: (action) => dispatched.push(action),
+      editorDispatch: send,
+      getFloor: (id) => state.project.floors.find((floor) => floor.id === id) || null,
+      activeFloorId: floorId,
+      viewport: { zoom: 0.1 },
+      activePhaseId: null,
+    });
+    handler.onMouseMove({ x: 20, y: 20 }, {}, state.editor.toolState);
+    const radius = FILLET_DEFAULT_RADIUS + 3 * FILLET_RADIUS_STEP;
+
+    // What the properties panel's Radius field sends.
+    send({ type: 'SET_FILLET_RADIUS', radius });
+
+    expect(state.editor.toolState.radius).toBe(radius);
+    const expected = geometryAt(state.editor.toolState, radius);
+    expect(state.editor.toolState.previewGeometry).toEqual(expected);
+
+    handler.onMouseDown({ x: 20, y: 20 }, { button: 0 }, state.editor.toolState);
+    expect(dispatched[0]).toMatchObject({ type: 'FILLET_APPLY', tangentPoint1: expected.tangentPoint1 });
   });
 
   it('with no corner under the cursor only the radius changes', () => {

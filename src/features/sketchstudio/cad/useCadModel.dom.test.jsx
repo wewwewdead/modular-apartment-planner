@@ -338,4 +338,69 @@ describe('kernel-inert edits (docs/sketch-studio-fab-shop.md §4.3)', () => {
     expect(sent.groups).toEqual(grouped.groups);
     expect(JSON.stringify(sent)).not.toContain('QQQQ');
   });
+  it('perf pass 3 B2.2: a Measure mark, Hide and an instance rename never rebuild; the next build still sends the marks', async () => {
+    const requests = [];
+    class WorkerMock {
+      postMessage(data) {
+        requests.push(data);
+        queueMicrotask(() =>
+          this.onmessage({
+            data: { ...data, result: data.type === 'build' ? { parts: [], instances: [] } : ['sheet'] },
+          }),
+        );
+      }
+      terminate() {}
+    }
+    vi.stubGlobal('Worker', WorkerMock);
+    const model = {
+      ...emptyModel(),
+      parts: [{ id: 'p', name: 'Plate', features: [{ id: 'f', type: 'box', width: 1, depth: 1, height: 1 }] }],
+      instances: [
+        { id: 'a', partId: 'p', name: 'Left', position: [0, 0, 0], rotation: [0, 0, 0], visible: true },
+        { id: 'b', partId: 'p', position: [5, 0, 0], rotation: [0, 0, 0], visible: true },
+      ],
+    };
+    const { result, rerender } = renderHook(({ model }) => useCadModel(model), { initialProps: { model } });
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    const snapshot = result.current.snapshot,
+      revision = result.current.revision;
+    const marked = {
+      ...model,
+      marks: [
+        {
+          id: 'm',
+          from: { instanceId: 'a', local: [0, 0, 0] },
+          to: { instanceId: 'b', local: [1, 0, 0] },
+          along: 'X',
+          offset: [0, 0, 5],
+        },
+      ],
+    };
+    const hidden = { ...marked, instances: [marked.instances[0], { ...marked.instances[1], visible: false }] };
+    const renamed = { ...hidden, instances: [{ ...hidden.instances[0], name: 'Left side' }, hidden.instances[1]] };
+    for (const next of [marked, hidden, renamed]) {
+      rerender({ model: next });
+      // Ready on the very render that shows the edit: nothing flashes "rebuilding".
+      expect(result.current.ready).toBe(true);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      });
+      expect(result.current.source).toBe(next);
+    }
+    expect(requests.filter((r) => r.type === 'build')).toHaveLength(1);
+    expect(result.current.snapshot).toBe(snapshot);
+    expect(result.current.revision).toBe(revision);
+    let answer;
+    await act(async () => {
+      answer = await result.current.request('drawings');
+    });
+    expect(answer).toEqual(['sheet']);
+    // Moving a part rebuilds, and the kernel still gets the marks (it validates them).
+    rerender({
+      model: { ...renamed, instances: [renamed.instances[0], { ...renamed.instances[1], position: [6, 0, 0] }] },
+    });
+    expect(result.current.ready).toBe(false);
+    await waitFor(() => expect(requests.filter((r) => r.type === 'build')).toHaveLength(2));
+    expect(requests.filter((r) => r.type === 'build').at(-1).payload.marks).toEqual(marked.marks);
+  });
 });

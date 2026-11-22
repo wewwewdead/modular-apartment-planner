@@ -493,6 +493,12 @@ export const madeBends = (records = []) => records.filter((record) => !isBendOn(
 // sequence, as the brake numbers its rows), not round, and takes it further,
 // at most to 180°. Returns bend id → its later hits [{ id, index (its place in
 // `feature.bends`), angle, punch, die, punchTrim?, dieTrim?, stroke? }].
+// A record's slide (docs/sketch-studio-sheet-slide.md §3): mm, 0 or absent
+// centred; anything that is not a number refused by name ("Bend 3 slide").
+function slideOf(value, label, params) {
+  if (value == null || value === '') return 0;
+  return numeric(value, params, label);
+}
 function bendOnHits(records, params, thickness) {
   const n = (value, label) => numeric(value, params, label);
   const steps = bendStrokes(records);
@@ -545,6 +551,10 @@ function bendOnHits(records, params, thickness) {
       ['dieTrim', 'die length'],
     ])
       if (!(record[key] == null || record[key] === '')) trims[key] = n(record[key], `Step ${step} ${label}`);
+    // The sheet slid under the punch (docs/sketch-studio-sheet-slide.md §3): mm along the made
+    // bend's own record a → b, only when not 0.
+    const slide = slideOf(record.slide, `Step ${step} slide`, params);
+    if (slide) trims.slide = slide;
     hits.push({
       id: record.id,
       index: i,
@@ -581,13 +591,14 @@ function resolveBends(feature, params, thickness, stock) {
     const last = later.at(-1) || null;
     // The bend as its last hit leaves it (§4.2): every number below is that hit's.
     const bend = last
-      ? (({ punchTrim: _p, dieTrim: _d, horns: _h, ...own }) => ({
+      ? (({ punchTrim: _p, dieTrim: _d, horns: _h, slide: _s, ...own }) => ({
           ...own,
           punch: last.punch,
           die: last.die,
           ...(last.punchTrim != null ? { punchTrim: last.punchTrim } : {}),
           ...(last.dieTrim != null ? { dieTrim: last.dieTrim } : {}),
           ...(last.horns != null ? { horns: last.horns } : {}),
+          ...(last.slide != null ? { slide: last.slide } : {}),
         }))(record)
       : record;
     const angle = last ? last.angle : first;
@@ -636,6 +647,10 @@ function resolveBends(feature, params, thickness, stock) {
       ['dieTrim', 'die length'],
     ])
       if (!(bend[key] == null || bend[key] === '')) trims[key] = n(bend[key], `${name} ${label}`);
+    // The sheet slid under the punch (sheet slide §3): mm along the record's a → b (a bend-on
+    // hit's along its bend's record), only when not 0; flipBend turns it with the line.
+    const slide = last ? last.slide || 0 : slideOf(bend.slide, `${name} slide`, params);
+    if (slide) trims.slide = slide;
     // Horn sections at the punch's ends (docs/sketch-studio-punch-library.md
     // §4.1): `horns: true` only when set, so a record without them is as
     // before; a radius punch has none.
@@ -649,6 +664,10 @@ function resolveBends(feature, params, thickness, stock) {
     if (last)
       for (const key of ['punchTrim', 'dieTrim'])
         if (!(record[key] == null || record[key] === '')) ownTrims[key] = n(record[key], `${name} ${key}`);
+    if (last) {
+      const own = slideOf(record.slide, `${name} slide`, params);
+      if (own) ownTrims.slide = own;
+    }
     const ownValue = last ? hornsOf(record.horns, name) : null;
     const ownHorns = last ? (ownValue != null ? { horns: ownValue } : {}) : horns;
     const ownPunch = last ? punchOf(record.punch || DEFAULT_PUNCH) : null;
@@ -952,6 +971,9 @@ export function poseFold(fold, angles = null, from = null) {
 }
 
 // ---------------------------------------------------------------- the fold
+// Folds kept by foldSheet: feature → profile → params → fold.
+const FOLDS = new WeakMap();
+const isKey = (value) => value !== null && typeof value === 'object';
 /**
  * Fold a sheet-metal feature's blank (§5.3–5.5). `profile` is the blank's
  * sketch profile, `params` resolved parameter values; `options.angles`
@@ -961,6 +983,22 @@ export function poseFold(fold, angles = null, from = null) {
  * warnings, rootPiece }.
  */
 export function foldSheet(feature, profile, params = {}, { angles = null } = {}) {
+  if (angles || !isKey(feature) || !isKey(profile) || !isKey(params)) return foldOnce(feature, profile, params, angles);
+  // The Shop tab's panels and stations fold the same blank several times per
+  // commit, so a fold at the bends' own angles is kept per (feature, profile,
+  // params) object (perf pass 3, B2.4): model records are never changed in
+  // place, and no caller changes a fold it is handed (they are shared). One
+  // that throws is not kept. Weak keys: a fold goes with its feature, its
+  // profile or its parameters.
+  let byProfile = FOLDS.get(feature);
+  if (!byProfile) FOLDS.set(feature, (byProfile = new WeakMap()));
+  let byParams = byProfile.get(profile);
+  if (!byParams) byProfile.set(profile, (byParams = new WeakMap()));
+  let fold = byParams.get(params);
+  if (!fold) byParams.set(params, (fold = foldOnce(feature, profile, params, null)));
+  return fold;
+}
+function foldOnce(feature, profile, params, angles) {
   const { thickness, stock, material, flat, bends, pieces } = cutBlank(feature, profile, params);
   const warnings = [];
   joinPieces(bends, pieces);
@@ -1212,6 +1250,8 @@ function finishFold({ feature, params, thickness, stock, material, flat, bends, 
       // Brake tool length (§3.1): the trims per end, only when set.
       ...(bend.punchTrim != null ? { punchTrim: bend.punchTrim } : {}),
       ...(bend.dieTrim != null ? { dieTrim: bend.dieTrim } : {}),
+      // The sheet slid under the punch (sheet slide §3), along this bend's u, only when set.
+      ...(bend.slide ? { slide: bend.slide } : {}),
       // Horn sections (docs/sketch-studio-punch-library.md §4.1), only when set.
       ...(bend.horns != null ? { horns: bend.horns } : {}),
       // A round bend's hits (docs/sketch-studio-round-bend.md §5.1); absent on an ordinary bend.
@@ -1239,6 +1279,9 @@ function flipBend(bend) {
   bend.intervals = bend.intervals.map(([s0, s1]) => [length - s1, length - s0]).reverse();
   bend.ends = bend.ends.map(([start, end]) => [end, start]).reverse();
   [bend.sides.minus, bend.sides.plus] = [bend.sides.plus, bend.sides.minus];
+  // The sheet's slide runs along a → b (sheet slide §3): end for end, it reads the other way.
+  if (bend.slide) bend.slide = -bend.slide;
+  if (bend.hits) bend.hits = bend.hits.map((hit) => (hit.slide ? { ...hit, slide: -hit.slide } : hit));
 }
 
 /** The folded part's bounding box [[x, y, z], [x, y, z]] from a (posed) fold: piece corners and sampled arcs. */
@@ -1345,7 +1388,7 @@ export const strokeOf = (bends, bendId) => bendStrokes(bends).find((s) => s.bend
 // A step's own tooling beside its punch and die: the lengths (brake tool
 // length §3.1) and horn sections (docs/sketch-studio-punch-library.md §4.1,
 // `horns: true` only when set), each carried only when the record has it.
-const TRIM_KEYS = ['punchTrim', 'dieTrim', 'horns'];
+const TRIM_KEYS = ['punchTrim', 'dieTrim', 'horns', 'slide'];
 // A fold bend's hits; a fold made without them (a hand-built test fold) is one hit per bend.
 const hitsOfBend = (bend) =>
   bend.hits || [
@@ -1556,6 +1599,45 @@ export const sheetMetalFeature = (part) => {
   const first = (part?.features || []).find((f) => !f.suppressed);
   return first?.type === 'sheetmetal' ? first : null;
 };
+
+// ---------------------------------------------------------------- twins (docs/sketch-studio-own-bends.md §4.1)
+// One piece of metal is one part (§3), so five blanks of one outline are five
+// parts; twins are those whose features are the same but for ids: one line on
+// the parts list, one build in the kernel (OB-2). The key is JSON.stringify of
+// the sheet-metal feature without its `marks` (etched lines are not the
+// shape), every string value that is exactly one of its bend ids written as
+// `#{its index in bends}` (so `again` names its bend by place) and every
+// `stroke` tag as `~{the order it first appears}`. Exact values only, never a
+// substring: the kiosk's ids run `…-bend-1`, `…-bend-10`. Feature ids stay in
+// the key: copies keep them (model.js blankCopy).
+function twinReplacer(feature) {
+  const bendAt = new Map();
+  (feature.bends || []).forEach((bend, index) => {
+    if (typeof bend?.id === 'string' && !bendAt.has(bend.id)) bendAt.set(bend.id, index);
+  });
+  const strokes = new Map();
+  return (key, value) => {
+    if (key === 'stroke' && value != null && value !== '' && typeof value !== 'object') {
+      const tag = String(value);
+      if (!strokes.has(tag)) strokes.set(tag, strokes.size);
+      return `~${strokes.get(tag)}`;
+    }
+    if (typeof value === 'string' && bendAt.has(value)) return `#${bendAt.get(value)}`;
+    return value;
+  };
+}
+/** The twin key of a sheet-metal feature (§4.1), or null when it is not one. */
+export function sheetTwinKey(feature) {
+  if (feature?.type !== 'sheetmetal') return null;
+  const { marks: _marks, ...shape } = feature;
+  return JSON.stringify(shape, twinReplacer(feature));
+}
+/** A part's twin key (§4.1): null without a sheet-metal feature, else equal for twins. */
+export function twinKey(part) {
+  const features = part?.features || [];
+  if (!features.some((f) => f?.type === 'sheetmetal')) return null;
+  return `[${features.map((f) => (f?.type === 'sheetmetal' ? sheetTwinKey(f) : JSON.stringify(f))).join(',')}]`;
+}
 
 // ---------------------------------------------------------------- 2D drawing nesting
 /**

@@ -136,6 +136,11 @@ export function createWalkNavigation({
   const handleKeyUp = (event) => {
     if (!enabled || inputSuspended || isTypingTarget(event.target)) return;
     if (!isMovementKey(event)) return;
+    // Unlocked, key-down let the key through (the plan's Space pan latches on
+    // it), so its key-up must reach the same listener. Nothing is held to
+    // release: movement keys are only set while locked, and losing the lock
+    // clears them.
+    if (!controls.isLocked && event.code !== 'Escape') return;
 
     event.preventDefault();
     event.stopPropagation();

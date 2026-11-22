@@ -68,29 +68,31 @@ function makeDocumentedProject() {
   project.floors[0].sectionCuts = [
     { ...createSectionCut({ x: -1000, y: 3000 }, { x: 9000, y: 3000 }), id: 'section_1' },
   ];
-  project.roofSystem = {
-    id: 'roof_1',
-    roofType: 'flat',
-    boundaryPolygon: rectangle(8000, 6000),
-    finishSlope: 1,
-    roofPlanes: [],
-    roofEdges: [],
-    drains: [
-      {
-        id: 'roof_drain_1',
-        name: 'Roof drain',
-        position: { x: 2000, y: 2000 },
-        diameter: 100,
-        catchmentPlaneIds: [],
-        outletRef: { kind: 'site_discharge', id: 'site_outlet', point: { x: 0, y: 2000 } },
-        routePoints: [
-          { x: 2000, y: 2000 },
-          { x: 0, y: 2000 },
-        ],
-      },
-    ],
-    roofOpenings: [],
-  };
+  project.roofSystems = [
+    {
+      id: 'roof_1',
+      roofType: 'flat',
+      boundaryPolygon: rectangle(8000, 6000),
+      finishSlope: 1,
+      roofPlanes: [],
+      roofEdges: [],
+      drains: [
+        {
+          id: 'roof_drain_1',
+          name: 'Roof drain',
+          position: { x: 2000, y: 2000 },
+          diameter: 100,
+          catchmentPlaneIds: [],
+          outletRef: { kind: 'site_discharge', id: 'site_outlet', point: { x: 0, y: 2000 } },
+          routePoints: [
+            { x: 2000, y: 2000 },
+            { x: 0, y: 2000 },
+          ],
+        },
+      ],
+      roofOpenings: [],
+    },
+  ];
   return project;
 }
 

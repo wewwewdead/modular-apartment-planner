@@ -1076,7 +1076,17 @@ export function createKernelSession(input, { cutOuts = 'compound' } = {}) {
       }
       return result;
     },
-    snapshot() {
+    // `timing` (the worker's probes, perf pass 3 B2.5): milliseconds added
+    // into its meshMs (OpenCascade's mesh), edgesMs (meshEdges) and copyMs
+    // (the typed-array copies). The calls run in the same order either way.
+    snapshot({ timing = null } = {}) {
+      // Adds the time since `start` to timing[key]; the new start.
+      const lap = (key, start) => {
+        if (!timing) return 0;
+        const now = performance.now();
+        timing[key] += now - start;
+        return now;
+      };
       return {
         parameters: params,
         parts: model.parts.map((part) => ({
@@ -1085,14 +1095,25 @@ export function createKernelSession(input, { cutOuts = 'compound' } = {}) {
           volume: cad.measureVolume(shapes.get(part.id)),
           features: metrics.get(part.id),
         })),
-        instances: model.instances.map((i) => ({
-          id: i.id,
-          partId: i.partId,
-          mesh: typedMesh(placed.get(i.id).mesh({ tolerance: 0.15, angularTolerance: 0.15 })),
-          edges: typedEdges(placed.get(i.id).meshEdges({ tolerance: 0.15 })),
-          bounds: bounds(placed.get(i.id)),
-          placement: placements.get(i.id),
-        })),
+        instances: model.instances.map((i) => {
+          let at = timing ? performance.now() : 0;
+          const faces = placed.get(i.id).mesh({ tolerance: 0.15, angularTolerance: 0.15 });
+          at = lap('meshMs', at);
+          const mesh = typedMesh(faces);
+          at = lap('copyMs', at);
+          const lines = placed.get(i.id).meshEdges({ tolerance: 0.15 });
+          at = lap('edgesMs', at);
+          const edges = typedEdges(lines);
+          lap('copyMs', at);
+          return {
+            id: i.id,
+            partId: i.partId,
+            mesh,
+            edges,
+            bounds: bounds(placed.get(i.id)),
+            placement: placements.get(i.id),
+          };
+        }),
       };
     },
     inspect() {

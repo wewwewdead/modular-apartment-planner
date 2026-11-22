@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { createSelectHandler } from './selectHandler';
 import { BUILDING_COMMANDS } from '@/domain/buildingCommands';
 import { ELECTRICAL_PLATE } from '@/domain/defaults';
+import { createProject, createSlab } from '@/domain/models';
+import floorplanReducer, { initializeFloorplanState } from '@/features/floorplan/store/floorplanReducer';
 
 /**
  * Wall drag = PREVIEW-THEN-COMMIT.
@@ -158,6 +160,20 @@ describe('selectHandler wall drag — preview-then-commit', () => {
     expect(harness.dispatched).toHaveLength(0);
     expect(harness.getToolState().wallDragPreview).toBeNull();
     expect(harness.getToolState().dragging).toBe(false);
+  });
+
+  it('Delete mid-drag ends the drag, so the release commits nothing for the deleted wall', () => {
+    const harness = createDragHarness();
+
+    harness.move({ x: 2000, y: 300 });
+    harness.key({ key: 'Delete' });
+
+    expect(harness.getToolState()).toMatchObject({ dragging: false, pendingDrag: false, wallDragPreview: null });
+
+    harness.up({ x: 2000, y: 300 });
+
+    expect(harness.dispatched.map((action) => action.type)).toEqual(['WALL_DELETE']);
+    expect(harness.statusMessages).toHaveLength(0);
   });
 });
 
@@ -998,24 +1014,26 @@ describe('selectHandler — slab plate editing', () => {
     expect(harness.getBoundary()).toEqual(PLATE);
   });
 
-  it('Escape puts the plate back exactly where the drag found it', () => {
+  it('Escape hands the plate back to the store to put back, and clears the drag', () => {
     const harness = createSlabHarness({ handle: 'slab-edge', index: 0, start: { x: 3000, y: 0 } });
 
     harness.move({ x: 3000, y: -600 });
     expect(harness.getBoundary()[0]).toEqual({ x: 0, y: -600 });
+    const framesCommitted = harness.slabUpdates().length;
 
     harness.key({ key: 'Escape' });
 
     // A slab commits per pointer-move, so cancelling has to restore geometry —
-    // clearing the drag state alone would leave the last frame standing.
-    expect(harness.getBoundary()).toEqual(PLATE);
-    expect(harness.slabUpdates().at(-1).slab.boundaryPoints).toEqual(PLATE);
+    // clearing the drag state alone would leave the last frame standing. The
+    // store restores it (see "through the store"), not a second slab edit.
+    expect(harness.dispatched.at(-1)).toEqual({ type: 'CANCEL_DRAG_GESTURE' });
+    expect(harness.slabUpdates()).toHaveLength(framesCommitted);
     expect(harness.getToolState().slabEditOrigin).toBeNull();
     expect(harness.getToolState().slabEdgeDrag).toBeNull();
     expect(harness.getToolState().dragging).toBe(false);
   });
 
-  it('Escape reverts a vertex drag the same way', () => {
+  it('Escape cancels a vertex drag the same way', () => {
     const harness = createSlabHarness({ handle: 'slab-vertex', index: 2, start: { x: 6000, y: 4000 } });
 
     harness.move({ x: 6523, y: 4011 });
@@ -1023,13 +1041,14 @@ describe('selectHandler — slab plate editing', () => {
 
     harness.key({ key: 'Escape' });
 
-    expect(harness.getBoundary()).toEqual(PLATE);
+    expect(harness.dispatched.at(-1)).toEqual({ type: 'CANCEL_DRAG_GESTURE' });
   });
 
-  it('Escape dispatches nothing when the drag never changed the boundary', () => {
+  it('Escape edits nothing when the drag never changed the boundary', () => {
     const harness = createSlabHarness({ handle: 'slab-edge', index: 0, start: { x: 3000, y: 0 } });
 
-    // Travel along the edge moves nothing, so there is nothing to put back.
+    // Travel along the edge moves nothing, so there is nothing to put back; the
+    // store's cancel is a no-op for a gesture that recorded nothing.
     harness.move({ x: 5000, y: 0 });
     harness.key({ key: 'Escape' });
 
@@ -1075,6 +1094,86 @@ describe('selectHandler — slab plate editing', () => {
 
     harness.move({ x: 6500, y: 4000 });
     expect(harness.getBoundary()[2]).toEqual({ x: 6500, y: 4000 });
+  });
+
+  describe('through the store', () => {
+    function storeDriver() {
+      let state = initializeFloorplanState(createProject('Slab drag'));
+      const floorId = state.project.floors[0].id;
+      const slab = { ...createSlab(floorId, PLATE, 200, 0), id: 'slab_1' };
+      state = floorplanReducer(state, {
+        type: 'PROJECT_LOAD',
+        project: {
+          ...state.project,
+          floors: state.project.floors.map((floor) => (floor.id === floorId ? { ...floor, slabs: [slab] } : floor)),
+        },
+      });
+      state = floorplanReducer(state, { type: 'SELECT_OBJECT', id: 'slab_1', objectType: 'slab' });
+      const send = (action) => {
+        state = floorplanReducer(state, action);
+      };
+      const handler = createSelectHandler({
+        dispatch: send,
+        editorDispatch: send,
+        getFloor: (id) => state.project.floors.find((floor) => floor.id === id) || null,
+        activeFloorId: floorId,
+        viewport: { zoom: 0.1 },
+        snapEnabled: true,
+      });
+      const slabNow = () => state.project.floors[0].slabs[0];
+      return {
+        getState: () => state,
+        slabNow,
+        press(start) {
+          send({ type: 'BEGIN_DRAG_GESTURE' });
+          handler.onMouseDown(start, {
+            button: 0,
+            target: { dataset: { handle: 'slab-edge', index: '0', slabId: 'slab_1' } },
+          });
+        },
+        move: (point) =>
+          handler.onMouseMove(point, {}, state.editor.toolState, state.editor.selectedId, state.editor.selectedType),
+        key: (key) =>
+          handler.onKeyDown({ key }, state.editor.toolState, state.editor.selectedId, state.editor.selectedType),
+        send,
+      };
+    }
+
+    it('Escape puts the plate back and leaves no undo step', () => {
+      const driver = storeDriver();
+      const before = driver.getState();
+
+      driver.press({ x: 3000, y: 0 });
+      driver.move({ x: 3000, y: -600 });
+      expect(driver.slabNow().boundaryPoints[0]).toEqual({ x: 0, y: -600 });
+
+      driver.key('Escape');
+
+      expect(driver.getState().history).toHaveLength(before.history.length);
+      expect(driver.getState().project).toBe(before.project);
+      expect(driver.slabNow().boundaryPoints).toEqual(PLATE);
+      expect(driver.getState().editor.toolState.dragging).toBe(false);
+    });
+
+    it('Escape after Ctrl+Z mid-drag cancels nothing more', () => {
+      const driver = storeDriver();
+      driver.send({ type: 'PROJECT_SET_NAME', name: 'An earlier edit' });
+      const named = driver.getState();
+
+      driver.press({ x: 3000, y: 0 });
+      driver.move({ x: 3000, y: -600 });
+      driver.send({ type: 'UNDO' });
+      driver.send({ type: 'DESELECT' });
+      const undone = driver.getState();
+      expect(undone.project).toBe(named.project);
+
+      driver.key('Escape');
+
+      // The earlier edit is still there: the cancel would have taken it too.
+      expect(driver.getState().project).toBe(undone.project);
+      expect(driver.getState().history).toBe(undone.history);
+      expect(driver.getState().editor.toolState.dragging).toBe(false);
+    });
   });
 
   it('clears the drag snapshot and the readout on release', () => {

@@ -8,7 +8,6 @@
 // brakeStation.js, pressBrake.js and shopCatalog.js. The picks live in the
 // workspace's brakeSession; only the machine and the bends are model edits.
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { numeric } from './model.js';
 import { bendLabel, bendNumber, foldedBounds, hitSequence, isRoundBend, stepFold } from './sheetMetal.js';
 import {
   DEFAULT_PUNCH,
@@ -29,9 +28,17 @@ import {
   stockOf,
   suggestedDie,
 } from './shopCatalog.js';
-import { hornSetting, punchChangeWords, punchChoice, turnAround } from './brakeStation.js';
-import { toolLengths } from './pressBrake.js';
-import { ValueField } from './CadEditors.jsx';
+import {
+  hornSetting,
+  pieceChoice,
+  pieceDefault,
+  piecesTogether,
+  punchChangeWords,
+  punchChoice,
+  turnAround,
+} from './brakeStation.js';
+import { toolEnds, toolLengths } from './pressBrake.js';
+import { ValueField, numberFor } from './CadEditors.jsx';
 import { ParameterContext } from './ExpressionInput.jsx';
 import { MachineNumbers, PrimaryButton, ProblemCard, Readout, Result, StationShell } from './ShopFloor.jsx';
 import { hitVerdict, legsText } from './brakeHands.js';
@@ -96,7 +103,9 @@ const toolingLine = (bend, die, lengths = null) => {
 };
 // A step's custom lengths (pressBrake.js toolLengths), only when its record has a trim.
 const lengthsOf = (fold, stroke, bed = null) =>
-  stroke.punchTrim || stroke.dieTrim ? toolLengths(stepFold(fold, stroke), stroke.bendIds, { bed }) : null;
+  stroke.punchTrim || stroke.dieTrim || stroke.slide
+    ? toolLengths(stepFold(fold, stroke), stroke.bendIds, { bed })
+    : null;
 
 function Segmented({ label, options, value, onChange, disabled = false }) {
   return (
@@ -303,7 +312,16 @@ function takeOffNote(pending) {
  * length the tool is held at; with no line picked the field shows it, "kept
  * for the next bend".
  */
-function BladeLength({ kind, tooling, trim, hold = null, bed, disabled, onTrim }) {
+// A tool's end as the Length note says it (docs/sketch-studio-sheet-slide.md §4): mm short of it,
+// past it, or flush, in the words of "short at each end" and short enough for a line of the
+// punch's column. `value`: toolEnds' (positive short).
+const endWords = (value, side) =>
+  value > 0.05
+    ? `${fmt(value, 1)} mm short at the ${side}`
+    : value < -0.05
+      ? `${fmt(-value, 1)} mm past the ${side}`
+      : `flush at the ${side}`;
+function BladeLength({ kind, tooling, trim, hold = null, bed, disabled, onTrim, ends = null }) {
   const label = kind === 'punch' ? 'Punch length' : 'Die length';
   const Kind = kind === 'punch' ? 'Punch' : 'Die';
   const fitted = tooling?.fitted || null;
@@ -313,25 +331,31 @@ function BladeLength({ kind, tooling, trim, hold = null, bed, disabled, onTrim }
   const custom = Boolean(fitted) && t !== 0;
   // Several runs: the field is the trim itself, "Shorter [5] mm" over "at each end · 2 sections".
   const held = !fitted && Number.isFinite(hold) ? hold : null;
+  // The sheet slid (sheet slide §4): the ends differ, so each is said, the operator's left first.
+  const perEnd = Boolean(fitted) && !several && ends && Math.abs(ends.left - ends.right) >= 0.05;
   const note = !fitted
     ? held != null
       ? 'kept for the next bend'
       : 'fitted to the bend'
-    : several
-      ? `at each end · ${fitted.length} sections${t ? (t < 0 ? ', past the bend' : '') : ', fitted'}`
-      : !t
-        ? 'fitted'
-        : `${fmt(Math.abs(t), 1)} mm ${t > 0 ? 'short at' : 'past'} each end`;
+    : perEnd
+      ? `${endWords(ends.left, 'left')}, ${endWords(ends.right, 'right')}`
+      : several
+        ? `at each end · ${fitted.length} sections${t ? (t < 0 ? ', past the bend' : '') : ', fitted'}`
+        : !t
+          ? 'fitted'
+          : `${fmt(Math.abs(t), 1)} mm ${t > 0 ? 'short at' : 'past'} each end`;
   const commit = (value) => {
     if (value == null) return onTrim(null);
     if (several) return onTrim(value ? exactTrim(value) : null);
     // A length on the bed: a longer tool runs past the bend's ends, at most the bed's length.
     const length = Math.max(0, Math.min(value, bed || Infinity));
     const next = exactTrim((span - length) / 2);
-    return onTrim(Math.abs(next) < 1e-6 ? null : next);
+    // The bend's own length typed (piece pick §5.2): fitted here, and that length held (the
+    // punch stays in the machine when more pieces join the hit); Fit to bend and an empty box hold none.
+    return Math.abs(next) < 1e-6 ? onTrim(null, length > 0 ? length : undefined) : onTrim(next);
   };
   return (
-    <div className="cad-blade-length" role="group" aria-label={`${Kind} length setting`}>
+    <div className={`cad-blade-length is-${kind}`} role="group" aria-label={`${Kind} length setting`}>
       <label className="cad-blade-length-field">
         {several ? 'Shorter' : 'Length'}
         <NumericInput
@@ -347,8 +371,20 @@ function BladeLength({ kind, tooling, trim, hold = null, bed, disabled, onTrim }
         />
         mm
       </label>
-      <small className="cad-blade-length-note" aria-label={`${Kind} length note`}>
-        {note}
+      {/* Per end (the sheet slid): an end a line, each read whole; the punch's block keeps the room for both. */}
+      <small
+        className={`cad-blade-length-note${perEnd ? ' is-ends' : ''}`}
+        aria-label={`${Kind} length note`}
+        title={note}
+      >
+        {perEnd ? (
+          <>
+            <span>{endWords(ends.left, 'left')}, </span>
+            <span>{endWords(ends.right, 'right')}</span>
+          </>
+        ) : (
+          note
+        )}
       </small>
       <button
         type="button"
@@ -362,6 +398,121 @@ function BladeLength({ kind, tooling, trim, hold = null, bed, disabled, onTrim }
       >
         Fit to bend
       </button>
+    </div>
+  );
+}
+
+/**
+ * The sheet slid under the punch (docs/sketch-studio-sheet-slide.md §6.2), one
+ * line under the punch's length: `Slide [9] mm · to the right`, the sheet's
+ * move along the bed as the operator sees it (positive to the right: the
+ * station's `tooling.right` turns it into the session's slide along its line),
+ * and Centre when it is not 0 (kept in place, out of reach, when centred: the
+ * row never moves). Disabled with no line, and on an offset bend (`offset`),
+ * whose pair is made centred.
+ */
+function SheetSlide({ tooling, slide, offset = false, disabled, onSession }) {
+  const right = tooling?.right ?? null;
+  const value = right == null ? 0 : right * (Number(slide) || 0);
+  const off = right != null && Math.abs(value) > 1e-9;
+  const note = offset ? 'an offset stays centred' : !off ? 'centred' : `to the ${value > 0 ? 'right' : 'left'}`;
+  return (
+    <div className="cad-blade-length cad-sheet-slide" role="group" aria-label="Sheet slide setting">
+      <label className="cad-blade-length-field">
+        Slide
+        <NumericInput
+          aria-label="Sheet slide (mm)"
+          step="1"
+          disabled={disabled || right == null}
+          value={right == null ? '' : Number(value.toFixed(1)) || 0}
+          onCommit={(v) => onSession({ slide: right * (Number(v) || 0), scrub: null })}
+        />
+        mm
+      </label>
+      <small className="cad-blade-length-note" aria-label="Sheet slide note">
+        {note}
+      </small>
+      <button
+        type="button"
+        className={`cad-slide-centre${off ? '' : ' is-idle'}`}
+        aria-hidden={off ? undefined : true}
+        tabIndex={off ? undefined : -1}
+        disabled={disabled || !off}
+        title="The sheet back under the middle of the punch"
+        onClick={() => onSession({ slide: 0, scrub: null })}
+      >
+        Centre
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The pieces on the line (docs/sketch-studio-piece-pick.md §5.5), shown only
+ * when the line crosses more than one: a chip per piece, pressed while it is
+ * in the hit (`1 · 82 mm`, a made one `· bent 90°`); a chip is a checkbox, so
+ * its click puts that piece in or leaves it flat with no modifier
+ * (brakeStation.js pieceChoice, `add`). Every piece when a piece is left flat
+ * that the line's default (pieceDefault) has in; it keeps its place hidden
+ * otherwise, so the row does not grow under the pointer. Pointing at or
+ * focusing a chip names the piece (`onHover(index | null)`).
+ */
+function PiecesRow({ station, session, onSession, onHover = null }) {
+  const pieces = station.segments || NONE;
+  const fallback = pieceDefault(station);
+  const every = pieces.some((p) => p.skipped && !fallback.includes(p.index));
+  const hover = useRef(onHover);
+  useEffect(() => {
+    hover.current = onHover;
+  }, [onHover]);
+  // The row going (a line of one piece, the station closed) lets go of the piece it named.
+  const named = useRef(false);
+  useEffect(() => () => named.current && hover.current?.(null), []);
+  const name = (index) => {
+    named.current = index != null;
+    hover.current?.(index);
+  };
+  const pick = (index) => {
+    const skip = pieceChoice(pieces.length, session.skip || NONE, index, {
+      add: true,
+      together: piecesTogether(pieces),
+    });
+    if (skip) onSession({ skip, scrub: null });
+  };
+  return (
+    <div className="cad-brake-pieces" role="group" aria-label="Pieces on the line">
+      <div className="cad-brake-chips">
+        {pieces.map((p) => (
+          <button
+            key={p.index}
+            type="button"
+            className="cad-brake-chip"
+            aria-pressed={!p.skipped}
+            title={`Piece ${p.index + 1} of ${pieces.length}: ${p.skipped ? 'left flat · click to put it in the hit' : 'in the hit · click to leave it flat'}`}
+            onClick={() => pick(p.index)}
+            onPointerEnter={() => name(p.index)}
+            onPointerLeave={() => name(null)}
+            onFocus={() => name(p.index)}
+            onBlur={() => name(null)}
+          >
+            {p.index + 1} · {fmt(p.s1 - p.s0, 1)} mm{p.made != null ? ` · bent ${fmt(p.made, 1)}°` : ''}
+          </button>
+        ))}
+        <button
+          type="button"
+          className={`cad-brake-chip is-every${every ? '' : ' is-idle'}`}
+          aria-hidden={every ? undefined : true}
+          tabIndex={every ? undefined : -1}
+          disabled={!every}
+          title="Every piece back in the hit (a piece already bent stays flat beside unbent ones)"
+          onClick={() => onSession({ skip: fallback, scrub: null })}
+        >
+          Every piece
+        </button>
+      </div>
+      <p className="cad-help cad-brake-hint">
+        Click a piece on the sheet to bend only it. The sheet comes to the punch; the punch and die keep their lengths.
+      </p>
     </div>
   );
 }
@@ -459,7 +610,17 @@ function Blades({ session, auto, bladeOptions, disabled, onSession, tooling = nu
             hold={session.punchHold ?? null}
             bed={bed}
             disabled={disabled}
-            onTrim={(punchTrim) => onSession({ punchTrim, scrub: null })}
+            onTrim={(punchTrim, punchHold) =>
+              onSession({ punchTrim, ...(punchHold !== undefined ? { punchHold } : {}), scrub: null })
+            }
+            ends={tooling?.slide ? toolEnds(tooling, tooling.sign) : null}
+          />
+          <SheetSlide
+            tooling={tooling}
+            slide={session.slide}
+            offset={Boolean(tooling) && tooling.right == null && session.shape === 'offset'}
+            disabled={disabled}
+            onSession={onSession}
           />
           <HornSections punch={punch} horns={session.horns} disabled={disabled} onSession={onSession} />
         </div>
@@ -487,7 +648,9 @@ function Blades({ session, auto, bladeOptions, disabled, onSession, tooling = nu
             hold={session.dieHold ?? null}
             bed={bed}
             disabled={disabled}
-            onTrim={(dieTrim) => onSession({ dieTrim, scrub: null })}
+            onTrim={(dieTrim, dieHold) =>
+              onSession({ dieTrim, ...(dieHold !== undefined ? { dieHold } : {}), scrub: null })
+            }
           />
         </div>
       </div>
@@ -611,8 +774,10 @@ function routeWords(here) {
  * printed). Not a refusal — the part is
  * simply past bending: what was made stays on show, Watch the bends replays
  * its strokes (the film, §8), and taking it back to bare metal stays one
- * click away as a second choice. `blocked`: shopOrderBlock (the part's records,
- * every copy's); `here`: brakeStation.js finishedHere (this instance's own).
+ * click away as a second choice. `blocked`: shopOrderBlock (the part's records:
+ * the blank's own, docs/sketch-studio-own-bends.md §4.5; every copy's in a
+ * model that still has copies); `here`: brakeStation.js finishedHere (this
+ * instance's own).
  */
 export function PressBrakeFinished({ blocked, here, fold, onWatch, onRemove, onCancel, shell = null }) {
   const strokes = hitSequence(fold);
@@ -696,6 +861,8 @@ export function PressBrakePanel({
   onReorder = null,
   // Flange gaps (docs/sketch-studio-corner-gaps.md §3.3): onGapHover(row | null), a row of the card hovered.
   onGapHover = null,
+  // The pieces on the line (docs/sketch-studio-piece-pick.md §5.5): onPieceHover(index | null), a chip pointed at or focused.
+  onPieceHover = null,
   // What the shop holds (§6.1, shopCatalog.js shopTolerance): each gap row's band on the bench; null: none.
   tolerance = null,
 }) {
@@ -707,15 +874,17 @@ export function PressBrakePanel({
     const root = fields.current;
     if (!focus || !root) return;
     const blades = root.querySelector('.cad-blades');
-    const target =
-      focus.target === 'distance'
-        ? root.querySelector('input[aria-label="Backgauge L (mm)"]')
-        : root.querySelector('.cad-blade-picker .cad-blade-card[aria-pressed="true"]') ||
-          root.querySelector('.cad-blade-picker .cad-blade-card');
+    // A field (L, or the sheet's slide: docs/sketch-studio-sheet-slide.md §6.1) or a blade's picker.
+    const field =
+      focus.target === 'distance' ? 'Backgauge L (mm)' : focus.target === 'slide' ? 'Sheet slide (mm)' : null;
+    const target = field
+      ? root.querySelector(`input[aria-label="${field}"]`)
+      : root.querySelector('.cad-blade-picker .cad-blade-card[aria-pressed="true"]') ||
+        root.querySelector('.cad-blade-picker .cad-blade-card');
     if (target) {
-      (focus.target === 'distance' ? target : blades || target).scrollIntoView?.({ block: 'nearest' });
+      (field ? target : blades || target).scrollIntoView?.({ block: 'nearest' });
       target.focus();
-      if (focus.target === 'distance') target.select?.();
+      if (field) target.select?.();
     }
     onFocused?.();
     // Once per request (its token).
@@ -736,16 +905,9 @@ export function PressBrakePanel({
   const radiusPunch = PUNCHES[session.punch]?.round ? PUNCHES[session.punch] : null;
   const shape = radiusPunch ? 'round' : session.shape || 'sharp';
   const auto = suggestedDie(t, session.punch);
-  // A typed value (number or =expression) for the session; anything else waits.
-  const number = (handler) => (value) => {
-    let resolved;
-    try {
-      resolved = numeric(value, values || {});
-    } catch {
-      return;
-    }
-    if (Number.isFinite(resolved)) handler(resolved);
-  };
+  // A typed value (number or =expression) for the session; anything else
+  // changes nothing and the field shows the value in force again.
+  const number = numberFor(values);
   const hit = pending && !pending.error ? pending : null;
   // An offset bend's pair (brake flip tooling §5.3): its spacing, web, both hits and the order chosen.
   const offset = hit?.offset || null;
@@ -776,7 +938,6 @@ export function PressBrakePanel({
   ) : null;
   // An armed try (tight bends §5.2), as the station resolved it.
   const armed = pending && !pending.error ? pending.armed || null : null;
-  const skippedCount = (station.segments || NONE).filter((s) => s.skipped).length;
   const tabs = hit?.members?.length || 1;
   // One rule with the backgauge's readout in the 3D view (brakeHands.js legsText).
   const legsOf = (key) => `${legsText(readouts, key) ?? '—'} mm`;
@@ -932,11 +1093,7 @@ export function PressBrakePanel({
           </p>
         )}
         {(station.segments || NONE).length > 1 && (
-          <p className="cad-help cad-brake-hint" aria-label="Segments on the line">
-            The line crosses {station.segments.length} pieces of material
-            {skippedCount ? ` (${skippedCount} left out)` : ''}: click one on the flat blank to leave it out of this
-            hit, or put it back. The punch and die are set up only where the hit bends.
-          </p>
+          <PiecesRow station={station} session={session} onSession={onSession} onHover={onPieceHover} />
         )}
         {again && (
           <p className="cad-help cad-brake-hint" role="note" aria-label="Bend on">

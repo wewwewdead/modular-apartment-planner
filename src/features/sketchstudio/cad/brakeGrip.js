@@ -1,5 +1,7 @@
 // The press brake's grip (docs/sketch-studio-brake-hands-on.md §5.2): two
-// handles drawn on the sheet, at a constant size on screen, where the
+// handles drawn on the sheet (three since the sheet slides by hand, docs/
+// sketch-studio-sheet-slide.md §6.1: Slide sheet, a straight arrow with a head
+// at each end lying along the bed beside them), at a constant size on screen, where the
 // operator's hands would be. Flip sheet is an open hoop with an arrowhead at
 // each end, standing over the front edge about the axis the flip turns on;
 // Turn sheet around is a flat ring with one arrowhead, lying just over the
@@ -34,6 +36,29 @@ const RENDER_ORDER = 41;
 const HOOP = Object.freeze({ from: -40, to: 220, lift: 0 });
 const RING = Object.freeze({ from: 310, to: 610, scale: 1.15 });
 const SAMPLES = 40;
+// Slide sheet (sheet slide §6.1): the arrow's half length, px, and how far from the rings' centre
+// along the bed its middle stands (clear of the ring), toward the operator a little.
+const SLIDE = Object.freeze({ half: 30, along: 80, front: -10 });
+
+class LineCurve extends THREE.Curve {
+  constructor(half) {
+    super();
+    this.half = half;
+  }
+  getPoint(t, target = new THREE.Vector3()) {
+    return target.set(-this.half + 2 * this.half * t, 0, 0);
+  }
+}
+// An arrowhead at the arrow's end x (px), pointing along ±X.
+function lineArrowGeometry(x, sign, scale = 1) {
+  const cone = new THREE.ConeGeometry(ARROW.radius * scale, ARROW.length * scale, 18);
+  cone.translate(0, (ARROW.length * scale) / 2, 0);
+  cone.applyQuaternion(
+    new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(sign, 0, 0)),
+  );
+  cone.translate(x, 0, 0);
+  return cone;
+}
 
 class ArcCurve extends THREE.Curve {
   constructor(radius, from, to) {
@@ -59,6 +84,7 @@ function arrowGeometry(radius, at, sign, scale = 1) {
 }
 
 function buildHandle(kind) {
+  if (kind === 'slide') return buildSlide();
   const shape = kind === 'flip' ? HOOP : RING;
   const radius = GRIP_RADIUS_PX * (shape.scale || 1);
   const ends =
@@ -105,6 +131,37 @@ function buildHandle(kind) {
   // The arc's centre line in handle pixels, for the pick and the chip.
   const samples = Array.from({ length: SAMPLES + 1 }, (_, i) => curve.getPoint(i / SAMPLES));
   return { kind, group, stroke, casing, samples, radius, lift: shape.lift || 0 };
+}
+
+// Slide sheet (sheet slide §6.1): the same stroke, casing and rest strength as the rings.
+function buildSlide() {
+  const group = new THREE.Group();
+  group.name = 'press-brake-grip-slide';
+  group.matrixAutoUpdate = false;
+  const material = (color, opacity) =>
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false });
+  const stroke = material(AXIS_COLORS.X, GRIP_REST),
+    casing = material(CASING, GRIP_REST * 0.85);
+  const curve = new LineCurve(SLIDE.half);
+  const parts = [
+    [new THREE.TubeGeometry(curve, 8, CASING_PX, 8, false), casing, RENDER_ORDER],
+    [new THREE.TubeGeometry(curve, 8, GRIP_STROKE_PX / 2, 8, false), stroke, RENDER_ORDER + 1],
+    ...[-1, 1].flatMap((sign) => [
+      [lineArrowGeometry(sign * SLIDE.half, sign, 1.35), casing, RENDER_ORDER],
+      [lineArrowGeometry(sign * SLIDE.half, sign), stroke, RENDER_ORDER + 1],
+    ]),
+  ];
+  for (const [geometry, mat, order] of parts) {
+    const mesh = new THREE.Mesh(geometry, mat);
+    mesh.renderOrder = order;
+    mesh.frustumCulled = false;
+    mesh.raycast = () => {};
+    group.add(mesh);
+  }
+  const samples = Array.from({ length: SAMPLES + 1 }, (_, i) =>
+    curve.getPoint(i / SAMPLES).multiplyScalar((SLIDE.half + ARROW.length) / SLIDE.half),
+  );
+  return { kind: 'slide', group, stroke, casing, samples, radius: SLIDE.half, lift: 0 };
 }
 
 /**
@@ -154,10 +211,19 @@ export function createBrakeGrip() {
         y.clone().multiplyScalar(scale),
         z.clone().multiplyScalar(scale),
       );
-      // The hoop stands above its anchor, the ring lies a pixel over the sheet.
-      const lift = kind === 'flip' ? handle.radius * handle.lift * scale : scale;
-      const along = kind === 'flip' ? y : z;
-      basis.setPosition(anchor[0] + along.x * lift, anchor[1] + along.y * lift, anchor[2] + along.z * lift);
+      // The hoop stands above its anchor, the ring lies a pixel over the sheet; the arrow
+      // beside them along the bed (its local X), a little toward the operator, a pixel over the sheet.
+      if (kind === 'slide') {
+        const at = [0, 1, 2].map(
+          (i) =>
+            anchor[i] + (x.getComponent(i) * SLIDE.along + y.getComponent(i) * SLIDE.front + z.getComponent(i)) * scale,
+        );
+        basis.setPosition(at[0], at[1], at[2]);
+      } else {
+        const lift = kind === 'flip' ? handle.radius * handle.lift * scale : scale;
+        const along = kind === 'flip' ? y : z;
+        basis.setPosition(anchor[0] + along.x * lift, anchor[1] + along.y * lift, anchor[2] + along.z * lift);
+      }
       handle.group.matrix.copy(basis);
       handle.group.matrixWorldNeedsUpdate = true;
     },

@@ -17,6 +17,12 @@ import { deserializeProject } from '@/persistence/deserialize';
 import demoData from '@/pages/playground-demo.json';
 import { RENDER_STYLES, renderStyleConfig } from './renderStyle';
 import {
+  CLOSURE_OWNER_MATERIAL_KEYS,
+  ROOF_OWNER_MATERIAL_KEYS,
+  ownerMaterialKey,
+  parseOwnerMaterialKey,
+} from '@/domain/roofCoveringCatalog';
+import {
   DEFAULT_VIEW_MODE,
   GHOST_OPACITY,
   MATERIAL_TIERS,
@@ -87,6 +93,29 @@ describe('view modes — the tier table', () => {
     expect(palette.roofGutter.userData.paletteKey).toBe('roofTrim');
     expect(tierOf(palette.roof)).toBe('skin');
     expect(tierOf(new THREE.MeshStandardMaterial())).toBeNull();
+  });
+
+  it("gives each roof's and truss system's own materials their base key's tier (docs/multi-roof.md §6)", () => {
+    const palette = createMaterialPalette();
+    for (const baseKey of [...ROOF_OWNER_MATERIAL_KEYS, ...CLOSURE_OWNER_MATERIAL_KEYS]) {
+      const material = paletteMaterialFor(palette, ownerMaterialKey(baseKey, 'owner_1'));
+      expect(tierOf(material), baseKey).toBe(MATERIAL_TIERS[baseKey]);
+    }
+  });
+
+  it("ghosts every roof's own materials in X-ray on the playground", () => {
+    const { palette, root, batchRoot } = playgroundBuild();
+    applyViewModeToWorld(root, batchRoot, palette, VIEW_MODES.XRAY);
+    const ownerMeshes = [];
+    root.traverse((node) => {
+      const base = node.isMesh ? node.userData.baseMaterial || node.material : null;
+      if (base && parseOwnerMaterialKey(base.userData?.paletteKey)) ownerMeshes.push(node);
+    });
+    expect(ownerMeshes.length).toBeGreaterThan(0);
+    for (const mesh of ownerMeshes) {
+      expect(mesh.material.userData.ghostTwin, mesh.name).toBe(true);
+      expect(mesh.castShadow).toBe(false);
+    }
   });
 });
 

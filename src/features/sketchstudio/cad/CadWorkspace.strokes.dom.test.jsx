@@ -2,8 +2,9 @@
 // Kiosk-class parts in the workspace (docs/sketch-studio-shop-floor.md §6,
 // SF-3): at the press brake an etched line is one click (the punch line, its
 // angle and its side); a line across two separate tabs is one stroke of two
-// bends, committed with one stroke id and listed as one hit; a segment
-// clicked on the flat blank leaves that tab out of the hit; a stroke whose
+// bends, committed with one stroke id and listed as one hit; a piece clicked
+// on the flat blank bends only it, Ctrl+clicked leaves it out (piece pick
+// §5.6); a stroke whose
 // tabs the sheet has already bent apart is refused. Draw → Flanged panel: the
 // form and its preview, and both endings. The kernel hook and the 3D viewport
 // are stand-ins.
@@ -152,7 +153,7 @@ it('bends two tabs on one line in one stroke: two bends, one stroke id, one hit'
   openBrake();
   click(map(), 'Etched line 1: UP 90°');
   expect(within(panel()).getByLabelText('Tabs').textContent).toBe('2 in one stroke');
-  expect(within(map()).getAllByRole('button', { name: /^Segment \d of 2$/ })).toHaveLength(2);
+  expect(within(map()).getAllByRole('button', { name: /^Piece \d of 2$/ })).toHaveLength(2);
   expect(viewport.props.brakeView.bendIds).toEqual(['pending-hit', 'pending-hit:2']);
   expect(within(panel()).getByRole('status', { name: 'Collision check' }).textContent).toMatch(/^Clear through/);
   const stroke = pedal(harness);
@@ -173,25 +174,42 @@ it('bends two tabs on one line in one stroke: two bends, one stroke id, one hit'
   expect(harness.model().parts[0].features[0].bends).toEqual([]);
 });
 
-it('leaves a tab out of the hit when its segment is clicked, and puts it back', () => {
+it('leaves a tab out of the hit when its piece is Ctrl+clicked; a plain click bends only that one', () => {
   const harness = setup(plateModel());
   openBrake();
   click(map(), 'Etched line 1: UP 90°');
-  const second = () => within(map()).getByRole('button', { name: 'Segment 2 of 2' });
-  act(() => fireEvent.click(second()));
-  expect(second().getAttribute('aria-pressed')).toBe('false');
+  const piece = (n) => within(map()).getByRole('button', { name: `Piece ${n} of 2` });
+  const chips = () =>
+    within(within(panel()).getByRole('group', { name: 'Pieces on the line' }))
+      .getAllByRole('button')
+      .filter((b) => !b.classList.contains('is-every'));
+  // A plain click (docs/sketch-studio-piece-pick.md §5.6): only that piece; Ctrl+click puts the other back.
+  act(() => fireEvent.click(piece(2)));
+  expect([piece(1), piece(2)].map((p) => p.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
+  act(() => fireEvent.click(piece(1), { ctrlKey: true }));
+  expect([piece(1), piece(2)].map((p) => p.getAttribute('aria-pressed'))).toEqual(['true', 'true']);
+  // Ctrl+click the second: left flat.
+  act(() => fireEvent.click(piece(2), { ctrlKey: true }));
+  expect(piece(2).getAttribute('aria-pressed')).toBe('false');
   expect(within(panel()).queryByLabelText('Tabs')).toBe(null);
   expect(viewport.props.brakeView.bendIds).toEqual(['pending-hit']);
-  expect(within(panel()).getByLabelText('Segments on the line').textContent).toContain('(1 left out)');
+  // The panel's row says the same.
+  expect(chips().map((c) => c.getAttribute('aria-pressed'))).toEqual(['true', 'false']);
+  // A chip pointed at lights its piece on the flat blank (§5.5); leaving it lets go.
+  act(() => fireEvent.pointerEnter(chips()[1]));
+  expect([piece(1), piece(2)].map((p) => p.classList.contains('is-lit'))).toEqual([false, true]);
+  act(() => fireEvent.pointerLeave(chips()[1]));
+  expect(piece(2).classList.contains('is-lit')).toBe(false);
   pedal(harness);
   const [made] = harness.model().parts[0].features[0].bends;
   // Just inside the kept tab, no stroke id (a stroke of its own).
   expect(made.a[1]).toBeCloseTo(0.5, 6);
   expect(made.b[1]).toBeCloseTo(139.5, 6);
   expect(made.stroke).toBeUndefined();
-  // A new line puts every segment back.
+  // A new line starts with its default (§5.3): the made tab left flat, the other in the hit.
   click(map(), 'Etched line 1: UP 90°');
-  expect(second().getAttribute('aria-pressed')).toBe('true');
+  expect([piece(1), piece(2)].map((p) => p.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
+  expect(chips()[0].textContent).toBe('1 · 140 mm · bent 90°');
 });
 
 it('refuses two tabs the sheet has already bent apart, and takes one tab alone', () => {
@@ -216,7 +234,8 @@ it('refuses two tabs the sheet has already bent apart, and takes one tab alone',
     /^The sheet is already bent between these flanges, so they are no longer in line\. Bend them one at a time/,
   );
   expect(within(panel()).getByRole('button', { name: 'Bend' }).disabled).toBe(true);
-  act(() => fireEvent.click(within(map()).getByRole('button', { name: 'Segment 2 of 2' })));
+  // A plain click on the first piece: it alone (piece pick §5.6).
+  act(() => fireEvent.click(within(map()).getByRole('button', { name: 'Piece 1 of 2' })));
   expect(within(panel()).queryByText(/no longer in line/)).toBe(null);
   expect(viewport.props.brakeView.bendIds).toEqual(['pending-hit']);
 });

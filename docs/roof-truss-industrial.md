@@ -57,6 +57,8 @@ drains, roofOpenings, roofPlanes, roofEdges, ridges, valleys, hips}`.
   (`src/truss/roofAttachment.js`, `deriveRoofStateFromTrussSystem` line 101)
   and the roof base elevation is `truss.baseElevation + roofOutline[0].z +
 purlinDepth` (lines 15-21, 38-43).
+  Superseded 2026-11-21: a project holds a list of roofs, one per truss system
+  (`project.roofSystems`), see docs/multi-roof.md.
 - **Roof body**: `buildRoofPlaneGeometry` (`src/geometry/roofPlaneGeometry.js:814`)
   gives per-plane outlines and `getSurfaceElevation(point, 'top'|'bottom')`
   where bottom = `baseElevation + rise(point)` and top = bottom +
@@ -277,6 +279,8 @@ system's colour wins when there are several. `resolveRoofAppearance`
 (`src/domain/roofCoveringCatalog.js`) must then return
 `closures: [{hex}]` from the project's truss systems, and the appearance memo
 in `ThreePreviewPanel.jsx` must be keyed on the truss systems too.
+Superseded by MR-3 (2026-11-21): each truss system's closures wear their own
+`gableInfill@<system id>` material, so nobody's colour wins; see docs/multi-roof.md §6 and §10.
 
 ### 4.4 Truss accuracy fields (RT-3)
 
@@ -334,6 +338,9 @@ soffit: {hex}, closures: [{hex}]}` derived from the project in
   per project is why this is enough; it never rebuilds or recompiles and
   batching keeps working. Call it on every project change (cheap) and once
   after the palette is created, before the first frame.
+  Superseded by MR-3 (2026-11-21): the same mutation now lands on per-owner
+  keys (`roof_metal@<roof id>`, `gableInfill@<truss system id>`), one set per
+  roof and per truss system; see docs/multi-roof.md §6 and §10.
 - `roof3dGeometry.js` chooses `materialKey` from `covering.kind`
   (`metal_* → roof_metal`, `*_tile | slate | shingle → roof_tile`,
   `membrane → roof_membrane`, `concrete_slab → roof_slab`).
@@ -1079,6 +1086,8 @@ lint` 0 errors; each new module has a `*.test.js`; DOM tests are
    as their own inspect types.
 9. Colour via palette mutation (one roof per project) rather than per-object
    materials; if a second roof ever appears this must move to per-roof keys.
+   Done in MR-3 (2026-11-21): per-roof and per-truss-system keys, still a
+   palette mutation; see docs/multi-roof.md §6 and §10.
 10. Corner mitres, hip girders/jacks, plates, attic trusses, dormers,
     sheet-level covering hatches: out of scope.
 

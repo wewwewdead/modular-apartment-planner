@@ -21,8 +21,15 @@ vi.setConfig({ testTimeout: 15000 });
 const log = vi.hoisted(() => []);
 // The stand-in kernel projects every view as `viewBox`; a sheet in `fail` is
 // refused (as the kernel refuses a section that misses), per sheet when the
-// request collects errors.
-const kernel = vi.hoisted(() => ({ viewBox: [0, -40, 140, 40], request: null, fail: new Set() }));
+// request collects errors. `ready`: whether the model on show is built;
+// `hold`: a promise a Generate views request waits on.
+const kernel = vi.hoisted(() => ({
+  viewBox: [0, -40, 140, 40],
+  request: null,
+  fail: new Set(),
+  ready: true,
+  hold: null,
+}));
 const views = (sheet) =>
   sheet.views.map((entry) => {
     const config = typeof entry === 'string' ? { name: entry, view: entry } : entry;
@@ -55,6 +62,7 @@ vi.mock('./useCadModel.js', () => ({
     kernel.request.mockImplementation(async (type, payload) => {
       log.push(`request:${type}`);
       if (type !== 'drawings') return null;
+      if (kernel.hold && !payload?.collectErrors) await kernel.hold;
       const asked = payload?.sheetIds ? model.sheets.filter((s) => payload.sheetIds.includes(s.id)) : [...model.sheets];
       const out = asked.map((sheet) => {
         if (!kernel.fail.has(sheet.id)) return drawn(sheet);
@@ -82,8 +90,8 @@ vi.mock('./useCadModel.js', () => ({
       return out;
     });
     return {
-      status: 'ready',
-      ready: true,
+      status: kernel.ready ? 'ready' : 'building',
+      ready: kernel.ready,
       snapshot: {
         parameters: {},
         parts: model.parts.map((p) => ({
@@ -165,6 +173,8 @@ afterEach(() => {
   cleanup();
   kernel.viewBox = [0, -40, 140, 40];
   kernel.fail = new Set();
+  kernel.ready = true;
+  kernel.hold = null;
   kernel.request?.mockClear();
   writer.gate = null;
   sheetsPdf.mockClear();
@@ -191,7 +201,8 @@ function setup(sheets) {
   const leg = (id, x) => ({ id, partId: part.id, name: id, position: [x, 0, 0], rotation: [0, 0, 0] });
   const base = { ...emptyModel(), parts: [part], instances: [leg('A', 0), leg('B', 100), leg('C', 200)] };
   const history = [normalizeModel(sheets ? { ...base, sheets } : base)];
-  let index = 0;
+  let index = 0,
+    id = 'doc';
   const setCadModel = vi.fn((next) => {
     history.splice(index + 1);
     history.push(next);
@@ -200,7 +211,7 @@ function setup(sheets) {
   const workspace = () => (
     <MemoryRouter>
       <CadWorkspace
-        document={{ id: 'doc', name: 'Test rig', entities: [], model: history[index] }}
+        document={{ id, name: 'Test rig', entities: [], model: history[index] }}
         setCadModel={setCadModel}
         undo={() => {}}
         redo={() => {}}
@@ -211,7 +222,24 @@ function setup(sheets) {
     </MemoryRouter>
   );
   const view = render(workspace());
-  return { setCadModel, rerender: () => view.rerender(workspace()), model: () => history[index] };
+  const rerender = () => view.rerender(workspace());
+  return {
+    setCadModel,
+    rerender,
+    model: () => history[index],
+    // The header's Undo: the snapshot before the last commit, the same model object.
+    undo: () => {
+      index -= 1;
+      rerender();
+    },
+    // Open: another document under the same workspace.
+    open: (nextId) => {
+      id = nextId;
+      history.splice(0, history.length, normalizeModel(base));
+      index = 0;
+      rerender();
+    },
+  };
 }
 const settle = () => act(async () => {});
 const pane = () => document.querySelector('.cad-drawing');
@@ -328,6 +356,31 @@ it('preflight: an overflowing fixed sheet is reported and nothing is written; Fi
   expect(within(panel()).getByRole('status').textContent).toBe('Saved Frame.pdf (2 pages)');
 });
 
+it('Fit to page, then Undo before the rebuild: the run waiting on the fix ends instead of spinning', async () => {
+  const harness = setup([plain('s1', 'Frame', { scaleMode: 'fixed', scale: 50 }), plain('s2', 'Other')]);
+  drawingsTab();
+  act(() => fireEvent.click(within(panel()).getByRole('radio', { name: 'All sheets (2)' })));
+  exportPdf();
+  await settle();
+  act(() =>
+    fireEvent.click(within(within(panel()).getByRole('status')).getByRole('button', { name: 'Fit to page: Frame' })),
+  );
+  // The fix is on show and rebuilding: the run waits for it.
+  kernel.ready = false;
+  harness.rerender();
+  expect(within(panel()).getByRole('status').textContent).toContain('Checking sheets…');
+  // Undo takes the fix back; the kernel is current again.
+  harness.undo();
+  kernel.ready = true;
+  harness.rerender();
+  await settle();
+  expect(harness.model().sheets[0].scaleMode).toBe('fixed');
+  expect(within(panel()).queryByRole('status')).toBeNull();
+  expect(sheetsPdf).not.toHaveBeenCalled();
+  expect(file.createWritable).not.toHaveBeenCalled();
+  expect(within(panel()).getByRole('button', { name: 'Export PDF' }).disabled).toBe(false);
+});
+
 it('preflight: Export the other N writes the sheets that pass, renumbered; Open sheet opens a failing one', async () => {
   kernel.fail = new Set(['bad']);
   setup([
@@ -424,6 +477,58 @@ it('the status bar’s Cancel ends the PDF run it cancels: nothing written, Expo
   await act(() => new Promise((resolve) => setTimeout(resolve, 450)));
   const ribbonExport = within(document.querySelector('.cad-ribbon')).getByRole('button', { name: /Export PDF…/ });
   expect(ribbonExport.getAttribute('aria-busy')).toBe('false');
+});
+
+it('Generate views ending under a PDF run leaves the run its busy state and its Cancel', async () => {
+  let views;
+  setup([plain('s1', 'Frame', { scaleMode: 'fixed', scale: 50 }), plain('s2', 'Other')]);
+  drawingsTab();
+  act(() => fireEvent.click(within(panel()).getByRole('radio', { name: 'All sheets (2)' })));
+  exportPdf();
+  await settle();
+  expect(within(panel()).getByRole('status').textContent).toContain('1 of 2 sheets can’t be exported');
+  // Generate views starts and waits on the kernel; meanwhile the report's
+  // Export the other 1 sheet starts the PDF run, which stops on its page.
+  kernel.hold = new Promise((resolve) => {
+    views = resolve;
+  });
+  writer.gate = (signal) => new Promise((resolve) => signal.addEventListener('abort', resolve));
+  act(() =>
+    fireEvent.click(within(document.querySelector('.cad-ribbon')).getByRole('button', { name: 'Generate views' })),
+  );
+  act(() => fireEvent.click(within(panel()).getByRole('button', { name: 'Export the other 1 sheet' })));
+  await settle();
+  expect(within(panel()).getByRole('status').textContent).toContain('Rendering sheet 1 of 1 — Other');
+  // The views arrive first: the run is still working, and still busy.
+  await act(async () => views());
+  await settle();
+  const footer = document.querySelector('.cad-status');
+  expect(within(panel()).getByRole('status').textContent).toContain('Rendering sheet 1 of 1 — Other');
+  expect(footer.textContent).toContain('Preparing workshop output…');
+  expect(within(footer).getByRole('button', { name: 'Cancel' })).toBeTruthy();
+  expect(within(document.querySelector('.cad-ribbon')).getByRole('button', { name: 'SVG sheet' }).disabled).toBe(true);
+  // Its Cancel ends it.
+  await act(async () => fireEvent.click(within(footer).getByRole('button', { name: 'Cancel' })));
+  await settle();
+  expect(within(panel()).getByRole('status').textContent).toBe('PDF export cancelled — nothing was written.');
+  expect(writable.write).not.toHaveBeenCalled();
+});
+
+it('another document ends a PDF run waiting on its report', async () => {
+  const harness = setup([plain('s1', 'Frame', { scaleMode: 'fixed', scale: 50 }), plain('s2', 'Other')]);
+  drawingsTab();
+  act(() => fireEvent.click(within(panel()).getByRole('radio', { name: 'All sheets (2)' })));
+  exportPdf();
+  await settle();
+  expect(within(panel()).getByRole('status').textContent).toContain('1 of 2 sheets can’t be exported');
+  harness.open('doc-2');
+  await settle();
+  expect(document.querySelector('.cad-pdf-report')).toBeNull();
+  // The new document's Sheets panel has no run of the old one's on it.
+  act(() => fireEvent.click(within(document.querySelector('.cad-ribbon')).getByRole('button', { name: /^Sheets/ })));
+  expect(within(panel()).queryByRole('status')).toBeNull();
+  expect(within(panel()).getByRole('button', { name: 'Export PDF' }).disabled).toBe(false);
+  expect(file.createWritable).not.toHaveBeenCalled();
 });
 
 it('without a Save dialog the PDF downloads under the suggested name', async () => {

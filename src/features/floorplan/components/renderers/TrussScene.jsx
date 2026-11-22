@@ -4,6 +4,7 @@ import TrussSelectionOverlay from './TrussSelectionOverlay';
 import TrussDrawOverlay from './TrussDrawOverlay';
 import TrussDetailRenderer from './TrussDetailRenderer';
 import TrussSectionRenderer from './TrussSectionRenderer';
+import { getProjectRoofs } from '@/domain/projectRoofs';
 
 const TrussScene = memo(function TrussScene({
   filteredFloor,
@@ -26,7 +27,7 @@ const TrussScene = memo(function TrussScene({
         <TrussRenderer
           floor={filteredFloor}
           trussSystems={floorTrussSystems}
-          roofSystem={filteredProject?.roofSystem || null}
+          roofSystems={getProjectRoofs(filteredProject)}
           selectedId={selectedId}
           selectedType={selectedType}
         />

@@ -2,12 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { createFloor, createProject } from '@/domain/models';
 import floorplanReducer, { initializeFloorplanState } from '@/features/floorplan/store/floorplanReducer';
 import { TOOLS } from './tools';
-import { ARMED_SETTING_KEYS, FLOW_MARKER_KEYS, isToolFlowInProgress, keepArmedSettings } from './toolSession';
+import {
+  ARMED_SETTING_KEYS,
+  FLOW_MARKER_KEYS,
+  enterTool,
+  isToolFlowInProgress,
+  keepArmedSettings,
+} from './toolSession';
 import { createBeamPlaceHandler } from './handlers/beamPlaceHandler';
 import { createCantileverHandler } from './handlers/cantileverHandler';
 import { createCeilingBeamPickHandler } from './handlers/ceilingBeamPickHandler';
 import { createCeilingPlaceHandler } from './handlers/ceilingPlaceHandler';
 import { createDimensionPlaceHandler } from './handlers/dimensionPlaceHandler';
+import { createElevationSelectHandler } from './handlers/elevationSelectHandler';
 import { createRailingPlaceHandler } from './handlers/railingPlaceHandler';
 import { createRoofOpeningPlaceHandler } from './handlers/roofOpeningPlaceHandler';
 import { createRoofParapetPlaceHandler } from './handlers/roofParapetPlaceHandler';
@@ -93,6 +100,20 @@ describe('a reset that keeps the tool keeps what it is armed with', () => {
     expect(sheet.editor.toolState).toEqual({ deviceType: 'switch' });
   });
 
+  it('the door keeps its swing and the furniture tool its turn', () => {
+    const { state, upperId } = twoFloorState();
+    const door = armed(state, TOOLS.DOOR, { openDirection: 'right', previewWallId: 'wall_1', previewOffset: 900 });
+    const bed = armed(state, TOOLS.FIXTURE, { fixtureType: 'bed', previewRotation: 90, previewX: 10 });
+
+    expect(floorplanReducer(door, { type: 'SET_VIEW_MODE', viewMode: 'elevation_north' }).editor.toolState).toEqual({
+      openDirection: 'right',
+    });
+    expect(floorplanReducer(bed, { type: 'SET_ACTIVE_FLOOR', floorId: upperId }).editor.toolState).toEqual({
+      fixtureType: 'bed',
+      previewRotation: 90,
+    });
+  });
+
   it('a flow under way is still dropped by those resets', () => {
     const { state, upperId } = twoFloorState();
     const beam = armed(state, TOOLS.BEAM, { beamPlacementMode: 'floor', startColumnId: 'col_1' });
@@ -108,6 +129,63 @@ describe('a reset that keeps the tool keeps what it is armed with', () => {
 
     expect(floorplanReducer(bed, { type: 'SET_TOOL', tool: TOOLS.FIXTURE }).editor.toolState).toEqual({});
     expect(floorplanReducer(bed, { type: 'SET_MODEL_TARGET', modelTarget: 'roof' }).editor.toolState).toEqual({});
+  });
+});
+
+/*
+ * The ritual every site wrote by hand before `enterTool`, frozen as it was:
+ * each step only when the site had something for it, always in this order.
+ */
+function handWrittenEntry(dispatch, { tool, selection, toolState, statusMessage }) {
+  dispatch({ type: 'SET_TOOL', tool });
+  if (selection) dispatch({ type: 'SELECT_OBJECT', id: selection.id, objectType: selection.objectType });
+  if (toolState) dispatch({ type: 'UPDATE_TOOL_STATE', payload: toolState });
+  if (statusMessage != null) dispatch({ type: 'SET_STATUS_MESSAGE', message: statusMessage });
+}
+
+function recordActions(enter, options) {
+  const actions = [];
+  enter((action) => actions.push(action), options);
+  return actions;
+}
+
+describe('enterTool', () => {
+  const SELECTIONS = [undefined, { id: 'slab_1', objectType: 'slab' }];
+  const TOOL_STATES = [undefined, { cantileverMode: 'bay' }];
+  const MESSAGES = [undefined, 'Click an edge of the slab.'];
+
+  it('sends what the hand-written ritual sent, for every combination of its parts', () => {
+    for (const selection of SELECTIONS) {
+      for (const toolState of TOOL_STATES) {
+        for (const statusMessage of MESSAGES) {
+          const options = { tool: TOOLS.CANTILEVER, selection, toolState, statusMessage };
+          expect(recordActions(enterTool, options)).toEqual(recordActions(handWrittenEntry, options));
+        }
+      }
+    }
+  });
+
+  it('lands the store on the tool, the selection, the settings and the message together', () => {
+    let state = initializeFloorplanState(createProject('Enter'));
+    enterTool(
+      (action) => {
+        state = floorplanReducer(state, action);
+      },
+      {
+        tool: TOOLS.CANTILEVER,
+        selection: { id: 'slab_1', objectType: 'slab' },
+        toolState: { cantileverMode: 'bay' },
+        statusMessage: 'Click an edge of the slab.',
+      },
+    );
+
+    expect(state.editor).toMatchObject({
+      activeTool: TOOLS.CANTILEVER,
+      selectedId: 'slab_1',
+      selectedType: 'slab',
+      toolState: { cantileverMode: 'bay' },
+      statusMessage: 'Click an edge of the slab.',
+    });
   });
 });
 
@@ -152,6 +230,20 @@ const ESCAPE_CASES = [
     select: ['parapet_1', 'parapet'],
   },
   { marker: 'dragging', owner: 'truss select', tool: TOOLS.SELECT, create: createTrussSelectHandler },
+  {
+    marker: 'dragging',
+    owner: 'elevation window',
+    tool: TOOLS.SELECT,
+    create: createElevationSelectHandler,
+    select: ['window_1', 'window'],
+  },
+  {
+    marker: 'pendingDrag',
+    owner: 'elevation window',
+    tool: TOOLS.SELECT,
+    create: createElevationSelectHandler,
+    select: ['window_1', 'window'],
+  },
   {
     marker: 'pendingDrag',
     owner: 'select',

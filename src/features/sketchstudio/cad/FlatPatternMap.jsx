@@ -9,17 +9,20 @@
 // millimetres throughout; the 3D pose follows from the session. Shop floor
 // §6.2: an etched line is a button (the punch line goes on it, with the
 // mark's angle and side when it carries them), and with a line chosen the
-// material it crosses shows as segments, each clicked out of (or back into)
-// the hit. Bends are numbered by stroke, as the sequence list counts hits.
-// Where click areas overlap (on a thin blank the long edges' strips cover the
-// short ends, the etched lines and the segments), a pointer click goes to the
-// nearest line whose own area holds the pointer, not to the one drawn last.
+// material it crosses shows as pieces (docs/sketch-studio-piece-pick.md
+// §5.6): a click bends only that piece, Ctrl, Shift or Meta + click puts it
+// into the hit or leaves it flat. Bends are numbered by stroke, as the
+// sequence list counts hits. Where click areas overlap (on a thin blank the
+// long edges' strips cover the short ends, the etched lines and the pieces), a
+// pointer click goes to the nearest line whose own area holds the pointer, not
+// to the one drawn last; the click's modifier keys go with it.
 // Tight bends §7.4 (e): in gauge mode a made bend that can be bent on is a
 // button too (its line seats the punch line on it, as the row's Bend on does).
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { hitSequence, isRoundBend } from './sheetMetal.js';
 import { nearestLine } from './pressBrake.js';
 import { bendOnKey } from './brakeStation.js';
+import { fingerRestore } from './brakeHands.js';
 
 const BEND_COLOURS = { up: '#c2410c', down: '#1864ab' };
 // Snap reach for two-point picks, in screen pixels.
@@ -39,11 +42,13 @@ const snapPoints = ({ outer, holes }) =>
 /**
  * `station`: brakeStation(); `session`: brakeSession. onPickEdge(index),
  * onDistance(L) while dragging the punch line, onPoints([[x, y], ...]),
- * onMark(mark) for an etched line, onSkip(index) for a segment of the line,
- * onBendOn(step key) for a made bend's line (gauge mode). `gapEdges`: the
- * hovered flange gap's edge(s) of the blank ([[p, q], …], flat mm,
+ * onMark(mark) for an etched line, onPiece(index, { add }) for a piece of
+ * the line (piece pick §5.6: `add` with Ctrl, Shift or Meta held), onBendOn(step
+ * key) for a made bend's line (gauge mode). `gapEdges`: the hovered flange
+ * gap's edge(s) of the blank ([[p, q], …], flat mm,
  * docs/sketch-studio-corner-gaps.md §3.3), drawn over the rest and never in a
- * click's way; absent, nothing is drawn for it.
+ * click's way; absent, nothing is drawn for it. `litPiece`: the piece the
+ * panel names (§5.5, its index), drawn lit; null none.
  */
 export default function FlatPatternMap({
   station,
@@ -52,14 +57,15 @@ export default function FlatPatternMap({
   onDistance,
   onPoints,
   onMark = null,
-  onSkip = null,
+  onPiece = null,
   onBendOn = null,
   gapEdges = null,
+  litPiece = null,
   disabled = false,
 }) {
   const svg = useRef(null);
   const drag = useRef(null);
-  // A drag of the punch line that started on a segment is not a click on it.
+  // A drag of the punch line that started on a piece is not a click on it.
   const dragged = useRef(false);
   const { polygon, fold, feature, edges, edge, pending } = station;
   const xs = polygon.outer.map((p) => p[0]),
@@ -97,28 +103,53 @@ export default function FlatPatternMap({
     onPoints(session.points.length === 1 ? [session.points[0], picked] : [picked]);
   };
   // Dragging the pending punch line along the gauge edge's normal sets L.
+  // The drag keeps the line as it was when it started, for Esc (brakeHands.js
+  // fingerRestore, the backgauge fingers' rule).
   const startDrag = (event) => {
     if (disabled || !edge) return;
     event.stopPropagation();
-    drag.current = { moved: false };
+    drag.current = { moved: false, from: fingerRestore(session) };
     dragged.current = false;
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
   const moveDrag = (event) => {
-    if (!drag.current || !edge) return;
+    if (!drag.current) return;
+    // A move with no button held: the release was lost, the drag is over
+    // (state-machines rule 6). So is one the card no longer takes.
+    if (!event.buttons || disabled || !edge) return endDrag(event);
     const { point } = toFlat(event);
     const distance = (point[0] - edge.a[0]) * edge.inward[0] + (point[1] - edge.a[1]) * edge.inward[1];
     const next = Math.max(0, Math.round(distance * 10) / 10);
     // The card's line is where it lies on the flat blank (skin gauge §4.7): a flat distance, named so.
     if (next === Number(station.flat ?? session.distance)) return;
     drag.current.moved = dragged.current = true;
-    onDistance(next, { stop: null });
+    // Its pieces matched against the line the drag started from (piece pick, the PK-1 audit).
+    onDistance(next, { stop: null, dragFrom: drag.current.from });
   };
   const endDrag = (event) => {
     if (!drag.current) return;
-    event.stopPropagation();
+    event?.stopPropagation();
     drag.current = null;
   };
+  // Esc puts the line back as it was (one patch, rule 4); the window losing
+  // focus ends the drag where it is. Capture phase, so the Esc is the drag's
+  // before the brake's own Esc (which clears the line) sees it.
+  useEffect(() => {
+    const key = (event) => {
+      if (event.key !== 'Escape' || !drag.current) return;
+      event.preventDefault();
+      const { moved, from } = drag.current;
+      drag.current = null;
+      if (moved) onDistance(from.distance, from);
+    };
+    const blur = () => endDrag(null);
+    window.addEventListener('keydown', key, true);
+    window.addEventListener('blur', blur);
+    return () => {
+      window.removeEventListener('keydown', key, true);
+      window.removeEventListener('blur', blur);
+    };
+  });
   const segmentsOf = (bend) =>
     bend.intervals.map(([s0, s1]) => [
       [bend.a[0] + bend.u[0] * s0, bend.a[1] + bend.u[1] * s0],
@@ -144,6 +175,18 @@ export default function FlatPatternMap({
           ? pending.data.map((d) => [d.a, d.b])
           : [];
   const segments = station.segments || [];
+  // The punch beside the line (sheet slide §6.3) when it is not the fitted one centred: a bar over
+  // each of its runs, a little off the line, never in a click's way.
+  const tooling = pending && !pending.error && !offsetLines ? pending.tooling : null;
+  const punchBars =
+    tooling?.line && (tooling.punchTrim || tooling.slide)
+      ? tooling.punch.map(([s0, s1]) => {
+          const { a, u } = tooling.line;
+          const off = Math.max(x1 - x0, y1 - y0) / 60;
+          const n = [-u[1] * off, u[0] * off];
+          return [s0, s1].map((s) => [a[0] + u[0] * s + n[0], a[1] + u[1] * s + n[1]]);
+        })
+      : [];
   // A bend's number: the step that first makes it (a bend-on step makes none, tight bends §4.4).
   const strokeNumber = new Map(
     hitSequence(fold)
@@ -151,7 +194,7 @@ export default function FlatPatternMap({
       .flatMap((s) => s.bendIds.map((id) => [id, s.index + 1])),
   );
   const dot = Math.max(viewBox[2], viewBox[3]) / 90;
-  // Half-widths of the click areas: a gauge edge's strip, an etched line's or a segment's band.
+  // Half-widths of the click areas: a gauge edge's strip, an etched line's or a piece's band.
   const edgeReach = dot * 1.6,
     bandReach = dot * 1.4;
   // Every line a click can pick, with what picking it does.
@@ -175,22 +218,24 @@ export default function FlatPatternMap({
     segmentsOf(bend).forEach(([a, b], k) =>
       targets.set(`bend-${bend.id}-${k}`, { a, b, reach: bandReach, act: () => onBendOn(key) }),
     );
-  if ((station.segments || []).length > 1 && onSkip)
+  // A piece (piece pick §5.6): bend only it; with Ctrl, Shift or Meta, into the hit or left flat.
+  if ((station.segments || []).length > 1 && onPiece)
     for (const segment of station.segments)
       targets.set(`segment-${segment.index}`, {
         a: segment.a,
         b: segment.b,
         reach: bandReach,
-        act: () => onSkip(segment.index),
+        act: (event) => onPiece(segment.index, { add: Boolean(event?.ctrlKey || event?.shiftKey || event?.metaKey) }),
       });
   // A click on line `key`'s area: a pointer click (detail ≥ 1) picks the
   // nearest line in reach of the pointer; a click with no pointer (the
-  // keyboard, a synthetic event) picks the line clicked.
+  // keyboard, a synthetic event) picks the line clicked. The event goes with
+  // it (a piece's modifier keys).
   const pickAt = (event, key) => {
     const own = targets.get(key);
     let target = own;
     if (event.detail > 0 && svg.current) target = nearestLine([...targets.values()], toFlat(event).point, own) || own;
-    target?.act();
+    target?.act(event);
   };
   // A band either side of a line to click (a bare line has no area to hit).
   const band = (a, b) => {
@@ -263,6 +308,8 @@ export default function FlatPatternMap({
         onClick={pickPoint}
         onPointerMove={moveDrag}
         onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onLostPointerCapture={endDrag}
       >
         <path
           className="cad-map-blank"
@@ -392,13 +439,13 @@ export default function FlatPatternMap({
           />
         ))}
         {segments.length > 1 &&
-          onSkip &&
+          onPiece &&
           segments.map((segment) => (
             <g
               key={`segment-${segment.index}`}
-              className={`cad-map-segment ${segment.skipped ? 'is-skipped' : ''}`}
+              className={`cad-map-segment${segment.skipped ? ' is-skipped' : ''}${litPiece === segment.index ? ' is-lit' : ''}`}
               role="button"
-              aria-label={`Segment ${segment.index + 1} of ${segments.length}`}
+              aria-label={`Piece ${segment.index + 1} of ${segments.length}`}
               aria-pressed={!segment.skipped}
               onPointerDown={startDrag}
               onClick={(event) => {
@@ -411,6 +458,18 @@ export default function FlatPatternMap({
               <line x1={segment.a[0]} y1={-segment.a[1]} x2={segment.b[0]} y2={-segment.b[1]} />
             </g>
           ))}
+        {punchBars.map(([a, b], k) => (
+          // Where the punch stands (docs/sketch-studio-sheet-slide.md §6.3): a length or a slide readable in plan.
+          <line
+            key={`punch-${k}`}
+            className="cad-map-punch"
+            aria-label={k === 0 ? 'Punch' : undefined}
+            x1={a[0]}
+            y1={-a[1]}
+            x2={b[0]}
+            y2={-b[1]}
+          />
+        ))}
         {edge && station.gauge?.distance != null && pendingBend && (
           <text
             className="cad-map-reading"

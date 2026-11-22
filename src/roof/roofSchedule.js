@@ -202,3 +202,56 @@ export function buildRoofScheduleSummary(roofSystem) {
     notes,
   };
 }
+
+const SUMMED_SCHEDULE_FIELDS = [
+  'grossPlanArea',
+  'grossSurfaceArea',
+  'openingPlanArea',
+  'openingSurfaceArea',
+  'netPlanArea',
+  'netSurfaceArea',
+  'parapetCount',
+  'parapetLengthTotal',
+  'gutterRunCount',
+  'gutterLengthTotal',
+  'downspoutCount',
+  'drainCount',
+  'openingCount',
+  'skylightCount',
+  'accessOpeningCount',
+  'roofOpeningCount',
+];
+
+/**
+ * One schedule for every roof of a building (a sheet's roof schedule): the
+ * figures summed, every roof's rows listed, each row's name prefixed by its
+ * roof's so two roofs' "Skylight 1" stay apart. One roof is its own schedule,
+ * unchanged.
+ */
+export function buildRoofsScheduleSummary(roofSystems = []) {
+  const schedules = roofSystems.map((roofSystem) => buildRoofScheduleSummary(roofSystem));
+  if (schedules.length <= 1) return schedules[0] || buildRoofScheduleSummary(null);
+
+  const prefixRows = (schedule, rows) =>
+    rows.map((row) => ({
+      ...row,
+      ...(row.id ? { id: `${schedule.roofId}:${row.id}` } : {}),
+      ...(row.name ? { name: `${schedule.roofName} · ${row.name}` } : {}),
+    }));
+  const combined = {
+    roofId: null,
+    roofName: 'Roof',
+    roofType: [...new Set(schedules.map((schedule) => schedule.roofType))].join(', '),
+    title: 'Roof Schedule',
+    gutterSource: 'derived_roof_edges',
+    downspoutSource: 'derived_from_gutters',
+    parapets: schedules.flatMap((schedule) => prefixRows(schedule, schedule.parapets)),
+    gutters: schedules.flatMap((schedule) => prefixRows(schedule, schedule.gutters)),
+    openings: schedules.flatMap((schedule) => prefixRows(schedule, schedule.openings)),
+    notes: [...new Set(schedules.flatMap((schedule) => schedule.notes))],
+  };
+  for (const field of SUMMED_SCHEDULE_FIELDS) {
+    combined[field] = schedules.reduce((sum, schedule) => sum + (Number(schedule[field]) || 0), 0);
+  }
+  return combined;
+}

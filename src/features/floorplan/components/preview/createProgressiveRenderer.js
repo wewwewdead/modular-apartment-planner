@@ -5,7 +5,12 @@ import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { IS_DESKTOP_APP } from '@/platform/desktopApp';
-import { refineSupersample } from './previewResolution';
+import {
+  cappedRefineSupersample,
+  estimateOffscreenBytes,
+  multisampleCountFor,
+  refineSupersample,
+} from './previewResolution';
 
 /**
  * The preview's image pipeline: ambient occlusion, tone mapping, and
@@ -53,7 +58,20 @@ import { refineSupersample } from './previewResolution';
  * Walk mode opts out of the step up — see `REFINE_PROFILES`. Someone on foot
  * crosses the settle threshold constantly, and paying for a resolution change
  * in both directions each time is what a walk feels as a stutter.
+ *
+ * "The canvas's own resolution" is the most a moving frame gets, not what it
+ * is always given: a GPU that cannot hold 60 fps at it is stepped down by the
+ * render-scale governor (`renderScaleGovernor.js`), which reads the frame rate
+ * actually reaching the screen. On a machine that holds 60 fps it never moves,
+ * and every frame is the one described above. Settled images are never
+ * governed — the picture you stop to look at is as sharp as ever.
  */
+
+/*
+ * The governor's stand-in when nobody supplies one: always the canvas's own
+ * resolution, occlusion as the style asks, no refine gap ever measured.
+ */
+const UNGOVERNED = Object.freeze({ scale: 1, occlusion: true, refineGapMs: null, snapshot: () => null });
 
 /**
  * How long a full refine is allowed to take before the sample count is cut.
@@ -155,9 +173,6 @@ const MSAA_PREFERRED_SAMPLES = 8;
  */
 const REFINE_SUPERSAMPLE = refineSupersample(typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1);
 
-/** Render scale of a moving frame: exactly the pixels the display can show. */
-const INTERACTIVE_SCALE = 1;
-
 /**
  * The refine profiles, and why walk mode gets its own.
  *
@@ -183,21 +198,41 @@ const INTERACTIVE_SCALE = 1;
  * dirty, so a walk-mode refine re-rendered a 4096² map every sample. Aiming at
  * the disc centre throughout lets the map be rendered once and then left alone,
  * at the cost of a penumbra nobody standing indoors was going to study.
+ *
+ * `followsInteractiveScale` keeps that promise once the render-scale governor
+ * has stepped moving frames below the canvas's resolution: refining at 1 would
+ * then be a step up on every stop and a step down on every start — the exact
+ * pair of reallocations the walk profile exists to remove. So a walk refines at
+ * whatever its moving frames render at, and the gear change stays a no-op. (A
+ * saved image is re-rendered at full resolution; see `repaint`.) Inspect mode
+ * never follows: its settled image is the product.
  */
 export const REFINE_PROFILES = Object.freeze({
-  inspect: Object.freeze({ supersample: REFINE_SUPERSAMPLE, maxSamples: Infinity, jitterSunDisc: true }),
+  inspect: Object.freeze({
+    supersample: REFINE_SUPERSAMPLE,
+    maxSamples: Infinity,
+    jitterSunDisc: true,
+    followsInteractiveScale: false,
+  }),
   // Enough samples to clean up the edges of a room in about a third of a second
   // and no more: a walker's next keystroke is never far away.
-  walk: Object.freeze({ supersample: 1, maxSamples: 12, jitterSunDisc: false }),
+  walk: Object.freeze({ supersample: 1, maxSamples: 12, jitterSunDisc: false, followsInteractiveScale: true }),
 });
 
-export function createProgressiveRenderer({ renderer, scene, camera: initialCamera, onBeforeSample = null }) {
+export function createProgressiveRenderer({
+  renderer,
+  scene,
+  camera: initialCamera,
+  onBeforeSample = null,
+  governor = UNGOVERNED,
+}) {
   let camera = initialCamera;
   // Device pixels of the default framebuffer — the size everything offscreen is
   // measured against, and the size the finished image is presented at.
   const canvasSize = renderer.getDrawingBufferSize(new THREE.Vector2());
   // Asking for more samples than the driver supports is not an error, it is
-  // silently ignored — so clamp rather than hope.
+  // silently ignored — so clamp rather than hope. This is the count at the
+  // canvas's own size; a supersampled refine takes fewer (`multisampleCountFor`).
   const msaaSamples = Math.min(MSAA_PREFERRED_SAMPLES, renderer.capabilities.maxSamples ?? 0);
 
   const composer = new EffectComposer(
@@ -216,8 +251,44 @@ export function createProgressiveRenderer({ renderer, scene, camera: initialCame
   const renderPass = new RenderPass(scene, camera);
   const gtaoPass = new GTAOPass(scene, camera, canvasSize.x, canvasSize.y);
   gtaoPass.output = GTAOPass.OUTPUT.Default;
+  // Its result stays in the write buffer; see `plainWriteBuffer` below.
+  gtaoPass.needsSwap = false;
   composer.addPass(renderPass);
   composer.addPass(gtaoPass);
+
+  /*
+   * One multisampled target, not two.
+   *
+   * The composer clones the target it is given for its second buffer, so both
+   * used to carry the scene's 8× MSAA — and the second one never draws the
+   * scene. Its only writers are GTAO's copy and multiply, two full-screen quads
+   * that cover every sample of every pixel with the same value, so each paid
+   * for eight samples per pixel and a resolve for an image a plain target
+   * holds exactly. And they only had to be multisampled because the buffers
+   * swapped every frame occlusion ran, so the scene landed in either one.
+   *
+   * So the write buffer is a plain half-float target, GTAO writes into it
+   * without swapping (`needsSwap = false` below), and the scene is always
+   * drawn into the same multisampled read buffer — which is also the target
+   * `getSceneRenderTarget` hands to the program warm-up, so what gets compiled
+   * is unchanged. The finished frame is the write buffer when occlusion ran and
+   * the read buffer when it did not (`blendIntoAccumulation`).
+   */
+  const plainWriteBuffer = new THREE.WebGLRenderTarget(canvasSize.x, canvasSize.y, {
+    type: THREE.HalfFloatType,
+    depthBuffer: false,
+    stencilBuffer: false,
+  });
+  plainWriteBuffer.texture.name = 'EffectComposer.rt1';
+  // Made after the passes so that everything is created in the order it
+  // always was: object ids come from `Math.random`, and so does GTAO's
+  // denoise noise, which is what lets a seeded render of the old and the new
+  // chain be compared pixel for pixel.
+  // The composer's own first target has never been drawn into, so it holds no
+  // GPU memory yet; disposing it is bookkeeping.
+  composer.renderTarget1.dispose();
+  composer.renderTarget1 = plainWriteBuffer;
+  composer.writeBuffer = plainWriteBuffer;
 
   const outputPass = new OutputPass();
   outputPass.renderToScreen = true;
@@ -231,14 +302,16 @@ export function createProgressiveRenderer({ renderer, scene, camera: initialCame
     depthBuffer: false,
     stencilBuffer: false,
     // Nearest while this is the same size as the canvas — which is every moving
-    // frame, and every frame at all in the browser build. Linear filtering at
-    // one texel per pixel cannot add information, but a half-texel misalignment
-    // anywhere in the chain would let it quietly soften every edge the
-    // accumulation just worked to resolve. Nearest cannot.
+    // frame on a machine that holds 60 fps, and every frame at all in the
+    // browser build there. Linear filtering at one texel per pixel cannot add
+    // information, but a half-texel misalignment anywhere in the chain would
+    // let it quietly soften every edge the accumulation just worked to
+    // resolve. Nearest cannot.
     //
-    // `applyRenderScale` switches it to linear for the supersampled case, where
-    // the blit is a genuine downsample and nearest would keep one texel out of
-    // every four.
+    // `applyRenderScale` switches it to linear whenever the sizes differ: the
+    // supersampled case, where the blit is a genuine downsample and nearest
+    // would keep one texel out of every four, and a governed moving frame
+    // below the canvas's size, where nearest would upscale it in blocks.
     minFilter: THREE.NearestFilter,
     magFilter: THREE.NearestFilter,
   });
@@ -279,6 +352,9 @@ export function createProgressiveRenderer({ renderer, scene, camera: initialCame
   // projection switch the first one also pays GTAO's recompile, and measuring
   // the budget on it would starve that view of samples for no reason.
   let budgetSample = 1;
+  // The sample the budget was measured on, its submit time, and the frame gaps
+  // seen since — see the refine budget in `renderSample`. Null between runs.
+  let budgetMeasure = null;
   let sampleIndex = 0;
   let targetSamples = MIN_SAMPLES;
   let lastFrameMs = 8;
@@ -306,12 +382,24 @@ export function createProgressiveRenderer({ renderer, scene, camera: initialCame
     renderScale = scale;
     renderSize.set(width, height);
 
+    // Fewer multisamples where the frame is already supersampled 2× — see
+    // `multisampleCountFor` for what that measured. Changed only here, where
+    // the chain is reallocated anyway; at the canvas's size and below it is the
+    // 8× it always was, so moving frames, and a refine that never leaves that
+    // size, never reallocate for it.
+    const sceneTarget = composer.readBuffer;
+    const samples = multisampleCountFor(scale, msaaSamples);
+    if (sceneTarget.samples !== samples) {
+      sceneTarget.samples = samples;
+      sceneTarget.dispose();
+    }
+
     // Sizing from the canvas's pixel count rather than from CSS pixels is what
     // makes this exact: at the usual desktop ratio the accumulation is exactly
     // twice the canvas in each axis, so a bilinear tap at a canvas pixel's
     // centre lands precisely between four texels and weights them 25% each —
     // a box filter, for free, in hardware, in linear light.
-    const filter = width > canvasSize.x ? THREE.LinearFilter : THREE.NearestFilter;
+    const filter = width !== canvasSize.x || height !== canvasSize.y ? THREE.LinearFilter : THREE.NearestFilter;
     if (accumulationTarget.texture.minFilter !== filter) {
       // Texture parameters of a render target are only read when its GL texture
       // is created, so force a new one rather than assume the resize will.
@@ -357,7 +445,10 @@ export function createProgressiveRenderer({ renderer, scene, camera: initialCame
   }
 
   function blendIntoAccumulation(weight) {
-    accumulationMaterial.uniforms.tDiffuse.value = composer.readBuffer.texture;
+    // Occlusion writes its result into the write buffer and leaves the scene
+    // where it was drawn; without it, the scene is the finished frame.
+    const finished = gtaoPass.enabled ? composer.writeBuffer : composer.readBuffer;
+    accumulationMaterial.uniforms.tDiffuse.value = finished.texture;
     accumulationMaterial.blendAlpha = weight;
     renderer.setRenderTarget(accumulationTarget);
     // The whole point of this pass is to read what is already in the target, so
@@ -383,7 +474,50 @@ export function createProgressiveRenderer({ renderer, scene, camera: initialCame
     outputPass.render(renderer, null, accumulationTarget, 0, false);
   }
 
-  applyRenderScale(INTERACTIVE_SCALE);
+  /**
+   * The scale a refinement sample renders at under the current profile: the
+   * supersampled size, or — for a profile that follows the moving frames —
+   * whatever the governor has them at.
+   */
+  function refineScale() {
+    if (refineProfile.followsInteractiveScale) return governor.scale;
+    // Capped in pixels: a 4K window would otherwise ask for 33 megapixels a
+    // sample (see `REFINE_PIXEL_CAP`).
+    return cappedRefineSupersample(refineProfile.supersample, canvasSize.x * canvasSize.y);
+  }
+
+  /** The body of a refinement sample, shared by the refine and by a capture. */
+  function drawSample() {
+    gtaoPass.enabled = style.ambientOcclusion;
+    onBeforeSample?.(sampleIndex, targetSamples);
+    jitterCamera(sampleIndex);
+    composer.render();
+
+    // First sample replaces whatever was there; later ones average in.
+    blendIntoAccumulation(hasAccumulation && sampleIndex > 0 ? 1 / (sampleIndex + 1) : 1);
+    present();
+
+    // Undo the jitter so picking, culling and the sun sprite all see the
+    // camera the user thinks they are looking through.
+    camera.updateProjectionMatrix();
+
+    sampleIndex += 1;
+    hasAccumulation = true;
+  }
+
+  /** The body of a moving frame, shared by `renderInteractive` and a capture. */
+  function drawInteractive() {
+    gtaoPass.enabled = style.ambientOcclusion && interactiveOcclusion && governor.occlusion;
+    onBeforeSample?.(-1, 1);
+    jitterCamera(-1);
+    composer.render();
+    blendIntoAccumulation(1);
+    present();
+    sampleIndex = 0;
+    hasAccumulation = true;
+  }
+
+  applyRenderScale(governor.scale);
 
   /*
    * The passes' own full-screen materials, as meshes a compile can see. Each
@@ -433,7 +567,7 @@ export function createProgressiveRenderer({ renderer, scene, camera: initialCame
         samples: sampleIndex,
         targetSamples,
         lastFrameMs: Math.round(lastFrameMs * 100) / 100,
-        multisampling: msaaSamples,
+        multisampling: composer.readBuffer.samples,
         drawingBuffer: canvasSize.toArray(),
         // What the last frame was actually rendered at, and how that compares
         // to the canvas — the two numbers that say whether this frame was a
@@ -443,6 +577,17 @@ export function createProgressiveRenderer({ renderer, scene, camera: initialCame
         // Which profile the refine is running under, so a walk-mode measurement
         // cannot be mistaken for an inspect-mode one.
         refineSupersample: refineProfile.supersample,
+        // What a moving frame is rendered at now, and why: 1 unless the
+        // governor has seen the frame rate fall below 60 fps.
+        interactiveScale: governor.scale,
+        governor: governor.snapshot(),
+        // What the offscreen chain at the current size is estimated to hold
+        // (`estimateOffscreenBytes`): the number that says whether a big
+        // window's refine fits on the GPU at all.
+        vramMB: Math.round(
+          estimateOffscreenBytes({ width: renderSize.x, height: renderSize.y, samples: composer.readBuffer.samples }) /
+            (1024 * 1024),
+        ),
       };
     },
 
@@ -537,11 +682,13 @@ export function createProgressiveRenderer({ renderer, scene, camera: initialCame
      * resize invalidates the picture, so the next frame is a moving one by
      * definition — and a window being dragged by its corner fires this dozens of
      * times, which is the last place to be allocating supersampled buffers.
+     * The interactive size is the governed one: a resize is no reason to forget
+     * what the frame rate has already said.
      */
     setSize() {
       renderer.getDrawingBufferSize(canvasSize);
       renderScale = 0;
-      applyRenderScale(INTERACTIVE_SCALE);
+      applyRenderScale(governor.scale);
       this.reset();
     },
 
@@ -553,24 +700,18 @@ export function createProgressiveRenderer({ renderer, scene, camera: initialCame
 
     /**
      * One frame while the camera is moving. No accumulation, and GTAO drops out
-     * if the last frame was too slow to afford it.
+     * if the last frame was too slow to afford it — by its own submit time, or
+     * because the governor has run out of resolution to give up first.
      */
     renderInteractive() {
       // Before the clock starts: on the first moving frame after a refine this
       // reallocates the offscreen chain, and charging a once-per-gesture
       // allocation to the frame-time estimate would drop occlusion out of the
       // whole drag that follows.
-      applyRenderScale(INTERACTIVE_SCALE);
+      applyRenderScale(governor.scale);
 
       const startedAt = performance.now();
-      gtaoPass.enabled = style.ambientOcclusion && interactiveOcclusion;
-      onBeforeSample?.(-1, 1);
-      jitterCamera(-1);
-      composer.render();
-      blendIntoAccumulation(1);
-      present();
-      sampleIndex = 0;
-      hasAccumulation = true;
+      drawInteractive();
       lastFrameMs = performance.now() - startedAt;
 
       smoothedFrameMs += (lastFrameMs - smoothedFrameMs) * FRAME_TIME_SMOOTHING;
@@ -609,37 +750,62 @@ export function createProgressiveRenderer({ renderer, scene, camera: initialCame
      * every settle frame after the first.
      */
     presizeForRefine() {
-      applyRenderScale(refineProfile.supersample);
+      applyRenderScale(refineScale());
     },
 
+    /*
+     * The refine budget, and what it is measured with.
+     *
+     * The sample count is `REFINE_BUDGET_MS` divided by what one sample costs.
+     * Submit time alone (`lastFrameMs`) is what JavaScript spent handing the
+     * sample to the GPU, which on a desktop GPU is a few milliseconds whatever
+     * the GPU then takes — so the division always hit the 128-sample cap, and a
+     * GPU that really needed 30 ms a sample stayed saturated for four seconds
+     * after every camera stop. The gap between two refine frames drawn back to
+     * back is what a sample costs on the wall clock, which is what the budget is
+     * written in. So once the gaps of the measured sample and the one after it
+     * are known (just before the third sample of a run is drawn, the fourth
+     * after a projection switch — never past `MIN_SAMPLES`), the count is
+     * re-cut on the larger of the submit time and the smaller of
+     * the two gaps. The smaller, because one gap can carry a stray long task —
+     * a React commit, a collection — and that is not what a sample costs.
+     *
+     * On a GPU that keeps up the gap is the display's own interval, and every
+     * style's cap is below what that buys (2500 / 16.7 ≈ 149 on the desktop,
+     * 900 / 16.7 ≈ 53 in a browser), so the count is unchanged.
+     */
     renderSample() {
       // The converged check has to come first: `applyRenderScale` resets the
       // sample count, so asking it anything at all after convergence would
       // restart the refine forever.
       if (sampleIndex >= targetSamples && hasAccumulation) return false;
 
+      // A run starts at zero, and a measurement from an earlier run is no
+      // evidence about this one.
+      if (sampleIndex === 0) budgetMeasure = null;
+      // The gap this frame closes is the one the previous sample took.
+      const gapMs = governor.refineGapMs;
+      if (budgetMeasure && gapMs !== null && sampleIndex - 1 >= budgetMeasure.sample) {
+        budgetMeasure.gaps.push(gapMs);
+        if (budgetMeasure.gaps.length === 2) {
+          const sampleMs = Math.max(budgetMeasure.submitMs, Math.min(...budgetMeasure.gaps), 1);
+          targetSamples = THREE.MathUtils.clamp(
+            Math.floor(REFINE_BUDGET_MS / sampleMs),
+            MIN_SAMPLES,
+            Math.min(style.maxSamples, refineProfile.maxSamples),
+          );
+          budgetMeasure = null;
+        }
+      }
+
       // A no-op on every sample but the first of a run — and, once the settle
       // frames have pre-sized the chain, on that one too. The first sample is
       // where a step up to the supersampled size is safe: sample zero replaces
       // the accumulation rather than averaging into it.
-      applyRenderScale(refineProfile.supersample);
+      applyRenderScale(refineScale());
 
       const startedAt = performance.now();
-      gtaoPass.enabled = style.ambientOcclusion;
-      onBeforeSample?.(sampleIndex, targetSamples);
-      jitterCamera(sampleIndex);
-      composer.render();
-
-      // First sample replaces whatever was there; later ones average in.
-      blendIntoAccumulation(hasAccumulation && sampleIndex > 0 ? 1 / (sampleIndex + 1) : 1);
-      present();
-
-      // Undo the jitter so picking, culling and the sun sprite all see the
-      // camera the user thinks they are looking through.
-      camera.updateProjectionMatrix();
-
-      sampleIndex += 1;
-      hasAccumulation = true;
+      drawSample();
       lastFrameMs = performance.now() - startedAt;
 
       if (sampleIndex === budgetSample) {
@@ -650,14 +816,35 @@ export function createProgressiveRenderer({ renderer, scene, camera: initialCame
           MIN_SAMPLES,
           Math.min(style.maxSamples, refineProfile.maxSamples),
         );
+        budgetMeasure = { sample: sampleIndex - 1, submitMs: lastFrameMs, gaps: [] };
       }
 
       return sampleIndex < targetSamples;
     },
 
-    /** Re-present the accumulated image without adding to it. */
-    repaint() {
+    /**
+     * Re-present the accumulated image without adding to it.
+     *
+     * `fullResolution` is for a saved image, which must never come out at a
+     * governed moving frame's reduced size. Only a walk can have settled there
+     * (`followsInteractiveScale`), and only once the governor has stepped down:
+     * then the same number of samples is rendered again at the canvas's own
+     * size before presenting, a one-off cost on the click that asked for it.
+     * Anywhere else the accumulation is already at least the canvas's size and
+     * this is the plain re-present it always was.
+     */
+    repaint({ fullResolution = false } = {}) {
       if (!hasAccumulation) return false;
+      if (fullResolution && renderScale < 1) {
+        const samples = sampleIndex;
+        applyRenderScale(1);
+        if (samples === 0) {
+          drawInteractive();
+        } else {
+          while (sampleIndex < samples) drawSample();
+        }
+        return true;
+      }
       present();
       return true;
     },

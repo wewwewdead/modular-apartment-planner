@@ -10,11 +10,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { act, cleanup, render } from '@testing-library/react';
 import { RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { ClipboardProvider } from '@/app/ClipboardProvider';
 import { ConfirmDialogProvider } from '@/ui/ConfirmDialog';
+import Modal from '@/ui/Modal';
 import { createColumn, createProject, createWall } from '@/domain/models';
 import { DEFAULT_ZOOM } from '@/domain/defaults';
 import { TOOLS } from '@/editor/tools';
@@ -49,7 +50,7 @@ function StoreProbe() {
   return null;
 }
 
-function renderCanvas(initialProject) {
+function renderCanvas(initialProject, extra = null) {
   const router = createMemoryRouter([
     {
       path: '/',
@@ -60,6 +61,7 @@ function renderCanvas(initialProject) {
               <DaylightStudyProvider>
                 <StoreProbe />
                 <SvgCanvas />
+                {extra}
               </DaylightStudyProvider>
             </FloorplanProvider>
           </ClipboardProvider>
@@ -249,6 +251,36 @@ describe('plan canvas keys and releases', () => {
     expect(floor0().columns[0].x).toBe(draggedX);
   });
 
+  it('a window blur mid column-drag ends the drag; moves after coming back do not move the column', () => {
+    const column = createColumn(2000, 2000, 300, 300, { height: 3000 });
+    const svg = renderCanvas(projectWith({ columns: [column] }));
+    const historyBefore = store().state.history.length;
+
+    act(() => {
+      svg.dispatchEvent(pointer('pointerdown', toClient(2000, 2000)));
+    });
+    hover(svg, 2400, 2000);
+    hover(svg, 2800, 2000);
+    const draggedX = floor0().columns[0].x;
+    expect(draggedX).toBeGreaterThan(2000);
+
+    // Alt-Tab away with the button held.
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+    });
+
+    expect(store().state.gesture.active).toBe(false);
+    expect(store().state.history).toHaveLength(historyBefore + 1);
+    expect(editorState().toolState.dragging).toBeFalsy();
+
+    // Back, button still held, dragging on: no longer a drag, and no undo
+    // step per frame either.
+    hover(svg, 4000, 2000);
+    hover(svg, 5000, 2000);
+    expect(floor0().columns[0].x).toBe(draggedX);
+    expect(store().state.history).toHaveLength(historyBefore + 1);
+  });
+
   it('the capture a normal release gives up does not end the drag a second time', () => {
     const wall = createWall({ x: 0, y: 0 }, { x: 8000, y: 0 });
     const svg = renderCanvas(projectWith({ walls: [wall] }));
@@ -366,6 +398,93 @@ describe('plan canvas keys and releases', () => {
 
       expect(svg.style.cursor).not.toBe('grab');
     });
+  });
+
+  it('an Escape a dialog takes does not also cancel the wall being drawn behind it', () => {
+    function DialogOverCanvas() {
+      const [open, setOpen] = useState(true);
+      return open ? (
+        <Modal title="Rename" onClose={() => setOpen(false)}>
+          <p>Dialog body</p>
+        </Modal>
+      ) : null;
+    }
+    const svg = renderCanvas(projectWith(), <DialogOverCanvas />);
+    setTool(TOOLS.WALL);
+    // The first point of a wall: the run is waiting for its second click.
+    click(svg, 1000, 1000);
+    expect(editorState().toolState.start).toBeTruthy();
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+
+    // A real key press is cancelable; the dialog marks the one it takes.
+    const escape = () =>
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      });
+    escape();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(editorState().toolState.start).toBeTruthy();
+
+    // With the dialog gone, Escape is the plan's again.
+    escape();
+    expect(editorState().toolState.start).toBeFalsy();
+  });
+
+  it('shows a refused wall edit once, not again each time the canvas comes back', () => {
+    const wall = (id, x1, y1, x2, y2) => ({ ...createWall({ x: x1, y: y1 }, { x: x2, y: y2 }), id });
+    const project = projectWith({
+      walls: [
+        wall('bottom', 0, 0, 8000, 0),
+        wall('right', 8000, 0, 8000, 3000),
+        wall('top', 8000, 3000, 0, 3000),
+        wall('left', 0, 3000, 0, 0),
+        wall('divider', 4000, 0, 4000, 3000),
+      ],
+    });
+    const canvasShown = { set: null };
+    function ToggledCanvas() {
+      const [shown, setShown] = useState(true);
+      useEffect(() => {
+        canvasShown.set = setShown;
+      }, []);
+      return shown ? <SvgCanvas /> : null;
+    }
+    const router = createMemoryRouter([
+      {
+        path: '/',
+        element: (
+          <ConfirmDialogProvider>
+            <ClipboardProvider>
+              <FloorplanProvider initialProject={project}>
+                <DaylightStudyProvider>
+                  <StoreProbe />
+                  <ToggledCanvas />
+                </DaylightStudyProvider>
+              </FloorplanProvider>
+            </ClipboardProvider>
+          </ConfirmDialogProvider>
+        ),
+      },
+    ]);
+    render(<RouterProvider router={router} />);
+
+    // Sliding the divider off the walls it tees into is refused.
+    act(() =>
+      store().dispatch({
+        type: 'WALL_UPDATE',
+        floorId: floor0().id,
+        wall: { id: 'divider', start: { x: 9500, y: 0 }, end: { x: 9500, y: 3000 } },
+      }),
+    );
+    expect(editorState().lastRejection).toBeTruthy();
+    expect(editorState().statusMessage).toBeTruthy();
+    act(() => store().dispatch({ type: 'CLEAR_STATUS_MESSAGE' }));
+
+    // Away to another view and back: the old refusal is not news.
+    act(() => canvasShown.set(false));
+    act(() => canvasShown.set(true));
+    expect(editorState().lastRejection).toBeTruthy();
+    expect(editorState().statusMessage).toBeFalsy();
   });
 
   it('plan shortcuts stay quiet behind an open wall detail editor', () => {

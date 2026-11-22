@@ -2,6 +2,7 @@ import { deriveFeasibilityComparison, deriveFeasibilityEconomics } from './feasi
 import { createQuantityProfile, deriveQuantityTakeoff } from './quantityTakeoff';
 import { deriveServicesRealization } from './servicesRealization';
 import { DESIGN_CONFIDENCE } from './trustModels';
+import { memoizePerProject } from './projectMemo';
 
 export const DEFAULT_COST_REALIZATION_PROFILE = Object.freeze({
   id: 'mu_ph_owner_feasibility_realization_v1',
@@ -286,7 +287,21 @@ export function realizeCostBaseline(project, profileOverrides = {}) {
   };
 }
 
+/*
+ * Memoised per project object (projectMemo.js): the store, the document
+ * package, the documentation realization (three times) and the validators all
+ * ask for it within one edit, and each ask re-priced every scenario to sign the
+ * takeoff basis.
+ */
+const costRealizationPerProject = memoizePerProject('deriveCostRealization', (project) =>
+  computeCostRealization(project),
+);
+
 export function deriveCostRealization(project) {
+  return costRealizationPerProject(project);
+}
+
+function computeCostRealization(project) {
   const building = project?.building || {};
   const profile = createCostRealizationProfile(building.costRealizationProfile);
   const state = createCostRealizationState(building.costRealization);

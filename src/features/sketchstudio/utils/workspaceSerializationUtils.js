@@ -61,12 +61,14 @@ function normalizeUi(ui, document) {
   };
 }
 
-export function buildSketchWorkspaceSnapshot({ document, viewport, ui } = {}) {
+// `options.reuseNormalized` is normalizeSketchDocument's: for the live
+// document, whose fields the reducer has already normalised.
+export function buildSketchWorkspaceSnapshot({ document, viewport, ui } = {}, options = {}) {
   if (!validateBasicDocumentShape(document)) {
     throw new Error('Invalid SketchStudio document shape.');
   }
 
-  const normalizedDocument = normalizeSketchDocument(document);
+  const normalizedDocument = normalizeSketchDocument(document, { reuseNormalized: options.reuseNormalized === true });
 
   return {
     kind: SKETCH_WORKSPACE_KIND,
@@ -78,8 +80,8 @@ export function buildSketchWorkspaceSnapshot({ document, viewport, ui } = {}) {
   };
 }
 
-export function serializeComparableSketchWorkspace(workspace) {
-  return JSON.stringify(buildSketchWorkspaceSnapshot(workspace));
+export function serializeComparableSketchWorkspace(workspace, options = {}) {
+  return JSON.stringify(buildSketchWorkspaceSnapshot(workspace, options));
 }
 
 export function serializeSketchWorkspace(workspace, options = {}) {

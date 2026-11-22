@@ -254,7 +254,7 @@ function createRoofMeshObject(descriptor, materialPalette) {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.computeVertexNormals();
 
-  const mesh = createMesh(geometry, materialPalette[descriptor.materialKey]);
+  const mesh = createMesh(geometry, paletteMaterialFor(materialPalette, descriptor.materialKey));
   addOutline(mesh, materialPalette);
   return mesh;
 }
@@ -384,7 +384,7 @@ function createVerticalPolygonObject(descriptor, materialPalette) {
   );
   geometry.translate(0, 0, -thickness / 2);
 
-  const mesh = createMesh(geometry, materialPalette[descriptor.materialKey]);
+  const mesh = createMesh(geometry, paletteMaterialFor(materialPalette, descriptor.materialKey));
   mesh.position.copy(planPointToWorld(origin, origin.elevation || 0));
   mesh.rotation.y = planAngleToWorldRotation(Math.atan2(xAxis.y, xAxis.x));
   addOutline(mesh, materialPalette);
@@ -401,7 +401,7 @@ function createStairObject(descriptor, materialPalette) {
       Math.max(descriptor.riserHeight, 1),
       Math.max(descriptor.width, 1),
     );
-    const step = createMesh(geometry, materialPalette[descriptor.materialKey]);
+    const step = createMesh(geometry, paletteMaterialFor(materialPalette, descriptor.materialKey));
     step.position.set(descriptor.treadDepth * (index + 0.5), descriptor.riserHeight * (index + 0.5), 0);
     addOutline(step, materialPalette);
     group.add(step);
@@ -446,7 +446,7 @@ function createSegment3DObject(descriptor, materialPalette) {
   const crossSectionHeight = Math.max(descriptor.crossSection?.height || descriptor.thickness || 1, 1);
   const crossSectionWidth = Math.max(descriptor.crossSection?.width || descriptor.thickness || 1, 1);
   const geometry = taggedBoxGeometry(length, crossSectionHeight, crossSectionWidth);
-  const mesh = createMesh(geometry, materialPalette[descriptor.materialKey]);
+  const mesh = createMesh(geometry, paletteMaterialFor(materialPalette, descriptor.materialKey));
   const midpoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
   const quaternion = segmentQuaternion(direction, descriptor.up);
 
@@ -570,7 +570,7 @@ function createDoorObject(descriptor, materialPalette) {
 
   const leaf = createMesh(
     taggedBoxGeometry(Math.max(width, 1), Math.max(height, 1), Math.max(depth, 1)),
-    materialPalette[descriptor.materialKey],
+    paletteMaterialFor(materialPalette, descriptor.materialKey),
   );
   addOutline(leaf, materialPalette);
   group.add(leaf);
@@ -633,7 +633,7 @@ function createDoorObject(descriptor, materialPalette) {
 
 function addBox(group, materialKey, sx, sy, sz, px, py, pz, materialPalette) {
   const geo = taggedBoxGeometry(Math.max(sx, 1), Math.max(sy, 1), Math.max(sz, 1));
-  const mesh = createMesh(geo, materialPalette[materialKey]);
+  const mesh = createMesh(geo, paletteMaterialFor(materialPalette, materialKey));
   mesh.position.set(px, py, pz);
   addOutline(mesh, materialPalette);
   group.add(mesh);
@@ -642,7 +642,7 @@ function addBox(group, materialKey, sx, sy, sz, px, py, pz, materialPalette) {
 
 function addCylinder(group, materialKey, rTop, rBot, h, segs, px, py, pz, materialPalette) {
   const geo = taggedCylinderGeometry(Math.max(rTop, 0.5), Math.max(rBot, 0.5), Math.max(h, 0.5), segs);
-  const mesh = createMesh(geo, materialPalette[materialKey]);
+  const mesh = createMesh(geo, paletteMaterialFor(materialPalette, materialKey));
   mesh.position.set(px, py, pz);
   addOutline(mesh, materialPalette);
   group.add(mesh);
@@ -1861,8 +1861,46 @@ export function buildPreviewObjectRoot(sceneDescriptor, materialPalette) {
 }
 
 /**
+ * The descriptors a selection overlay is built from, in the order it builds
+ * them: every visible entry of `meshMap` the selection matches (all of a truss
+ * system, every segment of a wall).
+ *
+ * Split out of `buildSelectionOverlay` so a caller can tell, without building
+ * anything, whether a rebuilt scene would give the same overlay it already has
+ * (`sameOverlayDescriptors`) — during a rebuild that did not touch the selected
+ * object, it would.
+ */
+export function selectionOverlayDescriptors(meshMap, selection) {
+  if (!(selection?.selectedId || selection?.part?.id) || !meshMap?.size) return [];
+  const descriptors = [];
+  for (const [, entry] of meshMap) {
+    if (!entry.floorVisible) continue;
+    // A luminaire's light answers to the same id as its fitting, and there is
+    // nothing to tint on a light — building one here would put a second lamp in
+    // the room for as long as the fixture stayed selected.
+    if (entry.descriptor.geometry === 'ceilingLightSource') continue;
+    if (!matchesSelection(entry.descriptor, selection)) continue;
+    descriptors.push(entry.descriptor);
+  }
+  return descriptors;
+}
+
+/**
+ * Whether two lists from `selectionOverlayDescriptors` would build the same
+ * overlay: the same descriptors, structurally, in the same order — the same
+ * test the scene cache uses to carry a mesh over.
+ */
+export function sameOverlayDescriptors(previous, next) {
+  if (!previous || !next || previous.length !== next.length) return false;
+  for (let index = 0; index < next.length; index += 1) {
+    if (!descriptorsEqual(previous[index], next[index])) return false;
+  }
+  return true;
+}
+
+/**
  * Build selection overlay meshes for the given selection.
- * Iterates meshMap and finds ALL matching descriptors (handles truss systems, multi-segment walls).
+ * Builds one overlay object per descriptor `selectionOverlayDescriptors` finds.
  * Returns a Group of overlay meshes with renderOrder=1 and LessEqual depth for visual priority.
  */
 export function buildSelectionOverlay(meshMap, selection, materialPalette, accentName = 'plan') {
@@ -1873,15 +1911,8 @@ export function buildSelectionOverlay(meshMap, selection, materialPalette, accen
   overlayGroup.name = 'selection-overlay';
   overlayGroup.renderOrder = 1;
 
-  for (const [, entry] of meshMap) {
-    if (!entry.floorVisible) continue;
-    // A luminaire's light answers to the same id as its fitting, and there is
-    // nothing to tint on a light — building one here would put a second lamp in
-    // the room for as long as the fixture stayed selected.
-    if (entry.descriptor.geometry === 'ceilingLightSource') continue;
-    if (!matchesSelection(entry.descriptor, selection)) continue;
-
-    const overlayObject = createObjectForDescriptor(entry.descriptor, materialPalette);
+  for (const descriptor of selectionOverlayDescriptors(meshMap, selection)) {
+    const overlayObject = createObjectForDescriptor(descriptor, materialPalette);
     // The accent outline is part of the highlight — the green edge on a selected
     // wall, the orange one on a selected board — and it is drawn in every style,
     // unlike the model's own edge overlay. So the overlay always cuts its lines,

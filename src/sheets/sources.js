@@ -1,5 +1,5 @@
 import { buildElevationAnnotationScene } from '@/elevations/annotations';
-import { buildRoofOnlyElevationScene } from '@/elevations/scene';
+import { buildRoofsOnlyElevationScene } from '@/elevations/scene';
 import { getProjectElevationScene } from '@/elevations/elevationSceneCache';
 import { getDefaultActiveFloorId, resolveProjectFloor } from '@/domain/floorModels';
 import { resolveRoofSectionCut } from '@/domain/roofModels';
@@ -17,7 +17,8 @@ import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { buildRoofPlanBounds } from '@/geometry/roofPlanGeometry';
 import { buildRoofPlanScene } from '@/geometry/roofPlanScene';
 import { buildFloorTrussGeometry, buildTrussDetailScene } from '@/geometry/trussGeometry';
-import { buildRoofScheduleSummary } from '@/roof/roofSchedule';
+import { buildRoofsScheduleSummary } from '@/roof/roofSchedule';
+import { getProjectRoofs } from '@/domain/projectRoofs';
 import { buildRoofScheduleLayout } from '@/roof/roofScheduleLayout';
 import { getProjectSectionScene } from '@/sections/sectionSceneCache';
 import { buildBuildingReport } from '@/domain/documentPackage';
@@ -254,8 +255,8 @@ function normalizeRoofElevationSourceView(sourceView) {
 }
 
 function buildRoofElevationSource(project, sourceView) {
-  const roofSystem = project?.roofSystem || null;
-  if (!roofSystem) {
+  const roofSystems = getProjectRoofs(project);
+  if (!roofSystems.length) {
     return {
       kind: 'empty',
       title: 'Roof Elevation',
@@ -264,11 +265,11 @@ function buildRoofElevationSource(project, sourceView) {
     };
   }
 
-  const scene = buildRoofOnlyElevationScene(roofSystem, normalizeRoofElevationSourceView(sourceView));
+  const scene = buildRoofsOnlyElevationScene(roofSystems, normalizeRoofElevationSourceView(sourceView));
   return {
     kind: 'roof_elevation',
     title: scene.title,
-    roofSystem,
+    roofSystems,
     viewMode: sourceView,
     scene,
     bounds: sceneBoundsToRenderBounds(scene),
@@ -304,9 +305,24 @@ function build3DPreviewSource(project, floor) {
   };
 }
 
+// The roof sources draw every roof of the building in the one view, titled by
+// the roof's own name only when there is just the one.
+function roofSourceTitle(roofSystems, suffix, fallback) {
+  return roofSystems.length === 1 && roofSystems[0].name ? `${roofSystems[0].name} ${suffix}` : fallback;
+}
+
+function unionBounds(boundsList) {
+  return {
+    minX: Math.min(...boundsList.map((bounds) => bounds.minX)),
+    maxX: Math.max(...boundsList.map((bounds) => bounds.maxX)),
+    minY: Math.min(...boundsList.map((bounds) => bounds.minY)),
+    maxY: Math.max(...boundsList.map((bounds) => bounds.maxY)),
+  };
+}
+
 function buildRoofPlanSource(project) {
-  const roofSystem = project?.roofSystem || null;
-  if (!roofSystem) {
+  const roofSystems = getProjectRoofs(project);
+  if (!roofSystems.length) {
     return {
       kind: 'empty',
       title: 'Roof Plan',
@@ -317,15 +333,15 @@ function buildRoofPlanSource(project) {
 
   return {
     kind: 'roof_plan',
-    title: roofSystem.name ? `${roofSystem.name} Plan` : 'Roof Plan',
-    roofSystem,
-    bounds: buildRoofPlanScene(roofSystem).bounds,
+    title: roofSourceTitle(roofSystems, 'Plan', 'Roof Plan'),
+    roofSystems,
+    bounds: unionBounds(roofSystems.map((roofSystem) => buildRoofPlanScene(roofSystem).bounds)),
   };
 }
 
 function buildRoofDrainageSource(project) {
-  const roofSystem = project?.roofSystem || null;
-  if (!roofSystem) {
+  const roofSystems = getProjectRoofs(project);
+  if (!roofSystems.length) {
     return {
       kind: 'empty',
       title: 'Roof Drainage',
@@ -336,9 +352,9 @@ function buildRoofDrainageSource(project) {
 
   return {
     kind: 'roof_drainage',
-    title: roofSystem.name ? `${roofSystem.name} Drainage` : 'Roof Drainage',
-    roofSystem,
-    bounds: buildRoofPlanBounds(roofSystem),
+    title: roofSourceTitle(roofSystems, 'Drainage', 'Roof Drainage'),
+    roofSystems,
+    bounds: unionBounds(roofSystems.map((roofSystem) => buildRoofPlanBounds(roofSystem))),
   };
 }
 
@@ -413,8 +429,8 @@ function buildTrussDetailSource(project, sourceFloorId, sourceRefId = null) {
 }
 
 function buildRoofSectionSource(project, sourceFloorId, sourceRefId) {
-  const roofSystem = project?.roofSystem || null;
-  if (!roofSystem) {
+  const roofSystems = getProjectRoofs(project);
+  if (!roofSystems.length) {
     return {
       kind: 'empty',
       title: 'Roof Section',
@@ -437,7 +453,7 @@ function buildRoofSectionSource(project, sourceFloorId, sourceRefId) {
   return {
     kind: 'roof_section',
     title: `Roof ${sectionCut.label || 'Section'}`,
-    roofSystem,
+    roofSystems,
     sourceFloor: floor,
     scene,
     bounds: sceneBoundsToRenderBounds(scene),
@@ -445,8 +461,8 @@ function buildRoofSectionSource(project, sourceFloorId, sourceRefId) {
 }
 
 function buildRoofScheduleSource(project) {
-  const roofSystem = project?.roofSystem || null;
-  if (!roofSystem) {
+  const roofSystems = getProjectRoofs(project);
+  if (!roofSystems.length) {
     return {
       kind: 'empty',
       title: 'Roof Schedule',
@@ -455,13 +471,13 @@ function buildRoofScheduleSource(project) {
     };
   }
 
-  const schedule = buildRoofScheduleSummary(roofSystem);
+  const schedule = buildRoofsScheduleSummary(roofSystems);
   const layout = buildRoofScheduleLayout(schedule, { showTitle: false });
 
   return {
     kind: 'roof_schedule',
     title: schedule.title,
-    roofSystem,
+    roofSystems,
     schedule,
     bounds: layout.bounds,
   };

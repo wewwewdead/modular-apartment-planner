@@ -1,6 +1,7 @@
 import { deriveAreaLedger } from './siteModels';
 import { createQuantityProfile, deriveQuantityTakeoff } from './quantityTakeoff';
 import { DESIGN_CONFIDENCE } from './trustModels';
+import { memoizePerProject } from './projectMemo';
 
 function percentAmount(base, percent) {
   return base * ((Number(percent) || 0) / 100);
@@ -19,7 +20,20 @@ function issue(ruleId, severity, message, entityRefs, inputs, resultKind = 'conf
   };
 }
 
+/*
+ * Memoised per project object and scenario (projectMemo.js): one settled edit
+ * prices the active scenario for the store, the cost realization, the document
+ * package and the validators, and every scenario again for each comparison.
+ */
+const feasibilityEconomicsPerProject = memoizePerProject('deriveFeasibilityEconomics', (project, scenarioId) =>
+  computeFeasibilityEconomics(project, scenarioId),
+);
+
 export function deriveFeasibilityEconomics(project, scenarioId = null) {
+  return feasibilityEconomicsPerProject(project, scenarioId || null);
+}
+
+function computeFeasibilityEconomics(project, scenarioId) {
   const profile = createQuantityProfile(project?.building?.quantityProfile);
   const resolvedScenarioId = scenarioId || profile.activeScenarioId || profile.scenarios[0]?.id || null;
   const scenario = profile.scenarios.find((entry) => entry.id === resolvedScenarioId) || null;

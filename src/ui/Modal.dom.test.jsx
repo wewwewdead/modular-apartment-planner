@@ -53,6 +53,56 @@ describe('Modal keyboard isolation', () => {
     window.removeEventListener('keydown', behind);
   });
 
+  it('closes only the dialog on top when one is open over another', () => {
+    const closeBelow = vi.fn();
+    const closeTop = vi.fn();
+    const below = render(
+      <Modal title="Open Project" onClose={closeBelow}>
+        <p>drafts</p>
+      </Modal>,
+    );
+    const top = render(
+      <Modal title="Confirm" onClose={closeTop}>
+        <button type="button">OK</button>
+      </Modal>,
+    );
+
+    press(top.getByText('OK'), 'Escape');
+    expect(closeTop).toHaveBeenCalledTimes(1);
+    expect(closeBelow).not.toHaveBeenCalled();
+
+    // With the confirm gone, the next Escape is the dialog under it.
+    top.unmount();
+    press(document.body, 'Escape');
+    expect(closeBelow).toHaveBeenCalledTimes(1);
+    expect(closeTop).toHaveBeenCalledTimes(1);
+    below.unmount();
+  });
+
+  it('marks the Escape it used, for listeners that were there before it opened', () => {
+    // A window listener added before the dialog (focus mode's Escape) hears the
+    // press first; it can only stand down if the press already says it was used.
+    let seenPrevented = null;
+    const earlier = (event) => {
+      seenPrevented = event.defaultPrevented;
+    };
+    window.addEventListener('keydown', earlier);
+    const view = render(
+      <Modal title="Open Project" onClose={() => {}}>
+        <button type="button">OK</button>
+      </Modal>,
+    );
+
+    const event = press(view.getByText('OK'), 'Escape');
+    expect(seenPrevented).toBe(true);
+    expect(event.defaultPrevented).toBe(true);
+
+    view.unmount();
+    // No dialog open: an Escape is nobody's but the app's.
+    expect(press(document.body, 'Escape').defaultPrevented).toBe(false);
+    window.removeEventListener('keydown', earlier);
+  });
+
   it('is announced as a modal dialog', () => {
     const view = render(
       <Modal title="Open Project" onClose={() => {}}>

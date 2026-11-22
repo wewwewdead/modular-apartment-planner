@@ -91,7 +91,7 @@ describe('strokeBends', () => {
     });
     expect(both.refusals.map((r) => r.code)).toContain('not-in-line');
     expect(both.refusals.find((r) => r.code === 'not-in-line').message).toBe(
-      'The sheet is already bent between these flanges, so they are no longer in line. Bend them one at a time: click a segment on the flat blank to leave it out.',
+      'The sheet is already bent between these flanges, so they are no longer in line. Bend them one at a time: click a piece to bend only it.',
     );
     // By two points, one tab each: accepted.
     for (const line of lines) {

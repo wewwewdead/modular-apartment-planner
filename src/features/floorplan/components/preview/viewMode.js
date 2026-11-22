@@ -84,6 +84,9 @@ export const MATERIAL_TIERS = Object.freeze({
   roofDownpipe: 'skin',
   roofSoffit: 'skin',
   gableInfill: 'skin',
+  // Each roof and truss system draws in its own copy of the roof keys above
+  // (`roof_metal@<roof id>`); those state their tier on the material
+  // (`materials.js` OWNER_MATERIAL_TIER), which is why every one of them is skin.
   parapet: 'skin',
   door: 'skin',
   windowFrame: 'skin',
@@ -208,7 +211,9 @@ export function isSeeThrough(mode) {
  *
  * A material that states its own tier is read first: the wall-finish materials
  * the palette builds on demand (`paletteMaterialFor`) are keyed by a colour
- * string no table could list, so each one carries `userData.tier` instead.
+ * string no table could list, so each one carries `userData.tier` instead —
+ * as do each roof's and each truss system's own copies of the roof keys
+ * (`roof_metal@<roof id>`, docs/multi-roof.md §6), keyed by an id.
  */
 export function tierOf(material) {
   if (material?.userData?.tier) return material.userData.tier;

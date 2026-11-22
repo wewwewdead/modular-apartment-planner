@@ -3,6 +3,7 @@ import { generateId } from '@/domain/ids';
 import { createWall } from '@/domain/models';
 import { WALL_FRAMING_MODES } from '@/domain/wallFit';
 import { TOOLS } from '@/editor/tools';
+import { enterTool } from '@/editor/toolSession';
 import { MIN_REPORTED_OVERHANG_MM, overhangRunRetractionMm } from '@/geometry/floorOverhang';
 import { distanceToSegment, nearestPointOnSegment } from '@/geometry/line';
 import { distance } from '@/geometry/point';
@@ -140,11 +141,10 @@ export function applyCantilever({ slab, floorId, pick, distanceMm, dispatch, edi
   // put back — you are meant to land on it, look at what you just made, and
   // keep going. Both SET_TOOL and the reselect wipe the status line, so the
   // report of what happened is said last.
-  editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SELECT });
-  editorDispatch({ type: 'SELECT_OBJECT', id: slab.id, objectType: 'slab' });
-  editorDispatch({
-    type: 'SET_STATUS_MESSAGE',
-    message: `Cantilever applied — ${Math.round(reach)} mm ${describeCantileverBasis(pick.support)}.`,
+  enterTool(editorDispatch, {
+    tool: TOOLS.SELECT,
+    selection: { id: slab.id, objectType: 'slab' },
+    statusMessage: `Cantilever applied — ${Math.round(reach)} mm ${describeCantileverBasis(pick.support)}.`,
   });
 
   return true;
@@ -516,11 +516,10 @@ export function applyProjectingBay({
   // Same landing as the cantilever: back on the plate, looking at what was just
   // made. Both SET_TOOL and the reselect wipe the status line, so the report of
   // what happened is said last.
-  editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SELECT });
-  editorDispatch({ type: 'SELECT_OBJECT', id: slab.id, objectType: 'slab' });
-  editorDispatch({
-    type: 'SET_STATUS_MESSAGE',
-    message: `Bay added — ${Math.round(width)} mm wide, projecting ${Math.round(reach)} mm, with three walls.`,
+  enterTool(editorDispatch, {
+    tool: TOOLS.SELECT,
+    selection: { id: slab.id, objectType: 'slab' },
+    statusMessage: `Bay added — ${Math.round(width)} mm wide, projecting ${Math.round(reach)} mm, with three walls.`,
   });
 
   return true;
@@ -553,13 +552,15 @@ export function createCantileverHandler({
    */
   function standDown() {
     resetCantileverToolState(editorDispatch);
-    editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SELECT });
+    enterTool(editorDispatch, { tool: TOOLS.SELECT });
   }
 
   function returnToSelect(slab) {
     resetCantileverToolState(editorDispatch);
-    editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SELECT });
-    if (slab) editorDispatch({ type: 'SELECT_OBJECT', id: slab.id, objectType: 'slab' });
+    enterTool(editorDispatch, {
+      tool: TOOLS.SELECT,
+      selection: slab ? { id: slab.id, objectType: 'slab' } : undefined,
+    });
   }
 
   return {

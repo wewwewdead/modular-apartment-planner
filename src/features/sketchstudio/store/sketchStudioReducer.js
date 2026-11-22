@@ -21,6 +21,7 @@ import {
   groupMembershipUnchanged,
   removeEntitiesFromGroups,
 } from '../utils/groupUtils';
+import { HOVER_DRAFT_TOOLS } from '../hooks/sketchConstants';
 import { SKETCH_STUDIO_ACTIONS } from './sketchStudioActions';
 
 function emptySnap() {
@@ -32,6 +33,23 @@ function emptySnap() {
     sourceKey: null,
     snapType: null,
   };
+}
+
+function isSameSnapPoint(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return Object.is(a.x, b.x) && Object.is(a.y, b.y);
+}
+
+// Two snap results that would draw the same marker and report the same source.
+function isSameSnap(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((key) =>
+    key === 'point' ? isSameSnapPoint(a.point, b.point) : Object.hasOwn(b, key) && Object.is(a[key], b[key]),
+  );
 }
 
 function emptySelectionBox() {
@@ -77,6 +95,18 @@ function emptyDraft() {
 
 function getIdleMode(draftType) {
   return draftType ? 'drawing' : 'idle';
+}
+
+// Each document a drag frame writes, mapped to the document the drag frames
+// grew from (the last one written by anything else). A frame differs from that
+// origin only in its entities, the rest being carried through normalisation,
+// so the dirty check can compare the entities alone while the drag lasts
+// (hooks/useSketchPersistence.js).
+const dragFrameOrigins = new WeakMap();
+
+/** The document the drag frames that wrote `document` started from, or null. */
+export function getDragFrameOrigin(document) {
+  return (document && dragFrameOrigins.get(document)) ?? null;
 }
 
 function buildResolvedDocumentState(document) {
@@ -153,6 +183,13 @@ function restoreUndoableSnapshot(state, snapshot) {
 
   const nextDocument = snapshot.document ?? state.document;
   const resolvedDocumentState = withResolvedDocumentState(buildResolvedDocumentState(nextDocument));
+  // A hover tool's draft holds the tool's setting (the fillet radius, the
+  // chamfer distance) beside the preview. Undo takes back the document, not
+  // the setting: the preview goes, the draft and its typed value stay, and the
+  // next pointer move rebuilds the preview from them.
+  const nextDraft = HOVER_DRAFT_TOOLS.has(state.draft.type)
+    ? { ...emptyDraft(), type: state.draft.type, precisionInput: state.draft.precisionInput }
+    : emptyDraft();
 
   return {
     ...state,
@@ -167,13 +204,11 @@ function restoreUndoableSnapshot(state, snapshot) {
     },
     interaction: {
       ...state.interaction,
-      mode: 'idle',
-      isPointerDown: false,
+      mode: getIdleMode(nextDraft.type),
       pointerId: null,
       panStartScreen: null,
       panStartViewport: null,
       handleDrag: null,
-      anchorDrag: null,
       transform: null,
       suppressNextClick: false,
     },
@@ -184,7 +219,7 @@ function restoreUndoableSnapshot(state, snapshot) {
     hover: {
       hoveredId: null,
     },
-    draft: emptyDraft(),
+    draft: nextDraft,
     snap: emptySnap(),
   };
 }
@@ -234,12 +269,10 @@ export default function sketchStudioReducer(state, action) {
         interaction: {
           ...state.interaction,
           mode: 'idle',
-          isPointerDown: false,
           pointerId: null,
           panStartScreen: null,
           panStartViewport: null,
           handleDrag: null,
-          anchorDrag: null,
           transform: null,
         },
         selection: {
@@ -277,22 +310,12 @@ export default function sketchStudioReducer(state, action) {
         viewport: action.payload,
       };
 
-    case SKETCH_STUDIO_ACTIONS.SET_POINTER_DOWN:
-      return {
-        ...state,
-        interaction: {
-          ...state.interaction,
-          isPointerDown: action.payload,
-        },
-      };
-
     case SKETCH_STUDIO_ACTIONS.START_PAN:
       return {
         ...state,
         interaction: {
           ...state.interaction,
           mode: 'panning',
-          isPointerDown: true,
           pointerId: action.payload.pointerId,
           // Only a left-button release is followed by a click, so how a pan ends
           // depends on which button started it.
@@ -327,7 +350,6 @@ export default function sketchStudioReducer(state, action) {
         interaction: {
           ...state.interaction,
           mode: getIdleMode(state.draft.type),
-          isPointerDown: false,
           pointerId: null,
           panButton: null,
           panStartScreen: null,
@@ -336,6 +358,15 @@ export default function sketchStudioReducer(state, action) {
       };
 
     case SKETCH_STUDIO_ACTIONS.SYNC_POINTER:
+      // The cursor itself is shown from the cursor channel
+      // (hooks/cursorChannel.js), so a move that changes neither the hover nor
+      // the snap changes nothing anyone reads: keep the state and React skips
+      // the render. `cursorScreen` / `cursorWorld` then hold the last position
+      // that came with a hover or snap change.
+      if (state.hover.hoveredId === action.payload.hoveredId && isSameSnap(state.snap, action.payload.snap)) {
+        return state;
+      }
+
       return {
         ...state,
         interaction: {
@@ -346,7 +377,8 @@ export default function sketchStudioReducer(state, action) {
         hover: {
           hoveredId: action.payload.hoveredId,
         },
-        snap: action.payload.snap,
+        // An equal snap keeps its object, so what draws it is not re-rendered.
+        snap: isSameSnap(state.snap, action.payload.snap) ? state.snap : action.payload.snap,
       };
 
     case SKETCH_STUDIO_ACTIONS.START_SELECTION_BOX:
@@ -355,7 +387,6 @@ export default function sketchStudioReducer(state, action) {
         interaction: {
           ...state.interaction,
           mode: 'selection-box',
-          isPointerDown: true,
         },
         selection: {
           ...state.selection,
@@ -387,7 +418,6 @@ export default function sketchStudioReducer(state, action) {
         interaction: {
           ...state.interaction,
           mode: 'idle',
-          isPointerDown: false,
         },
         selection: {
           ...state.selection,
@@ -516,10 +546,7 @@ export default function sketchStudioReducer(state, action) {
         return state;
       }
 
-      const isDragging =
-        state.interaction.mode === 'handle-drag' ||
-        state.interaction.mode === 'transform' ||
-        state.interaction.mode === 'anchor-drag';
+      const isDragging = state.interaction.mode === 'handle-drag' || state.interaction.mode === 'transform';
 
       // During drags, only resolve parametric expressions (skip joinery). The
       // full resolution is deferred to drag end.
@@ -528,9 +555,11 @@ export default function sketchStudioReducer(state, action) {
           ...state.document,
           entities: action.payload,
         });
+        const nextDocument = withRuntimeGroupIndex(lightDocument, state.document, { reuseGroupIndex: true });
+        dragFrameOrigins.set(nextDocument, getDragFrameOrigin(state.document) ?? state.document);
         return {
           ...state,
-          document: withRuntimeGroupIndex(lightDocument, state.document, { reuseGroupIndex: true }),
+          document: nextDocument,
           _needsFullResolution: true,
         };
       }
@@ -616,7 +645,6 @@ export default function sketchStudioReducer(state, action) {
             historySnapshot: buildUndoableSketchStateSnapshot(state),
             startSelectedIds: state.selection.selectedIds,
           },
-          isPointerDown: true,
         },
       };
 
@@ -630,7 +658,6 @@ export default function sketchStudioReducer(state, action) {
             ...resolvedState.interaction,
             mode: 'idle',
             handleDrag: null,
-            isPointerDown: false,
           },
         },
         {
@@ -641,43 +668,6 @@ export default function sketchStudioReducer(state, action) {
 
     case SKETCH_STUDIO_ACTIONS.CANCEL_HANDLE_DRAG:
       return restoreUndoableSnapshot(state, state.interaction.handleDrag?.historySnapshot);
-
-    case SKETCH_STUDIO_ACTIONS.START_ANCHOR_DRAG:
-      return {
-        ...state,
-        interaction: {
-          ...state.interaction,
-          mode: 'anchor-drag',
-          anchorDrag: {
-            ...action.payload,
-            historySnapshot: buildUndoableSketchStateSnapshot(state),
-            startSelectedIds: state.selection.selectedIds,
-          },
-          isPointerDown: true,
-        },
-      };
-
-    case SKETCH_STUDIO_ACTIONS.END_ANCHOR_DRAG: {
-      const resolvedState = resolveDeferredIfNeeded(state);
-      return finalizeUndoableState(
-        resolvedState,
-        {
-          ...resolvedState,
-          interaction: {
-            ...resolvedState.interaction,
-            mode: 'idle',
-            anchorDrag: null,
-            isPointerDown: false,
-          },
-        },
-        {
-          previousSnapshot: state.interaction.anchorDrag?.historySnapshot,
-        },
-      );
-    }
-
-    case SKETCH_STUDIO_ACTIONS.CANCEL_ANCHOR_DRAG:
-      return restoreUndoableSnapshot(state, state.interaction.anchorDrag?.historySnapshot);
 
     case SKETCH_STUDIO_ACTIONS.START_TRANSFORM:
       return {
@@ -693,7 +683,6 @@ export default function sketchStudioReducer(state, action) {
             // Ctrl-drag swaps the live selection to the copies).
             startSelectedIds: state.selection.selectedIds,
           },
-          isPointerDown: true,
         },
       };
 
@@ -723,7 +712,6 @@ export default function sketchStudioReducer(state, action) {
             ...resolvedState.interaction,
             mode: 'idle',
             transform: null,
-            isPointerDown: false,
           },
         },
         {
@@ -795,12 +783,10 @@ export default function sketchStudioReducer(state, action) {
         interaction: {
           ...state.interaction,
           mode: 'idle',
-          isPointerDown: false,
           pointerId: null,
           panStartScreen: null,
           panStartViewport: null,
           handleDrag: null,
-          anchorDrag: null,
           transform: null,
           suppressNextClick: false,
         },

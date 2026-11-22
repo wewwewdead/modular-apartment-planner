@@ -1,6 +1,7 @@
 import { getCeilingHostFloor } from '@/domain/cantileverCeiling';
 import { CEILING_ATTACHMENT_MODES } from '@/domain/ceilingModels';
 import { TOOLS } from '@/editor/tools';
+import { enterTool } from '@/editor/toolSession';
 
 /**
  * Where "add a ceiling" starts, for every control that offers it.
@@ -30,12 +31,11 @@ import { TOOLS } from '@/editor/tools';
 export function enterDrawCeilingUnderSlab({ slab, targetFloor, editorDispatch }) {
   if (!slab || !targetFloor) return null;
 
-  editorDispatch({ type: 'SET_TOOL', tool: TOOLS.CEILING });
-  editorDispatch({ type: 'SELECT_OBJECT', id: slab.id, objectType: 'slab' });
-  editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { ceilingTargetFloorId: targetFloor.id } });
-  editorDispatch({
-    type: 'SET_STATUS_MESSAGE',
-    message: 'Trace the ceiling area under this slab — click points, close on the first point.',
+  enterTool(editorDispatch, {
+    tool: TOOLS.CEILING,
+    selection: { id: slab.id, objectType: 'slab' },
+    toolState: { ceilingTargetFloorId: targetFloor.id },
+    statusMessage: 'Trace the ceiling area under this slab — click points, close on the first point.',
   });
   return targetFloor;
 }
@@ -61,15 +61,11 @@ export function enterDrawCeilingUnderSlab({ slab, targetFloor, editorDispatch })
 export function enterPickCeilingBeamsUnderSlab({ slab, targetFloor, editorDispatch }) {
   if (!slab || !targetFloor) return null;
 
-  editorDispatch({ type: 'SET_TOOL', tool: TOOLS.CEILING_BEAM_PICK });
-  editorDispatch({ type: 'SELECT_OBJECT', id: slab.id, objectType: 'slab' });
-  editorDispatch({
-    type: 'UPDATE_TOOL_STATE',
-    payload: { ceilingTargetFloorId: targetFloor.id, ceilingClipSlabId: slab.id },
-  });
-  editorDispatch({
-    type: 'SET_STATUS_MESSAGE',
-    message: `Click the beams on ${targetFloor.name}, the storey below this one, then press Enter — the ceiling covers the plate inside them.`,
+  enterTool(editorDispatch, {
+    tool: TOOLS.CEILING_BEAM_PICK,
+    selection: { id: slab.id, objectType: 'slab' },
+    toolState: { ceilingTargetFloorId: targetFloor.id, ceilingClipSlabId: slab.id },
+    statusMessage: `Click the beams on ${targetFloor.name}, the storey below this one, then press Enter — the ceiling covers the plate inside them.`,
   });
   return targetFloor;
 }

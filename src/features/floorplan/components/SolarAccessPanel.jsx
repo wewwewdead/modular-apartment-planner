@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { SunIcon } from '@/ui/ToolbarIcons';
 import { siteSupportsSunStudy } from '@/analysis/sunStudyState';
 import { LOADING_COPY, LoadingPill, solarTracing } from '@/ui/loading';
@@ -36,7 +36,7 @@ function formatArea(value) {
  * question the study exists to answer and the one a plan cannot show. Surfaces
  * come second, sorted by how much they receive.
  */
-export default function SolarAccessPanel({
+function SolarAccessPanel({
   project,
   solarAccess,
   study,
@@ -340,3 +340,6 @@ export default function SolarAccessPanel({
     </section>
   );
 }
+
+// Memoised: the sidebar hands it a project that lags a drag (see Sidebar.jsx).
+export default memo(SolarAccessPanel);

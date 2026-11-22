@@ -73,3 +73,63 @@ it('the print panel: an image goes to onImage; its size readout', () => {
   expect(within(panel).getByLabelText('Image size').textContent).toBe('1024 × 768 px · 2 KB in the model');
   expect(within(panel).getByRole('button', { name: 'New print' }).disabled).toBe(true);
 });
+
+// Text that reads as no number goes back to the value in force on commit, as
+// every number box in the app does (useNumericDraft): it is not kept on screen
+// with nothing said, nor shown again on the next part with the same value.
+it('an unreadable film thickness or print size goes back to the value in force', () => {
+  const onFinish = vi.fn();
+  const paint = (id) => (
+    <PaintPanel
+      view={{
+        stage: 'colour',
+        targets: [{ id, name: id, finish: null }],
+        group: null,
+        finish: { ...FINISH_DEFAULTS },
+        numbers: paintNumbers({ area: 50000, kind: 'powder', thickness: FINISH_DEFAULTS.thickness }),
+        holes: [],
+        prints: [],
+      }}
+      onFinish={onFinish}
+    />
+  );
+  const { rerender } = render(paint('Plate'));
+  const field = () => screen.getByLabelText('Film thickness (µm)');
+  const type = (input, text) => {
+    act(() => {
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: text } });
+    });
+    act(() => fireEvent.blur(input));
+  };
+  type(field(), 'abc');
+  expect(onFinish).not.toHaveBeenCalled();
+  expect(field().value).toBe(String(FINISH_DEFAULTS.thickness));
+  // Another part painted with the same film: its own value, not the text typed on the last.
+  rerender(paint('Lid'));
+  expect(field().value).toBe(String(FINISH_DEFAULTS.thickness));
+  // A number still goes through.
+  type(field(), '80');
+  expect(onFinish).toHaveBeenLastCalledWith({ thickness: 80 });
+  cleanup();
+
+  const onDraft = vi.fn();
+  render(
+    <PrintPanel
+      view={{
+        stage: 'face',
+        draft: { ...PRINT_DEFAULTS },
+        imageInfo: null,
+        selected: null,
+        selectedPart: '',
+        warnings: [],
+        notes: [],
+        prints: [],
+      }}
+      onDraft={onDraft}
+    />,
+  );
+  type(screen.getByLabelText('Width (mm)'), '=nope');
+  expect(onDraft).not.toHaveBeenCalled();
+  expect(screen.getByLabelText('Width (mm)').value).toBe(String(PRINT_DEFAULTS.width));
+});

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act } from 'react';
+import { act, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import ErrorBoundary from '@/app/ErrorBoundary';
 import { ConfirmDialogProvider } from '@/ui/ConfirmDialog';
 import { createProject } from '@/domain/models';
 import { saveProject } from '@/persistence/storage';
@@ -103,6 +104,82 @@ describe('useFloorplan autosave', () => {
     expect(saveProject).toHaveBeenCalledTimes(2);
     expect(vi.mocked(saveProject).mock.calls[1][0].name).toBe('Second');
     expect(latest.state.isDirty).toBe(false);
+  });
+
+  it('writes the draft once when the workspace goes away inside the five seconds', async () => {
+    vi.useFakeTimers();
+    vi.mocked(saveProject).mockResolvedValue(undefined);
+    mount();
+
+    act(() => latest.dispatch({ type: 'PROJECT_SET_NAME', name: 'First' }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    // A second edit restarts the wait; that is not a leave and writes nothing.
+    act(() => latest.dispatch({ type: 'PROJECT_SET_NAME', name: 'Second' }));
+    expect(saveProject).not.toHaveBeenCalled();
+
+    act(() => root.unmount());
+    root = null;
+    expect(saveProject).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(saveProject).mock.calls[0][0].name).toBe('Second');
+
+    // The timer it left behind is gone with it.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+    expect(saveProject).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes nothing on leaving a project with nothing unsaved', async () => {
+    vi.useFakeTimers();
+    vi.mocked(saveProject).mockResolvedValue(undefined);
+    mount();
+
+    act(() => latest.dispatch({ type: 'PROJECT_SET_NAME', name: 'Saved' }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(saveProject).toHaveBeenCalledTimes(1);
+    expect(latest.state.isDirty).toBe(false);
+
+    act(() => root.unmount());
+    root = null;
+    expect(saveProject).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the last edits as a draft when the workspace crashes before the autosave', () => {
+    vi.mocked(saveProject).mockResolvedValue(undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const bomb = { explode: null };
+    function Bomb() {
+      const [armed, setArmed] = useState(false);
+      useEffect(() => {
+        bomb.explode = () => setArmed(true);
+      });
+      if (armed) throw new Error('render failure');
+      return null;
+    }
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() =>
+      root.render(
+        <ErrorBoundary>
+          <ConfirmDialogProvider>
+            <Harness onRender={capture} />
+            <Bomb />
+          </ConfirmDialogProvider>
+        </ErrorBoundary>,
+      ),
+    );
+
+    act(() => latest.dispatch({ type: 'PROJECT_SET_NAME', name: 'Before the crash' }));
+    act(() => bomb.explode());
+
+    expect(document.body.textContent).toContain('Something Went Wrong');
+    expect(saveProject).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(saveProject).mock.calls[0][0].name).toBe('Before the crash');
   });
 });
 

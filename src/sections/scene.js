@@ -10,6 +10,8 @@ import { buildFloorSectionGeometry } from './floorGeometry';
 import { buildCeilingSectionElements } from './ceilingGeometry';
 import { buildStairElevationContexts } from '@/three/scene/objectBuilders';
 import { resolveSectionViewDepth } from './viewDepth';
+import { getProjectRoofs } from '@/domain/projectRoofs';
+import { scopeRoofElementIds } from '@/roof/roofElementScope';
 
 function computeSceneBounds(rects, stairs, sectionCut, baseLevel, polygons = [], lines = []) {
   const stairXs = stairs.flatMap((element) => element.points.map((point) => point.x));
@@ -45,7 +47,7 @@ function resolveLandingElevation(landing, stairs, floorLevel) {
   return computeLandingElevation(landing, stairs, floorLevel) - floorLevel;
 }
 
-function buildFloorSectionElements(floor, sectionCut, roofSystem = null, stairContexts = []) {
+function buildFloorSectionElements(floor, sectionCut, roofSystems = [], stairContexts = []) {
   const floorElevation = getFloorElevation(floor);
   const landings = floor.landings || [];
   const stairs = floor.stairs || [];
@@ -61,13 +63,13 @@ function buildFloorSectionElements(floor, sectionCut, roofSystem = null, stairCo
     polygonElements: railingElements.polygonElements || [],
     lineElements: railingElements.lineElements || [],
     stairElements: [
-      ...(roofSystem
+      ...(roofSystems.length
         ? stairs
             .map((stair) =>
               buildStairRoofAccessSectionElement({
                 stair,
                 floor,
-                roofSystem,
+                roofSystems,
                 sectionCut,
                 landingElevationMap,
               }),
@@ -111,9 +113,10 @@ function mergeVisibilityDiagnostics(current, next) {
   };
 }
 
-function buildSectionSceneFromFloors(floors, sectionCut, title = null, roofSystem = null, project = null) {
+// `roofSystems` is every roof the section cuts through or sees.
+function buildSectionSceneFromFloors(floors, sectionCut, title = null, roofSystems = [], project = null) {
   if (!sectionCut) return null;
-  const viewDepth = resolveSectionViewDepth(floors, sectionCut, project, roofSystem);
+  const viewDepth = resolveSectionViewDepth(floors, sectionCut, project, roofSystems);
   sectionCut = { ...sectionCut, depth: viewDepth.depth };
 
   const stackBounds = getFloorStackBounds(floors);
@@ -134,7 +137,7 @@ function buildSectionSceneFromFloors(floors, sectionCut, title = null, roofSyste
 
   const stairContexts = buildStairElevationContexts(floors);
   for (const floor of floors) {
-    const floorElements = buildFloorSectionElements(floor, sectionCut, roofSystem, stairContexts);
+    const floorElements = buildFloorSectionElements(floor, sectionCut, roofSystems, stairContexts);
     rectElements.push(...floorElements.rectElements);
     rectElements.push(...buildCeilingSectionElements(project, floor.id, sectionCut));
     polygonElements.push(...(floorElements.polygonElements || []));
@@ -143,15 +146,16 @@ function buildSectionSceneFromFloors(floors, sectionCut, title = null, roofSyste
     railingDiagnostics = mergeVisibilityDiagnostics(railingDiagnostics, floorElements.diagnostics?.railing);
   }
 
-  if (roofSystem) {
+  roofSystems.forEach((roofSystem, index) => {
     const roofElements = buildRoofSectionElements(roofSystem, sectionCut);
-    rectElements.push(...roofElements.rectElements);
-    polygonElements.push(...(roofElements.polygonElements || []));
-    stairElements.push(...roofElements.stairElements);
-    roofDiagnostics = roofElements.diagnostics || roofDiagnostics;
-  }
+    rectElements.push(...scopeRoofElementIds(roofElements.rectElements, roofSystem, roofSystems.length));
+    polygonElements.push(...scopeRoofElementIds(roofElements.polygonElements, roofSystem, roofSystems.length));
+    stairElements.push(...scopeRoofElementIds(roofElements.stairElements, roofSystem, roofSystems.length));
+    const diagnostics = roofElements.diagnostics || roofDiagnostics;
+    roofDiagnostics = index === 0 ? diagnostics : mergeVisibilityDiagnostics(roofDiagnostics, diagnostics);
+  });
 
-  const trussElements = buildTrussSectionElements(project?.trussSystems || [], sectionCut, roofSystem);
+  const trussElements = buildTrussSectionElements(project?.trussSystems || [], sectionCut, roofSystems);
   lineElements.push(...(trussElements.lineElements || []));
   polygonElements.push(...(trussElements.polygonElements || []));
 
@@ -207,7 +211,7 @@ function buildSectionSceneFromFloors(floors, sectionCut, title = null, roofSyste
 
 export function buildSectionScene(floor, sectionCut) {
   if (!floor || !sectionCut) return null;
-  return buildSectionSceneFromFloors([floor], sectionCut, sectionCut.label || 'Section', null, null);
+  return buildSectionSceneFromFloors([floor], sectionCut, sectionCut.label || 'Section', [], null);
 }
 
 export function buildProjectSectionScene(project, sourceFloorId, sectionCutId = null) {
@@ -222,7 +226,7 @@ export function buildProjectSectionScene(project, sourceFloorId, sectionCutId = 
     getOrderedFloors(project),
     sectionCut,
     sectionCut.label || 'Section',
-    project.roofSystem || null,
+    getProjectRoofs(project),
     project,
   );
 }

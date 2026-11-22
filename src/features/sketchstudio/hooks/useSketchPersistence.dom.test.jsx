@@ -156,6 +156,90 @@ describe('closing the save picker', () => {
   });
 });
 
+describe('recovered work', () => {
+  const PROMPT = 'Unsaved sketch changes will be lost. Continue?';
+
+  function mountRecovered() {
+    saveSketchRecovery(workspace('Recovered bench'));
+    const env = mountStudio({ withLine: false });
+    expect(env.persistence()).toMatchObject({ status: 'recovered', isDirty: false });
+    expect(env.studio().document.name).toBe('Recovered bench');
+    return env;
+  }
+
+  it('loads on a reload without asking anything', () => {
+    mountRecovered();
+    expect(screen.queryByText(PROMPT)).toBeNull();
+  });
+
+  it('is not replaced by New without asking first', async () => {
+    const env = mountRecovered();
+    let pending;
+    act(() => {
+      pending = env.studio().newSketch();
+    });
+    expect(screen.getByText(PROMPT)).toBeTruthy();
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Cancel' }).click();
+      await pending;
+    });
+    expect(env.studio().document.name).toBe('Recovered bench');
+    expect(env.persistence().status).toBe('recovered');
+
+    act(() => {
+      pending = env.studio().newSketch();
+    });
+    await act(async () => {
+      screen.getByRole('button', { name: 'OK' }).click();
+      await pending;
+    });
+    expect(env.studio().document.name).not.toBe('Recovered bench');
+    expect(env.persistence().status).toBe('idle');
+
+    // Once replaced, a clean sketch is replaced without a prompt again.
+    await act(() => env.studio().newSketch());
+    expect(screen.queryByText(PROMPT)).toBeNull();
+  });
+
+  it('is not replaced by Open without asking first', async () => {
+    const env = mountRecovered();
+    vi.mocked(openSketchWorkspaceFile).mockResolvedValue({
+      workspace: workspace(),
+      fileHandle: { name: 'bench.sketch.json' },
+      fileName: 'bench.sketch.json',
+    });
+    let pending;
+    act(() => {
+      pending = env.studio().openSketch();
+    });
+    expect(screen.getByText(PROMPT)).toBeTruthy();
+    expect(openSketchWorkspaceFile).not.toHaveBeenCalled();
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Cancel' }).click();
+      await pending;
+    });
+    expect(openSketchWorkspaceFile).not.toHaveBeenCalled();
+    expect(env.studio().document.name).toBe('Recovered bench');
+  });
+
+  it('is not replaced by Import without asking first', async () => {
+    const env = mountRecovered();
+    let pending;
+    act(() => {
+      pending = env.studio().importSketchFile(new File(['{}'], 'other.sketch.json'));
+    });
+    expect(screen.getByText(PROMPT)).toBeTruthy();
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Cancel' }).click();
+      await pending;
+    });
+    expect(env.studio().document.name).toBe('Recovered bench');
+  });
+});
+
 describe('the moves that were already right', () => {
   it('starts idle and clean', () => {
     const env = mountStudio({ withLine: false });

@@ -160,7 +160,9 @@ function productRoute({ product, model, parts, records, machine, batch }) {
       const { seconds, stroke, hit, hits } = strokeSeconds(fold, strokeBends, machine);
       // A punch or die set to its own length names it (docs/sketch-studio-brake-tool-length.md §3.4).
       const lengths =
-        bend.punchTrim || bend.dieTrim ? toolLengths(made, ids, { bed: machine.bed }) : { punch: null, die: null };
+        bend.punchTrim || bend.dieTrim || bend.slide
+          ? toolLengths(made, ids, { bed: machine.bed })
+          : { punch: null, die: null };
       // Horn sections at the punch's ends (docs/sketch-studio-punch-library.md §4.4).
       const tooling = `${punchOf(bend.punch).name} punch${lengths.punch ? `, ${lengths.punch}` : ''}${lengths.punch || lengths.die ? ' ·' : ','} ${dieOf(bend.die).name} die${lengths.die ? `, ${lengths.die}` : ''}${hornWords(bend.horns) ? ` · ${hornWords(bend.horns)}` : ''}`;
       return {

@@ -1,6 +1,6 @@
 /**
  * A fingerprint of everything in the project that a drawing is made from —
- * the building, the floors, the roof, the trusses and the ceilings — so an
+ * the building, the floors, the roofs, the trusses and the ceilings — so an
  * issued sheet can tell whether the model has moved on since it was generated.
  *
  * Memoised per project object. The coordination pass asks for this signature a
@@ -11,10 +11,12 @@
  * the signature reads are still checked by identity, so a caller that did
  * swap one in place is not handed a stale answer.
  */
+import { getProjectRoofs } from './projectRoofs';
+
 const signatureCache = new WeakMap();
 
 function signatureParts(project) {
-  return [project.building, project.floors, project.roofSystem, project.trussSystems, project.ceilings];
+  return [project.building, project.floors, getProjectRoofs(project), project.trussSystems, project.ceilings];
 }
 
 function partsUnchanged(cached, parts) {
@@ -22,6 +24,20 @@ function partsUnchanged(cached, parts) {
     if (cached.parts[index] !== parts[index]) return false;
   }
   return true;
+}
+
+/**
+ * The roofs as the hash sees them. Sheets and the documentation state store the
+ * signature they were issued from and compare it with the live one, so the move
+ * from one roof slot to a roof list (schema 32) must not change it: no roof
+ * still hashes as `null` and one roof as that roof, exactly what the slot held.
+ * Only a project with several roofs, which nothing before it could write,
+ * hashes the list.
+ */
+function signatureRoofs(project) {
+  const roofSystems = getProjectRoofs(project);
+  if (roofSystems.length > 1) return roofSystems;
+  return roofSystems[0] || null;
 }
 
 function computeDocumentModelSignature(project) {
@@ -34,7 +50,7 @@ function computeDocumentModelSignature(project) {
   const serialized = JSON.stringify({
     building,
     floors: project.floors,
-    roofSystem: project.roofSystem,
+    roofSystem: signatureRoofs(project),
     trussSystems: project.trussSystems,
     ceilings: project.ceilings,
   });

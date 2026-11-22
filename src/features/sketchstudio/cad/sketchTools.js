@@ -31,6 +31,7 @@ import { extendCut, extendPick, fmtMm, trimCut, trimPick } from './sketchTrim.js
 import { chamferCut, cornerPick, filletCut } from './sketchCorner.js';
 import { offsetCut, offsetPick } from './sketchOffset.js';
 import { DEFAULT_STOCK } from './shopCatalog.js';
+import { NO_MODE } from './sketchMode.js';
 
 // The in-viewport sketcher as a pure state machine. Clicks arrive already
 // snapped; typed HUD values are turned into the equivalent click, so a typed
@@ -866,16 +867,8 @@ function stepHistory(state, direction) {
     Boolean(state.op) ||
     Boolean(state.drag) ||
     Boolean(state.offsetFrom);
-  const transient = {
-    points: [],
-    chainStart: null,
-    pending: null,
-    box: null,
-    reliefCut: null,
-    op: null,
-    drag: null,
-    offsetFrom: null,
-  };
+  // Every mode but the tool's own ends.
+  const transient = { ...NO_MODE, tool: state.tool };
   if (!moved) return halfDrawn ? reset(state, transient) : state;
   const present = new Set(moved.entities.map((e) => e.id));
   const kept = state.selectedIds.filter((id) => present.has(id));
@@ -925,14 +918,17 @@ function fixProblem(state, problem) {
   }
   const present = new Set(fixed.entities.map((e) => e.id));
   const kept = state.selectedIds.filter((id) => present.has(id));
-  return commit(
-    state,
-    reset(state, {
-      ...fixed,
-      selectedIds: kept.length === state.selectedIds.length ? state.selectedIds : kept,
-      offsetFrom: null,
-    }),
-  );
+  const next = reset(state, {
+    ...fixed,
+    selectedIds: kept.length === state.selectedIds.length ? state.selectedIds : kept,
+    // Of the selection, as Undo keeps it, only what still exists: a dimension the fix pruned is let go.
+    selectedDimensionId: fixed.dimensions.some((d) => d.id === state.selectedDimensionId)
+      ? state.selectedDimensionId
+      : null,
+    offsetFrom: null,
+  });
+  // An action needs something to act on: a fix that took its whole selection ends it as Esc would.
+  return commit(state, state.op && !kept.length ? endOp(next) : next);
 }
 
 // `values`: a slot's or polygon's numbers typed (Enter), taken exactly rather than through the point.
@@ -1005,20 +1001,16 @@ const NOT_KEY = new Set(['on sketch', 'on edge', 'grid', 'free']);
 
 /**
  * An action's start (its key or row button): the tool and its half-drawn
- * shape end, the selection stays; the same action again ends it. With
+ * shape end, the selection stays; the same action again ends it, and another
+ * ends it first (Copy's copies become the selection the new one acts on). With
  * nothing selected the words say so and nothing changes.
  */
 function startOp(state, kind) {
   if (state.op?.kind === kind) return endOp(state);
+  if (state.op) state = endOp(state);
   if (!state.selectedIds.length) return { ...state, message: `Select what to ${OP_VERBS[kind]} first.` };
   return reset(state, {
-    tool: null,
-    points: [],
-    chainStart: null,
-    pending: null,
-    box: null,
-    drag: null,
-    offsetFrom: null,
+    ...NO_MODE,
     op: { kind, step: FIRST_STEP[kind], ...(kind === 'copy' ? { copies: [] } : {}) },
   });
 }
@@ -1170,18 +1162,7 @@ export function sketchReducer(state, action) {
   switch (action.type) {
     case 'tool':
       // A tool ends an action and a drag too (§7.3: a tool key or button takes the tool).
-      return reset(state, {
-        tool: action.tool,
-        points: [],
-        chainStart: null,
-        selectedIds: [],
-        selectedDimensionId: null,
-        pending: null,
-        box: null,
-        op: null,
-        drag: null,
-        offsetFrom: null,
-      });
+      return reset(state, { ...NO_MODE, tool: action.tool, selectedIds: [], selectedDimensionId: null });
     case 'move':
       // The raw point, tolerance and Shift let the Dimension tool say what a click would take
       // (and Mirror which line it would mirror about); Rotate's angle step comes with them.
@@ -1281,7 +1262,7 @@ export function sketchReducer(state, action) {
     case 'escape':
       // A box being dragged goes first (nothing selected by it). Then Esc
       // drops the tool (and any half-drawn shape), or with no tool clears the
-      // selection; the sketcher treats Esc with neither as "exit sketch". A
+      // selection; the sketcher treats Esc with neither as Finish. A
       // half-made dimension goes before its tool: its first point, or the
       // dimension waiting for its place click.
       if (state.box) return { ...state, box: null };
@@ -1292,12 +1273,13 @@ export function sketchReducer(state, action) {
         return reset(state, { pending: null, points: [] });
       // Offset: the chosen entity goes first, then the tool (§8.5).
       if (state.offsetFrom) return reset(state, { offsetFrom: null });
-      if (state.tool)
-        return reset(state, { tool: null, points: [], chainStart: null, pending: null, offsetFrom: null });
+      if (state.tool) return reset(state, NO_MODE);
       return reset(state, { selectedIds: chosenIds(state, []), selectedDimensionId: null });
     case 'select':
       // A dimension is selected alone. An entity alone, or with `toggle`
       // (Shift / Ctrl + click) added or removed; a toggle on nothing changes nothing.
+      // Under a tool or an action a click is theirs, never a selection.
+      if (state.tool || state.op) return state;
       if (action.dimensionId)
         return { ...state, selectedIds: chosenIds(state, []), selectedDimensionId: action.dimensionId };
       if (action.toggle && !action.id) return state;
@@ -1312,14 +1294,7 @@ export function sketchReducer(state, action) {
     case 'select-all':
       // Ctrl+A: every entity; a tool and its half-drawn shape (an action, a drag) end first.
       return reset(state, {
-        tool: null,
-        points: [],
-        chainStart: null,
-        pending: null,
-        box: null,
-        op: null,
-        drag: null,
-        offsetFrom: null,
+        ...NO_MODE,
         selectedIds: chosenIds(
           state,
           state.entities.map((e) => e.id),
@@ -1327,12 +1302,15 @@ export function sketchReducer(state, action) {
         selectedDimensionId: null,
       });
     case 'box':
-      // The box dragged with no tool (sketch-plane corners): drawn, nothing selected yet.
+      // The box dragged with no tool (sketch-plane corners): drawn, nothing selected yet. A tool
+      // or an action that came in the middle of the press has ended it for good.
+      if (state.tool || state.op) return state;
       return { ...state, box: { from: action.from, to: action.to, mode: action.mode, add: Boolean(action.add) } };
     case 'box-end': {
       // Released: what it takes (sketchSelect.js boxSelect), added with Shift, else in place of the selection.
       const { box } = state;
       if (!box) return state;
+      if (state.tool || state.op) return { ...state, box: null };
       const ids = boxSelect(state.entities, [box.from, box.to], box.mode);
       return {
         ...state,
@@ -1346,14 +1324,7 @@ export function sketchReducer(state, action) {
     case 'select-ids':
       // A Check row's entities (§6.5): selected as a box would, a tool and its half-drawn shape ended first.
       return reset(state, {
-        tool: null,
-        points: [],
-        chainStart: null,
-        pending: null,
-        box: null,
-        op: null,
-        drag: null,
-        offsetFrom: null,
+        ...NO_MODE,
         selectedIds: chosenIds(state, inDrawingOrder(state.entities, action.ids || [])),
         selectedDimensionId: null,
       });

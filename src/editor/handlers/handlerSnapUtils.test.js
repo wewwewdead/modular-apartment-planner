@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dropTrailingRepeatedPoints, snapToGrid, resolvePoint } from './handlerSnapUtils';
+import { dropTrailingRepeatedPoints, settleOutlineDoubleClick, snapToGrid, resolvePoint } from './handlerSnapUtils';
 import { GRID_MINOR } from '@/domain/defaults';
 
 describe('snapToGrid', () => {
@@ -67,5 +67,26 @@ describe('dropTrailingRepeatedPoints', () => {
     expect(dropTrailingRepeatedPoints(input, 100)).toEqual([A]);
     expect(input).toHaveLength(2);
     expect(dropTrailingRepeatedPoints(undefined, 100)).toEqual([]);
+  });
+});
+
+describe('settleOutlineDoubleClick', () => {
+  const A = { x: 0, y: 0 };
+  const B = { x: 1000, y: 0 };
+  const C = { x: 1000, y: 1000 };
+
+  it('commits three corners or more, the repeat dropped', () => {
+    expect(settleOutlineDoubleClick([A, B, C, { ...C }], 100)).toEqual({ action: 'commit', points: [A, B, C] });
+  });
+
+  it('keeps fewer than three, the repeat dropped', () => {
+    expect(settleOutlineDoubleClick([A, B, { ...B }], 100)).toEqual({ action: 'keep', points: [A, B] });
+    expect(settleOutlineDoubleClick([A, { ...A }], 100)).toEqual({ action: 'keep', points: [A] });
+  });
+
+  it('clears a lone corner, which only the second press put down', () => {
+    expect(settleOutlineDoubleClick([A], 100)).toEqual({ action: 'clear', points: [] });
+    expect(settleOutlineDoubleClick([], 100)).toEqual({ action: 'clear', points: [] });
+    expect(settleOutlineDoubleClick(undefined, 100)).toEqual({ action: 'clear', points: [] });
   });
 });

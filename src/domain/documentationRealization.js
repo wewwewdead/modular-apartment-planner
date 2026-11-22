@@ -1,9 +1,11 @@
 import { buildAnnotationScene } from '@/annotations/scene';
 import { deriveCostRealization } from './costRealization';
 import { deriveDocumentModelSignature } from './documentSignature';
+import { getProjectRoofs } from './projectRoofs';
 import { derivePreliminaryPackage, PRELIMINARY_PACKAGE_KIND } from './documentPackage';
 import { deriveProfessionalHandoff } from './professionalHandoff';
 import { DESIGN_CONFIDENCE } from './trustModels';
+import { memoizePerProject } from './projectMemo';
 
 export const DEFAULT_DOCUMENTATION_REALIZATION_PROFILE = Object.freeze({
   id: 'nu_professional_review_documentation_v1',
@@ -99,7 +101,7 @@ function activeRevision(project) {
 
 function requiredDeliverableIds(project, profile) {
   const required = [...profile.requiredDeliverableIds];
-  if (project.roofSystem || project.building?.brief?.roofType) required.push('roof_plan');
+  if (getProjectRoofs(project).length || project.building?.brief?.roofType) required.push('roof_plan');
   if ((project.building?.brief?.parkingRequirement || 0) > 0) required.push('site_access');
   return [...new Set(required)];
 }
@@ -339,7 +341,20 @@ export function issueDocumentationRealization(project, validationIssues = [], pr
   };
 }
 
+/*
+ * Memoised per project object (projectMemo.js): the store, the professional
+ * exchange and the validators each ask for it within one edit, and each ask
+ * rebuilt the whole preliminary package to check completeness.
+ */
+const documentationRealizationPerProject = memoizePerProject('deriveDocumentationRealization', (project) =>
+  computeDocumentationRealization(project),
+);
+
 export function deriveDocumentationRealization(project) {
+  return documentationRealizationPerProject(project);
+}
+
+function computeDocumentationRealization(project) {
   const profile = createDocumentationRealizationProfile(project?.building?.documentationRealizationProfile);
   const state = createDocumentationRealizationState(project?.building?.documentationRealization);
   const completeness = deriveDocumentationCompleteness(project, profile);

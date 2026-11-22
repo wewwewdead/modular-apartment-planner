@@ -11,6 +11,9 @@ import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { buildTrussSystemGeometry, getTrussSystemPurlinTotalLength } from '@/geometry/trussGeometry';
 import { distance } from '@/geometry/point';
 import { getFloorTopElevation, getOrderedFloors } from '@/domain/floorModels';
+import { getRoofForTrussSystem } from '@/domain/projectRoofs';
+import { getRooflessRoofTrussSystems } from '@/domain/roofModels';
+import { addRoofToTrussSystem, openRoof } from '@/features/floorplan/utils/addRoofEntry';
 import {
   detachBeamSupportedTrussInstances,
   deriveTrussPitchFromRise,
@@ -183,11 +186,14 @@ export function TrussSystemProperties({
   activePhaseName = null,
   phaseViewMode = 'all',
 }) {
-  const { activeTool } = useEditorState();
+  const { activeTool, activePhaseId } = useEditorState();
   const toolState = useToolSettings();
   const floors = getOrderedFloors(project);
-  const roofSystem = project.roofSystem || null;
-  const attachedRoofId = roofSystem?.trussAttachmentId === trussSystem.id ? roofSystem.id : null;
+  // The roof on THIS system: what its closures, purlin role and schedule read,
+  // and what the roof button opens. One roof per system (docs/multi-roof.md).
+  const systemRoof = getRoofForTrussSystem(project, trussSystem.id);
+  const canAddRoof = !systemRoof && getRooflessRoofTrussSystems(project).some((entry) => entry.id === trussSystem.id);
+  const trussRunCount = (trussSystem.trussInstances || []).length;
   const trussTypes = getDefaultTrussTypes();
   const lastInstance = trussSystem.trussInstances?.[trussSystem.trussInstances.length - 1] || null;
   const activeTrussTypeId = toolState.trussTypeId || lastInstance?.trussTypeId || trussTypes[0]?.id || '';
@@ -241,15 +247,11 @@ export function TrussSystemProperties({
     });
   };
 
-  const setAsRoofSource = () => {
-    if (!roofSystem) return;
-    dispatch({
-      type: 'ROOF_UPDATE',
-      roofSystem: {
-        id: roofSystem.id,
-        trussAttachmentId: trussSystem.id,
-      },
-    });
+  // A roof for THIS system, whatever other roofs exist; the panel stays on the
+  // truss. Re-pointing another system's roof here is what used to take that
+  // roof away from its trusses.
+  const addRoof = () => {
+    addRoofToTrussSystem({ project, trussSystem, phaseId: activePhaseId, dispatch, editorDispatch });
   };
 
   return (
@@ -348,21 +350,14 @@ export function TrussSystemProperties({
           });
         }}
       />
-      <InputField
-        label="Roof Link"
-        value={
-          roofSystem ? (attachedRoofId ? roofSystem.name || 'Active Roof' : 'Other roof source or none') : 'No roof'
-        }
-        readOnly
-      />
+      <InputField label="Roof Link" value={systemRoof ? systemRoof.name || 'Roof' : 'No roof'} readOnly />
       <InputField label="Roof Fit" value={formatRoofMappingLabel(roofAttachmentType, hasMixedRoofMapping)} readOnly />
       <TrussEndClosuresSection
         trussSystem={trussSystem}
         systemGeometry={systemGeometry}
-        roofSystem={roofSystem}
+        roofSystem={systemRoof}
         updateSystem={updateSystem}
         u={u}
-        colourShared={(project.trussSystems || [])[0]?.id !== trussSystem.id}
       />
       <TrussMembersSection trussSystem={trussSystem} updateSystem={updateSystem} u={u} />
       <div className={styles.subtitle}>Purlins</div>
@@ -382,7 +377,7 @@ export function TrussSystemProperties({
           onChange={(e) => updatePurlins({ enabled: e.target.checked })}
         />
       </div>
-      <TrussPurlinRoleSection trussSystem={trussSystem} roofSystem={roofSystem} updatePurlins={updatePurlins} />
+      <TrussPurlinRoleSection trussSystem={trussSystem} roofSystem={systemRoof} updatePurlins={updatePurlins} />
       {purlinSystem.enabled && (
         <>
           <InputField
@@ -472,7 +467,7 @@ export function TrussSystemProperties({
           </div>
         </>
       )}
-      <TrussScheduleSummary trussSystem={trussSystem} systemGeometry={systemGeometry} roofSystem={roofSystem} u={u} />
+      <TrussScheduleSummary trussSystem={trussSystem} systemGeometry={systemGeometry} roofSystem={systemRoof} u={u} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
         <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Draw Type</label>
         <select
@@ -525,9 +520,13 @@ export function TrussSystemProperties({
       >
         {activeTool === TOOLS.TRUSS_DRAW ? 'Drawing truss on beams' : 'Draw another truss'}
       </button>
-      {roofSystem && (
-        <button className={styles.actionBtn} disabled={attachedRoofId || !roofAttachmentType} onClick={setAsRoofSource}>
-          {attachedRoofId ? 'Roof attached here' : roofAttachmentType ? 'Set as roof source' : 'Roof fit unavailable'}
+      {systemRoof ? (
+        <button className={styles.actionBtn} onClick={() => openRoof({ roofSystem: systemRoof, editorDispatch })}>
+          Open roof
+        </button>
+      ) : (
+        <button className={styles.actionBtn} disabled={!canAddRoof} onClick={addRoof}>
+          {canAddRoof ? 'Add roof' : 'Roof fit unavailable'}
         </button>
       )}
       <div className={styles.drawingHint}>
@@ -541,6 +540,9 @@ export function TrussSystemProperties({
           : ''}
         {!canResizeSystem
           ? ' Length resize is unavailable because the truss instances in this system do not share one consistent layout axis.'
+          : ''}
+        {trussRunCount > 1
+          ? ' One roof covers every truss run in this system and takes its shape from the first. For a separate roof, draw that truss as its own system (Trusses + in the sidebar).'
           : ''}
       </div>
     </div>
@@ -774,7 +776,7 @@ export function TrussInstanceProperties({ project, trussSystem, trussInstance, d
         trussSystem={trussSystem}
         trussInstance={trussInstance}
         updateInstance={updateInstance}
-        roofSystem={project?.roofSystem || null}
+        roofSystem={getRoofForTrussSystem(project, trussSystem.id)}
         u={u}
       />
       <InputField

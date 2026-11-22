@@ -34,9 +34,14 @@ export function resolveSketchDocument(document) {
  * Lightweight resolution for drag operations — only normalizes and resolves
  * parametric expressions. Skips joinery resolution, which is the expensive half
  * of the pipeline. Full resolution should be run on drag-end.
+ *
+ * A 2D drag changes only the entities, so the layers, variables, joints and 3D
+ * model it carries in from the previous frame are already normalised: they are
+ * reused as they are (`reuseNormalized`) instead of being normalised again on
+ * every frame. The result is the same document.
  */
 export function resolveSketchDocumentLightweight(document) {
-  const normalizedDocument = normalizeSketchDocument(document);
+  const normalizedDocument = normalizeSketchDocument(document, { reuseNormalized: true });
   const resolvedEntities = resolveAllEntities(normalizedDocument.entities, normalizedDocument.variables || []);
   return {
     ...normalizedDocument,

@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { getOrderedFloors } from '@/domain/floorModels';
+import { getProjectRoofs } from '@/domain/projectRoofs';
 import { getStairDisplayLabel } from '@/domain/stairLabels';
 import { isRoofAccessOpening, normalizeRoofOpeningType } from '@/roof/openings';
 import { stairRun, stairTotalRise } from '@/geometry/stairGeometry';
@@ -13,11 +14,15 @@ function StairProperties({ stair, project, dispatch, floorId, u, phases }) {
   };
 
   const floorOptions = getOrderedFloors(project);
-  const roofSystem = project.roofSystem || null;
-  const roofOpenings = (roofSystem?.roofOpenings || []).map((opening, index) => ({
-    ...opening,
-    label: opening.name || `Roof Opening ${index + 1}`,
-  }));
+  // A stair can climb to an opening in any roof; with several roofs each
+  // option says which roof it is in.
+  const roofSystems = getProjectRoofs(project);
+  const roofOpenings = roofSystems.flatMap((roofSystem) =>
+    (roofSystem.roofOpenings || []).map((opening, index) => {
+      const label = opening.name || `Roof Opening ${index + 1}`;
+      return { ...opening, label: roofSystems.length > 1 ? `${roofSystem.name || 'Roof'} · ${label}` : label };
+    }),
+  );
   const totalRise = stairTotalRise(stair);
   const totalRun = stairRun(stair);
   const directionAngle = stair.direction?.angle ?? 0;
@@ -139,7 +144,7 @@ function StairProperties({ stair, project, dispatch, floorId, u, phases }) {
           ))}
         </select>
       </div>
-      {roofSystem && (
+      {roofSystems.length > 0 && (
         <>
           <div className={styles.subtitle}>Roof Access</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>

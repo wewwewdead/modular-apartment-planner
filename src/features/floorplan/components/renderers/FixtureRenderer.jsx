@@ -419,48 +419,57 @@ const DRAFTING_FLAT_FILLS = {
   plant: '#E6EFE0',
 };
 
+// One memoised item per fixture, so dragging one redraws only that one.
+const PresentationFixtureItem = memo(function PresentationFixtureItem({ fixture }) {
+  const outline = fixtureOutline(fixture);
+  const points = outline.map((p) => `${p.x},${p.y}`).join(' ');
+  return (
+    <g filter="url(#fixture-shadow)">
+      {/* The hook scripts and tests read; the symbol below is what shows. */}
+      <polygon data-id={fixture.id} data-type="fixture" points={points} fill="none" stroke="none" />
+      <PresentationFixtureSymbol fixture={fixture} />
+    </g>
+  );
+});
+
 function PresentationFixtures({ fixtures }) {
   return (
     <g className="fixtures">
-      {fixtures.map((fixture) => {
-        const outline = fixtureOutline(fixture);
-        const points = outline.map((p) => `${p.x},${p.y}`).join(' ');
-        return (
-          <g key={fixture.id} filter="url(#fixture-shadow)">
-            {/* The hook scripts and tests read; the symbol below is what shows. */}
-            <polygon data-id={fixture.id} data-type="fixture" points={points} fill="none" stroke="none" />
-            <PresentationFixtureSymbol fixture={fixture} />
-          </g>
-        );
-      })}
+      {fixtures.map((fixture) => (
+        <PresentationFixtureItem key={fixture.id} fixture={fixture} />
+      ))}
     </g>
   );
 }
+
+const DraftingFixtureItem = memo(function DraftingFixtureItem({ fixture }) {
+  const outline = fixtureOutline(fixture);
+  const points = outline.map((p) => `${p.x},${p.y}`).join(' ');
+  const gradFill = DRAFTING_FLAT_FILLS[fixture.fixtureType] || `url(#grad-${fixture.fixtureType})`;
+  return (
+    <g filter="url(#fixture-shadow)">
+      <polygon
+        data-id={fixture.id}
+        data-type="fixture"
+        points={points}
+        fill={gradFill}
+        stroke="#8A7D6B"
+        strokeWidth={1.5}
+        vectorEffect="non-scaling-stroke"
+      />
+      <FixtureDetails fixture={fixture} />
+    </g>
+  );
+});
 
 function FixtureRenderer({ fixtures }) {
   const presentation = isPresentationStyle(usePlanStyle());
   if (presentation) return <PresentationFixtures fixtures={fixtures} />;
   return (
     <g className="fixtures">
-      {fixtures.map((fixture) => {
-        const outline = fixtureOutline(fixture);
-        const points = outline.map((p) => `${p.x},${p.y}`).join(' ');
-        const gradFill = DRAFTING_FLAT_FILLS[fixture.fixtureType] || `url(#grad-${fixture.fixtureType})`;
-        return (
-          <g key={fixture.id} filter="url(#fixture-shadow)">
-            <polygon
-              data-id={fixture.id}
-              data-type="fixture"
-              points={points}
-              fill={gradFill}
-              stroke="#8A7D6B"
-              strokeWidth={1.5}
-              vectorEffect="non-scaling-stroke"
-            />
-            <FixtureDetails fixture={fixture} />
-          </g>
-        );
-      })}
+      {fixtures.map((fixture) => (
+        <DraftingFixtureItem key={fixture.id} fixture={fixture} />
+      ))}
     </g>
   );
 }

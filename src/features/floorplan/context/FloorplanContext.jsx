@@ -15,6 +15,8 @@ import useFloorplan from '../hooks/useFloorplan';
  * changes on its own timescale:
  *
  *   ProjectContext   — the project facade. Changes on an edit, an undo, a load.
+ *                      Also where "unsaved" lives: `isDirty` for the browser
+ *                      draft, `fileBehind` / `fileName` for an opened file.
  *   EditorContext    — selection, active tool, modes, phase state, study state.
  *                      Changes on a discrete user action.
  *   ToolSettingsContext — the settled fields of `toolState`: which fixture is
@@ -45,7 +47,7 @@ const EMPTY_TOOL_STATE = {};
 
 export function FloorplanProvider({ children, initialProject, isPlayground = false }) {
   const floorplan = useFloorplan({ initialProject, isPlayground });
-  const { state, dispatch, selectors } = floorplan;
+  const { state, dispatch, selectors, fileBehind, fileName } = floorplan;
   const editor = state.editor;
   const { getFloor } = selectors;
   // True only while a pointer gesture is actually rewriting the project — not on
@@ -63,6 +65,8 @@ export function FloorplanProvider({ children, initialProject, isPlayground = fal
       entities: state.entities,
       derived: state.derived,
       isDirty: state.isDirty,
+      fileBehind,
+      fileName,
       lastSavedAt: state.lastSavedAt,
       changeVersion: state.changeVersion,
       canUndo: state.history.length > 0,
@@ -76,6 +80,8 @@ export function FloorplanProvider({ children, initialProject, isPlayground = fal
     }),
     [
       dispatch,
+      fileBehind,
+      fileName,
       getFloor,
       state.changeVersion,
       state.entities,
@@ -112,6 +118,7 @@ export function FloorplanProvider({ children, initialProject, isPlayground = fal
       showFloorBelowUnderlay: editor.showFloorBelowUnderlay,
       viewMode: editor.viewMode,
       activeFloorId: editor.activeFloorId,
+      activeRoofId: editor.activeRoofId,
       activeSheetId: editor.activeSheetId,
       activeSectionCutId: editor.activeSectionCutId,
       statusMessage: editor.statusMessage,
@@ -135,6 +142,7 @@ export function FloorplanProvider({ children, initialProject, isPlayground = fal
       dispatch,
       dragGestureMutating,
       editor.activeFloorId,
+      editor.activeRoofId,
       editor.activeSectionCutId,
       editor.activeSheetId,
       editor.activeTool,

@@ -223,7 +223,7 @@ function createScene(floors) {
     assemblyDetail: false,
     visibleFloorIds: floors.filter((f) => f.visible).map((f) => f.floorId),
     floors,
-    roofLayerId: null,
+    roofLayerIds: [],
     bounds: { minX: 0, maxX: 100, minY: 0, maxY: 100, minElevation: 0, maxElevation: 100 },
     groundLevel: 0,
     hasVisibleObjects: true,
@@ -358,8 +358,8 @@ describe('createPreviewSceneCache', () => {
       ],
     });
     const project = { ...base, floors: [ground, upper], trussSystems: [trussSystem] };
-    project.roofSystem = createRoofSystemForProject(project, { id: 'roof_1' });
-    expect(project.roofSystem?.trussAttachmentId).toBe('ts_1');
+    project.roofSystems = [createRoofSystemForProject(project, { id: 'roof_1' })];
+    expect(project.roofSystems[0]?.trussAttachmentId).toBe('ts_1');
 
     // The stubbed THREE here has no vector maths for sloped members, so the
     // truss members are left out of what gets built; the floors' sourceKeys —
@@ -389,11 +389,13 @@ describe('createPreviewSceneCache', () => {
     // and the closure under it — once it is set by hand (pitchSource 'manual').
     const steeper = {
       ...project,
-      roofSystem: {
-        ...project.roofSystem,
-        pitchSource: 'manual',
-        pitch: { ...project.roofSystem.pitch, slope: 60 },
-      },
+      roofSystems: [
+        {
+          ...project.roofSystems[0],
+          pitchSource: 'manual',
+          pitch: { ...project.roofSystems[0].pitch, slope: 60 },
+        },
+      ],
     };
     const scene2 = withoutMembers(buildPreviewScene(steeper));
     cache.build(scene2, palette);
@@ -403,5 +405,88 @@ describe('createPreviewSceneCache', () => {
     expect(closureApex(scene2)).toBeGreaterThan(closureApex(scene1));
     expect(trussFloor2).not.toBe(trussFloor1);
     expect(upperFloor2).toBe(upperFloor1);
+  });
+  it('draws one layer per roof, and editing roof A reuses roof B and its trusses', () => {
+    // docs/multi-roof.md §5.5: each roof is its own layer keyed by its id, and
+    // each truss system's closures read only that system's roof.
+    const base = createProject('Two roofs');
+    const ground = base.floors[0];
+    const upper = createFloor('Level 2', 1);
+    const system = (id, y) =>
+      createTrussSystem(id, {
+        id,
+        floorId: ground.id,
+        baseElevation: 3000,
+        trussInstances: [
+          {
+            id: `${id}_ti`,
+            trussTypeId: 'truss_type_gable',
+            span: 7200,
+            rise: 1800,
+            spacing: 900,
+            count: 5,
+            startPoint: { x: 0, y },
+            endPoint: { x: 3600, y },
+          },
+        ],
+      });
+    let project = { ...base, floors: [ground, upper], trussSystems: [system('ts_a', 0), system('ts_b', 20000)] };
+    project = {
+      ...project,
+      roofSystems: [createRoofSystemForProject(project, { id: 'roof_a', trussAttachmentId: 'ts_a' })],
+    };
+    project = {
+      ...project,
+      roofSystems: [
+        ...project.roofSystems,
+        createRoofSystemForProject(project, { id: 'roof_b', trussAttachmentId: 'ts_b' }),
+      ],
+    };
+    expect(project.roofSystems.map((roof) => roof.trussAttachmentId)).toEqual(['ts_a', 'ts_b']);
+
+    const withoutMembers = (scene) => ({
+      ...scene,
+      floors: scene.floors.map((floor) => ({
+        ...floor,
+        objects: floor.objects.filter((object) => object.geometry !== 'segment3d'),
+      })),
+    });
+    const scene1 = buildPreviewScene(project);
+    expect(scene1.roofLayerIds).toEqual(['roof_a', 'roof_b']);
+    expect(scene1.floors.map((floor) => floor.floorId)).toEqual([ground.id, upper.id, 'roof_a', 'roof_b']);
+    // Both roofs stand on the ground floor's trusses, so they report that floor
+    // (not the top one) and a scope on the upper floor hides them.
+    const roofLayer = (scene, id) => scene.floors.find((floor) => floor.floorId === id);
+    expect(roofLayer(scene1, 'roof_b').objects.every((object) => object.metadata.floorId === ground.id)).toBe(true);
+    const upperOnly = buildPreviewScene(project, { visibleFloorIds: [upper.id] });
+    expect(roofLayer(upperOnly, 'roof_a').visible).toBe(false);
+    expect(roofLayer(upperOnly, 'roof_b').visible).toBe(false);
+    // The ground floor's key carries both systems' roofs.
+    expect(roofLayer(scene1, ground.id).sourceKey.roofSystems.map((roof) => roof.id)).toEqual(['roof_a', 'roof_b']);
+
+    const cache = createCache();
+    const { root, meshMap } = cache.build(withoutMembers(scene1), palette);
+    const group = (id) => root.children.find((child) => child.name === `floor-${id}`);
+    const roofA1 = group('roof_a');
+    const roofB1 = group('roof_b');
+    expect(roofA1).toBeDefined();
+    expect(roofB1).toBeDefined();
+    expect(meshMap.has('roof_a')).toBe(true);
+    expect(meshMap.has('roof_b')).toBe(true);
+
+    // A slope edit on roof A: roof A rebuilds, roof B keeps its group, the
+    // upper floor (no trusses) keeps its group.
+    const upper1 = group(upper.id);
+    const steeperA = {
+      ...project,
+      roofSystems: [
+        { ...project.roofSystems[0], pitchSource: 'manual', pitch: { ...project.roofSystems[0].pitch, slope: 60 } },
+        project.roofSystems[1],
+      ],
+    };
+    cache.build(withoutMembers(buildPreviewScene(steeperA)), palette);
+    expect(group('roof_a')).not.toBe(roofA1);
+    expect(group('roof_b')).toBe(roofB1);
+    expect(group(upper.id)).toBe(upper1);
   });
 });

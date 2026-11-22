@@ -36,3 +36,23 @@ export function dropTrailingRepeatedPoints(points, tolerance) {
   }
   return kept;
 }
+
+/**
+ * What a double-click on an outline tool (slab, ceiling, roof opening) does,
+ * read from the corner list as the double-click finds it.
+ *
+ * - `commit`: three corners or more once the repeat is dropped. The outline is
+ *   finished on `points`.
+ * - `keep`: fewer than that. The repeat the second press stacked on the last
+ *   corner is dropped and the outline goes on from `points`; left in, it would
+ *   be committed later as an edge of no length.
+ * - `clear`: one corner or none before anything is dropped. That one corner was
+ *   put down by the second press alone: the first press closed the outline on
+ *   its first corner and the second started a new one on the same spot, which
+ *   nobody asked for.
+ */
+export function settleOutlineDoubleClick(points, tolerance) {
+  if ((points || []).length <= 1) return { action: 'clear', points: [] };
+  const kept = dropTrailingRepeatedPoints(points, tolerance);
+  return { action: kept.length >= 3 ? 'commit' : 'keep', points: kept };
+}

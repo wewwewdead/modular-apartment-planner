@@ -58,7 +58,7 @@ function trussSystemDatumReadsRoofOverhang(trussSystem, catalog) {
   return Boolean(firstInstance) && resolveTrussType(firstInstance.trussTypeId, catalog)?.shape === 'hip';
 }
 
-export function getRoofAttachmentElevation(project, roofSystem = project?.roofSystem || null) {
+export function getRoofAttachmentElevation(project, roofSystem = null) {
   if (getAttachedTrussSystem(project, roofSystem)) {
     // One rule with the normalizer (syncRoofSystemAttachment), so an offset the
     // reducer stores against this elevation re-derives the same base.
@@ -68,7 +68,7 @@ export function getRoofAttachmentElevation(project, roofSystem = project?.roofSy
   return getFloorStackBounds(project).maxElevation;
 }
 
-export function getAttachedTrussSystem(project, roofSystem = project?.roofSystem || null) {
+export function getAttachedTrussSystem(project, roofSystem = null) {
   if (!project || !roofSystem?.trussAttachmentId) return null;
   return getProjectTrussSystem(project, roofSystem.trussAttachmentId);
 }

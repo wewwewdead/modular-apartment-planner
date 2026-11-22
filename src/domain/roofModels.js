@@ -18,7 +18,8 @@ import { polygonArea } from '@/geometry/polygon';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { deriveCustomRoofTopology } from '@/roof/customRoofTopology';
-import { reuseIfEqual } from './structuralSharing';
+import { getProjectRoofs, getRoofForTrussSystem } from './projectRoofs';
+import { reuseArrayIfSameElements, reuseIfEqual } from './structuralSharing';
 import {
   getAttachedTrussSystem,
   getRoofAttachmentElevation,
@@ -162,14 +163,32 @@ export function getAttachableRoofTrussSystems(project, catalog) {
   );
 }
 
+/** Roof-ready truss systems that carry no roof yet: the ones a new roof may go on (one roof per system). */
+export function getRooflessRoofTrussSystems(project, catalog) {
+  return getAttachableRoofTrussSystems(project, catalog).filter(
+    (trussSystem) => !getRoofForTrussSystem(project, trussSystem.id),
+  );
+}
+
+// A requested system is honoured or refused, never swapped for another: a
+// request for a system that already has a roof (or cannot carry one) makes no
+// roof, so a second roof can never land on, or move to, the wrong trusses.
 function resolveCreateRoofAttachmentId(project, requestedTrussAttachmentId = null, catalog) {
   const normalizedRequestedId = normalizeTrussAttachmentId(requestedTrussAttachmentId);
-  const attachableTrussSystems = getAttachableRoofTrussSystems(project, catalog);
-  if (!attachableTrussSystems.length) return null;
-  if (normalizedRequestedId && attachableTrussSystems.some((entry) => entry.id === normalizedRequestedId)) {
-    return normalizedRequestedId;
+  const rooflessTrussSystems = getRooflessRoofTrussSystems(project, catalog);
+  if (normalizedRequestedId) {
+    return rooflessTrussSystems.some((entry) => entry.id === normalizedRequestedId) ? normalizedRequestedId : null;
   }
-  return attachableTrussSystems[0].id;
+  return rooflessTrussSystems[0]?.id || null;
+}
+
+/** `Roof` for the first roof, then `Roof 2`, `Roof 3` … skipping names already in use. */
+export function getNextRoofName(project) {
+  const usedNames = new Set(getProjectRoofs(project).map((roofSystem) => roofSystem?.name));
+  if (!usedNames.has('Roof')) return 'Roof';
+  let index = 2;
+  while (usedNames.has(`Roof ${index}`)) index += 1;
+  return `Roof ${index}`;
 }
 
 function resolveAttachedRoofOverrides(roofSystemLike, attachmentContext) {
@@ -659,7 +678,7 @@ export function createRoofSystemForProject(project, options = {}) {
   const attachedOverrides = resolveAttachedRoofOverrides(creationOptions, attachmentContext);
   if (!attachedOverrides.followsAttachedTruss) return null;
 
-  return createRoofSystem(options.name ?? 'Roof', {
+  return createRoofSystem(options.name ?? getNextRoofName(project), {
     ...creationOptions,
     baseElevation: options.baseElevation ?? attachmentElevation + attachmentOffset,
     attachmentOffset,
@@ -729,19 +748,23 @@ export function syncRoofSystemAttachment(project, roofSystem) {
   };
 }
 
-export function syncProjectRoofSystem(project) {
+export function syncProjectRoofSystems(project) {
   if (!project) return project;
 
   // An unchanged roof keeps its identity (structuralSharing.js), so the
   // preview's roof layer and everything else keyed on it survive an edit that
-  // did not touch it.
-  const syncedRoofSystem = project.roofSystem
-    ? reuseIfEqual(project.roofSystem, syncRoofSystemAttachment(project, project.roofSystem))
-    : null;
+  // did not touch it; a list whose roofs all survived keeps its identity too.
+  const roofSystems = getProjectRoofs(project);
+  const syncedRoofSystems = reuseArrayIfSameElements(
+    roofSystems,
+    roofSystems
+      .filter(Boolean)
+      .map((roofSystem) => reuseIfEqual(roofSystem, syncRoofSystemAttachment(project, roofSystem))),
+  );
 
   return {
     ...project,
     version: Math.max(CURRENT_PROJECT_VERSION, Number(project.version || 0)),
-    roofSystem: syncedRoofSystem,
+    roofSystems: syncedRoofSystems,
   };
 }

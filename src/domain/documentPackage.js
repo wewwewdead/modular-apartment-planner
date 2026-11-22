@@ -4,6 +4,7 @@ import { deriveQuantityTakeoff } from './quantityTakeoff';
 import { deriveFeasibilityComparison, deriveFeasibilityEconomics } from './feasibilityEconomics';
 import { deriveProfessionalHandoff } from './professionalHandoff';
 import { deriveDocumentModelSignature } from './documentSignature';
+import { getProjectRoofs } from './projectRoofs';
 import { beamLength } from '@/geometry/beamGeometry';
 import { polygonArea } from '@/geometry/polygon';
 import { deriveApartmentDesignCoordination } from './apartmentDesign';
@@ -26,6 +27,17 @@ function reportRow(...cells) {
 
 function areaM2(value) {
   return ((Number(value) || 0) / 1_000_000).toFixed(2);
+}
+
+/** The modelled roofs' types, each once, in roof order ('' when there is no roof). */
+function modeledRoofTypes(project) {
+  return [
+    ...new Set(
+      getProjectRoofs(project)
+        .map((roofSystem) => roofSystem.roofType)
+        .filter(Boolean),
+    ),
+  ].join(', ');
 }
 
 function quantityValue(item) {
@@ -509,13 +521,16 @@ export function buildBuildingReport(project, reportType) {
           `${zone.unitCount ?? 'Unspecified'} units`,
         ),
       ),
-      ...(project.roofSystem?.drains || []).map((drain) =>
-        reportRow(
-          'Roof drain path',
-          drain.name || drain.id,
-          `Ø ${drain.diameter} mm · ${(drain.routePoints || []).length} points`,
-          'Roof',
-          `${drain.outletRef?.kind || 'Outlet missing'} ${drain.outletRef?.id || ''}`,
+      // Every roof's drains; with several roofs the row names the roof it drains.
+      ...getProjectRoofs(project).flatMap((roofSystem, _index, roofSystems) =>
+        (roofSystem.drains || []).map((drain) =>
+          reportRow(
+            'Roof drain path',
+            drain.name || drain.id,
+            `Ø ${drain.diameter} mm · ${(drain.routePoints || []).length} points`,
+            roofSystems.length > 1 ? roofSystem.name || 'Roof' : 'Roof',
+            `${drain.outletRef?.kind || 'Outlet missing'} ${drain.outletRef?.id || ''}`,
+          ),
         ),
       ),
       ...(plumbing.drainageRoutes || []).map((route) =>
@@ -782,7 +797,7 @@ export function buildBuildingReport(project, reportType) {
         brief.targetBudget == null ? 'Not set' : `${brief.currency || 'PHP'} ${brief.targetBudget}`,
       ),
       reportRow('Structural strategy', structural.strategy || 'Not set'),
-      reportRow('Roof type', brief.roofType || project.roofSystem?.roofType || 'Not set'),
+      reportRow('Roof type', brief.roofType || modeledRoofTypes(project) || 'Not set'),
       reportRow('North angle', `${site.northAngle || 0}°`),
       reportRow('Structural status', 'Modeled / deterministic coordination checks only'),
     ],
@@ -863,7 +878,9 @@ export function derivePreliminaryPackage(project, packageId = 'alpha', options =
     (systems.electrical?.points || []).length > 0 ||
     (systems.water?.equipmentZones || []).length > 0 ||
     (systems.mechanical?.outdoorUnitZones || []).length > 0;
-  const hasRoofDrainage = (project.roofSystem?.drains || []).some((drain) => (drain.routePoints || []).length >= 2);
+  const hasRoofDrainage = getProjectRoofs(project).some((roofSystem) =>
+    (roofSystem.drains || []).some((drain) => (drain.routePoints || []).length >= 2),
+  );
   const hasServices =
     (systems.plumbing?.shafts || []).length > 0 ||
     (systems.plumbing?.drainageRoutes || []).length > 0 ||
@@ -901,7 +918,7 @@ export function derivePreliminaryPackage(project, packageId = 'alpha', options =
     { id: 'site_plan', label: 'Site development plan', ready: (project.building?.site?.boundary || []).length >= 3 },
     { id: 'site_access', label: 'Parking and vehicle-access coordination', ready: hasParking },
     { id: 'floor_plans', label: 'Floor plans', ready: floors.length > 0 && hasModeledGeometry(project) },
-    { id: 'roof_plan', label: 'Roof plan', ready: Boolean(project.roofSystem) },
+    { id: 'roof_plan', label: 'Roof plan', ready: getProjectRoofs(project).length > 0 },
     { id: 'roof_drainage', label: 'Roof-drainage coordination', ready: hasRoofDrainage },
     { id: 'elevations', label: 'Building elevations', ready: hasModeledGeometry(project) },
     { id: 'section', label: 'Building section', ready: Boolean(section) },
@@ -1006,7 +1023,9 @@ export function derivePreliminaryPackage(project, packageId = 'alpha', options =
       ]),
     );
   });
-  if (project.roofSystem) {
+  // One roof plan sheet for the building, however many roofs it has: the sheet's
+  // view draws every roof.
+  if (getProjectRoofs(project).length) {
     sheets.push(
       sheet(project, packageId, 'A-201', 'Roof Plan', [
         viewport(project, packageId, 'A201', 'roof_plan', ground?.id, { scale: 100 }),

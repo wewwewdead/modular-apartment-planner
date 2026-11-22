@@ -39,6 +39,7 @@ import {
 import {
   bendQueue,
   foldOf,
+  lotOf,
   outlineEditRefusal,
   partProgress,
   readyOutlines,
@@ -73,6 +74,8 @@ import {
   failingSteps,
   finishedHere,
   needsAdvice,
+  pieceChoice,
+  piecesTogether,
   punchReversed,
   sequenceTries,
   rerunStroke,
@@ -90,6 +93,8 @@ import {
   brakeKeyAct,
   fingerOffer,
   fingerRestore,
+  pieceOffer,
+  slideOffer,
 } from './brakeHands.js';
 import {
   foldProblem,
@@ -182,6 +187,9 @@ import { changeRowCount, rowCountLabel } from './placementRows.js';
 import { canFlipSide, chosenHoleRows, flipHardwareSide, pickRowHoles, removeChosenHole } from './placementHardware.js';
 import { mapPlacement, unmapPlacement } from './placement.js';
 import {
+  blankBaseName,
+  blankCopy,
+  blankName,
   clone,
   createPart,
   duplicateSheet,
@@ -189,11 +197,11 @@ import {
   isFlatSheet,
   normalizeModel,
   numeric,
-  removeInstance,
   removeInstances,
   removePart,
   removeSheets,
   resolveParameters,
+  separateSheetBlanks,
   uid,
 } from './model.js';
 import { furnitureExample, bracketExample } from './examples.js';
@@ -202,7 +210,7 @@ import { buildCutList, cutListCsv } from './fabrication.js';
 import { sectionLabel } from './stockSections.js';
 import CadSketcher from './CadSketcher.jsx';
 import { ExtrudeSummary, SketchOperationPanel, SketchSummary } from './SketchPanels.jsx';
-import { SKETCH_PLANES, planeFrame, sketchConsumer, sketchWorldFrame, toPlane } from './sketchPlane.js';
+import { SKETCH_PLANES, askedConsumer, planeFrame, sketchConsumer, sketchWorldFrame, toPlane } from './sketchPlane.js';
 import { storedZero } from './sketchZero.js';
 import { HELP_SECTIONS, helpKeys, sketchHelp } from './sketchHelp.js';
 import { SKETCH_COMMAND_KEYS, SKETCH_KEYS, SKETCH_TOOLS } from './sketchTools.js';
@@ -212,7 +220,23 @@ import { entityPolyline, profileToEntities } from './sketchProfile.js';
 import { setGaps } from './cornerGaps.js';
 import { carryDimensions, carryEntities } from './outlineMove.js';
 import { mateInstance, mateNodes } from './mate.js';
-import { BRAKE, FILM, LASER, MATE, PAINT, PDF_RUN, PRINT, activeTool } from './toolSession.js';
+import {
+  BRAKE,
+  FILM,
+  LASER,
+  LIGHT_TOOLS,
+  MATE,
+  PAINT,
+  PDF_RUN,
+  PRINT,
+  ROUTE_WAITS_FOR,
+  SELECTION_FREE_TOOLS,
+  SHOP_STATIONS,
+  activeTool,
+  openTools,
+  resumeSession,
+  toolOpenBesides,
+} from './toolSession.js';
 import {
   createFilmClock,
   filmBeats,
@@ -316,6 +340,16 @@ const DRAWING_SOURCE_KEYS = ['parameters', 'sketches', 'parts', 'instances', 'co
 const DRAWN_SHEET_KEYS = ['views', 'section', 'partId', 'instanceIds', 'explodeDistance'];
 const sameDrawingSource = (a, b) => Boolean(a && b) && DRAWING_SOURCE_KEYS.every((k) => a[k] === b[k]);
 const sameDrawnSheet = (a, b) => DRAWN_SHEET_KEYS.every((k) => JSON.stringify(a?.[k]) === JSON.stringify(b?.[k]));
+// A JSON editor's key: its value as text, so it remounts (dropping a draft)
+// when the content changes. Model records are never changed in place, so the
+// text is worked out once per object rather than on every render.
+const jsonKeys = new WeakMap();
+const jsonKey = (value) => {
+  if (!value || typeof value !== 'object') return JSON.stringify(value);
+  let key = jsonKeys.get(value);
+  if (key === undefined) jsonKeys.set(value, (key = JSON.stringify(value)));
+  return key;
+};
 // The stale reasons the open sheet generates by itself for (Phase S §7);
 // a model change waits for Update drawing preview, as before.
 const AUTO_DRAWING_REASONS = ['This sheet has no views yet', 'The view list changed', 'The drawing subject changed'];
@@ -376,10 +410,9 @@ const finishDraft = (finish) =>
 // a removal) steps back to what still stands; the same object otherwise.
 function liveShopSession(model, session) {
   if (!session) return session;
-  // The replay (§8) shows the model it started on; nothing commits while it
-  // plays, and should anything change the model under it, it ends rather
-  // than show a film of a model that is no longer there.
-  if (session.station === 'film') return session.source === model ? session : null;
+  // The replay (§8) names no part of its own: a model change under it ends it
+  // in the workspace, which puts back what it started over (putBackFilm).
+  if (session.station === 'film') return session;
   const has = (id) => model.instances.some((i) => i.id === id);
   // The laser's part gone (an Undo, a removal) or no longer sheet metal: it
   // ends. Its job keeps the instances still there (SN-1 §4.2); Quantity's new
@@ -388,6 +421,16 @@ function liveShopSession(model, session) {
   if (session.station === 'laser') {
     const placed = model.instances.find((i) => i.id === session.instanceId);
     if (!sheetMetalFeature(model.parts.find((p) => p.id === placed?.partId))) return null;
+    // A cut runs on the model it started on (an Undo mid-cut): it stops, so
+    // the bed never draws an old job's path over the new one, nor says it cut.
+    if (session.stage === 'cutting' && session.run && session.run.model !== model)
+      return {
+        ...session,
+        stage: LASER.next(session.stage, 'STOP'),
+        run: null,
+        cut: false,
+        runKey: (session.runKey || 0) + 1,
+      };
     if (!Array.isArray(session.instanceIds)) return session;
     const fresh = session.fresh || [];
     const instanceIds = session.instanceIds.filter((id) => has(id) || fresh.includes(id));
@@ -396,11 +439,13 @@ function liveShopSession(model, session) {
       ? session
       : { ...session, instanceIds, fresh: unseen };
   }
+  // The booth: the targets still there keep what was asked of them (a Strip
+  // waiting on its confirm stays a Strip); with none left it is back at the pick.
   if (session.station === 'paint') {
     const targets = session.targets.filter(has);
     if (targets.length === session.targets.length) return session;
-    const stage = targets.length ? session.stage : PAINT.next(PAINT.next(session.stage, 'BACK'), 'BACK');
-    return { ...session, targets, stage, pending: null };
+    if (targets.length) return { ...session, targets };
+    return { ...session, targets, stage: PAINT.next(session.stage, 'GONE'), pending: null };
   }
   // A print placed by this session reaches the model with (or after) the
   // session's own update: it is only "gone" once it has been seen there.
@@ -409,6 +454,15 @@ function liveShopSession(model, session) {
   if (present) return session.printSeen === session.printId ? session : { ...session, printSeen: session.printId };
   if (session.printSeen !== session.printId) return session;
   return { ...session, stage: PRINT.next(session.stage, 'NEW'), printId: null };
+}
+// Sets each [value, setter, empty] slot to its empty value (null unless
+// given) and returns what puts every one back as it was: what a way out of a
+// station clears and what puts it back are one list.
+function clearSlots(slots) {
+  for (const [, set, empty = null] of slots) set(empty);
+  return () => {
+    for (const [was, set] of slots) set(was);
+  };
 }
 const fmtMm = (value) => Number(value.toFixed(2)).toString();
 const printLabel = (print) =>
@@ -556,6 +610,12 @@ export default function CadWorkspace({
   // The single selected part: every single-part tool keys on it, as before;
   // a group or a multi-selection has no part, like no selection.
   const selectedId = liveSelection.length === 1 && !isGroupId(draftModel, liveSelection[0]) ? liveSelection[0] : null;
+  // The part selected now, for a step that awaits (an operation's references)
+  // to see whether the selection moved meanwhile, as latestModel does the model.
+  const latestSelectedId = useRef(selectedId);
+  useLayoutEffect(() => {
+    latestSelectedId.current = selectedId;
+  }, [selectedId]);
   const selectedGroup =
     liveSelection.length === 1 ? model.groups?.find((g) => g.id === liveSelection[0]) || null : null;
   // Every part the selection holds (groups expanded), in model order.
@@ -617,6 +677,23 @@ export default function CadWorkspace({
   // Press brake refused by the shop order ({ partId }), and the last refused pedal or sequence edit.
   const [brakeBlocked, setBrakeBlocked] = useState(null);
   const [brakeProblem, setBrakeProblem] = useState('');
+  // The fingers or a blade clicked on the sheet (docs/sketch-studio-brake-hands-on.md
+  // §6.2, §6.3): the blade picker the panel shares with the sheet, and a
+  // one-shot request for the L field or a picker to take focus.
+  const [brakePicker, setBrakePicker] = useState(null);
+  const [brakeFocus, setBrakeFocus] = useState(null);
+  // Everything a press brake visit leaves behind: the session, the card that
+  // stands in for one (the shop-order refusal, the Finished card), the picker
+  // and a focus request. Every way out of the brake clears them all here
+  // (endBrake returns what puts them back); the problem line and the panel are
+  // each exit's own.
+  const brakeLeft = () => [
+    [brakeSession, setBrakeSession],
+    [brakeBlocked, setBrakeBlocked],
+    [brakePicker, setBrakePicker],
+    [brakeFocus, setBrakeFocus],
+  ];
+  const endBrake = () => clearSlots(brakeLeft());
   // The paint and print stations (§9 SM-3), the laser and the replay: {
   // station ('paint' | 'print' | 'laser' | 'film'), stage (PAINT / PRINT /
   // LASER / FILM), key, ...the picks and settings }; null when closed. Never
@@ -624,6 +701,12 @@ export default function CadWorkspace({
   const [shopSession, setShopSession] = useState(null);
   const [shopProblem, setShopProblem] = useState('');
   const [shopNotice, setShopNotice] = useState('');
+  // The session on show, for a result that lands later (a cut's end, an
+  // image's decode): it applies only to the session that asked for it.
+  const latestShop = useRef(shopSession);
+  useLayoutEffect(() => {
+    latestShop.current = shopSession;
+  }, [shopSession]);
   // Quantity's card (SN-1 §4.3) when fewer copies could go than asked: { text, model }, shown while the model is the one it describes.
   const [copiesNote, setCopiesNote] = useState(null);
   // What to do with a bought-in item just added ({ text, selectionKey }): the
@@ -808,7 +891,12 @@ export default function CadWorkspace({
     brakeAdvice.params === sheetParameters
       ? brakeAdvice.station
       : brakeFacts;
-  if (brakeSession && brakeFacts?.closed) setBrakeSession(null);
+  // Its part gone (an Undo, a removal): the session ends and takes its own
+  // panel with it, or the route would still read Bend as the open station.
+  if (brakeSession && brakeFacts?.closed) {
+    endBrake();
+    if (panel === 'press-brake') setPanel(null);
+  }
   // The blade picker's cards (docs/sketch-studio-brake-flip-tooling.md §4.1):
   // the pending hit tried with every punch or die, only while the picker is open.
   const brakeBladeOptions = useCallback(
@@ -866,6 +954,13 @@ export default function CadWorkspace({
   const rowTries = brakeRowsCollide && brakeRowTries?.checks === brakeChecks ? brakeRowTries.tries : null;
   // The viewport poses from the facts: the advice arriving changes no pose.
   const brakeView = brakeFacts && !brakeFacts.closed && !brakeFacts.error ? brakeFacts.view : null;
+  // A stroke whose station went from under it (the blank or the parameters
+  // can no longer be read): the shop layer has dropped it, so its end never
+  // comes. It ends here as a stroke on a moved model does, nothing committed.
+  if (brakeSession?.stage === 'stroke' && !brakeView && !brakeFacts?.closed) {
+    setBrakeSession({ ...brakeSession, stage: BRAKE.next(brakeSession.stage, 'DONE'), stroke: null });
+    setBrakeProblem('The model changed during the stroke: this hit was not saved.');
+  }
   // A flange gap row hovered in the press brake's card (docs/sketch-studio-
   // corner-gaps.md §3.3): its marker in the 3D view (by its own prop, never
   // inside brakeView: a new view re-poses the station) and its edges on the
@@ -897,6 +992,29 @@ export default function CadWorkspace({
     brakeFacts.feature === brakeGapHover.feature &&
     brakeFacts.profile === brakeGapHover.profile
       ? brakeGapHover
+      : null;
+  // A piece chip pointed at or focused in the press brake's panel
+  // (docs/sketch-studio-piece-pick.md §5.5): that piece lit on the flat blank
+  // (the 3D sheet: PK-2). Kept with the line it was named on (its pieces, by
+  // where they lie): it goes as soon as the line's pieces change, the station
+  // closes or a stroke runs.
+  const [brakePieceHover, setBrakePieceHover] = useState(null);
+  const brakePieces = brakeFacts?.segments || null;
+  const piecesKey = brakePieces ? brakePieces.map((s) => `${s.a}|${s.b}`).join(';') : '';
+  const hoverBrakePiece = useCallback(
+    (index) =>
+      setBrakePieceHover(
+        index == null ? null : { index, line: piecesKey, instanceId: brakeSession?.instanceId ?? null },
+      ),
+    [piecesKey, brakeSession?.instanceId],
+  );
+  const brakePiece =
+    brakePieceHover &&
+    brakeView &&
+    brakeSession?.stage === 'setup' &&
+    brakeSession.instanceId === brakePieceHover.instanceId &&
+    brakePieceHover.line === piecesKey
+      ? brakePieceHover.index
       : null;
   // Hands on the sheet (docs/sketch-studio-brake-hands-on.md §5.4): what
   // Flip sheet and Turn sheet around would leave, worked out as the advice is
@@ -968,9 +1086,20 @@ export default function CadWorkspace({
             edges: brakeSettled && brakeMode === 'gauge' ? brakeFacts.edges : null,
             edge: brakeFacts.edge?.index ?? null,
             fingers: brakeSettled ? fingerOffer(brakeFacts, brakeSession) : null,
+            // Piece pick PK-2 (§6.1, §6.3): the pieces of the line, only in setup and only
+            // when it crosses more than one (flat mm); the one the panel names; the gauge
+            // edge the fingers stand behind (a stroke's too: the fingers stay where they were).
+            pieces: brakeSettled && (brakeFacts.segments || []).length > 1 ? pieceOffer(brakeFacts.segments) : null,
+            litPiece: brakePiece,
+            gaugeEdge: brakeMode === 'gauge' ? brakeFacts.edge || null : null,
+            // Slide sheet (docs/sketch-studio-sheet-slide.md §6.1): with a pending hit, in setup.
+            slide:
+              brakeSettled && brakeFacts.pending && !brakeFacts.pending.error
+                ? slideOffer(brakeFacts.pending.tooling, brakeSession.slide)
+                : null,
           }
         : null,
-    [brakeView, brakeSettled, brakeLined, handsNow, handsLazy, brakeMode, brakeFacts, brakeSession],
+    [brakeView, brakeSettled, brakeLined, handsNow, handsLazy, brakeMode, brakeFacts, brakeSession, brakePiece],
   );
   // The shown feature is the part's only enabled one: removing or suppressing
   // it would leave a part with no solid (kernel "no active solid features"),
@@ -1012,11 +1141,15 @@ export default function CadWorkspace({
   // the final Enter / blur of the same session replace the model without a new
   // entry; Esc after live edits reverts and drops the session's entry. Any
   // commit without a session (a drag, a button, a select) ends the coalescing.
+  // The keeper (docs/sketch-studio-own-bends.md §4.2): one piece of metal is
+  // one part, so a sheet-metal part given a second instance here (Duplicate
+  // instance, Reusable definitions, the Model JSON, an example) is separated
+  // into blanks of their own before it is stored.
   const commit = (next) => {
     const meta = fieldMeta.current;
     const session = meta?.session ?? null;
     const coalesce = Boolean(session) && session === fieldSession.current && fieldModel.current === model;
-    const normalized = normalizeModel(next);
+    const normalized = separateSheetBlanks(normalizeModel(next));
     if (meta?.revert) {
       // Nothing of this session is (still) in the model: nothing to revert.
       if (!coalesce) return;
@@ -1046,10 +1179,20 @@ export default function CadWorkspace({
   };
   const marks = model.marks || [];
   const selectedMark = marks.find((m) => m.id === selectedMarkId);
+  // Every open tool (toolSession.js openTools): what each "is another tool
+  // open" rule below reads, so a tool or station added later reaches them all.
+  const toolState = {
+    operationDraft,
+    sketchSession,
+    mateSession,
+    measureSession,
+    holeMode,
+    brakeSession,
+    shopSession,
+  };
+  const tools = openTools(toolState);
   // Measure needs the assembled, unexploded model and no other tool.
-  const measureBlocked = Boolean(
-    exploded || operationDraft || sketchSession || mateSession || holeMode || brakeSession || shopSession || busy,
-  );
+  const measureBlocked = Boolean(exploded || busy || toolOpenBesides(tools, ['measure']));
   const measuring = Boolean(measureSession) && !measureBlocked;
   // Placement edits only need the displayed mesh, so they chain while the
   // kernel is still rebuilding the previous placement.
@@ -1059,29 +1202,19 @@ export default function CadWorkspace({
     !['error', 'cancelled'].includes(runtime.status) &&
     !exploded &&
     !busy &&
-    !operationDraft &&
-    !holeMode &&
-    !sketchSession &&
-    !mateSession &&
-    !brakeSession &&
-    !shopSession &&
-    !measureSession,
+    !tools.length,
   );
   // The Unfold view belongs to the selected sheet-metal part while no tool
   // runs: another selection or any tool folds it back at once (state-machines.md).
-  const runningTool = activeTool({
-    operationDraft,
-    sketchSession,
-    mateSession,
-    measureSession,
-    holeMode,
-    brakeSession,
-    shopSession,
-  });
+  const runningTool = activeTool(toolState);
   if (sheetFlat && (sheetFlat.instanceId !== selectedId || runningTool)) setSheetFlat(null);
   // A station whose picks name parts that are gone (an Undo, a removal) keeps what still stands.
   const liveShop = liveShopSession(model, shopSession);
-  if (liveShop !== shopSession) setShopSession(liveShop);
+  if (liveShop !== shopSession) {
+    setShopSession(liveShop);
+    if (shopSession.stage === 'cutting' && liveShop && liveShop.stage !== 'cutting')
+      setShopProblem('The model changed during the cut: cut again.');
+  }
   // The laser station (laserStation.js), derived from the model, its lead
   // part, the job and the sheet shown (SN-1 §4.2; the quantity is the model's).
   const laserSession = shopSession?.station === 'laser' ? shopSession : null;
@@ -1142,11 +1275,13 @@ export default function CadWorkspace({
   // handler sees the current selection and settings.
   useEffect(() => {
     const keyDown = (event) => {
-      // Delete / Backspace removes the selected mark (parts have no Delete key).
+      // Delete / Backspace removes the selected mark (parts have no Delete key),
+      // while Measure (the marks' own tool) or the hole tool is open, or none:
+      // a commit under another tool would break it (a stroke, a draft).
       if (
         (event.key === 'Delete' || event.key === 'Backspace') &&
         selectedMark &&
-        !sketchSession &&
+        !toolOpenBesides(tools, LIGHT_TOOLS) &&
         !editableTarget(event.target) &&
         !event.ctrlKey &&
         !event.metaKey &&
@@ -1163,16 +1298,7 @@ export default function CadWorkspace({
         nodes: liveSelection.length,
         hasGroup: liveSelection.some((id) => isGroupId(model, id)),
         openGroupId: openGroup,
-        busy: Boolean(
-          sketchSession ||
-          holeMode ||
-          mateSession ||
-          operationDraft ||
-          measureSession ||
-          brakeSession ||
-          shopSession ||
-          busy,
-        ),
+        busy: tools.length > 0 || busy,
         dragging: Boolean(viewport.current?.isDragging?.()),
       });
       if (groupAction) {
@@ -1185,9 +1311,7 @@ export default function CadWorkspace({
       }
       const action = placementKeyAction(event, {
         selected: Boolean(part) || isBody,
-        busy: Boolean(
-          sketchSession || holeMode || mateSession || operationDraft || measureSession || brakeSession || shopSession,
-        ),
+        busy: tools.length > 0,
         measuring: Boolean(measureSession),
         placeable,
         dragging: Boolean(viewport.current?.isDragging?.()),
@@ -1224,8 +1348,7 @@ export default function CadWorkspace({
     if (operationDraft) setIsolated(operationDraft.previousIsolation);
     setOperationDraft(null);
     setMateSession(null);
-    setBrakeSession(null);
-    setBrakeBlocked(null);
+    endBrake();
     setShopSession(null);
     setShopGate(null);
     setPendingStation(null);
@@ -1349,13 +1472,17 @@ export default function CadWorkspace({
   // under the view centre (like a new Board); its feature opens for bending.
   // `sheet` (SF-3): the stock sheet to cut it from, when the model's does not hold the blank.
   // `companions` (round-bend spec §13.3): parts made with it, [{ sketch, part,
-  // poses }], one instance per pose (a 4 × 4 in the new part's frame): a flanged
+  // poses }], one blank per pose (a 4 × 4 in the new part's frame): a flanged
   // panel's corner pieces, set in their corners and grouped with the panel
   // (named after it) so they move as one.
   // SN-1 (docs/sketch-studio-outline-edit-sheet-nest.md §4.3, §4.8): `quantity`
-  // instances of the part (each copy a blank on the shared sheet), or `items`
-  // — a batch, one record { sketch, part, centre, bounds, quantity } per
-  // outline — made in ONE commit (one Undo takes it all back). The new
+  // blanks of the part (each on the shared sheet), or `items` — a batch, one
+  // record { sketch, part, centre, bounds, quantity } per outline — made in
+  // ONE commit (one Undo takes it all back). One piece of metal is one part
+  // (docs/sketch-studio-own-bends.md §4.3): blank 1 is the part handed over
+  // (its name untouched), blank k ≥ 2 its copy "{name} #k" (blankCopy: bends
+  // kept, "Cut and bend it for me" hands over a bent part), each with its one
+  // instance; a corner piece is one part per pose the same way. The new
   // instances are laid out in rows round the view's drop point
   // (shopParts.js landingPositions: one blank lands exactly as before); the
   // laser then opens on the first, cutting every new one (a batch names them
@@ -1397,9 +1524,20 @@ export default function CadWorkspace({
   }) => {
     const lots = items || [{ sketch, part: created, centre, bounds, quantity }];
     const [x, y] = viewport.current?.viewDropPoint?.() ?? [0, 0, 0];
+    // The part names taken, the model's and those made in this commit (own bends §4.3).
+    const taken = new Set([
+      ...model.parts.map((p) => p.name),
+      ...lots.map((lot) => lot.part.name),
+      ...companions.map((c) => c.part.name),
+    ]);
+    const another = (part) => {
+      const name = blankName(part.name, taken);
+      taken.add(name);
+      return blankCopy(part, { name });
+    };
     const made = lots.flatMap((lot) =>
-      Array.from({ length: Math.max(1, Math.round(Number(lot.quantity) || 1)) }, () => ({
-        part: lot.part,
+      Array.from({ length: Math.max(1, Math.round(Number(lot.quantity) || 1)) }, (_, k) => ({
+        part: k === 0 ? lot.part : another(lot.part),
         // A record without bounds (an older caller) is a point at its centre.
         box: lot.bounds || [lot.centre, lot.centre],
       })),
@@ -1420,15 +1558,16 @@ export default function CadWorkspace({
     const placed = placedAll[0];
     const first = lots[0].part;
     // The new part is not turned: a pose moves by its position only (the panel maker's corner pieces).
-    const beside = companions.flatMap(({ part, poses }) =>
-      poses.map((pose) => ({
-        id: uid('instance'),
-        partId: part.id,
-        name: '',
-        ...matrixPose(pose.map((v, k) => (k >= 12 && k < 15 ? v + placed.position[k - 12] : v))),
-        visible: true,
-      })),
+    const pieces = companions.flatMap(({ part, poses }) =>
+      poses.map((pose, k) => ({ part: k === 0 ? part : another(part), pose })),
     );
+    const beside = pieces.map(({ part, pose }) => ({
+      id: uid('instance'),
+      partId: part.id,
+      name: '',
+      ...matrixPose(pose.map((v, k) => (k >= 12 && k < 15 ? v + placed.position[k - 12] : v))),
+      visible: true,
+    }));
     const next = {
       ...model,
       sketches: [
@@ -1436,7 +1575,7 @@ export default function CadWorkspace({
         ...lots.flatMap((lot) => (lot.sketch ? [lot.sketch] : [])),
         ...companions.map((c) => c.sketch),
       ],
-      parts: [...model.parts, ...lots.map((lot) => lot.part), ...companions.map((c) => c.part)],
+      parts: [...model.parts, ...made.map((m) => m.part), ...pieces.map((p) => p.part)],
       instances: [...model.instances, ...placedAll, ...beside],
       ...(sheet ? { fabrication: { ...model.fabrication, shop: { ...model.fabrication?.shop, sheet } } } : {}),
     };
@@ -1474,12 +1613,19 @@ export default function CadWorkspace({
       throw new Error('Wait for the current model to rebuild before adding an operation.');
     let references = [];
     if (['fillet', 'chamfer', 'shell'].includes(type) && part && runtime.ready) {
+      // `busy` is cleared only by the flow that owns it: one that found it
+      // already held leaves it, and an export or a Cancel since (a new
+      // generation) has taken it over.
+      const generation = exportGeneration.current;
+      const owner = !busy;
       setBusy(true);
       try {
         references = await runtime.request('references', { partId: part.id, beforeFeatureId: existingFeature?.id });
       } finally {
-        setBusy(false);
+        if (owner && generation === exportGeneration.current) setBusy(false);
       }
+      // A selection made while the references came opens nothing on the part it left.
+      if (latestSelectedId.current !== selectedId) throw new Error('The selection changed. Open the operation again.');
     }
     if (latestModel.current !== model) throw new Error('The model changed. Open the operation again.');
     const chosenSketch = model.sketches.find((s) => s.id === sketchId && isClosedProfile(s)) || null;
@@ -1587,12 +1733,22 @@ export default function CadWorkspace({
         });
     });
   useEffect(() => {
+    if (!reopen) return;
+    // The model from before the apply on show again after the commit had
+    // reached this component: an Undo took the apply back, so there is
+    // nothing to place another on and the reopen is forgotten.
+    if (model === reopen.before) {
+      if (reopen.left) setReopen(null);
+      return;
+    }
     // After the commit reaches this component and the model has rebuilt.
-    if (!reopen || model === reopen.before || !runtime.ready || operationDraft) return;
+    if (!runtime.ready || operationDraft) {
+      if (!reopen.left) setReopen({ ...reopen, left: true });
+      return;
+    }
     setReopen(null);
     // A tool started meanwhile (S works during the rebuild) keeps the view.
-    if (activeTool({ operationDraft, sketchSession, mateSession, measureSession, holeMode, brakeSession, shopSession }))
-      return;
+    if (tools.length > 0) return;
     perform(() => beginOperation(reopen.type, null, { template: reopen.template, row: reopen.row }));
     // Runs once the committed model has rebuilt; beginOperation reads that render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1848,10 +2004,14 @@ export default function CadWorkspace({
     if (!target) throw new Error('The sketch no longer exists.');
     const problem = sketchEditProblem(target);
     if (problem) throw new Error(problem);
-    const consumer = sketchConsumer(model, id);
+    // Several blanks share one outline (docs/sketch-studio-own-bends.md §4.6):
+    // the frame and the way back are the asked instance's when the caller
+    // names one (the laser, the part's form, the Tree's ↳ Edit sketch).
+    const asked = returnTo?.instanceId || null;
+    const consumer = askedConsumer(model, id, asked) || sketchConsumer(model, id);
     if (consumer?.instance && !runtime.ready)
       throw new Error('Wait for the model to rebuild before editing this sketch.');
-    const { frame } = sketchWorldFrame(model, runtime.snapshot, target);
+    const { frame } = sketchWorldFrame(model, runtime.snapshot, target, consumer?.instance?.id ?? null);
     const back =
       returnTo !== undefined
         ? returnTo
@@ -2028,6 +2188,8 @@ export default function CadWorkspace({
   const openSketchDraft = (sketchId, settings, ids, base, previous) => {
     const draft = sketchOperationDraft({ model: base, snapshot: runtime.snapshot, sketchId, settings, ids });
     setOperationDraft({ ...draft, ...previous, placement: sketchFlowPlacement(draft) });
+    // The hole tool and Measure give way, as to every other operation entry.
+    setHoleMode(null);
     setMeasureSession(null);
     setShowOperationPreview(true);
     setSelectedId(draft.newInstance?.id || settings.target);
@@ -2282,17 +2444,15 @@ export default function CadWorkspace({
     startPressBrake(brakeBlocked?.instanceId || selectedId, brakeBlocked?.carry || null);
   };
   const leavePressBrake = () => {
-    setBrakeSession(null);
-    setBrakePicker(null);
-    setBrakeFocus(null);
-    setBrakeBlocked(null);
+    endBrake();
     setBrakeProblem('');
     setPanel(null);
   };
   // The operator's picks: session state only (a new pick drops a scrub and the last refusal).
-  // A new line (edge, distance, points, mode) puts every segment back in the hit (§6.2) and
-  // starts the right way round (Turn sheet around, docs/sketch-studio-brake-flip-tooling.md §5.2);
-  // the punch and die keep their lengths (docs/sketch-studio-brake-tool-length.md §9.3, TL-2).
+  // A new line (edge, distance, points, mode) starts with its default pieces, or keeps the pick
+  // when only L moved (docs/sketch-studio-piece-pick.md §5.3), and the right way round (Turn sheet
+  // around, docs/sketch-studio-brake-flip-tooling.md §5.2); the punch and die keep their lengths
+  // (docs/sketch-studio-brake-tool-length.md §9.3, TL-2; piece pick §5.2).
   const changeBrake = (patch) => {
     setBrakeProblem('');
     // The one rule (brakeStation.js brakePatch): the collision card's trial and the grip's outcomes apply it too.
@@ -2313,21 +2473,44 @@ export default function CadWorkspace({
   // (these two are its onPickEdge and onDistance). A finger drag keeps the
   // line as it was when it started, for Esc (brakeHands.js fingerRestore).
   const pickBrakeEdge = (edge) => changeBrake({ mode: 'gauge', edge, scrub: null });
+  // A piece of the line clicked on the flat blank or on the sheet (docs/sketch-studio-piece-pick.md
+  // §5.6, §6.1): bend only it; with Ctrl, Shift or Meta into the hit or left flat; a made bend's
+  // pieces go together (bent on whole). One path for both clicks.
+  const pickBrakePiece = (index, { add = false } = {}) => {
+    if (brakeSession?.stage !== 'setup' || !brake || brake.error || brake.closed) return;
+    const pieces = brake.segments || [];
+    const skip = pieceChoice(pieces.length, brakeSession.skip || [], index, { add, together: piecesTogether(pieces) });
+    if (skip) changeBrake({ skip, scrub: null });
+  };
   // `more`: the flat-blank card's drag names `stop: null` (a flat distance, skin gauge §4.5 step 1).
   const brakeDistance = (distance, more = null) => changeBrake({ distance, scrub: null, ...more });
+  // The sheet slid by hand (docs/sketch-studio-sheet-slide.md §6.1): the viewport's arrow sends the
+  // sheet's move along the bed (positive to the right), the station's tooling.right turns it into the
+  // session's slide; once a frame, as the fingers'. The drag keeps the slide it started from, for Esc.
+  const slideStart = useRef(null);
+  const brakeSlide = ({ start = false, slide = null, cancel = false, end = false }) => {
+    if (start) slideStart.current = brakeSession ? Number(brakeSession.slide) || 0 : 0;
+    else if (slide != null) {
+      const right = brakeFacts?.pending?.tooling?.right;
+      if (right) changeBrake({ slide: right * slide, scrub: null });
+    } else if (cancel && slideStart.current != null) changeBrake({ slide: slideStart.current, scrub: null });
+    if (cancel || end) slideStart.current = null;
+  };
   const fingersFrom = useRef(null);
   const brakeFingers = ({ start = false, distance = null, cancel = false, end = false }) => {
     if (start) fingersFrom.current = brakeSession ? fingerRestore(brakeSession) : null;
-    // A finger drag stays on the stop it started on while that stop makes the line (§4.5).
+    // A finger drag stays on the stop it started on while that stop makes the line (§4.5), and
+    // its pieces are matched against the line it started from (piece pick, the PK-1 audit).
     else if (distance != null)
-      brakeDistance(distance, fingersFrom.current ? { dragStop: fingersFrom.current.stop ?? null } : null);
+      brakeDistance(
+        distance,
+        fingersFrom.current ? { dragStop: fingersFrom.current.stop ?? null, dragFrom: fingersFrom.current } : null,
+      );
     else if (cancel && fingersFrom.current) changeBrake(fingersFrom.current);
     if (cancel || end) fingersFrom.current = null;
   };
   // The fingers or a blade clicked on the sheet (§6.2, §6.3): the panel opens
   // if closed and its L field, or that blade's picker (open), takes focus.
-  const [brakePicker, setBrakePicker] = useState(null);
-  const [brakeFocus, setBrakeFocus] = useState(null);
   const focusBrake = (target) => {
     // Only what the sheet offers: while it is being set up (no stroke, no scrub).
     if (!brakeSettled) return;
@@ -2552,7 +2735,6 @@ export default function CadWorkspace({
   const openLaser = (instanceId = selectedId, { autoCut = false, instanceIds = null } = {}) => {
     const refusal = sheetBlankProblem(instanceId);
     if (refusal) throw new Error(refusal);
-    const ready = LASER.next(LASER.initial, 'START');
     let cutting = false;
     if (autoCut) {
       const station = laserStation({ model, session: { instanceId, instanceIds }, params: sheetParameters });
@@ -2562,12 +2744,13 @@ export default function CadWorkspace({
     openShopStation(
       'laser',
       {
-        stage: cutting ? LASER.next(ready, 'CUT') : ready,
+        stage: LASER.next(LASER.initial, cutting ? 'AUTOCUT' : 'START'),
         instanceId,
         instanceIds,
         sheetIndex: null,
         view: null,
-        run: cutting ? { token: uid('cut') } : null,
+        // A run cuts the model it started on (liveShopSession stops it on another).
+        run: cutting ? { token: uid('cut'), model } : null,
         cut: false,
         runKey: cutting ? 1 : 0,
       },
@@ -2586,13 +2769,16 @@ export default function CadWorkspace({
     setShopSession({
       ...s,
       stage: LASER.next(s.stage, 'CUT'),
-      run: { token: uid('cut') },
+      run: { token: uid('cut'), model },
       cut: false,
       runKey: (s.runKey || 0) + 1,
     });
   };
-  // The bed reports the cut's token at its end; a stale token (a stop, a new cut) is ignored.
+  // The bed reports the cut's token at its end; a stale token (a stop, a new
+  // cut) is ignored, its notice with it.
   const laserCutEnd = (token) => {
+    const live = latestShop.current;
+    if (live?.station !== 'laser' || live.run?.token !== token) return;
     setShopSession((s) =>
       s?.station === 'laser' && s.run?.token === token
         ? { ...s, stage: LASER.next(s.stage, 'DONE'), run: null, cut: true }
@@ -2612,27 +2798,35 @@ export default function CadWorkspace({
       }`,
     );
   };
-  // Quantity (SN-1 §4.3): the lead part's instances in the model, one commit.
-  // More: new copies of the part in rows beside the station's instance, clear
-  // of everything standing (shopParts.js copyPositions; its built bounds from
-  // the snapshot, else its blank's), joining a named job. Fewer: the newest
-  // copies go (removeInstance), never the station's own instance nor a copy
-  // that is painted, printed or grouped — those that cannot go are said so.
-  // The kernel builds the part once whatever the copies (kernel.js `build`
-  // is per part; each instance is placed and meshed).
+  // Quantity (SN-1 §4.3; docs/sketch-studio-own-bends.md §4.4): the lead's
+  // lot in the model (shopRoute.js lotOf: its blanks, one part each), one
+  // commit. More: new blanks, each a part of its own fresh off the laser —
+  // flat, whatever has been bent since (blankCopy `flat`) — named "{base} #k",
+  // in rows beside the station's instance, clear of everything standing
+  // (shopParts.js copyPositions: the lead's built bounds from the snapshot,
+  // else its blank's; a bent lead's flat blank at its position, the new
+  // blanks lying flat), joining a named job. Fewer: the newest blanks of the
+  // lot go (removeInstances: the part goes with its blank), never the lead nor
+  // a blank with something of its own — a bend, a feature after the sheet
+  // metal, a finish, a print or a group; those that cannot go are said so.
   const changeLaserQuantity = (wanted) => {
     const s = shopSession;
     const view = laserView;
     if (s?.station !== 'laser' || s.stage === 'cutting' || !view) return;
     const n = Math.max(1, Math.min(MAX_LASER_QUANTITY, Math.round(Number(wanted)) || 1));
     const lead = view.instance;
-    const mine = model.instances.filter((i) => i.partId === lead.partId);
+    const mine = lotOf(model, lead.id, sheetParameters || {});
+    const lot = new Set(mine.map((i) => i.id));
     setCopiesNote(null);
     if (n === mine.length) return;
     if (n > mine.length) {
       const boxOf = (id) => runtime.snapshot?.instances.find((i) => i.id === id)?.bounds || null;
-      const built = boxOf(lead.id);
-      const position = lead.position || [0, 0, 0];
+      // A bent lead (own bends §4.4): its flat blank where it stands, the new blanks lying flat.
+      const bent = (view.feature.bends || []).length > 0;
+      const built = bent ? null : boxOf(lead.id);
+      const position = bent
+        ? [Number(lead.position?.[0]) || 0, Number(lead.position?.[1]) || 0, 0]
+        : lead.position || [0, 0, 0];
       const [[bx0, by0], [bx1, by1]] = view.flat.bounds;
       const box = built
         ? [
@@ -2643,7 +2837,7 @@ export default function CadWorkspace({
             [position[0] + bx0, position[1] + by0],
             [position[0] + bx1, position[1] + by1],
           ];
-      // What already stands: built boxes, else (a copy not built yet) the lead's box where that copy is.
+      // What already stands: built boxes, else (a blank of the lot not built yet) the lead's box where it is.
       const taken = model.instances.flatMap((i) => {
         const b = boxOf(i.id);
         if (b)
@@ -2653,7 +2847,7 @@ export default function CadWorkspace({
               [b[1][0], b[1][1]],
             ],
           ];
-        if (i.partId !== lead.partId) return [];
+        if (!lot.has(i.id)) return [];
         const [dx, dy] = [0, 1].map((k) => (i.position?.[k] || 0) - position[k]);
         return [
           [
@@ -2662,15 +2856,29 @@ export default function CadWorkspace({
           ],
         ];
       });
-      const copies = copyPositions({ position, box, count: n - mine.length, taken }).map((at) => ({
-        id: uid('instance'),
-        partId: lead.partId,
-        name: '',
-        position: at,
-        rotation: [...(lead.rotation || [0, 0, 0])],
-        visible: true,
-      }));
-      const next = commit({ ...model, instances: [...model.instances, ...copies] });
+      // Named after the lot's first blank, without its number: "Sheet-metal part #6".
+      const base = blankBaseName(model.parts.find((p) => p.id === mine[0]?.partId)?.name ?? view.part.name);
+      const names = new Set(model.parts.map((p) => p.name));
+      const parts = [];
+      const copies = copyPositions({ position, box, count: n - mine.length, taken }).map((at) => {
+        const name = blankName(base, names);
+        names.add(name);
+        const part = blankCopy(view.part, { flat: true, name });
+        parts.push(part);
+        return {
+          id: uid('instance'),
+          partId: part.id,
+          name: '',
+          position: at,
+          rotation: bent ? [0, 0, 0] : [...(lead.rotation || [0, 0, 0])],
+          visible: true,
+        };
+      });
+      const next = commit({
+        ...model,
+        parts: [...model.parts, ...parts],
+        instances: [...model.instances, ...copies],
+      });
       setShopSession((cur) =>
         cur?.station === 'laser' && cur.key === s.key
           ? {
@@ -2687,27 +2895,38 @@ export default function CadWorkspace({
       );
       return next;
     }
-    // Fewer: the newest first; the station's own instance and a copy with something of its own stay.
-    const owned = (id) =>
-      (model.finishes || []).some((f) => f.instanceId === id) ||
-      (model.prints || []).some((p) => p.instanceId === id) ||
-      Boolean(model.instances.find((i) => i.id === id)?.groupId);
+    // Fewer: the newest first; the lead and a blank with something of its own stay (own bends §4.4).
+    const worked = (instance) => {
+      const features = model.parts.find((p) => p.id === instance.partId)?.features || [];
+      const at = features.findIndex((f) => f.type === 'sheetmetal');
+      return (features[at]?.bends || []).length > 0 || features.length > at + 1;
+    };
+    const owned = (instance) =>
+      worked(instance) ||
+      (model.finishes || []).some((f) => f.instanceId === instance.id) ||
+      (model.prints || []).some((p) => p.instanceId === instance.id) ||
+      Boolean(instance.groupId);
     const asked = mine.length - n;
     const going = [...mine]
       .reverse()
-      .filter((i) => i.id !== lead.id && !owned(i.id))
+      .filter((i) => i.id !== lead.id && !owned(i))
       .slice(0, asked);
     let next = model;
-    for (const i of going) next = removeInstance(next, i.id);
-    if (going.length) next = commit(next);
+    if (going.length)
+      next = commit(
+        removeInstances(
+          model,
+          going.map((i) => i.id),
+        ),
+      );
     setShopSession((cur) => (cur?.station === 'laser' && cur.key === s.key ? { ...cur, cut: false } : cur));
     const kept = asked - going.length;
     if (kept)
       setCopiesNote({
         text:
           kept === 1
-            ? '1 copy is painted, printed or grouped: delete it in the view if you mean to.'
-            : `${kept} copies are painted, printed or grouped: delete them in the view if you mean to.`,
+            ? '1 blank is bent, painted, printed or grouped: delete it in the view if you mean to.'
+            : `${kept} blanks are bent, painted, printed or grouped: delete them in the view if you mean to.`,
         model: next,
       });
     return next;
@@ -2725,8 +2944,18 @@ export default function CadWorkspace({
         ? { ...s, stage: LASER.next(s.stage, 'STOP'), run: null, cut: false, runKey: (s.runKey || 0) + 1 }
         : s,
     );
-  const changeLaserSheet = (key) =>
-    commit({ ...model, fabrication: { ...model.fabrication, shop: { ...model.fabrication.shop, sheet: key } } });
+  // A finished cut is the sheet's that was cut (SN-1 §4.4): another sheet of
+  // the nest, or another stock sheet (a new nest), shows nothing cut yet.
+  const uncutLaser = () => setShopSession((s) => (s?.station === 'laser' && s.cut ? { ...s, cut: false } : s));
+  const showLaserSheet = (sheetIndex) => {
+    if (sheetIndex !== laserView?.sheetIndex) uncutLaser();
+    changeShop({ sheetIndex });
+  };
+  const changeLaserSheet = (key) => {
+    const shop = model.fabrication.shop;
+    commit({ ...model, fabrication: { ...model.fabrication, shop: { ...shop, sheet: key } } });
+    if (key !== (shop.sheet || DEFAULT_LASER_SHEET)) uncutLaser();
+  };
   // What the shop holds (docs/sketch-studio-corner-gaps.md §6.1): one tolerance
   // of fabrication.shop.tolerance per settled field, one commit (one Undo);
   // null takes the model's own away (back to the catalogue's), and with none
@@ -2892,11 +3121,17 @@ export default function CadWorkspace({
   };
   const removePrint = (id) => commit({ ...model, prints: (model.prints || []).filter((p) => p.id !== id) });
   // An uploaded image, fitted (≤ 1024 px, ≤ 512 KB): the draft's, or the selected print's.
+  // It lands only where it was asked for: in the print session that asked (not
+  // one opened since, nor after the station closed), and only as the last
+  // image chosen there (an earlier one decoding later is dropped).
+  const imageAsked = useRef(0);
   const uploadPrintImage = async (file) => {
+    const s = shopSession;
+    const asked = ++imageAsked.current;
     const fitted = await printImage(file);
+    if (asked !== imageAsked.current || !s || latestShop.current?.key !== s.key) return;
     const aspect = fitted.height / fitted.width;
     const current = latestModel.current;
-    const s = shopSession;
     const print = s?.stage === 'artwork' ? (current.prints || []).find((p) => p.id === s.printId) : null;
     if (print) {
       const { text: _text, font: _font, ...rest } = print;
@@ -2910,7 +3145,7 @@ export default function CadWorkspace({
       });
     }
     setShopSession((cur) =>
-      cur?.station === 'print'
+      cur?.station === 'print' && cur.key === s.key
         ? {
             ...cur,
             imageInfo: { width: fitted.width, height: fitted.height },
@@ -3111,6 +3346,10 @@ export default function CadWorkspace({
   // it was projected from. A sheet the kernel refuses keeps that error as its
   // own, so one broken sheet leaves the other sheets' previews alone.
   const requestDrawings = async (ids = [sheet.id]) => {
+    // `busy` is cleared only by its owner (see beginOperation): a PDF run or
+    // an export started meanwhile keeps it until its own end.
+    const generation = exportGeneration.current;
+    const owner = !busy;
     setBusy(true);
     try {
       const definition = (id) => model.sheets.find((s) => s.id === id);
@@ -3129,7 +3368,7 @@ export default function CadWorkspace({
       }));
       setSplit(true);
     } finally {
-      setBusy(false);
+      if (owner && generation === exportGeneration.current) setBusy(false);
     }
   };
   // The 3D selection as a drawing subject (Phase R §7): one part, a group's
@@ -3531,7 +3770,18 @@ export default function CadWorkspace({
   };
   // After a fix, once its commit is the model on show and rebuilt.
   useEffect(() => {
-    if (pdfRun?.stage !== 'refit' || model === pdfRun.before || !runtime.ready || busy) return;
+    if (pdfRun?.stage !== 'refit') return;
+    // The model from before the fix on show again after the fix had reached
+    // this component: an Undo took it back, and the run waiting on it ends
+    // (refit --CANCEL--> idle) instead of waiting on a commit that is gone.
+    if (model === pdfRun.before) {
+      if (pdfRun.left) setPdfRun((r) => (r === pdfRun && PDF_RUN.next(r.stage, 'CANCEL') === 'idle' ? null : r));
+      return;
+    }
+    if (!runtime.ready || busy) {
+      if (!pdfRun.left) setPdfRun((r) => (r === pdfRun ? { ...r, left: true } : r));
+      return;
+    }
     const { ids, includeParts, name, title, handle } = pdfRun;
     perform(() => runSheetsPdf({ ids, includeParts, name, title, handle }));
     // runSheetsPdf reads this render's model and views.
@@ -3592,7 +3842,7 @@ export default function CadWorkspace({
   const filmOn = Boolean(film);
   const routeBusy =
     busy ||
-    ['operation', 'sketch', 'mate'].includes(runningTool) ||
+    tools.some((tool) => ROUTE_WAITS_FOR.includes(tool)) ||
     brakeSession?.stage === 'stroke' ||
     shopSession?.stage === 'cutting' ||
     Boolean(film);
@@ -3704,19 +3954,22 @@ export default function CadWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [tab, model, currentSubject?.productId, sheetParameters],
   );
-  // Leave whatever station is open (its own Leave, without touching the subject).
-  const leaveStations = () => {
-    setBrakeSession(null);
-    setBrakeBlocked(null);
-    setBrakeProblem('');
-    setShopSession(null);
-    setShopProblem('');
-    setShopNotice('');
-    setShopGate(null);
-    setPendingStation(null);
-    setHoleMode(null);
-    setMeasureSession(null);
-  };
+  // Leave whatever station is open (its own Leave, without touching the
+  // subject). It returns what puts all of it back as this render has it, for
+  // a command that leaves the station first and then refuses (More): what is
+  // cleared and what is kept are the one list.
+  const leaveStations = () =>
+    clearSlots([
+      ...brakeLeft(),
+      [brakeProblem, setBrakeProblem, ''],
+      [shopSession, setShopSession],
+      [shopProblem, setShopProblem, ''],
+      [shopNotice, setShopNotice, ''],
+      [shopGate, setShopGate],
+      [pendingStation, setPendingStation],
+      [holeMode, setHoleMode],
+      [measureSession, setMeasureSession],
+    ]);
   // ------------------------------------------------ Replay the build (§8, SF-5)
   // The film is the shop session's `station: 'film'` (toolSession.js FILM),
   // so every rule that keeps another tool out while a station is open keeps
@@ -3765,6 +4018,8 @@ export default function CadWorkspace({
       shopSession,
       brakeSession,
       brakeBlocked,
+      brakePicker,
+      brakeFocus,
       brakeProblem,
       shopProblem,
       shopNotice,
@@ -3773,13 +4028,16 @@ export default function CadWorkspace({
       sheetFlat,
       propertiesOpen,
     };
-    setBrakeSession(null);
-    setBrakeBlocked(null);
+    endBrake();
     setBrakeProblem('');
     setShopProblem('');
     setShopNotice('');
     setShopGate(null);
     setSheetFlat(null);
+    // Measure and the hole tool give way to the replay as to every station
+    // (left open, they would read as the tool in charge and take its Esc).
+    setMeasureSession(null);
+    setHoleMode(null);
     setShopSession({
       station: 'film',
       stage: FILM.next(FILM.initial, 'START'),
@@ -3804,11 +4062,17 @@ export default function CadWorkspace({
   const endFilm = () => {
     const s = shopSession;
     if (s?.station !== 'film') return;
-    const b = s.before;
     filmClock.current = null;
-    setShopSession(b.shopSession);
-    setBrakeSession(b.brakeSession);
+    putBackFilm(s.before);
+  };
+  // What the film put away as it started (`before`), back as it was; the
+  // station it started over comes back through its own table (RESUME_*).
+  const putBackFilm = (b) => {
+    setShopSession(resumeSession(SHOP_STATIONS[b.shopSession?.station], b.shopSession));
+    setBrakeSession(resumeSession(BRAKE, b.brakeSession));
     setBrakeBlocked(b.brakeBlocked);
+    setBrakePicker(b.brakePicker);
+    setBrakeFocus(b.brakeFocus);
     setBrakeProblem(b.brakeProblem);
     setShopProblem(b.shopProblem);
     setShopNotice(b.shopNotice);
@@ -3817,6 +4081,48 @@ export default function CadWorkspace({
     setSheetFlat(b.sheetFlat);
     setPropertiesOpen(b.propertiesOpen);
   };
+  // Another document under this workspace (New, Open, Import, a template;
+  // it stays mounted so the kernel worker stays alive): every session of the
+  // one before ends as a cancel, so nothing is finished, put back or
+  // committed into the new one. An operation, a sketch, a mate, Measure, the
+  // hole tool, the press brake, a station or the replay, a station or a tool
+  // waiting on a commit, a PDF run or an export, the selection and the panel.
+  const sessionDocument = useRef(document.id);
+  useEffect(() => {
+    if (sessionDocument.current === document.id) return;
+    sessionDocument.current = document.id;
+    resetSelectionTools();
+    setSelection([]);
+    setOpenGroupId(null);
+    setSketchSession(null);
+    setMeasureSession(null);
+    setMarkParameter(null);
+    setReopen(null);
+    setPendingDrawings(null);
+    setBrakeProblem('');
+    setShopProblem('');
+    setShopNotice('');
+    setSheetFlat(null);
+    filmClock.current = null;
+    // Its export or PDF run: a new generation drops what it would still
+    // write (the picked file stays as it was), and `busy` is no one's.
+    exportGeneration.current++;
+    if (pdfRun?.stage === 'working') pdfRun.controller.abort();
+    setPdfRun(null);
+    setBusy(false);
+    setExportingType(null);
+    // resetSelectionTools and pdfRun are this render's: the sessions of the document that went.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [document.id]);
+  // The replay shows the model it started on; nothing commits while it plays,
+  // and should anything change the model under it, it ends as End replay ends
+  // it, with what it started over put back (the clock is read only while a
+  // film is on). Under another document it is only dropped: the swap above
+  // ends every session of the one before as a cancel.
+  if (film && film.source !== model) {
+    if (sessionDocument.current === document.id) putBackFilm(film.before);
+    else setShopSession(null);
+  }
   // One take of the film: the update for the session it is still on.
   const filmUpdate = (take, update) =>
     setShopSession((cur) =>
@@ -4121,6 +4427,14 @@ export default function CadWorkspace({
   // stations, the model is current). A commit that never arrives drops it.
   useEffect(() => {
     if (!pendingStation) return;
+    // A tool opened while it waited (S during the rebuild): the tool keeps the
+    // view and the station is dropped with its waiting card, as Apply and
+    // place another gives way.
+    if (tools.length > 0) {
+      setPendingStation(null);
+      setShopGate((gate) => (gate?.kind === 'waiting' ? null : gate));
+      return;
+    }
     const { station, instanceId, instanceIds = null, autoCut, before } = pendingStation;
     if (instanceId && !model.instances.some((i) => i.id === instanceId)) {
       if (model !== before) setPendingStation(null);
@@ -4130,9 +4444,9 @@ export default function CadWorkspace({
     setPendingStation(null);
     setError('');
     openStationOn(station, instanceId, currentSubject, { autoCut, instanceIds });
-    // Runs once its commit or the rebuild reaches this render; the openers read it.
+    // Runs once its commit or the rebuild reaches this render, or a tool opens; the openers read it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingStation, model, runtime.ready]);
+  }, [pendingStation, model, runtime.ready, tools.length]);
   // The station shell's subject and Back / Next (the same part, §4.6).
   const shellFor = (key, subject = '', instanceId = currentSubject?.instanceId || null) => {
     const back = routeNeighbour(key, -1),
@@ -4223,9 +4537,11 @@ export default function CadWorkspace({
     setShopSubject({ productId: topNode(model, instanceId), instanceId, selectionKey });
     select(instanceId);
   };
-  // A gate's pick rows, and its button. Bend's are per part (§7.4: a bend
-  // belongs to the part, its copies fold with it): the first copy of each in
-  // the gate's own order, "× copies" and the bend queue's text.
+  // A gate's pick rows, and its button. Bend's are per part (§7.4), and one
+  // piece of metal is one part (docs/sketch-studio-own-bends.md §4.5), so a row
+  // is a blank, bent by itself: the first instance of each part in the gate's
+  // own order, "× copies" (only a model that still has copies of one part)
+  // and the bend queue's text.
   const gatePerPart = (ids) => {
     const queue = new Map(bendQueue(model, { params: shopParams }).map((row) => [row.partId, row]));
     const seen = new Set();
@@ -4725,14 +5041,10 @@ export default function CadWorkspace({
       run: () => exportFile('zip'),
     },
   ];
-  // The ribbon's commands wait for any session (the route's stations have their own rule, routeBusy).
-  const commandsOff =
-    busy ||
-    Boolean(operationDraft) ||
-    Boolean(sketchSession) ||
-    Boolean(mateSession) ||
-    Boolean(brakeSession) ||
-    Boolean(shopSession);
+  // The ribbon's commands wait for any session but Measure and the hole tool,
+  // which every command that opens a tool ends (the route's stations have
+  // their own rule, routeBusy).
+  const commandsOff = busy || toolOpenBesides(tools, LIGHT_TOOLS);
   // The route's More menu (§4.1): the Shop commands that are not stations,
   // run as they always were, and the Assemble tab's commands that put parts
   // together (docs/sketch-studio-shop-trim.md §4.3). A shop station open is
@@ -4759,26 +5071,26 @@ export default function CadWorkspace({
       icon: command.icon || icon,
       disabled:
         routeBusy || (command.current && !runtime.ready) || (command.icon === 'ShopUnfold' && Boolean(runningTool)),
-      run: () => {
-        if (openStation) leaveStations();
-        perform(command.run);
-      },
+      // The open station is left first (what the command opens comes after
+      // it), and put back as it was when the command refuses (Ungroup with
+      // no group): the operator's picks are not lost for nothing.
+      run: () =>
+        perform(() => {
+          if (!openStation) return command.run();
+          const putBack = leaveStations();
+          try {
+            return command.run();
+          } catch (e) {
+            putBack();
+            throw e;
+          }
+        }),
     };
   });
   const pickingFace = sketchSession?.stage === 'pick' || (mateSession && mateSession.stage !== 'placed');
   // Origin plane tiles: on an empty model at rest, and while picking where a
   // new sketch goes. Never under Cut's picker: its clicks pick outlines on XY.
-  const planesShown =
-    (model.parts.length === 0 &&
-      !pickShown &&
-      !sketchSession &&
-      !operationDraft &&
-      !measureSession &&
-      !mateSession &&
-      !holeMode &&
-      !brakeSession &&
-      !shopSession) ||
-    sketchSession?.stage === 'pick';
+  const planesShown = (model.parts.length === 0 && !pickShown && !tools.length) || sketchSession?.stage === 'pick';
   useEffect(() => {
     if (!pickingFace) return;
     const keyDown = (event) => {
@@ -4911,8 +5223,13 @@ export default function CadWorkspace({
     window.addEventListener('keydown', keyDown);
     return () => window.removeEventListener('keydown', keyDown);
   });
-  // Mark coordinates and values for the Marks panel, as the model is shown.
-  const markPoses = useMemo(() => modelPoses(model, runtime.snapshot), [model, runtime.snapshot]);
+  // Mark coordinates and values for the Marks panel, as the model is shown
+  // (only while that panel is: nothing else reads them).
+  const marksShown = panel === 'marks';
+  const markPoses = useMemo(
+    () => (marksShown ? modelPoses(model, runtime.snapshot) : null),
+    [marksShown, model, runtime.snapshot],
+  );
   // The open station, derived from the model, the kernel mesh and the picks
   // (§9 SM-3): the paint's targets and readouts, the print's checks.
   const paintView = (() => {
@@ -5042,20 +5359,23 @@ export default function CadWorkspace({
   );
   const downloadJobSheet = () => download(new Blob([jobSheetCsv(jobView)], { type: 'text/csv' }), 'job-sheet.csv');
   // The cutting list's shop records (finishes, prints), when the model has any.
+  // Both lists are only read by the Cutting list panel (the CSV export makes
+  // its own), so they are worked out only while it shows.
+  const cutsShown = panel === 'cuts';
   const shopRows = useMemo(() => {
     try {
-      return runtime.ready ? shopRecordRows(model, runtime.snapshot) : null;
+      return cutsShown && runtime.ready ? shopRecordRows(model, runtime.snapshot) : null;
     } catch {
       return null;
     }
-  }, [model, runtime.ready, runtime.snapshot]);
+  }, [cutsShown, model, runtime.ready, runtime.snapshot]);
   const rows = useMemo(() => {
     try {
-      return runtime.ready ? buildCutList(model, runtime.snapshot) : [];
+      return cutsShown && runtime.ready ? buildCutList(model, runtime.snapshot) : [];
     } catch {
       return [];
     }
-  }, [model, runtime.ready, runtime.snapshot]);
+  }, [cutsShown, model, runtime.ready, runtime.snapshot]);
   // Projected views stay valid while only a sheet's annotations, title block
   // or parts-list setting change; anything that changes geometry or which
   // views are projected needs Generate views again. The cache holds each
@@ -5123,31 +5443,49 @@ export default function CadWorkspace({
   const draftScale = scaleDraft && scaleDraft.sheetId === sheet?.id ? scaleDraft.scale : null;
   const previewSheet =
     activeDrawing && draftScale != null ? { ...activeDrawing, scaleMode: 'fixed', scale: draftScale } : activeDrawing;
-  let svg = '',
-    drawingError = sheetError,
-    drawingFit = null,
-    drawingParts = [];
-  if (previewSheet) {
-    try {
-      drawingParts = layoutParts(previewSheet, model, runtime.snapshot);
-      // Its page number is its place in the model (only this sheet is generated).
-      svg = sheetSvg(previewSheet, model, runtime.snapshot, model.sheets.indexOf(sheet) + 1, model.sheets.length, {
-        allowOverflow: true,
-      });
-      drawingFit = sheetFit(previewSheet, previewSheet.views, { parts: drawingParts });
-    } catch (e) {
-      svg = '';
-      drawingError = e.message;
+  // The preview is read only by the drawing pane (split) and the Sheet panel
+  // (previewReady, the scale control's parts); the PDF and SVG / DXF exports
+  // draw their own. So it is drawn while one of them shows, and again only
+  // when what it is drawn from changes: previewSheet is a fresh object each
+  // render, made from the cache entry, the sheet and the slider's draft.
+  const previewShown = split || panel === 'sheet';
+  const preview = useMemo(() => {
+    let svg = '',
+      failed = false,
+      error,
+      fit = null,
+      parts = [];
+    if (previewShown && previewSheet) {
+      try {
+        parts = layoutParts(previewSheet, model, runtime.snapshot);
+        // Its page number is its place in the model (only this sheet is generated).
+        svg = sheetSvg(previewSheet, model, runtime.snapshot, model.sheets.indexOf(sheet) + 1, model.sheets.length, {
+          allowOverflow: true,
+        });
+        fit = sheetFit(previewSheet, previewSheet.views, { parts });
+      } catch (e) {
+        svg = '';
+        failed = true;
+        error = e.message;
+      }
     }
-  }
+    return { svg, failed, error, fit, parts };
+    // previewSheet is derived from drawnEntry, sheet and draftScale.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewShown, drawnEntry, sheet, draftScale, model, runtime.snapshot]);
+  const { svg, fit: drawingFit, parts: drawingParts } = preview;
+  const drawingError = preview.failed ? preview.error : sheetError;
   const overflowing = drawingFit && !drawingFit.fits ? drawingFit.views.find((v) => !v.fits) : null;
   const onScaleDraft = (scale) => setScaleDraft(scale == null ? null : { sheetId: sheet.id, scale });
   // The last PDF's result line, while the model is the one it was made from.
   const pdfNoticeShown = pdfNotice?.model === model ? pdfNotice : null;
   // The Sheets panel's page and scale per sheet: the resolved scale once its
-  // views are current, else Fit or the fixed ratio.
-  const sheetScales = () =>
-    new Map(
+  // views are current, else Fit or the fixed ratio. Worked out while that
+  // panel shows, once per model, snapshot and drawings cache.
+  const sheetsShown = panel === 'sheets';
+  const sheetScales = useMemo(() => {
+    if (!sheetsShown) return null;
+    return new Map(
       model.sheets.map((s) => {
         const entry = drawings && sameDrawingSource(drawings.source, model) ? drawings.sheets.get(s.id) : null;
         const views = entry?.result && sameDrawnSheet(entry.sheet, s) ? entry.result.views : null;
@@ -5164,6 +5502,13 @@ export default function CadWorkspace({
         return [s.id, `${s.size || 'A3'} · ${scale}`];
       }),
     );
+  }, [sheetsShown, model, drawings, runtime.snapshot]);
+  // The parts tree's rows (groups.js treeRows reads only the instances and
+  // the groups), once per change to either rather than on every render.
+  const tree = useMemo(
+    () => treeRows({ instances: model.instances, groups: model.groups }),
+    [model.instances, model.groups],
+  );
   // A tree row's "Draw <name>" icon (Drawings tab only, Phase S §6): opens
   // or creates that subject's sheet without touching the 3D selection.
   const drawButton = (name, subject) => (
@@ -5204,6 +5549,7 @@ export default function CadWorkspace({
           />
           <div className="cad-file-actions" role="group" aria-label="Model file operations">
             {/* The replay (§8) changes nothing: what would replace or change the model waits for it. */}
+            {/* Not openTools: a document rule, and only the replay must hold the model still. */}
             <button disabled={Boolean(film)} onClick={newSketch}>
               New
             </button>
@@ -5323,10 +5669,7 @@ export default function CadWorkspace({
                   onDraw={() => perform(() => goStation('draw'))}
                 />
               ) : (
-                <fieldset
-                  className="cad-tree-body"
-                  disabled={Boolean(sketchSession || mateSession || brakeSession || shopSession)}
-                >
+                <fieldset className="cad-tree-body" disabled={toolOpenBesides(tools, SELECTION_FREE_TOOLS)}>
                   <button
                     className="cad-wide"
                     onClick={() => {
@@ -5338,7 +5681,7 @@ export default function CadWorkspace({
                   </button>
                   <details open>
                     <summary>Assembly · {model.instances.length} instances</summary>
-                    {treeRows(model).map(function treeRow(row) {
+                    {tree.map(function treeRow(row) {
                       if (row.kind === 'group') {
                         const { group } = row;
                         // Collapsed by hand, unless it holds the selection.
@@ -5477,7 +5820,11 @@ export default function CadWorkspace({
                                       : ''}
                                     {f.operation === 'cut' ? ' (cut)' : ''}
                                     {f.suppressed ? ' (suppressed)' : ''}
-                                    {runtime.error?.featureId === f.id ? ' ⚠' : ''}
+                                    {/* Blanks of one outline share feature ids (own bends §4.6): the part must match too. */}
+                                    {runtime.error?.featureId === f.id &&
+                                    (runtime.error.partId == null || runtime.error.partId === p?.id)
+                                      ? ' ⚠'
+                                      : ''}
                                   </button>
                                   {f.sketchId && model.sketches.some((s) => s.id === f.sketchId) && (
                                     <button
@@ -5727,32 +6074,14 @@ export default function CadWorkspace({
                     </button>
                   ))}
                   <button
-                    disabled={
-                      !part ||
-                      !runtime.ready ||
-                      Boolean(operationDraft) ||
-                      Boolean(sketchSession) ||
-                      Boolean(mateSession) ||
-                      Boolean(brakeSession) ||
-                      Boolean(shopSession) ||
-                      busy
-                    }
+                    disabled={!part || !runtime.ready || toolOpenBesides(tools, LIGHT_TOOLS) || busy}
                     aria-pressed={holeMode === 'place'}
                     onClick={() => perform(() => startHoleTool('place'))}
                   >
                     Place holes
                   </button>
                   <button
-                    disabled={
-                      !part ||
-                      !runtime.ready ||
-                      Boolean(operationDraft) ||
-                      Boolean(sketchSession) ||
-                      Boolean(mateSession) ||
-                      Boolean(brakeSession) ||
-                      Boolean(shopSession) ||
-                      busy
-                    }
+                    disabled={!part || !runtime.ready || toolOpenBesides(tools, LIGHT_TOOLS) || busy}
                     aria-pressed={holeMode === 'move'}
                     onClick={() => perform(() => startHoleTool('move'))}
                   >
@@ -5937,8 +6266,12 @@ export default function CadWorkspace({
                   rotateSnap={rotateSnap}
                   rotateSpace={isBody ? 'world' : rotateSpace}
                   pivotPick={rotateAbout === 'picked'}
+                  // A sketch and a mate end the hole tool as they open, so only an
+                  // operation, the press brake or a station can stand over it.
                   holeMode={
-                    !operationDraft && !brakeSession && !shopSession && !exploded && !section && !busy ? holeMode : null
+                    !toolOpenBesides(tools, ['sketch', 'mate', ...LIGHT_TOOLS]) && !exploded && !section && !busy
+                      ? holeMode
+                      : null
                   }
                   onPlaceHole={(point, normal, planar, options) =>
                     perform(() => placeHole(point, normal, planar, options))
@@ -6000,6 +6333,8 @@ export default function CadWorkspace({
                   onBrakeGrip={brakeAct}
                   onBrakeGripWant={wantBrakeHand}
                   onBrakeEdge={pickBrakeEdge}
+                  onBrakePiece={pickBrakePiece}
+                  onBrakeSlide={brakeSlide}
                   onBrakeFingers={brakeFingers}
                   onBrakeFocus={focusBrake}
                   shopPick={film ? filmPick : shopPick}
@@ -6053,14 +6388,9 @@ export default function CadWorkspace({
                           : {}),
                       })
                     }
-                    onSkip={(index) =>
-                      changeBrake({
-                        skip: (brakeSession.skip || []).includes(index)
-                          ? brakeSession.skip.filter((i) => i !== index)
-                          : [...(brakeSession.skip || []), index],
-                        scrub: null,
-                      })
-                    }
+                    // A piece clicked: bend only it; Ctrl, Shift or Meta: into the hit or left flat (piece pick §5.6).
+                    onPiece={pickBrakePiece}
+                    litPiece={brakePiece}
                   />
                 )}
                 {laserView && shopSession?.station === 'laser' && (
@@ -6069,7 +6399,7 @@ export default function CadWorkspace({
                     session={shopSession}
                     onDone={laserCutEnd}
                     onView={(view) => changeShop({ view })}
-                    onSheet={(sheetIndex) => changeShop({ sheetIndex })}
+                    onSheet={showLaserSheet}
                   />
                 )}
                 {sketchSession?.stage === 'draw' && (
@@ -6869,6 +7199,7 @@ export default function CadWorkspace({
                   rowTries={rowTries}
                   onReorder={(bends) => perform(() => changeBrakeBends(bends, 'That order is'))}
                   onGapHover={hoverBrakeGap}
+                  onPieceHover={hoverBrakePiece}
                 />
               ) : panel === 'shop-paint' && paintView ? (
                 <PaintPanel
@@ -7131,7 +7462,7 @@ export default function CadWorkspace({
                     offsets. Optional PlaneGCS primitives bind polygon pointIds or circleId.
                   </p>
                   <JsonEditor
-                    key={JSON.stringify(sketch)}
+                    key={jsonKey(sketch)}
                     value={sketch}
                     label="Part sketch"
                     onApply={(s) =>
@@ -7190,7 +7521,7 @@ export default function CadWorkspace({
                     target’s local frame. Weld locations and notes are explicit shop instructions.
                   </p>
                   <JsonEditor
-                    key={JSON.stringify(model.connections)}
+                    key={jsonKey(model.connections)}
                     label="Connections and welds"
                     value={model.connections}
                     onApply={(connections) => commit({ ...model, connections })}
@@ -7224,7 +7555,7 @@ export default function CadWorkspace({
                   selection={
                     selectionMembers.length ? { subject: selectionSubject, count: selectionMembers.length } : null
                   }
-                  scales={sheetScales()}
+                  scales={sheetScales}
                   notice={sheetNotice?.model === model ? sheetNotice : null}
                   disabled={busy || Boolean(operationDraft)}
                   onOpen={openSheet}
@@ -7375,7 +7706,7 @@ export default function CadWorkspace({
                     Stable IDs link parts, features, instances and annotations. Invalid references stop rebuilding and
                     exporting.
                   </p>
-                  <JsonEditor key={JSON.stringify(model)} label="Model JSON" value={model} onApply={commit} />
+                  <JsonEditor key={jsonKey(model)} label="Model JSON" value={model} onApply={commit} />
                 </>
               ) : isBody ? (
                 // A group or several parts (§4.6): no single part, so the
@@ -7574,7 +7905,7 @@ export default function CadWorkspace({
                     <details>
                       <summary>Advanced instance data</summary>
                       <JsonEditor
-                        key={JSON.stringify(instance)}
+                        key={jsonKey(instance)}
                         label="Instance placement (mm / degrees)"
                         value={instance}
                         onApply={(i) => changeInstance({ ...i, id: instance.id, partId: instance.partId })}
@@ -7777,6 +8108,7 @@ export default function CadWorkspace({
                 </>
               ) : !model.parts.length && !sketchSession && !operationDraft && !mateSession && !measureSession ? (
                 // Empty model: the ways in (docs/sketch-studio-start-sketch.md §4.4).
+                // Not openTools: the hole tool, the brake and the stations need a part, so it names only these four.
                 <section className="cad-start" aria-label="Start">
                   <h3>Start</h3>
                   {model.parameters.length > 0 && (
@@ -7819,6 +8151,7 @@ export default function CadWorkspace({
         </div>
         <footer className="cad-status">
           <span className={`cad-status-dot ${runtime.ready ? 'is-ready' : ''}`} />
+          {/* Not openTools: a priority chain of what to say, each tool with its own words. */}
           <span>
             {shopSession?.station === 'laser' && shopSession.stage === 'sheet'
               ? `Laser — ${laserView?.sheet.name || 'setting up'} sheet · ${

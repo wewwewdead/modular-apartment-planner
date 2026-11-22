@@ -5,7 +5,7 @@
 import { crossingText, foldSheet, polygonBounds, profilePolygon, sheetMetalFeature } from './sheetMetal.js';
 import { jobProducts, stepStatus, strokeHits } from './jobSheet.js';
 import { nodeName } from './groups.js';
-import { numeric } from './model.js';
+import { blankBaseName, numeric } from './model.js';
 import { isClosedProfile } from './operations.js';
 import { sketchConsumer } from './sketchPlane.js';
 import { sketchEditProblem } from './sketchOperations.js';
@@ -13,6 +13,7 @@ import { entityPolyline, profileToEntities } from './sketchProfile.js';
 import { stockOf } from './shopCatalog.js';
 import { isFabricated } from './shopParts.js';
 import { shopOrderBlock } from './brakeStation.js';
+import { lotInstances } from './laserStation.js';
 
 // key, the name on the route bar, the ribbon icon, the panel region it opens.
 // Putting parts together is not a station (docs/sketch-studio-shop-trim.md
@@ -51,6 +52,19 @@ export function sheetPartOf(model, instanceId) {
   if (!feature) return null;
   return { instance, part, feature, sketch: model.sketches.find((s) => s.id === feature.sketchId) || null };
 }
+/**
+ * The lot of an instance's blank (docs/sketch-studio-own-bends.md §3, §4.1):
+ * every instance, in model order, whose part's sheet-metal blank is cut from
+ * the same outline in the same stock and thickness (laserStation.js sameLot)
+ * — the blanks the laser's Quantity counts. [] when the instance is not sheet
+ * metal. A part with several instances (a model that breaks the rule) is one
+ * lot with them all.
+ */
+export function lotOf(model, instanceId, params = {}) {
+  const own = sheetPartOf(model, instanceId);
+  return own ? lotInstances(model, own.feature, params) : [];
+}
+
 /** The instance's folded blank (foldSheet), or null: not sheet metal, or the blank does not fold. */
 export function foldOf(model, instanceId, params = {}) {
   const sheet = sheetPartOf(model, instanceId);
@@ -252,14 +266,16 @@ export function partProgress(model, instanceId, { params = {} } = {}) {
 
 /**
  * The press brake's queue (docs/sketch-studio-outline-edit-sheet-nest.md
- * §7.1): one row per sheet-metal PART that has an instance — a bend belongs
- * to the part, so its copies fold with it — in job-board order (the products,
- * then each product's instances; a part's row stands at its first instance):
- * [{ partId, instanceId (that first copy), name, copies (the part's
- * instances in the model), state, text, bends, profile }]. `state`: 'flat'
- * (it folds, no bend yet), 'bent', 'finished' (shopOrderBlock holds it:
- * painted or printed, any copy) or 'problem' (the blank does not fold). One
- * foldSheet per part.
+ * §7.1): one row per sheet-metal part that has an instance, in job-board
+ * order (the products, then each product's instances). One piece of metal is
+ * one part (docs/sketch-studio-own-bends.md §3, §4.5), so a row is a blank,
+ * bent by itself: five blanks of one outline are five rows. A model that
+ * still has several instances of one part (tests build them) gets one row at
+ * its first instance, "× copies": [{ partId, instanceId (that first
+ * instance), name, copies (the part's instances in the model), state, text,
+ * bends, profile }]. `state`: 'flat' (it folds, no bend yet), 'bent',
+ * 'finished' (shopOrderBlock holds it: painted or printed) or 'problem' (the
+ * blank does not fold). One foldSheet per part.
  */
 export function bendQueue(model, { params = {} } = {}) {
   const rows = new Map();
@@ -279,7 +295,7 @@ export function bendQueue(model, { params = {} } = {}) {
     }
     const bends = fold?.bends.length || 0;
     const held = fold ? shopOrderBlock(model, partId) : null;
-    // What came after the brake, any copy's (the shop order's own rule).
+    // What came after the brake (the shop order's own rule: this blank's).
     const after = held
       ? [held.finishes.length && 'painted', held.prints.length && 'printed'].filter(Boolean).join(' and ')
       : '';
@@ -304,28 +320,35 @@ export function bendQueue(model, { params = {} } = {}) {
 
 /**
  * Cut's picker, Already cut (docs/sketch-studio-cut-pick.md §4.2): one row
- * per sheet-metal part that has a blank, in model order: [{ partId,
- * instanceId (its first blank), name, copies, sheet ("t 1.5 SPCC"), profile }].
+ * per LOT (docs/sketch-studio-own-bends.md §4.4: the blanks of one outline in
+ * one stock and thickness, lotOf), in the model order of their parts:
+ * [{ partId, instanceId (the lot's first blank), name (its base name: "Tray",
+ * not "Tray #2"), copies (the lot), sheet ("t 1.5 SPCC"), profile }].
  */
 export function cutParts(model, params = {}) {
+  const seen = new Set();
   return model.parts.flatMap((part) => {
     const feature = sheetMetalFeature(part);
-    const blanks = feature ? model.instances.filter((i) => i.partId === part.id) : [];
-    if (!blanks.length) return [];
+    const first = feature ? model.instances.find((i) => i.partId === part.id) : null;
+    if (!first || seen.has(first.id)) return [];
+    const blanks = lotOf(model, first.id, params);
+    for (const blank of blanks) seen.add(blank.id);
+    const lead = blanks[0];
+    const own = sheetPartOf(model, lead.id).feature;
     let thickness = null;
     try {
-      thickness = numeric(feature.thickness, params, 'Sheet thickness');
+      thickness = numeric(own.thickness, params, 'Sheet thickness');
     } catch {
       thickness = null;
     }
     return [
       {
-        partId: part.id,
-        instanceId: blanks[0].id,
-        name: nodeName(model, blanks[0].id),
+        partId: lead.partId,
+        instanceId: lead.id,
+        name: blankBaseName(nodeName(model, lead.id)),
         copies: blanks.length,
-        sheet: `t ${fmt(thickness)} ${stockOf(feature.stock).key.toUpperCase()}`,
-        profile: model.sketches.find((s) => s.id === feature.sketchId)?.profile || null,
+        sheet: `t ${fmt(thickness)} ${stockOf(own.stock).key.toUpperCase()}`,
+        profile: model.sketches.find((s) => s.id === own.sketchId)?.profile || null,
       },
     ];
   });

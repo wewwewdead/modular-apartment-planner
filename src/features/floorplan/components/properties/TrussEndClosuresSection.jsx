@@ -115,14 +115,7 @@ function ClosureSide({ side, entry, closure, settings, setSide, u }) {
  * draws one. The whole `endClosures` object is written back through
  * TRUSS_SYSTEM_UPDATE on every change; thickness and area are Readouts.
  */
-export default function TrussEndClosuresSection({
-  trussSystem,
-  systemGeometry,
-  roofSystem,
-  updateSystem,
-  u,
-  colourShared = false,
-}) {
+export default function TrussEndClosuresSection({ trussSystem, systemGeometry, roofSystem, updateSystem, u }) {
   const settings = normalizeTrussEndClosures(trussSystem.endClosures);
   const layout = useMemo(
     () => buildEndClosureLayout(trussSystem, systemGeometry, roofSystem),
@@ -147,9 +140,6 @@ export default function TrussEndClosuresSection({
           catalogues={SWATCH_CATALOGUES}
           onChange={(colour) => setClosures({ ...settings, colour })}
         />
-        {colourShared ? (
-          <Hint>The 3D preview paints every gable with the first truss system&rsquo;s cladding colour.</Hint>
-        ) : null}
         {shownSides.map((side) => (
           <ClosureSide
             key={side}

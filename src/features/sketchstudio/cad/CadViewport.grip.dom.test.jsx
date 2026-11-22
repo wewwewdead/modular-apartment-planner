@@ -10,6 +10,7 @@
 // it less than 0.5 mm and 0.5°.
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
+import { createRef } from 'react';
 import * as THREE from 'three';
 import CadViewport from './CadViewport.jsx';
 import { emptyModel } from './model.js';
@@ -267,7 +268,7 @@ it('says what to do at the brake in the hint line, by the line picked', () => {
   const now = setup();
   const { rerender } = render(<CadViewport {...props({ brakeView: now.view, brakeGrip: now.grip() })} />);
   expect(document.querySelector('.cad-viewport-hint').textContent).toContain(
-    'Drag a ring on the sheet to flip or turn it · F flip · T turn around · Enter bends · Esc clears the line · Drag background to orbit',
+    'Drag a ring to flip or turn the sheet, the arrow to slide it · F flip · T turn around · Enter bends · Esc clears the line · Drag background to orbit',
   );
   rerender(<CadViewport {...props({ brakeView: now.view, brakeGrip: now.grip({ lined: false }) })} />);
   expect(document.querySelector('.cad-viewport-hint').textContent).toContain(
@@ -401,4 +402,40 @@ it('swings a newly picked gauge edge to the fingers, and never turns for a new L
   rerender(<CadViewport {...props({ brakeView: nearer.view })} />);
   expect(station().turning).toBe(false);
   expect(WORK_HEIGHT).toBe(1000);
+});
+
+it('lets the press go with the drag when the station ends it: a new view under it, the grip hidden, the station closed', () => {
+  const act = vi.fn();
+  const now = setup();
+  const ref = createRef();
+  const shown = (extra) => (
+    <CadViewport {...props({ ref, brakeView: now.view, brakeGrip: now.grip(), onBrakeGrip: act, ...extra })} />
+  );
+  const endings = [
+    // A rebuild landing re-poses the station under the drag.
+    shown({ snapshot: { ...snapshot } }),
+    // The workspace says the station is no longer being set up.
+    shown({ brakeGrip: now.grip({ shown: false }) }),
+    // The station closes.
+    shown({ brakeView: null, brakeGrip: null }),
+  ];
+  for (const ending of endings) {
+    const { rerender } = render(shown());
+    const { arc } = station().grip.handles.turn;
+    const middle = Math.floor(arc.length / 2);
+    dragArc(arc, middle, middle + 8, { release: false });
+    expect(station().grip.dragging).toBe('turn');
+    expect(ref.current.isDragging()).toBe(true);
+    expect(document.querySelector('.cad-grip-chip').hidden).toBe(false);
+    rerender(ending);
+    // The press is over with the drag: no chip, the orbit back, nothing in the hand.
+    expect(ref.current.isDragging()).toBe(false);
+    expect(document.querySelector('.cad-grip-chip').hidden).toBe(true);
+    expect(document.querySelector('.cad-viewport').cadPlacement().orbit).toBe(true);
+    expect(canvas().style.cursor).toBe('');
+    press('pointerMove', arc[middle + 12]);
+    press('pointerUp', arc[middle + 12]);
+    expect(act).not.toHaveBeenCalled();
+    cleanup();
+  }
 });

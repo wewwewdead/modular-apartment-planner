@@ -95,3 +95,95 @@ describe('dragging a window up an elevation', () => {
     expect(update.window.sillHeight).toBeCloseTo(1200, 6);
   });
 });
+
+/**
+ * Press, move, release and keys as the canvas sends them, with the tool state
+ * and selection they leave behind. At zoom 0.1 a pixel is 10 mm.
+ */
+function createPressHarness() {
+  const { project, floor, windowItem } = makeProject();
+  let toolState = {};
+  let selection = { id: null, type: null };
+  const dispatched = [];
+  const handler = createElevationSelectHandler({
+    dispatch: (action) => dispatched.push(action),
+    editorDispatch: (action) => {
+      if (action.type === 'UPDATE_TOOL_STATE') toolState = { ...toolState, ...action.payload };
+      if (action.type === 'SELECT_OBJECT') selection = { id: action.id, type: action.objectType };
+      if (action.type === 'DESELECT') selection = { id: null, type: null };
+    },
+    project,
+    getFloor: () => floor,
+    activeFloorId: floor.id,
+    viewport: { zoom: 0.1 },
+    viewMode: 'elevation_front',
+  });
+
+  return {
+    windowItem,
+    dispatched,
+    updates: () => dispatched.filter((action) => action.type === 'WINDOW_UPDATE'),
+    getToolState: () => toolState,
+    getSelection: () => selection,
+    press: (point) => handler.onMouseDown(point, { button: 0 }, toolState),
+    move: (point) => handler.onMouseMove(point, {}, toolState, selection.id, selection.type),
+    up: (point) => handler.onMouseUp(point, { button: 0 }, toolState),
+    key: (key) => handler.onKeyDown({ key }, toolState, selection.id, selection.type),
+  };
+}
+
+// On the window's glass: sill 900 and 1200 tall on a floor at 3000.
+const ON_GLASS = { x: 3000, y: -4500 };
+
+describe('pressing a window on an elevation', () => {
+  it('a click with a wobble under 4 px selects the window and moves nothing', () => {
+    const harness = createPressHarness();
+
+    harness.press(ON_GLASS);
+    harness.move({ x: ON_GLASS.x + 20, y: ON_GLASS.y - 20 });
+    harness.up({ x: ON_GLASS.x + 20, y: ON_GLASS.y - 20 });
+
+    expect(harness.getSelection().id).toBe(harness.windowItem.id);
+    expect(harness.updates()).toHaveLength(0);
+    expect(harness.getToolState()).toMatchObject({ dragging: false, pendingDrag: false });
+  });
+
+  it('a move past 4 px starts the drag', () => {
+    const harness = createPressHarness();
+
+    harness.press(ON_GLASS);
+    harness.move({ x: ON_GLASS.x + 500, y: ON_GLASS.y });
+
+    expect(harness.updates()).toHaveLength(1);
+    expect(harness.getToolState().dragging).toBe(true);
+  });
+
+  it('Escape mid-drag hands the window back to the store to put back and ends the drag', () => {
+    const harness = createPressHarness();
+
+    harness.press(ON_GLASS);
+    harness.move({ x: ON_GLASS.x + 500, y: ON_GLASS.y });
+    harness.key('Escape');
+
+    expect(harness.dispatched.at(-1)).toEqual({ type: 'CANCEL_DRAG_GESTURE' });
+    expect(harness.getToolState()).toMatchObject({ dragging: false, pendingDrag: false, dragType: null });
+    // The selection stays, as it does for every drag Escape reverts.
+    expect(harness.getSelection().id).toBe(harness.windowItem.id);
+
+    harness.move({ x: ON_GLASS.x + 900, y: ON_GLASS.y });
+    expect(harness.updates()).toHaveLength(1);
+  });
+
+  it('Delete mid-drag ends the drag, so a later Escape does not bring the window back', () => {
+    const harness = createPressHarness();
+
+    harness.press(ON_GLASS);
+    harness.move({ x: ON_GLASS.x + 500, y: ON_GLASS.y });
+    harness.key('Delete');
+
+    expect(harness.getToolState().dragging).toBe(false);
+
+    harness.key('Escape');
+    expect(harness.dispatched.map((action) => action.type)).not.toContain('CANCEL_DRAG_GESTURE');
+  });
+});

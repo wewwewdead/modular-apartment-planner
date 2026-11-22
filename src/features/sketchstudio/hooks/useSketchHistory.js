@@ -31,12 +31,21 @@ export default function useSketchHistory(state, dispatch) {
   }, [canUndo, cancelTransientInteraction, dispatch]);
 
   const handleRedo = useCallback(() => {
+    // Redo restores a snapshot, which would drop a drag in the middle with
+    // nothing kept and nothing put back. It ends the drag the way undo does
+    // instead, and redoes nothing: the redo is still there for the next press.
+    const endAction = interactionEndAction(state.interaction.mode, 'undo');
+    if (endAction) {
+      dispatch(endAction);
+      return;
+    }
+
     if (!canRedo) {
       return;
     }
 
     dispatch(redo());
-  }, [canRedo, dispatch]);
+  }, [canRedo, dispatch, state.interaction.mode]);
 
   return {
     canUndo,

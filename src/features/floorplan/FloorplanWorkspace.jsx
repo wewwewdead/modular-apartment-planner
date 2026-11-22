@@ -84,13 +84,17 @@ function FocusExitHint() {
  * renders the entire workspace. Reading them through a ref keeps the window
  * listener from being re-subscribed frame by frame as well.
  */
-function FocusEscapeGuard({ focusedPanel }) {
-  const { pastePreview, dispatch } = useEditorState();
+export function FocusEscapeGuard({ focusedPanel }) {
+  const { pastePreview, wallDetailEditor, ceilingDetailEditor, dispatch } = useEditorState();
   const toolState = useToolState();
   const markersRef = useRef(null);
 
   useEffect(() => {
-    markersRef.current = { toolState, pastePreview };
+    markersRef.current = {
+      toolState,
+      pastePreview,
+      detailEditorOpen: Boolean(wallDetailEditor || ceilingDetailEditor),
+    };
   });
 
   useEffect(() => {
@@ -98,6 +102,10 @@ function FocusEscapeGuard({ focusedPanel }) {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       const target = event.target;
       if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName)) return;
+      // A detail editor covers the plan and owns the keyboard while it is open.
+      // An idle editor lets Escape through unhandled, and that press is not a
+      // request to leave the focus mode out of sight behind it.
+      if (markersRef.current?.detailEditorOpen) return;
 
       if (focusedPanel === 'canvas') {
         const markers = markersRef.current || {};

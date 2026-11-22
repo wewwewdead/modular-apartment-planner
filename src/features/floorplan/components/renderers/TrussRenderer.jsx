@@ -185,7 +185,8 @@ function TrussLabels({ instanceGeometry }) {
   );
 }
 
-function TrussRenderer({ floor = null, trussSystems = [], roofSystem = null, selectedId = null, selectedType = null }) {
+// `roofSystems` is every roof on show: each system's closures read the one attached to it.
+function TrussRenderer({ floor = null, trussSystems = [], roofSystems = [], selectedId = null, selectedType = null }) {
   const floorGeometry = buildFloorTrussGeometry(trussSystems);
 
   return (
@@ -195,7 +196,7 @@ function TrussRenderer({ floor = null, trussSystems = [], roofSystem = null, sel
         <g key={systemGeometry.trussSystem.id}>
           <ClosureFootprints
             systemGeometry={systemGeometry}
-            roofSystem={roofSystem}
+            roofSystem={roofSystems.find((entry) => entry?.trussAttachmentId === systemGeometry.trussSystem.id) || null}
             selected={selectedType === 'trussSystem' && selectedId === systemGeometry.trussSystem.id}
           />
           {systemGeometry.instances.map((instanceGeometry) => {

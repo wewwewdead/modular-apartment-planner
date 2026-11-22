@@ -316,7 +316,7 @@ try {
   await s.fill(panel, 'Backgauge L (mm)', 200);
   await s.stationWhen('s.grip.handles.turn && s.grip.outcomes.flip && s.grip.outcomes.turn', 5000);
   await expect(page.locator('.cad-viewport-hint')).toContainText(
-    'Drag a ring on the sheet to flip or turn it · F flip · T turn around · Enter bends · Esc clears the line',
+    'Drag a ring to flip or turn the sheet, the arrow to slide it · F flip · T turn around · Enter bends · Esc clears the line',
   );
   g = await s.grip();
   measured.outcomes300 = { ms: g.outcomesMs, flip: g.outcomes.flip, turn: g.outcomes.turn };
@@ -576,10 +576,7 @@ try {
   const dies = sheetAlone.panel.getByRole('region', { name: 'Dies' });
   await expect(dies).toBeVisible();
   assert.equal(await sheetAlone.panel.getByRole('region', { name: 'Punches' }).count(), 0, 'the die picker only');
-  assert(
-    await dies.evaluate((el) => el.contains(document.activeElement)),
-    'the die picker has the focus',
-  );
+  assert(await dies.evaluate((el) => el.contains(document.activeElement)), 'the die picker has the focus');
   await s.shot('15-die-picker');
   const automatic = dieChip.match(/^(V\d+ 88°)/)[1];
   const otherDie = automatic === 'V12 88°' ? 'V16 88°' : 'V12 88°';
@@ -646,7 +643,9 @@ try {
   await s.stationWhen('!s.turning', 5000);
   await blurAll();
   await page.keyboard.press('Enter');
-  const card = stored(await s.savedWhen((m) => m.parts[0].features[0].bends.length === 2, 'the second hit, by the card'));
+  const card = stored(
+    await s.savedWhen((m) => m.parts[0].features[0].bends.length === 2, 'the second hit, by the card'),
+  );
   assert.deepEqual(alone, card, `on the sheet alone ${JSON.stringify(alone)} vs the card ${JSON.stringify(card)}`);
   measured.sheetAloneBends = alone;
   measured.cardBends = card;

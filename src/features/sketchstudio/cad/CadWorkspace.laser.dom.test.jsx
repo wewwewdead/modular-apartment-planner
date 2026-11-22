@@ -192,9 +192,14 @@ it('saves the sheet choice and the etched bend lines; the quantity nests copies 
   harness.rerender();
   expect(within(panel()).getByLabelText('Etched marks').textContent).toBe('2 etched lines');
   expect(screen.getAllByLabelText('Etched line')).toHaveLength(2);
-  // Ten copies (docs/sketch-studio-outline-edit-sheet-nest.md §4.3): nine new
-  // instances of the part in one commit, ten blanks on the bed.
+  // Ten blanks (docs/sketch-studio-outline-edit-sheet-nest.md §4.3): one piece
+  // of metal is one part (docs/sketch-studio-own-bends.md §4.4), so nine new
+  // parts and instances in one commit, each fresh off the laser (flat, the
+  // bent lead's marks kept), ten blanks on the bed.
   const instances = harness.model().instances.length;
+  const parts = harness.model().parts.length;
+  const lead = harness.model().parts.at(-1);
+  expect(lead.features[0].bends.length).toBeGreaterThan(0);
   const commits = harness.setCadModel.mock.calls.length;
   const field = within(panel()).getByLabelText('Quantity');
   act(() => {
@@ -204,12 +209,19 @@ it('saves the sheet choice and the etched bend lines; the quantity nests copies 
   act(() => fireEvent.blur(field));
   expect(harness.setCadModel.mock.calls.length).toBe(commits + 1);
   expect(harness.model().instances).toHaveLength(instances + 9);
+  expect(harness.model().parts).toHaveLength(parts + 9);
+  const made = harness.model().parts.slice(parts);
+  expect(made.map((p) => p.name)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10].map((k) => `${lead.name} #${k}`));
+  expect(made.every((p) => p.features.length === 1 && p.features[0].bends.length === 0)).toBe(true);
+  expect(made.every((p) => p.features[0].marks.length === 2)).toBe(true);
   harness.rerender();
   expect(screen.getAllByLabelText(/^Blank \d+$/)).toHaveLength(10);
   expect(within(panel()).getByLabelText('Quantity').value).toBe('10');
   expect(within(panel()).getByLabelText('Cut time').textContent).toMatch(/per blank · .* for 10$/);
+  // Clear marks is the lead blank's own (own bends §4.4).
   act(() => fireEvent.click(within(panel()).getByRole('button', { name: 'Clear marks' })));
-  expect(harness.model().parts.at(-1).features[0].marks).toEqual([]);
+  expect(harness.model().parts.find((p) => p.id === lead.id).features[0].marks).toEqual([]);
+  expect(harness.model().parts.at(-1).features[0].marks).toHaveLength(2);
 });
 
 it('loads Example: control box with its records, shows its job sheet complete and draws its flat pattern', async () => {

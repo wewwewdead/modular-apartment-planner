@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { DaylightIcon } from '@/ui/ToolbarIcons';
 import { daylightFactorToLux } from '@/analysis/daylightModel';
 import { LOADING_COPY, LoadingPill, daylightSampling } from '@/ui/loading';
@@ -38,7 +38,7 @@ function formatArea(value) {
  * scrollable, because the useful action here is comparing rooms, not tuning
  * settings. Everything adjustable folds away.
  */
-export default function DaylightPanel({
+function DaylightPanel({
   project,
   daylight,
   study,
@@ -431,3 +431,6 @@ export default function DaylightPanel({
     </section>
   );
 }
+
+// Memoised: the sidebar hands it a project that lags a drag (see Sidebar.jsx).
+export default memo(DaylightPanel);

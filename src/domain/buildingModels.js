@@ -16,6 +16,7 @@ import { createServicesRealizationProfile, createServicesRealizationState } from
 import { createCostRealizationProfile, createCostRealizationState } from './costRealization';
 import { createDocumentationRealizationProfile, createDocumentationRealizationState } from './documentationRealization';
 import { createProfessionalExchangeProfile, createProfessionalExchangeState } from './professionalExchange';
+import { reuseUnchanged } from './structuralSharing';
 
 export { DESIGN_CONFIDENCE };
 
@@ -201,6 +202,20 @@ function compareFloorOrder(floorOrder, a, b) {
 export function syncCanonicalBuilding(project) {
   if (!project?.building) return project;
 
+  // Rebuilt in full on every edit and every drag frame, but handed back with
+  // every part that came out the same kept as the object it was given
+  // (structuralSharing.js) — and the very same `building` when nothing moved.
+  // The 3D preview keys each floor on `building.systems`, and the lifecycle
+  // panel's forms, the plan overlays and the document signature on other
+  // slices; a fresh copy of an unchanged slice looked to all of them like an
+  // edit. The saved project is the fresh one, byte for byte.
+  return {
+    ...project,
+    building: reuseUnchanged(project.building, buildSyncedBuilding(project)),
+  };
+}
+
+function buildSyncedBuilding(project) {
   const floorOrder = new Map((project.floors || []).map((floor, index) => [floor.id, index]));
   const existingStacks = new Map(
     (project.building.systems?.structural?.columnStacks || []).map((stack) => [stack.id, stack]),
@@ -273,84 +288,81 @@ export function syncCanonicalBuilding(project) {
   const mechanical = project.building.systems?.mechanical || createSystem(project.id, 'mechanical');
   const egress = project.building.systems?.egress || createSystem(project.id, 'egress');
   return {
-    ...project,
-    building: {
-      ...project.building,
-      levelIds: (project.floors || []).map((floor) => floor.id),
-      spaceProgram: createSpaceProgram(project.building.spaceProgram),
-      unitTypes: project.building.unitTypes || [],
-      unitInstances: (project.building.unitInstances || []).map((instance) => ({
-        ...instance,
-        roomIds: roomIdsByUnitInstance.get(instance.id) || [],
+    ...project.building,
+    levelIds: (project.floors || []).map((floor) => floor.id),
+    spaceProgram: createSpaceProgram(project.building.spaceProgram),
+    unitTypes: project.building.unitTypes || [],
+    unitInstances: (project.building.unitInstances || []).map((instance) => ({
+      ...instance,
+      roomIds: roomIdsByUnitInstance.get(instance.id) || [],
+    })),
+    testFitProfile: createTestFitProfile(project.building.testFitProfile),
+    testFitOptions: (project.building.testFitOptions || []).filter((entry) => entry?.id).map(createTestFitOption),
+    selectedTestFitId: project.building.selectedTestFitId || null,
+    acceptedTestFitId: project.building.acceptedTestFitId || null,
+    apartmentDesignProfile: createApartmentDesignProfile(project.building.apartmentDesignProfile),
+    apartmentDesign: createApartmentDesignState(project.building.apartmentDesign),
+    quantityProfile: createQuantityProfile(project.building.quantityProfile),
+    costRealizationProfile: createCostRealizationProfile(project.building.costRealizationProfile),
+    costRealization: createCostRealizationState(project.building.costRealization),
+    documentationRealizationProfile: createDocumentationRealizationProfile(
+      project.building.documentationRealizationProfile,
+    ),
+    documentationRealization: createDocumentationRealizationState(project.building.documentationRealization),
+    professionalExchangeProfile: createProfessionalExchangeProfile(project.building.professionalExchangeProfile),
+    professionalExchange: createProfessionalExchangeState(project.building.professionalExchange),
+    assumptions: (project.building.assumptions || []).filter((entry) => entry?.id).map(createDesignAssumption),
+    documentation: createDocumentationModel(project.building.documentation),
+    site: {
+      ...project.building.site,
+      solarStudyTargets: (project.building.site?.solarStudyTargets || []).map((target) => ({
+        ...target,
+        polygon: (target.polygon || []).map((point) => ({ ...point })),
       })),
-      testFitProfile: createTestFitProfile(project.building.testFitProfile),
-      testFitOptions: (project.building.testFitOptions || []).filter((entry) => entry?.id).map(createTestFitOption),
-      selectedTestFitId: project.building.selectedTestFitId || null,
-      acceptedTestFitId: project.building.acceptedTestFitId || null,
-      apartmentDesignProfile: createApartmentDesignProfile(project.building.apartmentDesignProfile),
-      apartmentDesign: createApartmentDesignState(project.building.apartmentDesign),
-      quantityProfile: createQuantityProfile(project.building.quantityProfile),
-      costRealizationProfile: createCostRealizationProfile(project.building.costRealizationProfile),
-      costRealization: createCostRealizationState(project.building.costRealization),
-      documentationRealizationProfile: createDocumentationRealizationProfile(
-        project.building.documentationRealizationProfile,
-      ),
-      documentationRealization: createDocumentationRealizationState(project.building.documentationRealization),
-      professionalExchangeProfile: createProfessionalExchangeProfile(project.building.professionalExchangeProfile),
-      professionalExchange: createProfessionalExchangeState(project.building.professionalExchange),
-      assumptions: (project.building.assumptions || []).filter((entry) => entry?.id).map(createDesignAssumption),
-      documentation: createDocumentationModel(project.building.documentation),
-      site: {
-        ...project.building.site,
-        solarStudyTargets: (project.building.site?.solarStudyTargets || []).map((target) => ({
-          ...target,
-          polygon: (target.polygon || []).map((point) => ({ ...point })),
+      parkingPlan: createParkingPlan(project.building.site?.parkingPlan),
+    },
+    systems: {
+      ...project.building.systems,
+      plumbing: {
+        ...plumbing,
+        wetZones: plumbing.wetZones || [],
+        drainageRoutes: plumbing.drainageRoutes || [],
+        shafts: (plumbing.shafts || []).map((shaft) => ({
+          ...shaft,
+          fixtureRefs: fixtureRefsByShaft.get(shaft.id) || [],
         })),
-        parkingPlan: createParkingPlan(project.building.site?.parkingPlan),
       },
-      systems: {
-        ...project.building.systems,
-        plumbing: {
-          ...plumbing,
-          wetZones: plumbing.wetZones || [],
-          drainageRoutes: plumbing.drainageRoutes || [],
-          shafts: (plumbing.shafts || []).map((shaft) => ({
-            ...shaft,
-            fixtureRefs: fixtureRefsByShaft.get(shaft.id) || [],
-          })),
-        },
-        electrical: {
-          ...electrical,
-          riserZones: electrical.riserZones || [],
-          panelZones: (electrical.panelZones || []).map(createEquipmentZone),
-          points: (electrical.points || []).map(createElectricalPoint),
-        },
-        water: {
-          ...water,
-          equipmentZones: (water.equipmentZones || []).map(createEquipmentZone),
-        },
-        mechanical: {
-          ...mechanical,
-          outdoorUnitZones: (mechanical.outdoorUnitZones || []).map(createEquipmentZone),
-        },
-        egress: {
-          ...egress,
-          exits: egress.exits || [],
-          routes: egress.routes || [],
-        },
-        coordinationProfile: project.building.systems?.coordinationProfile || {},
-        realizationProfile: createServicesRealizationProfile(project.building.systems?.realizationProfile),
-        realization: createServicesRealizationState(project.building.systems?.realization),
-        equipmentCoordinationProfile: createEquipmentCoordinationProfile(
-          project.building.systems?.equipmentCoordinationProfile,
-        ),
-        structural: {
-          ...structural,
-          columnStacks,
-          wallStacks,
-          realizationProfile: createStructuralRealizationProfile(structural.realizationProfile),
-          realization: createStructuralRealizationState(structural.realization),
-        },
+      electrical: {
+        ...electrical,
+        riserZones: electrical.riserZones || [],
+        panelZones: (electrical.panelZones || []).map(createEquipmentZone),
+        points: (electrical.points || []).map(createElectricalPoint),
+      },
+      water: {
+        ...water,
+        equipmentZones: (water.equipmentZones || []).map(createEquipmentZone),
+      },
+      mechanical: {
+        ...mechanical,
+        outdoorUnitZones: (mechanical.outdoorUnitZones || []).map(createEquipmentZone),
+      },
+      egress: {
+        ...egress,
+        exits: egress.exits || [],
+        routes: egress.routes || [],
+      },
+      coordinationProfile: project.building.systems?.coordinationProfile || {},
+      realizationProfile: createServicesRealizationProfile(project.building.systems?.realizationProfile),
+      realization: createServicesRealizationState(project.building.systems?.realization),
+      equipmentCoordinationProfile: createEquipmentCoordinationProfile(
+        project.building.systems?.equipmentCoordinationProfile,
+      ),
+      structural: {
+        ...structural,
+        columnStacks,
+        wallStacks,
+        realizationProfile: createStructuralRealizationProfile(structural.realizationProfile),
+        realization: createStructuralRealizationState(structural.realization),
       },
     },
   };

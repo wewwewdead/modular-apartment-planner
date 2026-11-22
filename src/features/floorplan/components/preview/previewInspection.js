@@ -11,6 +11,7 @@ import {
 } from '@/domain/ceilingModels';
 import { getColumnListLabel } from '@/domain/columnLabels';
 import { getOrderedFloors } from '@/domain/floorModels';
+import { findRoofOwner, getRoofFloorId, getRoofForTrussSystem } from '@/domain/projectRoofs';
 import { getLandingDisplayLabel } from '@/domain/landingLabels';
 import { getSlabDisplayLabel } from '@/domain/slabLabels';
 import { getStairDisplayLabel } from '@/domain/stairLabels';
@@ -452,22 +453,32 @@ export function getPreviewInspection(project, selectedType, selectedId) {
       floorName: floor.name,
       title: titleForObject(selectedType, object, floor),
       subtitle: `${floor.name} · ${TYPE_LABELS[selectedType]}`,
-      rows: rowsForObject(selectedType, object, floor, project?.roofSystem || null),
+      // A stair's roof access names an opening of whichever roof it climbs to.
+      rows: rowsForObject(
+        selectedType,
+        object,
+        floor,
+        findRoofOwner(project, 'roofOpening', object.roofAccess?.roofOpeningId),
+      ),
     };
   }
 
-  const roofObject = findObjectInRoof(project?.roofSystem, selectedType, selectedId);
+  // A roof object is looked for in every roof; the one that holds it reports it.
+  const ownerRoof = findRoofOwner(project, selectedType, selectedId);
+  const roofObject = findObjectInRoof(ownerRoof, selectedType, selectedId);
   if (roofObject) {
     const topFloor = getOrderedFloors(project).slice(-1)[0] || null;
 
     return {
       id: selectedId,
       type: selectedType,
-      floorId: topFloor?.id || null,
-      floorName: project?.roofSystem?.name || 'Roof',
+      // The storey the 3D preview shows this roof with, so a floor scope that
+      // hides the roof hides its inspection too.
+      floorId: getRoofFloorId(project, ownerRoof, topFloor?.id || null),
+      floorName: ownerRoof.name || 'Roof',
       title: titleForObject(selectedType, roofObject, topFloor || { columns: [] }),
-      subtitle: `${project?.roofSystem?.name || 'Roof'} · ${TYPE_LABELS[selectedType]}`,
-      rows: rowsForObject(selectedType, roofObject, topFloor || { columns: [] }, project?.roofSystem || null),
+      subtitle: `${ownerRoof.name || 'Roof'} · ${TYPE_LABELS[selectedType]}`,
+      rows: rowsForObject(selectedType, roofObject, topFloor || { columns: [] }, ownerRoof),
     };
   }
 
@@ -500,7 +511,12 @@ export function getPreviewInspection(project, selectedType, selectedId) {
       floorName: floor?.name || 'Truss',
       title: titleForObject(selectedType, object, floor || { columns: [] }),
       subtitle: `${trussObject.trussSystem.name || 'Truss System'} · ${TYPE_LABELS[selectedType]}`,
-      rows: rowsForObject(selectedType, object, floor || { columns: [] }, project?.roofSystem || null),
+      rows: rowsForObject(
+        selectedType,
+        object,
+        floor || { columns: [] },
+        getRoofForTrussSystem(project, trussObject.trussSystem.id),
+      ),
     };
   }
 

@@ -354,18 +354,20 @@ describe('roof quantities', () => {
   async function projectWithRoof(roofType) {
     const { createRoofSystem } = await import('./roofModels');
     const project = createProject('Roofed');
-    project.roofSystem = createRoofSystem('Roof', {
-      id: 'roof_1',
-      roofType,
-      baseElevation: 3000,
-      boundaryPolygon: [
-        { x: 0, y: 0 },
-        { x: 10000, y: 0 },
-        { x: 10000, y: 8000 },
-        { x: 0, y: 8000 },
-      ],
-      pitch: { slope: 25, overhang: 300, direction: { x: 0, y: 1 } },
-    });
+    project.roofSystems = [
+      createRoofSystem('Roof', {
+        id: 'roof_1',
+        roofType,
+        baseElevation: 3000,
+        boundaryPolygon: [
+          { x: 0, y: 0 },
+          { x: 10000, y: 0 },
+          { x: 10000, y: 8000 },
+          { x: 0, y: 8000 },
+        ],
+        pitch: { slope: 25, overhang: 300, direction: { x: 0, y: 1 } },
+      }),
+    ];
     return project;
   }
 

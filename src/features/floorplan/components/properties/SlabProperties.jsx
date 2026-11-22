@@ -14,6 +14,7 @@ import {
   resetCantileverToolState,
 } from '@/editor/handlers/cantileverHandler';
 import { TOOLS } from '@/editor/tools';
+import { enterTool } from '@/editor/toolSession';
 import { slabArea } from '@/geometry/slabGeometry';
 import PhaseSelector from '../PhaseSelector';
 import styles from '../PropertiesPanel.module.css';
@@ -144,15 +145,14 @@ function SlabProperties({
     : PROJECTING_BAY_DEFAULT_WIDTH_MM;
 
   const startCantilever = (mode = CANTILEVER_MODES.CANTILEVER) => {
-    editorDispatch({ type: 'SET_TOOL', tool: TOOLS.CANTILEVER });
     // SET_TOOL clears the selection along with the old tool's state, and the
     // whole flow is anchored on this plate — so it goes straight back. The mode
     // has to be set AFTER it for the same reason.
-    editorDispatch({ type: 'SELECT_OBJECT', id: slab.id, objectType: 'slab' });
-    editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { cantileverMode: mode } });
-    editorDispatch({
-      type: 'SET_STATUS_MESSAGE',
-      message:
+    enterTool(editorDispatch, {
+      tool: TOOLS.CANTILEVER,
+      selection: { id: slab.id, objectType: 'slab' },
+      toolState: { cantileverMode: mode },
+      statusMessage:
         mode === CANTILEVER_MODES.BAY
           ? 'Click an edge of the slab where the bay should project.'
           : 'Click an edge of the slab to cantilever that side.',

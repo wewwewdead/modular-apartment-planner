@@ -37,7 +37,7 @@ export function createWallDetailPreviewProject(project, floorId, wallId) {
   return {
     ...project,
     floors: [previewFloor],
-    roofSystem: null,
+    roofSystems: [],
     trussSystems: [],
     ceilings: [],
     building: project.building

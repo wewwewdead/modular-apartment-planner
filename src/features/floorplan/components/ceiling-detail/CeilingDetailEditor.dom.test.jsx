@@ -479,6 +479,44 @@ describe('clicking a board on the plan', () => {
       }),
     );
   });
+
+  it('drops a drag before Delete removes the board, so the release brings nothing back', () => {
+    const { container } = mountManualCeiling();
+    const svg = container.querySelector('svg[data-tool]');
+    svg.setPointerCapture = () => {};
+    svg.releasePointerCapture = () => {};
+    svg.getBoundingClientRect = () => CANVAS_AS_PRESSED;
+    const board = container.querySelector('path[fill-rule="evenodd"]');
+    const at = { clientX: 300, clientY: 200, button: 0, pointerId: 1 };
+
+    fireEvent.pointerDown(board, at);
+    fireEvent.pointerMove(svg, { ...at, clientX: 340 });
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(mocks.dispatch).toHaveBeenCalledTimes(1);
+
+    fireEvent.pointerUp(svg, { ...at, clientX: 340 });
+    expect(mocks.dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('measures a drag against the canvas as Fit leaves it, as zoom does', () => {
+    const { container } = mountManualCeiling();
+    const svg = container.querySelector('svg[data-tool]');
+    svg.setPointerCapture = () => {};
+    svg.releasePointerCapture = () => {};
+    let rect = CANVAS_AS_PRESSED;
+    svg.getBoundingClientRect = () => rect;
+    const board = container.querySelector('path[fill-rule="evenodd"]');
+    const at = { clientX: 300, clientY: 200, button: 0, pointerId: 1 };
+
+    fireEvent.pointerDown(board, at);
+    // Fit, mid-press: the drawing slides 100 px left under a pointer that
+    // follows it, so the release is over the very point that was pressed.
+    fireEvent.keyDown(window, { key: '0' });
+    rect = { ...CANVAS_AS_PRESSED, left: -100, right: 500 };
+    fireEvent.pointerUp(svg, { ...at, clientX: 200 });
+
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
 });
 
 /**
@@ -1001,6 +1039,44 @@ describe('ceiling dimensions', () => {
 
     expect(container.textContent).toContain('Selected measurement');
     expect(container.textContent).toContain('measurement selected');
+  });
+
+  it('leaves a measurement’s end where it was when its grip is only clicked', () => {
+    const { container } = mountMeasuredCeiling();
+    const svg = container.querySelector('svg[data-tool]');
+    svg.setPointerCapture = () => {};
+    svg.releasePointerCapture = () => {};
+    svg.getBoundingClientRect = () => CANVAS;
+    const at = { button: 0, pointerId: 1, clientX: 250, clientY: 294 };
+    fireEvent.pointerDown(dimensionFigures(container, 'custom')[0], at);
+    fireEvent.pointerUp(svg, at);
+    // The figure is drawn afresh while its end is held, so the grip is looked
+    // up again for each press.
+    const startGrip = () => dimensionFigures(container, 'custom')[0].querySelectorAll(':scope > g')[0];
+    expect(startGrip()).toBeTruthy();
+
+    // On the start grip, drifting a fraction of a pixel: a click, which must
+    // not re-acquire (snap, round, level) the stored end.
+    const grip = { button: 0, pointerId: 1, clientX: 100, clientY: 294 };
+    fireEvent.pointerDown(startGrip(), grip);
+    fireEvent.pointerUp(svg, { ...grip, clientX: 100.5 });
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+
+    // A real drag of the grip still moves that end.
+    fireEvent.pointerDown(startGrip(), grip);
+    fireEvent.pointerMove(svg, { ...grip, clientX: 50 });
+    fireEvent.pointerUp(svg, { ...grip, clientX: 50 });
+    expect(committedManualDimensions()[0].start.u).toBeCloseTo(500);
+  });
+
+  it('clears the pick-up marker when the pointer leaves the plan', () => {
+    const { container } = mountManualCeiling({ beamless: true });
+    const svg = measurablePlan(container);
+    fireEvent.pointerMove(svg, { pointerId: 1, clientX: 100, clientY: 300 });
+    expect(svg.querySelector('g[data-snapped]')).not.toBeNull();
+
+    fireEvent.pointerLeave(svg, { pointerId: 1, clientX: 700, clientY: 300 });
+    expect(svg.querySelector('g[data-snapped]')).toBeNull();
   });
 
   it('drops a selected measurement from the stored list', () => {
@@ -1671,5 +1747,30 @@ describe('ceiling popovers and Escape', () => {
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(tracePreview()).toBeNull();
+  });
+});
+
+/**
+ * Space held pans the plan, even with a tool button focused — which is where
+ * focus is after clicking one. Pick a tool, hold Space, drag: that must pan,
+ * not press the button again. Enter still presses a focused button.
+ */
+describe('ceiling Space with a tool button focused', () => {
+  it('pans, and the tool stays as it was', () => {
+    const { container } = mountManualCeiling({ beamless: true });
+    const frame = container.querySelector('[data-space-pan]');
+    const canvas = container.querySelector('svg[data-tool]');
+    const button = container.querySelector('button[title^="Draw measurement"]');
+    fireEvent.click(button);
+    button.focus();
+    expect(canvas.getAttribute('data-tool')).toBe('draw_dimension');
+
+    // fireEvent answers false when the default was prevented: the key is the
+    // pan's, so the browser does not press the button with it.
+    expect(fireEvent.keyDown(button, { key: ' ', code: 'Space' })).toBe(false);
+    expect(frame.getAttribute('data-space-pan')).toBe('true');
+    expect(fireEvent.keyUp(button, { key: ' ', code: 'Space' })).toBe(false);
+    expect(frame.getAttribute('data-space-pan')).toBe('false');
+    expect(canvas.getAttribute('data-tool')).toBe('draw_dimension');
   });
 });

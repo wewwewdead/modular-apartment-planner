@@ -778,6 +778,21 @@
   stroke: none;
 }
 
+/*
+ * A large selection (more than SELECTION_GLOW_LIMIT entities, DraftingCanvas)
+ * is highlighted by its stroke alone: a drop-shadow filter on thousands of
+ * entities is a filter pass each, every frame. And only the hovered entity
+ * keeps its colour transition, so selecting or clearing thousands at once does
+ * not start thousands of transitions. Smaller selections are untouched.
+ */
+.sketchStudioCanvas.is-large-selection .sketchStudioEntity.is-selected {
+  filter: none;
+}
+
+.sketchStudioCanvas.is-large-selection .sketchStudioEntity:not(.is-hovered) {
+  transition: none;
+}
+
 .sketchStudioEntityLeader {
   fill: none;
   stroke: #d8e6fb;

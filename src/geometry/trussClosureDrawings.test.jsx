@@ -40,18 +40,18 @@ function fixture({ sectionCut = null } = {}) {
     ],
   });
   const project = { ...base, floors: [ground], trussSystems: [trussSystem] };
-  project.roofSystem = createRoofSystemForProject(project, { id: 'roof_1' });
+  project.roofSystems = [createRoofSystemForProject(project, { id: 'roof_1' })];
   return { project, ground };
 }
 
 function ridgeUnderside(project) {
-  return buildRoofPlaneGeometry(project.roofSystem).getSurfaceElevation({ x: 0, y: 0 }, 'bottom');
+  return buildRoofPlaneGeometry(project.roofSystems[0]).getSurfaceElevation({ x: 0, y: 0 }, 'bottom');
 }
 
 describe('gable closures in elevation', () => {
   it('draws a gableInfill polygon on the front elevation whose apex is the roof ridge underside', () => {
     const { project, ground } = fixture();
-    expect(project.roofSystem?.trussAttachmentId).toBe('ts_1');
+    expect(project.roofSystems[0]?.trussAttachmentId).toBe('ts_1');
     const scene = buildProjectElevationScene(project, ground.id, 'elevation_front');
     const closures = scene.polygonElements.filter((element) => element.category === 'gableInfill');
     expect(closures.map((element) => element.side).sort()).toEqual(['end', 'start']);
@@ -129,7 +129,7 @@ describe('gable closures in plan', () => {
     const { project, ground } = fixture();
     const markup = renderToStaticMarkup(
       <svg>
-        <TrussRenderer floor={ground} trussSystems={project.trussSystems} roofSystem={project.roofSystem} />
+        <TrussRenderer floor={ground} trussSystems={project.trussSystems} roofSystems={project.roofSystems} />
       </svg>,
     );
     expect(markup).toContain('data-truss-closure="start"');
@@ -140,7 +140,7 @@ describe('gable closures in plan', () => {
     const { project, ground } = fixture();
     const markup = renderToStaticMarkup(
       <svg>
-        <TrussRenderer floor={ground} trussSystems={project.trussSystems} roofSystem={project.roofSystem} />
+        <TrussRenderer floor={ground} trussSystems={project.trussSystems} roofSystems={project.roofSystems} />
       </svg>,
     );
     // Both ends are infilled, so the end copies are gable end frames.

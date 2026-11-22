@@ -85,7 +85,9 @@ function buildClosureElevationElements(trussSystem, systemGeometry, roofSystem, 
   return { polygonElements, lineElements };
 }
 
-export function buildTrussElevationElements(trussSystems = [], view, roofSystem = null) {
+// `roofSystems` is every roof in the view; each truss system's gable closures
+// read the one attached to it.
+export function buildTrussElevationElements(trussSystems = [], view, roofSystems = []) {
   if (!view) {
     return {
       lineElements: [],
@@ -98,6 +100,7 @@ export function buildTrussElevationElements(trussSystems = [], view, roofSystem 
 
   for (const trussSystem of trussSystems) {
     const systemGeometry = buildTrussSystemGeometry(trussSystem);
+    const roofSystem = roofSystems.find((entry) => entry?.trussAttachmentId === trussSystem.id) || null;
     const closureElements = buildClosureElevationElements(trussSystem, systemGeometry, roofSystem, view);
     polygonElements.push(...closureElements.polygonElements);
     lineElements.push(...closureElements.lineElements);

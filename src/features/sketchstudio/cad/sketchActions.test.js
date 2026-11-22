@@ -253,7 +253,7 @@ describe('Move (M)', () => {
     expect(done.entities[2].c).toEqual([110, 60]);
   });
 
-  it('is ended by a tool, Ctrl+A, Delete and Undo (which drops it before stepping back)', () => {
+  it('is ended by a tool, Ctrl+A, Delete and Undo (which drops it in the same press as its step back)', () => {
     const on = run(selected(), { type: 'op', kind: 'move' }, click([0, 0]));
     expect(sketchReducer(on, { type: 'tool', tool: 'line' })).toMatchObject({ op: null, tool: 'line' });
     expect(sketchReducer(on, { type: 'select-all' }).op).toBe(null);
@@ -279,6 +279,22 @@ describe('Copy (K)', () => {
     expect(state.dimensions).toEqual([toCorner, onHole]);
     state = sketchReducer(state, { type: 'escape' });
     expect(state).toMatchObject({ op: null, selectedIds: ['e4', 'e5'] });
+  });
+
+  it('ends before another action starts, so the new one acts on the copies', () => {
+    const copied = run(selected(['e3']), { type: 'op', kind: 'copy' }, click([100, 50]), click([120, 50]));
+    const turning = sketchReducer(copied, { type: 'op', kind: 'rotate' });
+    expect(turning).toMatchObject({ op: { kind: 'rotate', step: 'center' }, selectedIds: ['e4'] });
+    expect(turning.history).toBe(copied.history);
+    // With no copy made the selection stays the original, as Esc leaves it.
+    const none = run(selected(['e3']), { type: 'op', kind: 'copy' }, { type: 'op', kind: 'move' });
+    expect(none).toMatchObject({ op: { kind: 'move', step: 'base' }, selectedIds: ['e3'] });
+    // Move then Mirror: Mirror on the same selection.
+    const moving = run(selected(['e2', 'e3']), { type: 'op', kind: 'move' }, click([0, 0]));
+    expect(sketchReducer(moving, { type: 'op', kind: 'mirror' })).toMatchObject({
+      op: { kind: 'mirror', step: 'first' },
+      selectedIds: ['e2', 'e3'],
+    });
   });
 
   it('refuses a copy that would lie exactly on a shape already there, with the count', () => {

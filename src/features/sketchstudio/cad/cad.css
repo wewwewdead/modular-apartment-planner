@@ -2329,6 +2329,14 @@
 .cad-map-pending.is-refused {
   stroke: #e03131;
 }
+/* Where the punch stands (sheet slide §6.3): the tooling's grey, beside the line, never clicked. */
+.cad-map-punch {
+  stroke: #7b8794;
+  stroke-width: 4;
+  stroke-linecap: butt;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
 .cad-map-mark.is-button {
   cursor: pointer;
 }
@@ -2383,8 +2391,53 @@
 .cad-map-segment:hover line {
   stroke-width: 6;
 }
+/* The piece the panel's chip names (piece pick §5.5): lit in the shop accent, in the hit or left flat. */
+.cad-map-segment.is-lit line {
+  stroke: var(--shop-accent, #287fb3);
+  stroke-width: 6;
+  stroke-dasharray: none;
+}
 .cad-brake-hint {
   font-size: 13px;
+}
+/* The pieces on the line (piece pick §5.5): one chip per piece, wrapping; Every piece keeps its place. */
+.cad-brake-pieces {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.cad-brake-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+.cad-workspace .cad-brake-chip {
+  min-height: 26px;
+  padding: 2px 8px;
+  border: 1px solid #c4d0da;
+  border-radius: 13px;
+  background: var(--shop-card, #fff);
+  color: var(--shop-quiet, #5b6c7c);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cad-workspace .cad-brake-chip[aria-pressed='true'] {
+  border-color: var(--shop-done, #2e7d4f);
+  background: #e6f4ea;
+  color: var(--shop-ink, #263444);
+}
+.cad-workspace .cad-brake-chip:focus-visible {
+  outline: 2px solid var(--shop-accent, #287fb3);
+  outline-offset: 1px;
+}
+.cad-workspace .cad-brake-chip.is-every {
+  border-style: dashed;
+}
+.cad-workspace .cad-brake-chip.is-every.is-idle {
+  visibility: hidden;
 }
 .cad-map-reading {
   fill: #2b8a3e;
@@ -3481,7 +3534,23 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cad-workspace .cad-blade-fit {
+/* The punch's note says each end on its own line once the sheet is slid: the
+   room for both is always kept, so nothing under it moves when it does. */
+.cad-blade-length.is-punch {
+  grid-template-rows: 24px 28px 20px;
+}
+.cad-blade-length.is-punch .cad-blade-length-note {
+  align-self: start;
+  line-height: 14px;
+}
+.cad-blade-length-note.is-ends span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cad-workspace .cad-blade-fit,
+.cad-workspace .cad-slide-centre {
   justify-self: start;
   height: 20px;
   padding: 0 6px;
@@ -3491,7 +3560,8 @@
   font-size: 11px;
   white-space: nowrap;
 }
-.cad-workspace .cad-blade-fit.is-idle {
+.cad-workspace .cad-blade-fit.is-idle,
+.cad-workspace .cad-slide-centre.is-idle {
   visibility: hidden;
 }
 .cad-blade-picker {

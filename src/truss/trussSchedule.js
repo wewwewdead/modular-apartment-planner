@@ -1,5 +1,6 @@
 import { TRUSS_MEMBER_KEYS, normalizeTrussMemberSizes, resolveTrussType } from '@/domain/trussModels';
 import { buildTrussSystemGeometry } from '@/geometry/trussGeometry';
+import { getRoofForTrussSystem } from '@/domain/projectRoofs';
 import { buildEndClosureLayout } from './endClosures';
 import { getWebPatternLabel } from './webPatterns';
 
@@ -162,12 +163,12 @@ export function buildTrussSchedule(trussSystem, options = {}) {
 
 /** Takeoff figures for every truss system of a project (spec §7.5). */
 export function buildProjectTrussQuantities(project) {
-  const roofSystem = project?.roofSystem || null;
   const timber = new Map();
   let trussCount = 0;
   let purlinLm = 0;
   for (const trussSystem of project?.trussSystems || []) {
-    const schedule = buildTrussSchedule(trussSystem, { roofSystem });
+    // Each system's closures sit under its own roof.
+    const schedule = buildTrussSchedule(trussSystem, { roofSystem: getRoofForTrussSystem(project, trussSystem.id) });
     trussCount += schedule.totals.trussCount;
     purlinLm += schedule.totals.purlinLm;
     for (const entry of schedule.totals.timberBySection) {

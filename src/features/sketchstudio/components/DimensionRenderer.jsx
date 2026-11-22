@@ -1,18 +1,21 @@
+import { memo, useMemo } from 'react';
 import { formatDimensionText, getDimensionGeometry, measureDistance } from '../utils/dimensionUtils';
 import { getAngleDimensionGeometry, formatAngleText } from '../utils/angleUtils';
-import { resolveAngleDimensionPoints, resolveLinearDimensionPoints } from '../utils/entityUtils';
+import { buildEntityIdLookup, resolveAngleDimensionPoints, resolveLinearDimensionPoints } from '../utils/entityUtils';
 
-function hasValidSourceRefs(entity, allEntities) {
+// Every slot is checked, nulls included (a null slot is simply not a broken
+// reference): the slots are positional and are never filtered.
+function hasValidSourceRefs(entity, entityById) {
   const sourceRefs = entity.meta?.sourceRefs ?? [];
   if (sourceRefs.length === 0) return true;
   return sourceRefs.every((ref) => {
     if (!ref?.entityId) return true;
-    return allEntities.some((e) => e.id === ref.entityId);
+    return entityById.has(ref.entityId);
   });
 }
 
-function renderLinearDimension(entity, allEntities, className) {
-  const { p1, p2 } = resolveLinearDimensionPoints(entity, allEntities);
+function renderLinearDimension(entity, allEntities, className, entityById) {
+  const { p1, p2 } = resolveLinearDimensionPoints(entity, allEntities, entityById);
   const geometry = getDimensionGeometry({
     p1,
     p2,
@@ -42,8 +45,8 @@ function renderLinearDimension(entity, allEntities, className) {
   );
 }
 
-function renderAngleDimension(entity, allEntities, className) {
-  const { vertex, p1, p2 } = resolveAngleDimensionPoints(entity, allEntities);
+function renderAngleDimension(entity, allEntities, className, entityById) {
+  const { vertex, p1, p2 } = resolveAngleDimensionPoints(entity, allEntities, entityById);
   const geometry = getAngleDimensionGeometry({
     vertex,
     p1,
@@ -81,32 +84,55 @@ function renderAngleDimension(entity, allEntities, className) {
   );
 }
 
-export default function DimensionRenderer({ entities, allEntities, hoveredId, selectedIds }) {
-  const dimensionEntities = entities.filter(
-    (entity) =>
-      entity.visible !== false &&
-      (entity.type === 'dimension' || entity.type === 'angle-dimension') &&
-      hasValidSourceRefs(entity, allEntities),
+// One dimension, memoised like EntityRenderer's shapes: a hover or selection
+// change re-renders only the dimensions whose state changed.
+const DimensionShape = memo(function DimensionShape({ entity, allEntities, entityById, isSelected, isHovered }) {
+  const className = [
+    'sketchStudioDimension',
+    entity.meta?.lineStyle === 'broken' ? 'is-broken-line' : '',
+    isSelected ? 'is-selected' : '',
+    isHovered ? 'is-hovered' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  if (entity.type === 'angle-dimension') {
+    return renderAngleDimension(entity, allEntities, className, entityById);
+  }
+
+  return renderLinearDimension(entity, allEntities, className, entityById);
+});
+
+function DimensionRenderer({ entities, allEntities, hoveredId, selectedIds }) {
+  const selectedIdSet = useMemo(() => (selectedIds instanceof Set ? selectedIds : new Set(selectedIds)), [selectedIds]);
+  // Source references resolve through one id lookup per document instead of a
+  // scan of every entity per reference.
+  const entityById = useMemo(() => buildEntityIdLookup(allEntities), [allEntities]);
+  const dimensionEntities = useMemo(
+    () =>
+      entities.filter(
+        (entity) =>
+          entity.visible !== false &&
+          (entity.type === 'dimension' || entity.type === 'angle-dimension') &&
+          hasValidSourceRefs(entity, entityById),
+      ),
+    [entities, entityById],
   );
 
   return (
     <g className="sketchStudioDimensionLayer">
-      {dimensionEntities.map((entity) => {
-        const className = [
-          'sketchStudioDimension',
-          entity.meta?.lineStyle === 'broken' ? 'is-broken-line' : '',
-          selectedIds.includes(entity.id) ? 'is-selected' : '',
-          hoveredId === entity.id ? 'is-hovered' : '',
-        ]
-          .filter(Boolean)
-          .join(' ');
-
-        if (entity.type === 'angle-dimension') {
-          return renderAngleDimension(entity, allEntities, className);
-        }
-
-        return renderLinearDimension(entity, allEntities, className);
-      })}
+      {dimensionEntities.map((entity) => (
+        <DimensionShape
+          key={entity.id}
+          entity={entity}
+          allEntities={allEntities}
+          entityById={entityById}
+          isSelected={selectedIdSet.has(entity.id)}
+          isHovered={hoveredId === entity.id}
+        />
+      ))}
     </g>
   );
 }
+
+export default memo(DimensionRenderer);

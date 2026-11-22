@@ -82,7 +82,7 @@ function renderScene(overrides = {}) {
   const props = {
     floor,
     filteredFloor,
-    filteredProject: { floors: filteredFloor ? [filteredFloor] : [], trussSystems: [], roofSystem: null },
+    filteredProject: { floors: filteredFloor ? [filteredFloor] : [], trussSystems: [], roofSystems: [] },
     viewMode: 'plan',
     selectedId: 'wall-1',
     selectedType: 'wall',

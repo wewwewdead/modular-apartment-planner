@@ -17,6 +17,7 @@ import { columnOutline } from '@/geometry/columnGeometry';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { unionPolygons } from '@/geometry/polygonBoolean';
 import { buildRoofPlaneGeometry } from '@/geometry/roofPlaneGeometry';
+import { getProjectRoofs } from '@/domain/projectRoofs';
 
 /** Prisms whose base and top agree to within this are merged into one mass. */
 const HEIGHT_BAND_MM = 10;
@@ -123,7 +124,9 @@ function mergePrismsByHeightBand(prisms, idPrefix) {
  * planar by construction, which makes its cast shadow exact rather than an
  * approximation — a gable's shadow is the union of its two plane shadows.
  */
-function collectRoofMasses(roofSystem) {
+// Plane ids are only unique within one roof, so with several roofs each mass
+// id also names its roof; a single roof keeps the ids it always had.
+function collectRoofMasses(roofSystem, roofCount = 1) {
   if (!roofSystem || (roofSystem.boundaryPolygon || []).length < 3) return [];
 
   let geometry;
@@ -163,7 +166,7 @@ function collectRoofMasses(roofSystem) {
     const lowestTop = Math.min(...topElevations);
 
     masses.push({
-      id: `roof:${plane.id}`,
+      id: roofCount > 1 ? `roof:${roofSystem.id}:${plane.id}` : `roof:${plane.id}`,
       footprint: outline.map((point) => ({ x: point.x, y: point.y })),
       holes: [],
       baseElevation,
@@ -201,7 +204,10 @@ export function buildAnalysisMassing(project, options = {}) {
     masses.push(...mergePrismsByHeightBand(prisms, `floor:${floor.id}`));
   }
 
-  if (includeRoof) masses.push(...collectRoofMasses(project?.roofSystem));
+  if (includeRoof) {
+    const roofSystems = getProjectRoofs(project);
+    for (const roofSystem of roofSystems) masses.push(...collectRoofMasses(roofSystem, roofSystems.length));
+  }
 
   return masses;
 }

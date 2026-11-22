@@ -136,7 +136,8 @@ describe('deserializeProject', () => {
       const { project } = deserializeProject(input);
       // After migration, project should have backfilled fields
       expect(project.sheets).toEqual([]);
-      expect(project.roofSystem).toBeNull();
+      expect(project.roofSystems).toEqual([]);
+      expect(project).not.toHaveProperty('roofSystem');
       expect(project.trussSystems).toEqual([]);
       expect(project.ceilings).toEqual([]);
       expect(project.address).toBe('');
@@ -148,7 +149,8 @@ describe('deserializeProject', () => {
       // 30 since RT-1: the roof covering + edge-kit backfill (migration_29_to_30).
       // 31 since RT-3.1: attached roofs drop their stale attachmentOffset
       // (migration_30_to_31), so the expected current schema moved to 31.
-      expect(CURRENT_SCHEMA_VERSION).toBe(31);
+      // 32 since MR-1: one roof slot became a roof list (migration_31_to_32).
+      expect(CURRENT_SCHEMA_VERSION).toBe(32);
 
       const { createProject } = await import('@/domain/models');
       const payload = createProject('Pre-ceiling save');

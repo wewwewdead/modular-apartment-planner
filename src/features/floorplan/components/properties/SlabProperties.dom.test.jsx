@@ -233,9 +233,11 @@ describe('SlabProperties — guided cantilever', () => {
 
     click(findByText('button', 'Add cantilever'));
 
-    expect(editorActions.slice(0, 2)).toEqual([
+    expect(editorActions).toEqual([
       { type: 'SET_TOOL', tool: 'cantilever' },
       { type: 'SELECT_OBJECT', id: 'slab_upper', objectType: 'slab' },
+      { type: 'UPDATE_TOOL_STATE', payload: { cantileverMode: 'cantilever' } },
+      { type: 'SET_STATUS_MESSAGE', message: 'Click an edge of the slab to cantilever that side.' },
     ]);
   });
 
@@ -601,13 +603,13 @@ describe('SlabProperties — projecting bay', () => {
 
     click(findByText('button', 'Add projecting bay'));
 
-    expect(editorActions.slice(0, 3)).toEqual([
+    expect(editorActions).toEqual([
       { type: 'SET_TOOL', tool: 'cantilever' },
       { type: 'SELECT_OBJECT', id: 'slab_upper', objectType: 'slab' },
       // SET_TOOL drops the tool state with the tool, so the mode goes after it.
       { type: 'UPDATE_TOOL_STATE', payload: { cantileverMode: 'bay' } },
+      { type: 'SET_STATUS_MESSAGE', message: 'Click an edge of the slab where the bay should project.' },
     ]);
-    expect(editorActions.at(-1).message).toContain('where the bay should project');
   });
 
   it('asks for a projection and a width once a side is picked', () => {

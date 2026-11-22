@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer, useRef } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import sketchStudioInitialState from '../store/sketchStudioInitialState';
 import sketchStudioReducer from '../store/sketchStudioReducer';
 import {
@@ -39,6 +39,7 @@ import useSketchTransform from './useSketchTransform';
 import useSketchKeyboard from './useSketchKeyboard';
 import useSketchPointer from './useSketchPointer';
 import useSketchToolClick from './useSketchToolClick';
+import { createCursorChannel } from './cursorChannel';
 
 // Re-export for consumers that import TOOL_DEFINITIONS from this file
 export { TOOL_DEFINITIONS } from './sketchConstants';
@@ -61,6 +62,8 @@ export default function useSketchStudio() {
   const [state, dispatch] = useReducer(sketchStudioReducer, sketchStudioInitialState, initializeSketchStudioState);
   const canvasRef = useRef(null);
   const isSpacePanActiveRef = useRef(false);
+  // The cursor position travels outside the reducer: see cursorChannel.js.
+  const [cursorChannel] = useState(createCursorChannel);
 
   const activeTool = state.ui.activeTool;
   const groupIndex = state.document.groupIndex;
@@ -69,7 +72,7 @@ export default function useSketchStudio() {
 
   // --- Sub-hooks ---
   const selection = useSketchSelection(state, groupIndex);
-  const viewport = useSketchViewport(state, dispatch, canvasRef, { visibleEntities, editableEntities });
+  const viewport = useSketchViewport(state, dispatch, canvasRef, { visibleEntities, editableEntities, cursorChannel });
   const layers = useSketchLayers(state, dispatch);
   const history = useSketchHistory(state, dispatch);
   const persistence = useSketchPersistence(state, dispatch);
@@ -176,6 +179,7 @@ export default function useSketchStudio() {
       isSpacePanActiveRef,
       selectionBounds,
       getConstrainedDraftPoint: viewport.getConstrainedDraftPoint,
+      cursorChannel,
     });
 
   // --- Canvas click handler ---
@@ -198,12 +202,96 @@ export default function useSketchStudio() {
   const editJoint = useCallback((jointId) => dispatch(setUiFlag('editingJointId', jointId || null)), [dispatch]);
   const clearEditingJoint = useCallback(() => dispatch(setUiFlag('editingJointId', null)), [dispatch]);
 
+  // Stable identities for everything handed to the memoised panels (RightPanel,
+  // CraftsmanSidebar, TopBar): a fresh arrow per render re-rendered them on
+  // every pointer move.
+  // meta: { skipHistory, revertSession } from a CAD field's typing session.
+  const setCadModel = useCallback((model, meta) => dispatch({ type: 'SET_CAD_MODEL', payload: model, meta }), []);
+  const setWorkspaceMode = useCallback((mode) => dispatch(setUiFlag('workspaceMode', mode)), []);
+  const rotateSelectionLeft = useCallback(() => handleRotateSelection(-90), [handleRotateSelection]);
+  const rotateSelectionRight = useCallback(() => handleRotateSelection(90), [handleRotateSelection]);
+  const flipSelectionHorizontal = useCallback(() => handleFlipSelection('horizontal'), [handleFlipSelection]);
+  const flipSelectionVertical = useCallback(() => handleFlipSelection('vertical'), [handleFlipSelection]);
+  const { handleSaveSketch, applyWorkspace } = persistence;
+  const saveSketchAs = useCallback(() => handleSaveSketch({ saveAs: true }), [handleSaveSketch]);
+  const precisionBindings = useMemo(
+    () => ({
+      onInputChange: (field, value) => dispatch(setPrecisionInput({ [field]: value, activeField: field })),
+      onSubmit: () => commitPrecisionDraft(),
+      onToggleChange: (key, value) => dispatch(setUiFlag(key, value)),
+    }),
+    [commitPrecisionDraft],
+  );
+  const handleBindings = useMemo(
+    () => ({
+      onHandlePointerDown: handleHandlePointerDown,
+      onTransformPointerDown: handleTransformPointerDown,
+    }),
+    [handleHandlePointerDown, handleTransformPointerDown],
+  );
+  const setEntityMaterialCallback = useCallback(
+    (entityIds, materialId) => dispatch(setEntityMaterial(entityIds, materialId)),
+    [],
+  );
+  const setEntityThicknessCallback = useCallback(
+    (entityIds, thickness) => dispatch(setEntityThickness(entityIds, thickness)),
+    [],
+  );
+  const setEntityGrainAngleCallback = useCallback(
+    (entityIds, grainAngle) => dispatch(setEntityGrainAngle(entityIds, grainAngle)),
+    [],
+  );
+  const setEntityHardwareCallback = useCallback(
+    (entityIds, hardwareId) => dispatch(setEntityHardware(entityIds, hardwareId)),
+    [],
+  );
+  const setActiveHardwareCallback = useCallback((hardwareId) => dispatch(setActiveHardware(hardwareId)), []);
+  const toggleCraftsmanModeCallback = useCallback(() => dispatch(toggleCraftsmanMode()), []);
+  const setVariablesCallback = useCallback((vars) => dispatch(setVariables(vars)), []);
+  const addJointCallback = useCallback((joint) => dispatch(addJoint(joint)), []);
+  const updateJointCallback = useCallback((jointId, patch) => dispatch(updateJoint(jointId, patch)), []);
+  const removeJointCallback = useCallback((jointId) => dispatch(removeJoint(jointId)), []);
+  const loadTemplate = useCallback((workspace) => applyWorkspace(workspace, { status: 'idle' }), [applyWorkspace]);
+  // Stable across document changes (the cutting list's Duplicate button holds
+  // it): it reads the entities of the last committed render, as its closure did.
+  const committedEntitiesRef = useRef(state.document.entities);
+  useLayoutEffect(() => {
+    committedEntitiesRef.current = state.document.entities;
+  }, [state.document.entities]);
+  const duplicateEntities = useCallback((entityIds) => {
+    const result = duplicateEntitiesByIds(committedEntitiesRef.current, entityIds);
+    if (!result.duplicatedIds.length) return [];
+    dispatch(setDocumentEntities(result.entities));
+    dispatch(setSelection(result.duplicatedIds));
+    return result.duplicatedIds;
+  }, []);
+
+  // The cursor's X / Y is not in here: the status bar reads it from the
+  // cursor channel.
+  const snapPoint = state.snap.point;
+  const status = useMemo(
+    () => ({
+      snapPoint: snapPoint ? { x: roundWorldValue(snapPoint.x), y: roundWorldValue(snapPoint.y) } : null,
+      selectedProfileCount: selection.selectedProfileInfo?.count ?? 0,
+      documentStatus: persistence.documentPersistence.isDirty ? 'dirty' : persistence.documentPersistence.status,
+      viewMode: state.ui.viewMode,
+      isometricPlane: state.ui.isometricPlane,
+    }),
+    [
+      snapPoint,
+      selection.selectedProfileInfo,
+      persistence.documentPersistence.isDirty,
+      persistence.documentPersistence.status,
+      state.ui.viewMode,
+      state.ui.isometricPlane,
+    ],
+  );
+
   // --- Return composed API ---
   return {
     document: state.document,
-    // meta: { skipHistory, revertSession } from a CAD field's typing session.
-    setCadModel: (model, meta) => dispatch({ type: 'SET_CAD_MODEL', payload: model, meta }),
-    setWorkspaceMode: (mode) => dispatch(setUiFlag('workspaceMode', mode)),
+    setCadModel,
+    setWorkspaceMode,
     viewport: state.viewport,
     ui: state.ui,
     interaction: state.interaction,
@@ -238,76 +326,52 @@ export default function useSketchStudio() {
     toggleShortcutOverlay,
     closeShortcutOverlay,
     updateSelectedEntityField,
-    rotateSelectionLeft: () => handleRotateSelection(-90),
-    rotateSelectionRight: () => handleRotateSelection(90),
-    flipSelectionHorizontal: () => handleFlipSelection('horizontal'),
-    flipSelectionVertical: () => handleFlipSelection('vertical'),
+    rotateSelectionLeft,
+    rotateSelectionRight,
+    flipSelectionHorizontal,
+    flipSelectionVertical,
     toggleBrokenLines: handleToggleBrokenLines,
     newSketch: persistence.handleNewSketch,
     openSketch: persistence.handleOpenSketch,
     importSketchFile: persistence.handleImportSketchFile,
     saveSketch: persistence.handleSaveSketch,
-    saveSketchAs: () => persistence.handleSaveSketch({ saveAs: true }),
+    saveSketchAs,
     undo: history.handleUndo,
     redo: history.handleRedo,
     commitDocumentName: layers.handleDocumentNameCommit,
-    precisionBindings: {
-      onInputChange: (field, value) => dispatch(setPrecisionInput({ [field]: value, activeField: field })),
-      onSubmit: () => commitPrecisionDraft(),
-      onToggleChange: (key, value) => dispatch(setUiFlag(key, value)),
-    },
+    precisionBindings,
     dismissToast,
-    handleBindings: {
-      onHandlePointerDown: handleHandlePointerDown,
-      onTransformPointerDown: handleTransformPointerDown,
-    },
+    handleBindings,
     canvasRef,
+    cursorChannel,
     onCanvasClick: handleCanvasClick,
     onCanvasPointerDown: handlePointerDown,
     onCanvasPointerMove: handlePointerMove,
     onCanvasPointerUp: handlePointerUp,
     onCanvasPointerCancel: handlePointerCancel,
     onCanvasPointerLeave: handlePointerLeave,
-    status: {
-      cursorWorld: {
-        x: roundWorldValue(state.interaction.cursorWorld.x),
-        y: roundWorldValue(state.interaction.cursorWorld.y),
-      },
-      snapPoint: state.snap.point
-        ? { x: roundWorldValue(state.snap.point.x), y: roundWorldValue(state.snap.point.y) }
-        : null,
-      selectedProfileCount: selection.selectedProfileInfo?.count ?? 0,
-      documentStatus: persistence.documentPersistence.isDirty ? 'dirty' : persistence.documentPersistence.status,
-      viewMode: state.ui.viewMode,
-      isometricPlane: state.ui.isometricPlane,
-    },
+    status,
     documentPersistence: persistence.documentPersistence,
     // Stable identity, like dismissToast: the error toast times out through it.
     dismissDocumentError: persistence.dismissError,
     jointDiagnostics: state.jointDiagnostics || [],
     manufacturingPreviewEntities: state.manufacturingPreviewEntities || [],
     manufacturingExportEntities: state.manufacturingExportEntities || [],
-    setEntityMaterial: (entityIds, materialId) => dispatch(setEntityMaterial(entityIds, materialId)),
-    setEntityThickness: (entityIds, thickness) => dispatch(setEntityThickness(entityIds, thickness)),
-    setEntityGrainAngle: (entityIds, grainAngle) => dispatch(setEntityGrainAngle(entityIds, grainAngle)),
-    setEntityHardware: (entityIds, hardwareId) => dispatch(setEntityHardware(entityIds, hardwareId)),
-    setActiveHardware: (hardwareId) => dispatch(setActiveHardware(hardwareId)),
-    toggleCraftsmanMode: () => dispatch(toggleCraftsmanMode()),
-    setVariables: (vars) => dispatch(setVariables(vars)),
+    setEntityMaterial: setEntityMaterialCallback,
+    setEntityThickness: setEntityThicknessCallback,
+    setEntityGrainAngle: setEntityGrainAngleCallback,
+    setEntityHardware: setEntityHardwareCallback,
+    setActiveHardware: setActiveHardwareCallback,
+    toggleCraftsmanMode: toggleCraftsmanModeCallback,
+    setVariables: setVariablesCallback,
     focusJoint,
     clearFocusedJoint,
     editJoint,
     clearEditingJoint,
-    addJoint: (joint) => dispatch(addJoint(joint)),
-    updateJoint: (jointId, patch) => dispatch(updateJoint(jointId, patch)),
-    removeJoint: (jointId) => dispatch(removeJoint(jointId)),
-    loadTemplate: (workspace) => persistence.applyWorkspace(workspace, { status: 'idle' }),
-    duplicateEntities: (entityIds) => {
-      const result = duplicateEntitiesByIds(state.document.entities, entityIds);
-      if (!result.duplicatedIds.length) return [];
-      dispatch(setDocumentEntities(result.entities));
-      dispatch(setSelection(result.duplicatedIds));
-      return result.duplicatedIds;
-    },
+    addJoint: addJointCallback,
+    updateJoint: updateJointCallback,
+    removeJoint: removeJointCallback,
+    loadTemplate,
+    duplicateEntities,
   };
 }

@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { cancelDraft, commitEntity } from '../store/sketchStudioActions';
+import { cancelDraft, commitEntity, patchDraft, setDocumentEntities } from '../store/sketchStudioActions';
 import {
   createCircleEntity,
   createEllipseEntity,
@@ -11,11 +11,13 @@ import {
 import { getNextActiveLayer } from '../utils/layerUtils';
 import { withIsometricPlaneMeta } from '../utils/isometricUtils';
 import { buildFastenerFeatureConfig } from '../utils/fastenerUtils';
+import { applyFillet, computeSketchFillet, DEFAULT_FILLET_RADIUS } from '../utils/filletUtils';
+import { applyChamfer, computeSketchChamfer, DEFAULT_CHAMFER_DISTANCE } from '../utils/chamferUtils';
 import {
   buildAngleDimensionEntityFromDraft,
   buildOffsetEntityFromDraft,
   buildSketchArrayResult,
-  buildSketchMirrorResult,
+  parsePositiveNumber,
 } from './sketchConstants';
 import { commitSelectionCopyResult } from './selectionCopyCommit';
 
@@ -181,18 +183,24 @@ export default function useSketchDraftCommit(state, dispatch, draftPreview) {
       return;
     }
 
-    if (state.draft.type === 'mirror') {
-      commitSelectionCopyResult(
-        dispatch,
-        buildSketchMirrorResult({
-          entities: state.document.entities,
-          draft: state.draft,
-          selectedIds: state.selection?.selectedIds ?? [],
-          axisStart: state.draft.points?.[0],
-          axisEnd: state.draft.currentPoint,
-        }),
-        'Nothing in the selection can be mirrored',
-      );
+    // The fillet and chamfer boxes appear while a corner is hovered and hold
+    // the focus, so Enter there is the keyboard's way to apply the typed size
+    // at that corner, as a click on it does. The size is read from the box, not
+    // from the preview, which is only rebuilt when the mouse moves.
+    if (state.draft.type === 'fillet' || state.draft.type === 'chamfer') {
+      const corner = state.draft.hoveredCorner;
+      if (!corner) return;
+      const isFillet = state.draft.type === 'fillet';
+      const geometry = isFillet
+        ? computeSketchFillet(corner, parsePositiveNumber(state.draft.precisionInput?.radius) ?? DEFAULT_FILLET_RADIUS)
+        : computeSketchChamfer(
+            corner,
+            parsePositiveNumber(state.draft.precisionInput?.distance) ?? DEFAULT_CHAMFER_DISTANCE,
+          );
+      if (!geometry) return;
+      const apply = isFillet ? applyFillet : applyChamfer;
+      dispatch(setDocumentEntities(apply(state.document.entities, corner, geometry, targetLayerId)));
+      dispatch(patchDraft({ hoveredCorner: null, previewGeometry: null }));
       return;
     }
 

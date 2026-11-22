@@ -147,12 +147,27 @@ export function sketchConsumer(model, sketchId) {
   return null;
 }
 
+// The consumer of `sketchId` through the asked instance's part, or null when
+// that instance is gone or its part is not made from this sketch.
+export function askedConsumer(model, sketchId, instanceId) {
+  if (!instanceId) return null;
+  const instance = model.instances.find((i) => i.id === instanceId);
+  const part = model.parts.find((p) => p.id === instance?.partId);
+  const feature = part?.features.find(
+    (f) => f.sketchId === sketchId || f.profileId === sketchId || f.sections?.includes(sketchId),
+  );
+  return feature ? { part, feature, instance } : null;
+}
+
 // A consumed sketch lives in its part's coordinates; show it on the first
 // instance of that part (its kernel placement, so attachments are included).
-// An unconsumed sketch lives in world coordinates.
-export function sketchWorldFrame(model, snapshot, sketch) {
+// An unconsumed sketch lives in world coordinates. `instanceId`: the instance
+// asked for, when it is one of a part cut from this sketch — several blanks
+// share one outline (docs/sketch-studio-own-bends.md §4.6), and the sketch is
+// shown on the one the user works on; the consumer is then its part's.
+export function sketchWorldFrame(model, snapshot, sketch, instanceId = null) {
   const local = sketchLocalFrame(sketch, snapshot?.parameters || {});
-  const consumer = sketchConsumer(model, sketch.id);
+  const consumer = askedConsumer(model, sketch.id, instanceId) || sketchConsumer(model, sketch.id);
   if (!consumer?.instance) return { frame: local, consumer };
   const placement = snapshot?.instances.find((i) => i.id === consumer.instance.id)?.placement;
   if (!placement) throw new Error('Rebuild the model before editing this sketch.');
@@ -180,12 +195,29 @@ export function describeFrame(frame, support) {
   return `Plane through (${fmt(frame.origin)}) · normal (${fmt(frame.normal)})`;
 }
 
+// Every triangle touching each vertex, in triangle order: `triangles` from
+// `offsets[v]` to `offsets[v + 1]` for vertex v (`vertexCount` vertices).
+export function meshAdjacency(index, vertexCount) {
+  const count = Math.floor(index.length / 3) * 3;
+  const offsets = new Int32Array(vertexCount + 1);
+  for (let k = 0; k < count; k++) offsets[index[k] + 1] += 1;
+  for (let v = 0; v < vertexCount; v++) offsets[v + 1] += offsets[v];
+  const triangles = new Int32Array(count);
+  const fill = offsets.slice(0, vertexCount);
+  for (let k = 0; k < count; k++) triangles[fill[index[k]]++] = Math.floor(k / 3);
+  return { offsets, triangles };
+}
+
 // Connected coplanar triangles around a hit triangle — one B-rep face, because
 // the kernel meshes every face with its own vertices — and the outline
 // segments (edges used by exactly one triangle), in world coordinates.
-export function faceOutline(positions, index, triangle, normal, tolerance = 1e-4) {
+// `options` (docs/perf-pass-3.md §5 B1.5): `adjacency` the mesh's
+// meshAdjacency, kept per mesh by the caller, instead of building it over the
+// whole mesh again; `point(i)` vertex i, for a caller that brings vertices to
+// world space only as they are asked for. The result is the same either way.
+export function faceOutline(positions, index, triangle, normal, tolerance = 1e-4, options = {}) {
   const count = index.length / 3;
-  const point = (i) => [positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]];
+  const point = options.point || ((i) => [positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]]);
   const n = normalize(normal);
   const corners = (t) => [index[t * 3], index[t * 3 + 1], index[t * 3 + 2]];
   const offset = dot(point(corners(triangle)[0]), n);
@@ -197,22 +229,31 @@ export function faceOutline(positions, index, triangle, normal, tolerance = 1e-4
     if (length < 1e-12) return true;
     return dot(tn, n) / length > 0.99999 && Math.abs(dot(a, n) - offset) < tolerance * span;
   };
-  const byVertex = new Map();
-  for (let t = 0; t < count; t++)
-    for (const v of corners(t)) {
-      if (!byVertex.has(v)) byVertex.set(v, []);
-      byVertex.get(v).push(t);
-    }
   const seen = new Set([triangle]);
   const queue = [triangle];
-  while (queue.length) {
-    const t = queue.pop();
-    for (const v of corners(t))
-      for (const next of byVertex.get(v))
-        if (!seen.has(next) && coplanar(next)) {
-          seen.add(next);
-          queue.push(next);
-        }
+  const visit = (next) => {
+    if (!seen.has(next) && coplanar(next)) {
+      seen.add(next);
+      queue.push(next);
+    }
+  };
+  if (options.adjacency) {
+    const { offsets, triangles } = options.adjacency;
+    while (queue.length) {
+      const t = queue.pop();
+      for (const v of corners(t)) for (let k = offsets[v]; k < offsets[v + 1]; k++) visit(triangles[k]);
+    }
+  } else {
+    const byVertex = new Map();
+    for (let t = 0; t < count; t++)
+      for (const v of corners(t)) {
+        if (!byVertex.has(v)) byVertex.set(v, []);
+        byVertex.get(v).push(t);
+      }
+    while (queue.length) {
+      const t = queue.pop();
+      for (const v of corners(t)) for (const next of byVertex.get(v)) visit(next);
+    }
   }
   const edges = new Map();
   for (const t of seen) {

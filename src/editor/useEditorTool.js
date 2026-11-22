@@ -27,6 +27,9 @@ import { createTrussSelectHandler } from './handlers/trussSelectHandler';
 import { createTrussDrawHandler } from './handlers/trussDrawHandler';
 import { createFilletPlaceHandler } from './handlers/filletPlaceHandler';
 
+// Stable, so a caller with no context roofs does not rebuild the handler.
+const EMPTY_ROOFS = Object.freeze([]);
+
 function createReadOnlyHandler() {
   return {
     onMouseDown() {},
@@ -50,6 +53,7 @@ export function useEditorTool({
   floorBelow = null,
   showFloorBelowUnderlay = false,
   roofSystem,
+  contextRoofSystems = EMPTY_ROOFS,
   trussSystems,
   modelTarget,
   viewport,
@@ -98,6 +102,9 @@ export function useEditorTool({
         dispatch,
         editorDispatch,
         getFloor: callGetFloor,
+        // The whole project, read at event time: a new system's name has to
+        // be unique across every floor, not just the systems on this one.
+        getProject: callGetProject,
         activeFloorId,
         trussSystems,
         viewport,
@@ -121,10 +128,14 @@ export function useEditorTool({
         return createReadOnlyHandler();
       }
 
+      // `roofSystem` is the active roof, the only one the tools edit;
+      // `contextRoofSystems` are the others on screen, which a click can switch
+      // to (select) or is told about (place tools).
       const roofCtx = {
         dispatch,
         editorDispatch,
         roofSystem,
+        contextRoofSystems,
         viewport,
       };
 
@@ -234,6 +245,7 @@ export function useEditorTool({
     showFloorBelowUnderlay,
     project,
     roofSystem,
+    contextRoofSystems,
     trussSystems,
     modelTarget,
     viewport.zoom,

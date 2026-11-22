@@ -147,7 +147,7 @@ it('offers Round corner on each square flanged corner; the result counts the cor
   expect(document.querySelector('.cad-error')).toBe(null);
 });
 
-it('makes the corner pieces as their own part with either ending, an instance in each corner, grouped with the panel', () => {
+it('makes the corner pieces as their own parts with either ending, one in each corner, grouped with the panel', () => {
   for (const ending of ['Cut and bend it for me', 'Cut the blank — I will bend it']) {
     const harness = setup(emptyModel());
     const { draw, form } = openForm();
@@ -156,9 +156,16 @@ it('makes the corner pieces as their own part with either ending, an instance in
     click(draw, ending);
     harness.rerender();
     const model = harness.model();
-    expect(model.parts.map((p) => p.name)).toEqual(['Flanged panel', 'Flanged panel corner piece']);
+    // One piece of metal is one part (docs/sketch-studio-own-bends.md §4.3): a corner piece per
+    // pose, the second its copy "… #2", both cut from the one corner piece outline.
+    expect(model.parts.map((p) => p.name)).toEqual([
+      'Flanged panel',
+      'Flanged panel corner piece',
+      'Flanged panel corner piece #2',
+    ]);
     expect(model.sketches.map((s) => s.name)).toEqual(['Flanged panel blank', 'Flanged panel corner piece blank']);
-    const [panel, piece] = model.parts;
+    const [panel, piece, second] = model.parts;
+    expect(second.features).toEqual(piece.features);
     const feature = piece.features[0];
     // One round bend by bump hits (with "Cut and bend it for me"), its etched line carrying it either way.
     expect(feature.bends).toHaveLength(ending === 'Cut and bend it for me' ? 1 : 0);
@@ -169,7 +176,7 @@ it('makes the corner pieces as their own part with either ending, an instance in
     // The panel instance and one corner piece in each of the two corners.
     const [placed, ...corners] = model.instances;
     expect(placed.partId).toBe(panel.id);
-    expect(corners.map((i) => i.partId)).toEqual([piece.id, piece.id]);
+    expect(corners.map((i) => i.partId)).toEqual([piece.id, second.id]);
     // Each where the panel maker's pose stands it, moved with the panel (which is not turned).
     const { cornerPieces } = flangedPanel({
       face: presetFace('rectangle', { width: 600, height: 1400 }),

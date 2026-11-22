@@ -295,6 +295,29 @@ it('draws a snapshot whose tessellation arrives as typed arrays', () => {
   setIndex.mockRestore();
 });
 
+// B1.2 (docs/perf-pass-3.md §5): the transferred arrays are the attributes, not copies of them.
+it('adopts the transferred typed arrays without copying them', () => {
+  const item = snapshotAt().instances[0];
+  const mesh = {
+    vertices: Float32Array.from(item.mesh.vertices),
+    normals: Float32Array.from(item.mesh.normals),
+    triangles: Uint32Array.from(item.mesh.triangles),
+  };
+  const lines = Float32Array.from([0, 0, 0, 10, 0, 0]);
+  render(
+    <CadViewport model={model} snapshot={{ parts: [], instances: [{ ...item, mesh, edges: { lines } }] }} ready />,
+  );
+  let body, edges;
+  scenes.at(-1).traverse((object) => {
+    if (object.isGroup && object.userData?.instanceId === 'item') [body, edges] = object.children;
+  });
+  expect(body.geometry.getAttribute('position').array).toBe(mesh.vertices);
+  expect(body.geometry.getAttribute('normal').array).toBe(mesh.normals);
+  expect(body.geometry.index.array).toBe(mesh.triangles);
+  expect(edges.geometry.getAttribute('position').array).toBe(lines);
+  expect(frames.at(-1).item).toEqual([5, 5, 0]);
+});
+
 it('picks bodies without walking their edge segments', () => {
   render(<CadViewport model={model} snapshot={snapshotAt()} ready />);
   const scene = scenes.at(-1);
@@ -349,4 +372,40 @@ it('keeps a gizmo drag going when the previous drop’s rebuild lands mid-drag',
   expect(frames.at(-1).item).toEqual([25, 5, 0]);
   act(() => TransformControls.current.dispatchEvent({ type: 'mouseUp' }));
   expect(onMove).toHaveBeenLastCalledWith('other', [0, 30, 0]);
+});
+
+it('tells a view watcher of a camera move a frame later, and never after the viewport is gone', () => {
+  const pending = new Map();
+  let next = 0;
+  vi.stubGlobal('requestAnimationFrame', (callback) => {
+    next += 1;
+    pending.set(next, callback);
+    return next;
+  });
+  vi.stubGlobal('cancelAnimationFrame', (id) => pending.delete(id));
+  const run = () => {
+    const due = [...pending.values()];
+    pending.clear();
+    due.forEach((callback) => callback(0));
+  };
+  // A sized canvas, so a camera move renders.
+  const sized = [
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(600),
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600),
+  ];
+  const ref = createRef();
+  const props = { model, snapshot: snapshotAt(), ready: true, ref };
+  const { rerender, unmount } = render(<CadViewport {...props} view="top" />);
+  const watcher = vi.fn();
+  ref.current.watchView(watcher);
+  // A new standard view moves the camera: the watcher hears of it on the next frame.
+  rerender(<CadViewport {...props} view="front" />);
+  run();
+  expect(watcher).toHaveBeenCalledTimes(1);
+  // Moved again, and the viewport unmounted before the frame: nobody is told.
+  rerender(<CadViewport {...props} view="right" />);
+  unmount();
+  run();
+  expect(watcher).toHaveBeenCalledTimes(1);
+  sized.forEach((spy) => spy.mockRestore());
 });

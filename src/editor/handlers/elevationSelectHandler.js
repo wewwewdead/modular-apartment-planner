@@ -3,6 +3,8 @@ import { getElevationView, projectElevationHorizontal } from '@/elevations/proje
 import { resolveWallVerticalSpan } from '@/domain/wallFit';
 import { elevationRegionContainsPoint, getVisibleElevationDrawables } from '@/elevations/visibility';
 import { clampWallOpeningOffset, wallLength } from '@/geometry/wallGeometry';
+import { distance } from '@/geometry/point';
+import { DRAG_THRESHOLD_PX } from './selectHandler';
 
 const EPSILON = 1e-6;
 
@@ -39,7 +41,23 @@ function hitTestElevationWindow(modelPos, project, sourceFloorId, viewMode) {
   return hit;
 }
 
-export function createElevationSelectHandler({ dispatch, editorDispatch, project, getFloor, activeFloorId, viewMode }) {
+/** The window drag's fields at rest: what a release, Escape and Delete each write. */
+const IDLE_ELEVATION_DRAG_STATE = Object.freeze({
+  dragging: false,
+  pendingDrag: false,
+  dragType: null,
+  startPos: null,
+});
+
+export function createElevationSelectHandler({
+  dispatch,
+  editorDispatch,
+  project,
+  getFloor,
+  activeFloorId,
+  viewport,
+  viewMode,
+}) {
   return {
     onMouseDown(modelPos, e) {
       if (e.button !== 0) return;
@@ -54,10 +72,14 @@ export function createElevationSelectHandler({ dispatch, editorDispatch, project
       }
 
       editorDispatch({ type: 'SELECT_OBJECT', id: hit.id, objectType: hit.type });
+      // Pending, as the plan's select tool is: every move rewrites the window
+      // from the cursor, so a click that wobbled by a pixel would otherwise
+      // snap the sill to wherever the button came up.
       editorDispatch({
         type: 'UPDATE_TOOL_STATE',
         payload: {
-          dragging: true,
+          dragging: false,
+          pendingDrag: true,
           dragType: 'elevation-window-move',
           startPos: modelPos,
         },
@@ -65,7 +87,14 @@ export function createElevationSelectHandler({ dispatch, editorDispatch, project
     },
 
     onMouseMove(modelPos, e, toolState, selectedId, selectedType) {
-      if (!toolState.dragging || toolState.dragType !== 'elevation-window-move') return;
+      if (toolState.dragType !== 'elevation-window-move') return;
+      if (toolState.pendingDrag && !toolState.dragging) {
+        const travelPx = distance(modelPos, toolState.startPos) * (viewport?.zoom ?? 1);
+        if (travelPx < DRAG_THRESHOLD_PX) return;
+        editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { pendingDrag: false, dragging: true } });
+      } else if (!toolState.dragging) {
+        return;
+      }
       if (selectedType !== 'window' || !selectedId) return;
 
       const { floor, windowItem } = findWindowOwner(project, selectedId);
@@ -114,23 +143,32 @@ export function createElevationSelectHandler({ dispatch, editorDispatch, project
     },
 
     onMouseUp(modelPos, e, toolState) {
-      if (!toolState.dragging) return;
-      editorDispatch({
-        type: 'UPDATE_TOOL_STATE',
-        payload: {
-          dragging: false,
-          dragType: null,
-          startPos: null,
-        },
-      });
+      if (!toolState.dragging && !toolState.pendingDrag) return;
+      editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: IDLE_ELEVATION_DRAG_STATE });
     },
 
     onKeyDown(e, toolState, selectedId, selectedType) {
+      if (e.key === 'Escape' && (toolState.dragging || toolState.pendingDrag)) {
+        // The drag commits on every pointer frame, so cancelling puts back the
+        // project the store held when the press opened the gesture, and keeps
+        // the selection. With the selection gone (Ctrl+Z deselects mid-drag)
+        // the undo already took the gesture's entry, and cancelling would take
+        // the one before it.
+        if (selectedId) dispatch({ type: 'CANCEL_DRAG_GESTURE' });
+        editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: IDLE_ELEVATION_DRAG_STATE });
+        return;
+      }
+
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedType === 'window' && selectedId) {
         const { floor } = findWindowOwner(project, selectedId);
         if (!floor) return;
         dispatch({ type: 'WINDOW_DELETE', floorId: floor.id, windowId: selectedId });
         editorDispatch({ type: 'DESELECT' });
+        // A drag of the deleted window ends with it; left standing, a later
+        // Escape would cancel the gesture and bring the window back.
+        if (toolState.dragging || toolState.pendingDrag) {
+          editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: IDLE_ELEVATION_DRAG_STATE });
+        }
       }
     },
 

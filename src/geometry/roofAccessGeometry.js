@@ -18,10 +18,19 @@ function resolveStairBaseElevation(stair, floor, landingElevationMap) {
   return landingElevation != null ? floorElevation + landingElevation : floorElevation;
 }
 
-export function buildStairRoofAccessSectionElement({ stair, floor, roofSystem, sectionCut, landingElevationMap }) {
+// `roofSystems` is every roof in the view: the stair climbs through whichever
+// one holds its opening.
+export function buildStairRoofAccessSectionElement({
+  stair,
+  floor,
+  roofSystems = [],
+  sectionCut,
+  landingElevationMap,
+}) {
   const roofOpeningId = stair?.roofAccess?.roofOpeningId || null;
-  if (!roofSystem || !sectionCut || !roofOpeningId) return null;
+  if (!sectionCut || !roofOpeningId) return null;
 
+  const roofSystem = roofSystems.find((entry) => findRoofOpeningById(entry, roofOpeningId)) || null;
   const roofOpening = findRoofOpeningById(roofSystem, roofOpeningId);
   if (!roofOpening) return null;
 

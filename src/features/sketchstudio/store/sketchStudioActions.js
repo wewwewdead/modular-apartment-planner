@@ -4,7 +4,6 @@ export const SKETCH_STUDIO_ACTIONS = {
   SET_ACTIVE_LAYER: 'SET_ACTIVE_LAYER',
   SET_UI_FLAG: 'SET_UI_FLAG',
   SET_VIEWPORT: 'SET_VIEWPORT',
-  SET_POINTER_DOWN: 'SET_POINTER_DOWN',
   START_PAN: 'START_PAN',
   UPDATE_PAN: 'UPDATE_PAN',
   END_PAN: 'END_PAN',
@@ -27,9 +26,6 @@ export const SKETCH_STUDIO_ACTIONS = {
   START_HANDLE_DRAG: 'START_HANDLE_DRAG',
   END_HANDLE_DRAG: 'END_HANDLE_DRAG',
   CANCEL_HANDLE_DRAG: 'CANCEL_HANDLE_DRAG',
-  START_ANCHOR_DRAG: 'START_ANCHOR_DRAG',
-  END_ANCHOR_DRAG: 'END_ANCHOR_DRAG',
-  CANCEL_ANCHOR_DRAG: 'CANCEL_ANCHOR_DRAG',
   START_TRANSFORM: 'START_TRANSFORM',
   PATCH_TRANSFORM: 'PATCH_TRANSFORM',
   END_TRANSFORM: 'END_TRANSFORM',
@@ -88,11 +84,6 @@ export const dismissToast = () => setUiFlag('toast', null);
 export const setViewport = (viewport) => ({
   type: SKETCH_STUDIO_ACTIONS.SET_VIEWPORT,
   payload: viewport,
-});
-
-export const setPointerDown = (isPointerDown) => ({
-  type: SKETCH_STUDIO_ACTIONS.SET_POINTER_DOWN,
-  payload: isPointerDown,
 });
 
 export const startPan = ({ pointerId, button, screenPoint, startViewport }) => ({
@@ -198,19 +189,6 @@ export const endHandleDrag = () => ({
 
 export const cancelHandleDrag = () => ({
   type: SKETCH_STUDIO_ACTIONS.CANCEL_HANDLE_DRAG,
-});
-
-export const startAnchorDrag = (anchorDrag) => ({
-  type: SKETCH_STUDIO_ACTIONS.START_ANCHOR_DRAG,
-  payload: anchorDrag,
-});
-
-export const endAnchorDrag = () => ({
-  type: SKETCH_STUDIO_ACTIONS.END_ANCHOR_DRAG,
-});
-
-export const cancelAnchorDrag = () => ({
-  type: SKETCH_STUDIO_ACTIONS.CANCEL_ANCHOR_DRAG,
 });
 
 export const startTransform = (transform) => ({

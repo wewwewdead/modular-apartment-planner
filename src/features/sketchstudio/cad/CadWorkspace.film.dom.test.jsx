@@ -282,11 +282,12 @@ it('the press brake on a finished part says so, with this part’s own counts, t
     'Bending is done on this part: 4 hits made. It has gone on down the route: powder-coated RAL 9005 Jet black.',
   );
   expect(within(within(brake).getByRole('list', { name: 'Hits made' })).getAllByRole('listitem')).toHaveLength(4);
-  // The remedy stays, a second choice, and says plainly whose records it takes off.
+  // The remedy stays, a second choice, and says plainly whose records it takes off: the front face
+  // frame is a blank of its own (docs/sketch-studio-own-bends.md §4.5), so its own one finish.
   expect(within(brake).getByRole('note', { name: 'Bend it again' }).textContent).toBe(
-    "Only bare metal goes back on the press brake, so bending it again means taking off what came after the brake. This part is one definition made twice (it is also the rear face frame), so that is every copy's: 2 paint finishes.",
+    'Only bare metal goes back on the press brake, so bending it again means taking off what came after the brake: a paint finish.',
   );
-  expect(within(brake).getByRole('button', { name: 'Remove 2 paint finishes and bend' })).toBeTruthy();
+  expect(within(brake).getByRole('button', { name: 'Remove a paint finish and bend' })).toBeTruthy();
   // Watch the bends: the film of this part's four hits, then back to the card.
   act(() => fireEvent.click(within(brake).getByRole('button', { name: 'Watch the bends' })));
   const panel = film();

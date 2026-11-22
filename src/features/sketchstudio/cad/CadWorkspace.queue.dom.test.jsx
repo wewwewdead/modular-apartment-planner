@@ -75,7 +75,10 @@ const runFrames = () =>
   });
 
 const rect = (width, height) => ({ type: 'rectangle', width, height, origin: [0, 0] });
-// Three cut parts, as a batch makes them: Big, Small × 2, Tab (each copy loose).
+// Three outlines cut as a batch makes them: Big, Small × 2, Tab (each blank loose). One piece of
+// metal is one part (docs/sketch-studio-own-bends.md §4.3): Small's two blanks are the parts
+// "Small" and "Small #2", both cut from the one outline.
+const partOf = (id, c) => (c ? `${id}-${c + 1}` : id);
 function cutParts({ only = null } = {}) {
   const list = [
     ['big', 'Big', 300, 200, 1],
@@ -85,14 +88,16 @@ function cutParts({ only = null } = {}) {
   return {
     ...emptyModel(),
     sketches: list.map(([id, name, w, h]) => ({ id: `s-${id}`, name, plane: 'XY', profile: rect(w, h) })),
-    parts: list.map(([id, name]) => ({
-      ...sheetMetalPart({ sketchId: `s-${id}`, stock: 'spcc', thickness: 1.5, name }),
-      id,
-    })),
+    parts: list.flatMap(([id, name, , , copies]) =>
+      Array.from({ length: copies }, (_, c) => ({
+        ...sheetMetalPart({ sketchId: `s-${id}`, stock: 'spcc', thickness: 1.5, name: c ? `${name} #${c + 1}` : name }),
+        id: partOf(id, c),
+      })),
+    ),
     instances: list.flatMap(([id, , w, , copies], k) =>
       Array.from({ length: copies }, (_, c) => ({
         id: `${id}-${c + 1}`,
-        partId: id,
+        partId: partOf(id, c),
         name: '',
         position: [k * 400 + c * (w + 20), 0, 0],
         rotation: [0, 0, 0],
@@ -166,14 +171,16 @@ it('lists every part to bend under the head, steps through them and keeps the pu
   station('Bend');
   expect(viewport.props.brakeView).toMatchObject({ instanceId: 'big-1' });
   // Under the shell's head, before the station's own body.
-  expect(brake().textContent).toMatch(/^3BendBigParts to bend0 of 3 bent/);
+  expect(brake().textContent).toMatch(/^3BendBigParts to bend0 of 4 bent/);
+  // One row per blank (own bends §4.5): Small's two blanks are two rows.
   expect(rows().map((b) => b.textContent)).toEqual([
     'Bigflat · no bends yet',
-    'Small × 2flat · no bends yet',
+    'Smallflat · no bends yet',
+    'Small #2flat · no bends yet',
     'Tabflat · no bends yet',
   ]);
-  expect(rows().map((b) => b.getAttribute('aria-current'))).toEqual(['true', null, null]);
-  expect(progress()).toBe('0 of 3 bent');
+  expect(rows().map((b) => b.getAttribute('aria-current'))).toEqual(['true', null, null, null]);
+  expect(progress()).toBe('0 of 4 bent');
   expect(step('Previous part').disabled).toBe(true);
   expect(step('Next part').disabled).toBe(false);
   expect(step('Next part').classList.contains('is-ready')).toBe(false);
@@ -183,7 +190,7 @@ it('lists every part to bend under the head, steps through them and keeps the pu
   bendOnce(harness);
   expect(harness.model().parts[0].features[0].bends).toHaveLength(1);
   expect(rows()[0].textContent).toBe('Big1 bend');
-  expect(progress()).toBe('1 of 3 bent');
+  expect(progress()).toBe('1 of 4 bent');
   expect(step('Next part').classList.contains('is-ready')).toBe(true);
 
   // Next part: Small on the brake, the punch still in, the picks fresh.
@@ -195,13 +202,22 @@ it('lists every part to bend under the head, steps through them and keeps the pu
   );
   expect(rows()[1].getAttribute('aria-current')).toBe('true');
   expect(step('Previous part').disabled).toBe(false);
-  // A bend belongs to the part: both copies fold with it.
+  // Only the blank on the brake folds (own bends §4.5): Small #2 stays flat.
   bendOnce(harness);
   expect(harness.model().parts.find((p) => p.id === 'small').features[0].bends).toHaveLength(1);
-  expect(rows()[1].textContent).toBe('Small × 21 bend');
+  expect(harness.model().parts.find((p) => p.id === 'small-2').features[0].bends).toHaveLength(0);
+  expect(rows()[1].textContent).toBe('Small1 bend');
+  expect(rows()[2].textContent).toBe('Small #2flat · no bends yet');
+  expect(progress()).toBe('2 of 4 bent');
+
+  // Next part: Small #2, bent by itself.
+  act(() => fireEvent.click(step('Next part')));
+  expect(viewport.props.brakeView).toMatchObject({ instanceId: 'small-2' });
+  bendOnce(harness);
+  expect(rows()[2].textContent).toBe('Small #21 bend');
 
   // A row: Tab on the brake (still the same punch); bent, every part is.
-  act(() => fireEvent.click(rows()[2]));
+  act(() => fireEvent.click(rows()[3]));
   expect(viewport.props.brakeView).toMatchObject({ instanceId: 'tab-1' });
   expect(punch()).toBe('gooseneck-88');
   expect(step('Next part').disabled).toBe(true);
@@ -250,21 +266,23 @@ it('starts from the defaults after another station in between, and shows no queu
   expect(within(brake()).queryByRole('region', { name: 'Bend queue' })).toBe(null);
 });
 
-it('asks which part with one row per part, its copies counted', () => {
+it('asks which part with one row per blank', () => {
   setup(cutParts());
   station('Bend');
   const gate = brake();
   expect(within(gate).getByText('Which part goes on the press brake?')).toBeTruthy();
   const choose = within(within(gate).getByRole('list', { name: 'Choose a part' })).getAllByRole('button');
+  // One piece of metal is one part (own bends §4.5): no "× 2", Small's blanks are two rows.
   expect(choose.map((b) => b.textContent)).toEqual([
     'Bigflat · no bends yet',
-    'Small × 2flat · no bends yet',
+    'Smallflat · no bends yet',
+    'Small #2flat · no bends yet',
     'Tabflat · no bends yet',
   ]);
-  // A row opens the brake on that part's first copy, with the queue.
-  act(() => fireEvent.click(choose[1]));
-  expect(viewport.props.brakeView).toMatchObject({ instanceId: 'small-1' });
-  expect(rows()[1].getAttribute('aria-current')).toBe('true');
+  // A row opens the brake on that blank, with the queue.
+  act(() => fireEvent.click(choose[2]));
+  expect(viewport.props.brakeView).toMatchObject({ instanceId: 'small-2' });
+  expect(rows()[2].getAttribute('aria-current')).toBe('true');
 });
 
 it('makes a job board row of the batch the laser is on the lead, keeping the job', () => {
@@ -289,12 +307,14 @@ it('makes a job board row of the batch the laser is on the lead, keeping the job
   const job = () => within(within(laser()).getByRole('list', { name: 'This cut' })).getAllByRole('button');
   expect(job().map((b) => b.getAttribute('aria-current'))).toEqual(['true', null, null]);
   const board = screen.getByRole('region', { name: 'Job board' });
-  // Small's second copy on the job board: Small leads, the job of four blanks stays.
+  // Small's second blank on the job board: Small's lot leads, the job of four blanks stays.
   const [, , second] = harness.model().instances;
   act(() => fireEvent.click(within(board).getAllByRole('button', { name: /^Small/ })[1]));
   expect(job().map((b) => b.getAttribute('aria-current'))).toEqual([null, 'true', null]);
-  expect(laser().querySelector('.cad-shell-subject').textContent).toBe('Small + 2 more');
+  expect(laser().querySelector('.cad-shell-subject').textContent).toBe('Small #2 + 2 more');
   expect(within(laser()).getByLabelText('On this sheet').textContent).toBe('4 blanks');
   expect(within(laser()).getByLabelText('Quantity').value).toBe('2');
-  expect(second.partId).toBe(harness.model().parts[1].id);
+  // Its own part (own bends §4.3), cut from Small's outline.
+  expect(second.partId).toBe(harness.model().parts[2].id);
+  expect(harness.model().parts[2]).toMatchObject({ name: 'Small #2', features: [{ sketchId: 'small' }] });
 });

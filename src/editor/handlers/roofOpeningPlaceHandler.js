@@ -2,7 +2,8 @@ import { SNAP_DISTANCE_PX } from '@/domain/defaults';
 import { createRoofOpening, isValidRoofPolygon } from '@/domain/roofModels';
 import { distance } from '@/geometry/point';
 import { roofContainsPoint } from '@/geometry/roofPlanGeometry';
-import { dropTrailingRepeatedPoints } from './handlerSnapUtils';
+import { settleOutlineDoubleClick } from './handlerSnapUtils';
+import { findContextRoofAt, otherRoofMessage } from './roofContextPick';
 
 function resetToolState(editorDispatch) {
   editorDispatch({
@@ -14,7 +15,13 @@ function resetToolState(editorDispatch) {
   });
 }
 
-export function createRoofOpeningPlaceHandler({ dispatch, editorDispatch, roofSystem, viewport }) {
+export function createRoofOpeningPlaceHandler({
+  dispatch,
+  editorDispatch,
+  roofSystem,
+  contextRoofSystems = [],
+  viewport,
+}) {
   function commitRoofOpening(points) {
     if (!roofSystem || !isValidRoofPolygon(points) || !points.every((point) => roofContainsPoint(roofSystem, point))) {
       editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Roof openings must stay inside the roof boundary.' });
@@ -22,7 +29,7 @@ export function createRoofOpeningPlaceHandler({ dispatch, editorDispatch, roofSy
     }
 
     const roofOpening = createRoofOpening(points);
-    dispatch({ type: 'ROOF_OPENING_ADD', roofOpening });
+    dispatch({ type: 'ROOF_OPENING_ADD', roofId: roofSystem?.id || null, roofOpening });
     editorDispatch({ type: 'SELECT_OBJECT', id: roofOpening.id, objectType: 'roofOpening' });
     editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Created roof opening.' });
     resetToolState(editorDispatch);
@@ -32,7 +39,12 @@ export function createRoofOpeningPlaceHandler({ dispatch, editorDispatch, roofSy
     onMouseDown(modelPos, e, toolState) {
       if (e.button !== 0 || !roofSystem) return;
       if (!roofContainsPoint(roofSystem, modelPos)) {
-        editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Roof openings must stay inside the roof boundary.' });
+        // The tool stays on the active roof; a press on another one says so.
+        const otherRoof = findContextRoofAt(contextRoofSystems, modelPos);
+        editorDispatch({
+          type: 'SET_STATUS_MESSAGE',
+          message: otherRoof ? otherRoofMessage(otherRoof) : 'Roof openings must stay inside the roof boundary.',
+        });
         return;
       }
 
@@ -75,10 +87,10 @@ export function createRoofOpeningPlaceHandler({ dispatch, editorDispatch, roofSy
     },
 
     onDoubleClick(modelPos, e, toolState) {
-      // The double-click's second press put its corner down a second time.
-      const points = dropTrailingRepeatedPoints(toolState.roofOpeningPoints, SNAP_DISTANCE_PX / viewport.zoom);
-      if (points.length < 3) return;
-      commitRoofOpening(points);
+      const settled = settleOutlineDoubleClick(toolState.roofOpeningPoints, SNAP_DISTANCE_PX / viewport.zoom);
+      if (settled.action === 'commit') commitRoofOpening(settled.points);
+      else if (settled.action === 'clear') resetToolState(editorDispatch);
+      else editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { roofOpeningPoints: settled.points } });
     },
 
     onKeyDown(e) {

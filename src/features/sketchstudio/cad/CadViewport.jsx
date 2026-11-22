@@ -13,10 +13,11 @@ import {
   worldToLocalTurn,
   worldTurn,
 } from './rotateDial.js';
-import { faceFrame, faceOutline, segmentsInPlane, toPlane, uprightAxes } from './sketchPlane.js';
+import { faceFrame, faceOutline, meshAdjacency, segmentsInPlane, toPlane, uprightAxes } from './sketchPlane.js';
 import { createPlacementLayer } from './placementLayer.js';
 import { STATION_VIEW, createShopLayer } from './shopLayer.js';
 import {
+  CLICK_PX,
   COMMIT_DEGREES,
   axisTravel,
   brakeHint,
@@ -26,7 +27,11 @@ import {
   gripChip as brakeGripChip,
   gripDrag as brakeGripDrag,
   reachChip,
+  slideChip,
+  slideReadout,
+  slideSnap,
   typedL,
+  typedSlide,
 } from './brakeHands.js';
 import BrakeSideView from './BrakeSideView.jsx';
 import {
@@ -167,6 +172,13 @@ export default function CadViewport({
   onBrakeEdge,
   onBrakeFingers,
   onBrakeFocus,
+  // Piece pick PK-2 (docs/sketch-studio-piece-pick.md §6.1): onBrakePiece(index, { add }) a piece of
+  // the line clicked on the sheet (`add` with Ctrl, Shift or Meta held): the flat-blank card's onPiece.
+  onBrakePiece,
+  // The sheet slid by hand (docs/sketch-studio-sheet-slide.md §6.1): onBrakeSlide({ start } |
+  // { slide } | { end } | { cancel }), slide the sheet's move along the bed (mm, positive to the
+  // right) at most once a frame, as the fingers' onBrakeFingers; cancel puts the slide back.
+  onBrakeSlide,
   // The paint and print stations (§9 SM-3): null, or { station, stage, pick
   // ('part' | 'face' | null), hint, targets (instance ids outlined: what the
   // booth paints), printId }. While set, viewport clicks go to
@@ -342,10 +354,26 @@ export default function CadViewport({
   useEffect(() => {
     strokeCallback.current = onBrakeStrokeEnd;
   }, [onBrakeStrokeEnd]);
-  const gripCallback = useRef({ onBrakeGrip, onBrakeGripWant, onBrakeEdge, onBrakeFingers, onBrakeFocus });
+  const gripCallback = useRef({
+    onBrakeGrip,
+    onBrakeGripWant,
+    onBrakeEdge,
+    onBrakeFingers,
+    onBrakeFocus,
+    onBrakePiece,
+    onBrakeSlide,
+  });
   useEffect(() => {
-    gripCallback.current = { onBrakeGrip, onBrakeGripWant, onBrakeEdge, onBrakeFingers, onBrakeFocus };
-  }, [onBrakeGrip, onBrakeGripWant, onBrakeEdge, onBrakeFingers, onBrakeFocus]);
+    gripCallback.current = {
+      onBrakeGrip,
+      onBrakeGripWant,
+      onBrakeEdge,
+      onBrakeFingers,
+      onBrakeFocus,
+      onBrakePiece,
+      onBrakeSlide,
+    };
+  }, [onBrakeGrip, onBrakeGripWant, onBrakeEdge, onBrakeFingers, onBrakeFocus, onBrakePiece, onBrakeSlide]);
   const shopCallbacks = useRef({});
   useEffect(() => {
     shopCallbacks.current = { onShopPick, onShopPrintMove };
@@ -375,7 +403,8 @@ export default function CadViewport({
     const element = host.current;
     let renderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true });
+      // The discrete GPU where there is one, as the planner's preview asks (B1.6).
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     } catch (e) {
       // External renderer initialization can fail before its event callbacks exist.
       setError(e.message);
@@ -694,9 +723,12 @@ export default function CadViewport({
       ].join(',');
     };
     let viewTold = null,
-      viewTelling = false;
+      viewTelling = false,
+      // Cancels the frame that will tell the watchers (cleared on unmount).
+      stopTelling = null;
     const tellView = () => {
       viewTelling = false;
+      stopTelling = null;
       for (const watcher of [...ctx.viewWatchers]) watcher();
     };
     ctx.watchView = (watcher) => {
@@ -704,10 +736,42 @@ export default function CadViewport({
       viewTold = viewKey();
       return () => ctx.viewWatchers.delete(watcher);
     };
+    // Work that must happen before every draw (the press brake's grip, the
+    // placement handles after an orbit step): the layers push theirs here, so
+    // what they lay out is drawn in the same frame, never a frame later.
+    ctx.beforeRender = [];
+    const layout = () => {
+      for (const hook of ctx.beforeRender) hook();
+      // Spent by the hooks above: an orbit step has been laid out.
+      ctx.viewMoved = false;
+    };
+    // One draw per React commit (docs/perf-pass-3.md §5 B1.1). While the
+    // effects of a commit run (`ctx.committing`, opened and closed by the two
+    // deps-less effects round the others), a render asked for, by an effect,
+    // a layer or a listener an effect sets off (the gizmo's attach, the
+    // controls' update), lays out at once, so whatever a later effect reads is
+    // as it would have been, and the draw itself waits for the commit's last
+    // effect: one frame, with the commit's final state. Outside a commit
+    // (events, animation frames) a render draws at once, as it always has.
     const render = () => {
+      if (!ctx.committing) return draw();
+      layout();
+      ctx.renderPending = true;
+    };
+    const draw = () => {
+      ctx.renderPending = false;
       const start = performance.now();
-      // The press brake's grip keeps its size on screen and its place on the sheet.
-      ctx.shopLayer?.layoutGrip();
+      layout();
+      // Out of sight (B1.6: the drawing focus hides the model view with
+      // display: none, the ResizeObserver says so): no pixels to draw. The
+      // scene graph is brought up to date as a draw would (picks and browser
+      // checks read it) and the draw waits until the viewport has a size again.
+      if (ctx.hidden) {
+        scene.updateMatrixWorld();
+        ctx.camera.updateMatrixWorld();
+        ctx.renderPending = true;
+        return;
+      }
       renderer.render(scene, ctx.camera);
       ctx.lastRenderMs = performance.now() - start;
       placeLabels();
@@ -719,12 +783,31 @@ export default function CadViewport({
         if (key !== viewTold && !viewTelling) {
           viewTold = key;
           viewTelling = true;
-          (typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (fn) => setTimeout(fn, 16))(tellView);
+          if (typeof requestAnimationFrame === 'function') {
+            const frame = requestAnimationFrame(tellView);
+            stopTelling = () => cancelAnimationFrame(frame);
+          } else {
+            const timer = setTimeout(tellView, 16);
+            stopTelling = () => clearTimeout(timer);
+          }
         }
       }
     };
     ctx.render = render;
-    controls.addEventListener('change', render);
+    // The name the effects use: in a commit it is the same deferred render.
+    ctx.requestRender = render;
+    // The commit's last effect: the one draw, if anything asked for one.
+    ctx.flushRender = () => {
+      if (!ctx.committing) return;
+      ctx.committing = false;
+      if (ctx.renderPending) draw();
+    };
+    // An orbit, pan or zoom: the layers that keep a size on screen lay out
+    // again before this draw (ctx.viewMoved, read by their beforeRender hooks).
+    controls.addEventListener('change', () => {
+      ctx.viewMoved = true;
+      render();
+    });
     let drag = null,
       consumedPointer = false,
       // A ring click in Picked point mode, handed on to pointerUp as a pick.
@@ -1243,9 +1326,14 @@ export default function CadViewport({
       render();
     });
     // During a ring drag dialMove renders each move; TransformControls'
-    // change in between would only draw its own, discarded angle.
+    // change in between would only draw its own, discarded angle. A move or
+    // tool-gizmo drag's pointer move sends change then objectChange: the
+    // objectChange listener draws it once, after the snap and the parts have
+    // moved, so the change before it would only draw a stale frame.
     transform.addEventListener('change', () => {
-      if (!drag?.dial) render();
+      if (drag?.dial) return;
+      if (transform.dragging && (drag || ctx.placementLayer?.toolDragging())) return;
+      render();
     });
     transform.addEventListener('mouseUp', () => {
       if (ctx.toolGizmo) return ctx.placementLayer.toolUp();
@@ -1284,8 +1372,11 @@ export default function CadViewport({
       if (delta.some((value) => Math.abs(value) > 1e-6)) moveCallback.current?.(completed.id, delta);
     });
     let holeDrag = null;
+    // Only a live hole drag hands the orbit back: the hole effect calls this
+    // on every rebuild, which may land in the middle of another owner's drag.
     const cancelHoleDrag = () => {
-      if (holeDrag) holeDrag.handle.position.copy(holeDrag.start);
+      if (!holeDrag) return;
+      holeDrag.handle.position.copy(holeDrag.start);
       holeDrag = null;
       controls.enabled = true;
       render();
@@ -1377,7 +1468,12 @@ export default function CadViewport({
       render();
     };
     ctx.resize = resize;
-    const observer = new ResizeObserver(resize);
+    // A viewport of no size is out of sight (draw holds its draws); back in
+    // sight, the resize draws what was held.
+    const observer = new ResizeObserver(() => {
+      ctx.hidden = !element.clientWidth || !element.clientHeight;
+      resize();
+    });
     observer.observe(element);
     resize();
     let down;
@@ -1675,8 +1771,12 @@ export default function CadViewport({
         poses.last = pose;
         for (const listener of poses.listeners) listener(pose);
       },
+      // The layer ended the grip drag itself: the press in the hand goes with it.
+      onGripEnd: () => ctx.dropGrip?.(),
     });
     ctx.shopLayer = shopLayer;
+    // The press brake's grip keeps its size on screen and its place on the sheet.
+    ctx.beforeRender.push(() => shopLayer.layoutGrip());
     // Browser checks: the press brake station (null when closed: its
     // machine, tooling, the bend in the die, its angle, the punch tip, the
     // stroke and a collision shown), the unfold state and its bend labels,
@@ -1712,32 +1812,54 @@ export default function CadViewport({
         ? new THREE.Vector3(...direction).transformDirection(inverse).toArray()
         : new THREE.Vector3(...point).applyMatrix4(inverse).toArray();
     };
-    const faceTarget = (hit) => {
-      const info = pickedFace(hit);
+    // `info`: the hit's pickedFace (the point is always the hit's own).
+    const faceTarget = (hit, info = pickedFace(hit)) => {
       const g = hit.object.parent;
       const x = uprightAxes(info.normal).x;
+      const point = hit.point.toArray();
       return {
         kind: 'face',
         instanceId: info.instanceId,
-        point: info.point,
+        point,
         normal: info.normal,
         planar: info.planar,
         outline: info.outlineWorld || [],
         x,
         local: {
-          point: toPartFrame(g, info.point),
+          point: toPartFrame(g, point),
           normal: toPartFrame(g, null, info.normal),
           x: toPartFrame(g, null, x),
         },
       };
     };
-    // What a click would pick for the open station.
-    const shopTarget = (event) => {
+    // The hover's face, as planeTarget keeps it (docs/perf-pass-3.md §5 B1.5):
+    // a hover on a triangle of the face already found, the part where it was,
+    // reuses that pick. Clicks and browser checks always pick afresh.
+    const hoverFace = (hit) => {
+      const cached = ctx.shopFace;
+      const pose = hit.object.matrixWorld.elements;
+      if (
+        cached?.object === hit.object &&
+        cached.triangles.has(hit.faceIndex) &&
+        cached.pose.every((value, i) => value === pose[i])
+      )
+        return cached.info;
+      const info = pickedFace(hit);
+      ctx.shopFace = {
+        object: hit.object,
+        pose: [...hit.object.matrixWorld.elements],
+        triangles: new Set(info.triangles || [hit.faceIndex]),
+        info,
+      };
+      return info;
+    };
+    // What a click would pick for the open station (`hover`: for the hover frame).
+    const shopTarget = (event, hover = false) => {
       const pick = ctx.shopPick?.pick;
       if (!pick) return null;
       const hit = modelHit(rayAt(event));
       if (pick === 'part') return hit ? { kind: 'part', instanceId: hit.object.userData.instanceId } : null;
-      return hit ? faceTarget(hit) : null;
+      return hit ? faceTarget(hit, hover ? hoverFace(hit) : pickedFace(hit)) : null;
     };
     // Browser checks: what a click at a client point would pick for the open station.
     element.cadShopTarget = (clientX, clientY) => {
@@ -1759,9 +1881,13 @@ export default function CadViewport({
     };
     const showShopHover = (target) => {
       ctx.shopHover = target;
-      clearLayer(shopHoverLayer);
-      if (target?.kind === 'face' && target.planar && target.outline.length)
-        shopHoverLayer.add(outlineLine(target.outline));
+      const outline = target?.kind === 'face' && target.planar && target.outline.length ? target.outline : null;
+      // The same face again (hoverFace): its outline is already drawn.
+      if (!outline || shopHoverLayer.userData.outline !== outline) {
+        clearLayer(shopHoverLayer);
+        shopHoverLayer.userData.outline = outline;
+        if (outline) shopHoverLayer.add(outlineLine(outline));
+      }
       showHoverHint(
         target?.kind === 'face' && !target.planar && ctx.shopPick?.pick === 'face'
           ? 'Curved face: pad printing only'
@@ -1777,6 +1903,7 @@ export default function CadViewport({
     ctx.drawShopPick = () => {
       if (!ctx.shopPick?.pick) {
         clearLayer(shopHoverLayer);
+        shopHoverLayer.userData.outline = null;
         ctx.shopHover = null;
         if (!ctx.shopPick) showHoverHint('');
       }
@@ -1789,7 +1916,7 @@ export default function CadViewport({
       const pointer = shopPointer;
       shopPointer = null;
       if (!pointer || !ctx.shopPick?.pick || printDrag) return;
-      showShopHover(shopTarget(pointer));
+      showShopHover(shopTarget(pointer, true));
     };
     const shopMove = (event) => {
       if (event.buttons || !ctx.shopPick?.pick) return;
@@ -1922,6 +2049,15 @@ export default function CadViewport({
       return true;
     };
     ctx.cancelPrintDrag = printCancel;
+    // Every press first forgets the last one: a press a capture-phase drag
+    // takes (the print, the grip, the fingers, a placement or hole handle)
+    // never reaches pointerDown, so its release, after an Esc or a drag the
+    // layer ended, must not be measured against an older press as a click.
+    // Registered before the first of them.
+    const forgetDown = () => {
+      down = null;
+    };
+    renderer.domElement.addEventListener('pointerdown', forgetDown, true);
     renderer.domElement.addEventListener('pointerdown', printDown, true);
     renderer.domElement.addEventListener('pointermove', printMove, true);
     renderer.domElement.addEventListener('pointerup', printUp, true);
@@ -1948,8 +2084,10 @@ export default function CadViewport({
       gripHover = null,
       gripFocus = null,
       reachHover = null,
-      fingerPress = null;
-    ctx.gripPressed = () => Boolean(gripPress || fingerPress);
+      fingerPress = null,
+      // The sheet slid by hand (sheet slide §6.1): the arrow in the hand.
+      slidePress = null;
+    ctx.gripPressed = () => Boolean(gripPress || fingerPress || slidePress);
     const canvasPoint = (event) => {
       const rect = renderer.domElement.getBoundingClientRect();
       return [event.clientX - rect.left, event.clientY - rect.top];
@@ -1971,8 +2109,10 @@ export default function CadViewport({
     const chipByHandle = (kind) => {
       const spot = ctx.shopLayer.gripSpot(kind);
       if (!gripChip || !spot) return hideChip();
-      const outcome = ctx.shopLayer.gripOutcome(kind);
-      const words = brakeGripChip(kind, outcome);
+      const outcome = kind === 'slide' ? null : ctx.shopLayer.gripOutcome(kind);
+      // Slide sheet (sheet slide §6.1) says where the sheet stands, no outcome.
+      const words =
+        kind === 'slide' ? { title: slideChip(ctx.brakeGrip?.slide), outcome: null } : brakeGripChip(kind, outcome);
       writeChip(words.title, words.outcome, Boolean(outcome?.ok));
       const width = element.clientWidth,
         height = element.clientHeight;
@@ -1990,7 +2130,7 @@ export default function CadViewport({
     };
     // A handle approached: its outcome, when the workspace has not worked it out yet.
     const wantGrip = (kind) => {
-      if (kind && !ctx.shopLayer.gripOutcome(kind)) gripCallback.current.onBrakeGripWant?.(kind);
+      if (kind && kind !== 'slide' && !ctx.shopLayer.gripOutcome(kind)) gripCallback.current.onBrakeGripWant?.(kind);
     };
     // The chip of a thing in reach (HO-2): by the cursor, in the words the workspace's offer gives.
     const chipByPointer = (target) => {
@@ -1999,6 +2139,7 @@ export default function CadViewport({
         fingers: grip?.fingers || null,
         edges: grip?.edges || [],
         picked: grip?.edge ?? null,
+        pieces: grip?.pieces || [],
       });
       if (!words?.title) return hideChip();
       writeChip(words.title, words.line, false, 'is-typed');
@@ -2010,7 +2151,7 @@ export default function CadViewport({
         ? target.offered
           ? 'grab'
           : ''
-        : ['blade', 'edge'].includes(target?.kind)
+        : ['blade', 'edge', 'piece'].includes(target?.kind)
           ? 'pointer'
           : '';
     // Only the station's own cursors are put back: another tool's stays.
@@ -2023,13 +2164,16 @@ export default function CadViewport({
     const showGripHot = () => {
       if (gripPress) return;
       if (fingerPress) return fingerReadout();
+      if (slidePress) return slideReadoutChip();
       const kind = ctx.shopLayer.gripLight(gripFocus || gripHover);
       wantGrip(kind);
       // A lit handle puts out whatever else was lit.
       const reach = ctx.shopLayer.reachLight(kind ? null : reachHover);
-      setCursor(gripHover && kind === gripHover ? 'grab' : reachCursor(reach));
+      // The piece the panel names (piece pick §5.5) is lit with nothing under the pointer: no cursor, no chip for it.
+      const pointed = reachHover ? reach : null;
+      setCursor(gripHover && kind === gripHover ? 'grab' : reachCursor(pointed));
       if (kind) chipByHandle(kind);
-      else if (reach) chipByPointer(reach);
+      else if (pointed) chipByPointer(pointed);
       else hideChip();
     };
     ctx.lightGrip = (kind) => {
@@ -2048,7 +2192,7 @@ export default function CadViewport({
       gripFrame = 0;
       const pointer = gripPointer;
       gripPointer = null;
-      if (!pointer || gripPress || fingerPress || !ctx.shopLayer.stationOpen()) return;
+      if (!pointer || gripPress || fingerPress || slidePress || !ctx.shopLayer.stationOpen()) return;
       // In order (HO-2 §6.3): a handle, the fingers, a blade or the machine (a ray, cast only if needed), an edge.
       const target = ctx.shopLayer.handPick(pointer.at, () => rayAt(pointer.client));
       const kind = target?.kind === 'grip' ? target.handle : null;
@@ -2063,7 +2207,7 @@ export default function CadViewport({
       showGripHot();
     };
     const gripHoverMove = (event) => {
-      if (event.buttons || gripPress || fingerPress || !ctx.shopLayer.stationOpen()) return;
+      if (event.buttons || gripPress || fingerPress || slidePress || !ctx.shopLayer.stationOpen()) return;
       gripPointer = { at: canvasPoint(event), client: { clientX: event.clientX, clientY: event.clientY } };
       if (!gripFrame) gripFrame = requestAnimationFrame(runGripHover);
     };
@@ -2071,7 +2215,7 @@ export default function CadViewport({
       if (gripFrame) cancelAnimationFrame(gripFrame);
       gripFrame = 0;
       gripPointer = null;
-      if ((!gripHover && !reachHover) || gripPress || fingerPress) return;
+      if ((!gripHover && !reachHover) || gripPress || fingerPress || slidePress) return;
       gripHover = reachHover = null;
       showGripHot();
     };
@@ -2097,9 +2241,16 @@ export default function CadViewport({
       if (gripPress?.dial) applyGrip(gripPress.dial.refresh({ snap: ctx.rotateSnap, free: Boolean(ctx.altDown) }));
       // The fingers in the hand: L again in the steps Alt now asks for.
       ctx.fingerAlt?.();
+      ctx.slideAlt?.();
     };
     const gripDown = (event) => {
       if (!ctx.shopLayer.stationOpen()) return;
+      // A right press mid-drag puts the sheet's slide back (sheet slide §6.1).
+      if (slidePress) {
+        event.stopImmediatePropagation();
+        if (event.button !== 0) endSlide(event, { cancel: true });
+        return;
+      }
       // A right press mid-drag puts the fingers back (HO-2).
       if (fingerPress) {
         event.stopImmediatePropagation();
@@ -2119,6 +2270,8 @@ export default function CadViewport({
       const target = ctx.shopLayer.handPick(point, () => rayAt(event));
       // The fingers where they are a handle (HO-2 §6.2); a blade or an edge waits for the click.
       if (target?.kind === 'fingers' && target.offered) return fingerDown(event, point);
+      // The arrow (sheet slide §6.1) is taken as the fingers are: a drag slides, a click opens the field.
+      if (target?.kind === 'grip' && target.handle === 'slide') return slideDown(event, point);
       const kind = target?.kind === 'grip' ? target.handle : null;
       if (!kind) return;
       event.stopImmediatePropagation();
@@ -2130,6 +2283,7 @@ export default function CadViewport({
       renderer.domElement.style.cursor = 'grabbing';
     };
     const gripMove = (event) => {
+      if (slidePress) return slideMove(event);
       if (fingerPress) return fingerMove(event);
       if (!gripPress) return;
       event.stopImmediatePropagation();
@@ -2181,6 +2335,11 @@ export default function CadViewport({
       if (ctx.shopLayer.gripRelease(commit)) gripCallback.current.onBrakeGrip?.(press.kind);
     };
     const gripUp = (event) => {
+      if (slidePress) {
+        event.stopImmediatePropagation();
+        endSlide(event);
+        return;
+      }
       if (fingerPress) {
         event.stopImmediatePropagation();
         endFinger(event);
@@ -2191,8 +2350,20 @@ export default function CadViewport({
       endGrip(event);
     };
     const gripCancel = () => {
+      endSlide(null, { cancel: true });
       endFinger(null, { cancel: true });
       endGrip(null, true);
+    };
+    // The shop layer ended the drag itself (a new view under it, the grip
+    // hidden, the station closed; shopLayer.js onGripEnd): the press ends
+    // with it, the orbit back, and its release does nothing.
+    ctx.dropGrip = () => {
+      if (!gripPress) return;
+      gripPress = null;
+      controls.enabled = true;
+      renderer.domElement.style.cursor = '';
+      gripHover = null;
+      hideChip();
     };
     // ------------------------------------------------ the backgauge fingers in the hand (HO-2 §6.2)
     // Pressed: a press without travel is a click (the panel's L field takes
@@ -2335,11 +2506,160 @@ export default function CadViewport({
       ctx.lastFingerDrag = { positions: press.positions, from: press.from, to: press.L };
     };
     ctx.fingerAlt = () => fingerTo();
+    // ------------------------------------------------ the sheet slid by hand (docs/sketch-studio-sheet-slide.md §6.1)
+    // Pressed on the arrow: a press without travel is a click (the panel's Sheet
+    // slide field takes focus, as the fingers' L does); past CLICK_PX the sheet
+    // is in the hand: the pointer's travel along the bed's axis on the canvas
+    // (axisTravel) is the sheet's move, caught by the detents (brakeHands.js
+    // slideSnap: whole mm, a tenth with Alt, which passes through them), stopped
+    // where too little of the punch would stand over the pieces. The layer draws
+    // the sheet there at once (slideTo, view only) and the new slide goes to the
+    // workspace at most once a frame (onBrakeSlide({ slide })); nothing of the
+    // station is worked out per move. Digits + Enter set it exactly; Esc, a right
+    // press, a lost pointer or the window losing focus put it back.
+    let slideFrame = 0;
+    const slideDown = (event, point) => {
+      const start = ctx.shopLayer.slideStart();
+      const offer = ctx.brakeGrip?.slide;
+      if (!start || !offer?.offered) return;
+      event.stopImmediatePropagation();
+      trackPointer(event);
+      slidePress = {
+        start: point,
+        axis: start.axis,
+        offer,
+        from: start.value,
+        value: start.value,
+        sent: start.value,
+        dragging: false,
+        typed: '',
+        positions: 0,
+        at: null,
+      };
+      controls.enabled = false;
+      renderer.domElement.setPointerCapture?.(event.pointerId);
+      renderer.domElement.style.cursor = 'grabbing';
+    };
+    const sendSlide = (press = slidePress) => {
+      if (!press?.dragging || press.value === press.sent) return;
+      press.sent = press.value;
+      press.positions += 1;
+      gripCallback.current.onBrakeSlide?.({ slide: press.value });
+    };
+    const queueSlide = () => {
+      if (slideFrame) return;
+      sendSlide();
+      slideFrame = requestAnimationFrame(() => {
+        slideFrame = 0;
+        if (slidePress && slidePress.value !== slidePress.sent) queueSlide();
+      });
+    };
+    const slideReadoutChip = () => {
+      const press = slidePress;
+      if (!press?.dragging) return;
+      const words = slideReadout(press.offer, press.value);
+      writeChip(
+        words,
+        press.typed
+          ? `${press.typed} mm · Enter applies · Esc cancels`
+          : 'Type a slide (− for the left) · Enter applies',
+        false,
+        'is-typed',
+      );
+      const lines = `${words.length}:${press.typed.length}`;
+      if (gripChip && (!press.box || press.box.lines !== lines))
+        press.box = {
+          lines,
+          width: element.clientWidth,
+          height: element.clientHeight,
+          w: gripChip.offsetWidth + 12,
+          h: gripChip.offsetHeight,
+        };
+      placeBox(gripChip, press.box);
+    };
+    const slideToPointer = () => {
+      const press = slidePress;
+      if (!press?.dragging || !press.at) return;
+      const travel = axisTravel([press.at[0] - press.start[0], press.at[1] - press.start[1]], press.axis);
+      const pxPerMm = Math.hypot(press.axis[0], press.axis[1]);
+      press.value = slideSnap(press.from + travel, press.offer, pxPerMm, { free: Boolean(ctx.altDown) });
+      ctx.shopLayer.slideTo(press.value);
+      queueSlide();
+      slideReadoutChip();
+    };
+    const slideMove = (event) => {
+      const press = slidePress;
+      event.stopImmediatePropagation();
+      trackPointer(event);
+      const point = canvasPoint(event);
+      ctx.altDown = event.altKey;
+      if (!press.dragging) {
+        if (Math.hypot(point[0] - press.start[0], point[1] - press.start[1]) <= CLICK_PX) return;
+        press.dragging = true;
+        ctx.shopLayer.slideHold(true, press.from);
+        gripCallback.current.onBrakeSlide?.({ start: true });
+      }
+      press.at = point;
+      slideToPointer();
+    };
+    // Let go: a click opens the field; a drag's last slide goes; cancel puts it back; typed sets it exactly.
+    const endSlide = (event, { cancel = false, typed = null } = {}) => {
+      const press = slidePress;
+      if (!press) return;
+      slidePress = null;
+      controls.enabled = true;
+      if (event?.pointerId != null && renderer.domElement.hasPointerCapture?.(event.pointerId))
+        renderer.domElement.releasePointerCapture(event.pointerId);
+      renderer.domElement.style.cursor = '';
+      gripHover = null;
+      hideChip();
+      if (!press.dragging) {
+        if (!cancel) gripCallback.current.onBrakeFocus?.('slide');
+        return;
+      }
+      if (typed != null) {
+        press.value = Math.min(press.offer.max, Math.max(press.offer.min, typed));
+        ctx.shopLayer.slideTo(press.value);
+      }
+      ctx.shopLayer.slideHold(false);
+      if (cancel) {
+        gripCallback.current.onBrakeSlide?.({ cancel: true });
+        return;
+      }
+      sendSlide(press);
+      gripCallback.current.onBrakeSlide?.({ end: true });
+      ctx.lastSlideDrag = { positions: press.positions, from: press.from, to: press.value };
+    };
+    ctx.slideAlt = () => slideToPointer();
+    ctx.dropSlide = () => endSlide(null, { cancel: true });
     // The station no longer being set up (a stroke, a scrub, the replay, closed): the fingers are let go, the line put back.
     ctx.dropFingers = () => endFinger(null, { cancel: true });
     // Esc puts the sheet back (and leaves the line picked: the brake's own Esc
     // waits, isDragging); digits + Enter set the angle exactly, as the rings do.
     ctx.gripKey = (event) => {
+      // The sheet in the hand (sheet slide §6.1): Esc puts the slide back; digits (a leading minus:
+      // the left) + Enter set it exactly.
+      if (slidePress) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          endSlide(null, { cancel: true });
+          return true;
+        }
+        if (!slidePress.dragging || event.ctrlKey || event.metaKey || event.altKey) return true;
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          const value = typedSlide(slidePress.typed);
+          if (value != null) endSlide(null, { typed: value });
+          return true;
+        }
+        const next = typeKey(slidePress.typed, event.key);
+        if (next != null) {
+          event.preventDefault();
+          slidePress.typed = next;
+          slideReadoutChip();
+        }
+        return true;
+      }
       // The fingers in the hand (HO-2): Esc puts the line back, digits + Enter set L exactly.
       if (fingerPress) {
         if (event.key === 'Escape') {
@@ -2411,6 +2731,11 @@ export default function CadViewport({
     ctx.brakeClick = (event) => {
       const target = ctx.shopLayer.handPick(canvasPoint(event), () => rayAt(event));
       if (target?.kind === 'edge') gripCallback.current.onBrakeEdge?.(target.index);
+      // A piece of the line (piece pick §6.1): bend only it; Ctrl, Shift or Meta: in or out.
+      else if (target?.kind === 'piece')
+        gripCallback.current.onBrakePiece?.(target.index, {
+          add: Boolean(event.ctrlKey || event.shiftKey || event.metaKey),
+        });
       else if (target?.kind === 'blade') gripCallback.current.onBrakeFocus?.(target.blade);
     };
     // Browser checks: what a press at a client point would reach, and where the blades can be pressed.
@@ -2456,11 +2781,11 @@ export default function CadViewport({
     // Double-click a part with no tool running: open the group under the
     // cursor one level (§3.3). The placement layer's own dblclick keeps
     // priority (it listens first and only acts while placing); the two
-    // clicks before it have already selected the group.
+    // clicks before it have already selected the group. Whether a tool
+    // owns the click is pointerUp's order alone: `selectClick` says its
+    // second click reached the selection.
     const selectDouble = (event) => {
       if (!ctx.selectClick || event.button !== 0) return;
-      if (ctx.placing || ctx.sketchMode || ctx.holeMode || ctx.measureMode || ctx.shopPick) return;
-      if (ctx.pivotPick && ctx.transformMode === 'rotate' && ctx.movingId) return;
       const hit = rayAt(event)
         .intersectObjects(group.children, true)
         .find((h) => h.object.isMesh && h.object.parent.visible);
@@ -2554,7 +2879,8 @@ export default function CadViewport({
           return;
         }
       }
-      if (!down || Math.hypot(event.clientX - down[0], event.clientY - down[1]) > 4 || event.button !== 0) return;
+      if (!down || Math.hypot(event.clientX - down[0], event.clientY - down[1]) > CLICK_PX || event.button !== 0)
+        return;
       // Measuring: clicks pick points, never the selection.
       if (ctx.measureMode) {
         measureClick(event);
@@ -2695,7 +3021,11 @@ export default function CadViewport({
     renderer.domElement.addEventListener('pointerdown', pointerDown);
     renderer.domElement.addEventListener('pointerup', pointerUp);
     return () => {
+      // Nothing left to draw: a commit's fallback flush (below) finds it closed.
+      ctx.committing = false;
+      ctx.renderPending = false;
       observer.disconnect();
+      stopTelling?.();
       window.removeEventListener('keydown', keyDown);
       window.removeEventListener('keyup', trackAlt);
       window.removeEventListener('blur', releaseAlt);
@@ -2718,6 +3048,7 @@ export default function CadViewport({
       renderer.domElement.removeEventListener('pointermove', outlineMove);
       renderer.domElement.removeEventListener('pointerleave', outlineLeave);
       delete element.cadOutlineAt;
+      renderer.domElement.removeEventListener('pointerdown', forgetDown, true);
       renderer.domElement.removeEventListener('pointerdown', printDown, true);
       renderer.domElement.removeEventListener('pointermove', printMove, true);
       renderer.domElement.removeEventListener('pointerup', printUp, true);
@@ -2755,6 +3086,7 @@ export default function CadViewport({
       labels?.replaceChildren();
       renderer.domElement.removeEventListener('pointerdown', trackPointer, true);
       drawSnapHighlights(snapLayer, null);
+      disposeSnapMaterials(snapLayer);
       endRotateFeedback();
       window.removeEventListener('blur', cancelDrag);
       window.removeEventListener('blur', cancelHoleDrag);
@@ -2783,6 +3115,15 @@ export default function CadViewport({
       sceneRef.current = null;
     };
   }, []);
+  // Opens the commit (B1.1, see `render` above): the renders the effects
+  // below ask for wait, and the last effect of all draws once. Should an
+  // effect in between throw, the microtask still closes the commit and draws.
+  useEffect(() => {
+    const ctx = sceneRef.current;
+    if (!ctx) return;
+    ctx.committing = true;
+    queueMicrotask(ctx.flushRender);
+  });
   useEffect(() => {
     const ctx = sceneRef.current;
     if (!ctx) return;
@@ -2831,7 +3172,7 @@ export default function CadViewport({
         });
       });
     }
-    ctx.render();
+    ctx.requestRender();
   }, [holeMode, ready, selectedId, snapshot, model]);
   useEffect(() => {
     const ctx = sceneRef.current;
@@ -2849,17 +3190,23 @@ export default function CadViewport({
     ctx.group.clear();
     for (const item of snapshot?.instances || []) {
       const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.Float32BufferAttribute(item.mesh.vertices, 3));
-      geometry.setAttribute('normal', new THREE.Float32BufferAttribute(item.mesh.normals, 3));
+      geometry.setAttribute('position', floatAttribute(item.mesh.vertices));
+      geometry.setAttribute('normal', floatAttribute(item.mesh.normals));
       // The kernel sends a Uint32Array, which `setIndex` would take as an
       // attribute itself; a plain array (test fixtures) still goes straight in.
       const triangles = item.mesh.triangles;
-      geometry.setIndex(ArrayBuffer.isView(triangles) ? new THREE.Uint32BufferAttribute(triangles, 1) : triangles);
+      geometry.setIndex(
+        triangles instanceof Uint32Array
+          ? new THREE.BufferAttribute(triangles, 1)
+          : ArrayBuffer.isView(triangles)
+            ? new THREE.Uint32BufferAttribute(triangles, 1)
+            : triangles,
+      );
       // Placeholders: the pose effect below gives each part its real look.
       const mesh = new THREE.Mesh(geometry, ctx.materials.body(BODY_COLORS.metal, 1, { depthWrite: true }));
       mesh.userData.instanceId = item.id;
       const lineGeometry = new THREE.BufferGeometry();
-      lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(item.edges.lines, 3));
+      lineGeometry.setAttribute('position', floatAttribute(item.edges.lines));
       const edges = new THREE.LineSegments(lineGeometry, ctx.materials.edge(EDGE_COLOR, EDGE_ALPHA.solid));
       // Every pick in the viewport wants the body (each keeps only mesh hits),
       // and testing a ray against thousands of edge segments per pointer move
@@ -2875,7 +3222,7 @@ export default function CadViewport({
       group.add(mesh, edges);
       ctx.group.add(group);
     }
-    ctx.render();
+    ctx.requestRender();
   }, [snapshot]);
   useEffect(() => {
     const ctx = sceneRef.current;
@@ -2887,10 +3234,19 @@ export default function CadViewport({
     ctx.materials.setClippingPlanes(plane ? [plane] : []);
     const selected = new Set(selectedKey ? selectedKey.split('|') : []);
     const meshed = new Map((snapshot?.instances || []).map((item) => [item.id, item.placement]));
+    // Each group's instance and part, looked up once per run (B1.6), the
+    // first of an id winning as `find` did.
+    const firstById = (list) => {
+      const byId = new Map();
+      for (const entry of list) if (!byId.has(entry.id)) byId.set(entry.id, entry);
+      return byId;
+    };
+    const instances = firstById(model.instances),
+      parts = firstById(model.parts);
     // Isolate shows the selection: one part or every part of a group. The
     // shop layer asks too when its preview hands a part back.
     const shown = (group) => {
-      const instance = model.instances.find((i) => i.id === group.userData.instanceId);
+      const instance = instances.get(group.userData.instanceId);
       return instance?.visible !== false && (!isolated || selected.has(group.userData.instanceId));
     };
     ctx.groupShown = shown;
@@ -2900,8 +3256,8 @@ export default function CadViewport({
     // What the paint booth will paint: outlined, so its colour still shows (§7: selection wins).
     const shopTargets = new Set(shopPick?.targets || []);
     ctx.group.children.forEach((group, index) => {
-      const instance = model.instances.find((i) => i.id === group.userData.instanceId);
-      const part = model.parts.find((p) => p.id === group.userData.partId);
+      const instance = instances.get(group.userData.instanceId);
+      const part = parts.get(group.userData.partId);
       // A sheet-metal part unfolded in the shop layer: its preview stands in.
       group.visible = shown(group) && !ctx.shopLayer.hides(group.userData.instanceId);
       // The model commits before the worker rebuilds, so show the committed
@@ -2957,7 +3313,7 @@ export default function CadViewport({
     // Marks ride on the poses just shown.
     ctx.updateMarks();
     ctx.shopLayer.sync();
-    ctx.render();
+    ctx.requestRender();
   }, [
     snapshot,
     model,
@@ -3049,7 +3405,10 @@ export default function CadViewport({
     const ctx = sceneRef.current;
     if (!ctx) return;
     ctx.shopLayer.setGrip(brakeView ? brakeGrip : null);
-    if (!(brakeView && brakeGrip?.shown)) ctx.dropFingers?.();
+    if (!(brakeView && brakeGrip?.shown)) {
+      ctx.dropFingers?.();
+      ctx.dropSlide?.();
+    }
     // The words of the things in reach (HO-2): the fingers' offer, the edges, the edge at the backgauge.
     ctx.brakeGrip = brakeView ? brakeGrip : null;
     // An outcome arriving while a handle is lit: its chip says it now.
@@ -3065,7 +3424,7 @@ export default function CadViewport({
     const ctx = sceneRef.current;
     if (!ctx) return;
     ctx.shopLayer.setRecords(model);
-    ctx.render();
+    ctx.requestRender();
   }, [snapshot, model, selectedKey, isolated, exploded, viewMode, section, sheetView, brakeView]);
   // The open station's pick: what clicks pick.
   useEffect(() => {
@@ -3089,7 +3448,7 @@ export default function CadViewport({
     ctx.selectedMarkId = selectedMarkId;
     ctx.hideMarks = hideMarks;
     ctx.updateMarks();
-    ctx.render();
+    ctx.requestRender();
   }, [marks, snapshot, model, selectedMarkId, hideMarks, isolated, exploded]);
   // Origin plane tiles, after the poses above so the size follows the
   // displayed model; a new mesh drops the cached hovered face.
@@ -3114,7 +3473,7 @@ export default function CadViewport({
     ctx.shopOutlinesChosen = (shopOutlines || []).filter((o) => o.chosen).map((o) => o.id);
     // What a click can pick under Cut's picker (cut-pick §4.2), built here, once per list.
     ctx.outlinePick = outlinePickAreas(shopOutlines);
-    ctx.render();
+    ctx.requestRender();
   }, [shopOutlines]);
   useEffect(() => {
     const ctx = sceneRef.current;
@@ -3201,7 +3560,7 @@ export default function CadViewport({
       ctx.movingGroups = moving;
       ctx.movingInstance = instance ? { instance, parameters: snapshot?.parameters || {} } : null;
     } else if (placement?.toolGizmo && !exploded) ctx.placementLayer.attachTool(transformMode);
-    ctx.render();
+    ctx.requestRender();
   }, [
     snapshot,
     model,
@@ -3302,6 +3661,11 @@ export default function CadViewport({
     ctx.controls.update();
     ctx.resize();
   }, [focusTarget]);
+  // The last effect (B1.1): the commit's one draw, with every effect above applied.
+  // Keep it last: an effect declared after it would draw on its own again.
+  useEffect(() => {
+    sceneRef.current?.flushRender();
+  });
   return (
     <div ref={host} className="cad-viewport" aria-label="Solid model viewport" data-view-mode={shownViewMode}>
       <div ref={hudRef} className="cad-gizmo-hud" aria-label="Gizmo readout" />
@@ -3364,7 +3728,7 @@ export default function CadViewport({
           ? 'Drag background to orbit · Right drag to pan · Scroll to zoom'
           : brakeView
             ? // The press brake (hands on the sheet §5.5): the station's own line, then the view's.
-              `${brakeGrip ? `${brakeHint(brakeGrip.lined, brakeGrip.mode)} · ` : ''}Drag background to orbit · Right drag to pan · Scroll to zoom`
+              `${brakeGrip ? `${brakeHint(brakeGrip.lined, brakeGrip.mode, brakeGrip.pieces?.length || 0)} · ` : ''}Drag background to orbit · Right drag to pan · Scroll to zoom`
             : !sketchMode &&
               (placement || shopPick
                 ? 'Drag background to orbit · Right drag to pan · Scroll to zoom'
@@ -3480,8 +3844,6 @@ const HUD_OFFSET = 18;
 const HUD_MARGIN = 6;
 // A picked pivot snaps to a bounding-box corner this close on screen (px).
 const PIVOT_SNAP_PX = 8;
-// Pointer travel (px) below which a press and release is a click, not a drag.
-const CLICK_PX = 4;
 const AXIS_UNITS = { X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };
 // Sector resolution: one triangle per 5° of sweep.
 const SECTOR_SEGMENTS = 72;
@@ -3503,6 +3865,19 @@ const TILE_EDGE_HOVER = '#246e9a';
 const PICK_COLOR = '#287fb3';
 const LABEL_GAP_PX = 4;
 const TILE_TIE_MM = 0.01;
+
+// A part's xyz buffer (docs/perf-pass-3.md §5 B1.2). The kernel transfers
+// its tessellation as Float32Arrays the snapshot holds and nothing writes:
+// the attribute takes the array itself, where Float32BufferAttribute would
+// copy it (a second copy of every part on every rebuild). Plain arrays (test
+// fixtures) and any other typed array are converted as before. Bounds stay
+// three's to compute: the kernel's `bounds` is OpenCascade's box, which may be
+// looser than the tessellation and would move every box read off a part.
+function floatAttribute(array) {
+  return array instanceof Float32Array
+    ? new THREE.BufferAttribute(array, 3)
+    : new THREE.Float32BufferAttribute(array, 3);
+}
 
 // Dispose a layer's own geometry and materials and empty it.
 function clearLayer(layer) {
@@ -3670,6 +4045,39 @@ const planeOf = (frame) =>
     new THREE.Vector3(...frame.origin),
   );
 
+// What a face pick keeps per part mesh (docs/perf-pass-3.md §5 B1.5), so a
+// newly hovered face costs the face, not the mesh: its index, the triangles
+// at each vertex (sketchPlane.meshAdjacency, built once) and the vertices
+// brought to world space so far under the pose they were taken at; a new pose
+// starts that copy over. Held by the geometry: a rebuild's new geometry
+// starts afresh and the old entry goes with the old geometry.
+const faceMeshes = new WeakMap();
+function faceMesh(mesh) {
+  const geometry = mesh.geometry;
+  const source = geometry.getAttribute('position');
+  const indexArray = geometry.index ? geometry.index.array : null;
+  let entry = faceMeshes.get(geometry);
+  if (!entry || entry.source !== source || entry.indexArray !== indexArray) {
+    const index = indexArray || Array.from({ length: source.count }, (_, i) => i);
+    entry = {
+      source,
+      indexArray,
+      index,
+      adjacency: meshAdjacency(index, source.count),
+      pose: null,
+      world: new Float64Array(source.count * 3),
+      done: new Uint8Array(source.count),
+    };
+    faceMeshes.set(geometry, entry);
+  }
+  const pose = mesh.matrixWorld.elements;
+  if (!entry.pose || entry.pose.some((value, i) => value !== pose[i])) {
+    entry.pose = [...pose];
+    entry.done.fill(0);
+  }
+  return entry;
+}
+
 // The flat face under a pick: its plane frame (see sketchPlane.faceFrame) and
 // its outline in sketch coordinates, taken from the displayed (world) mesh.
 function pickedFace(hit) {
@@ -3689,17 +4097,23 @@ function pickedFace(hit) {
     planar,
   };
   if (!planar) return info;
-  const source = geometry.getAttribute('position');
-  const world = new Float64Array(source.count * 3);
+  // Only the vertices the face and its rim of neighbours use go to world
+  // space, each once per pose (faceMesh); the same numbers the whole-mesh copy gave.
+  const { source, index, adjacency, world, done } = faceMesh(mesh);
   const v = new THREE.Vector3();
-  for (let i = 0; i < source.count; i++) {
-    v.fromBufferAttribute(source, i).applyMatrix4(mesh.matrixWorld);
-    world[i * 3] = v.x;
-    world[i * 3 + 1] = v.y;
-    world[i * 3 + 2] = v.z;
-  }
-  const index = geometry.index ? geometry.index.array : Array.from({ length: source.count }, (_, i) => i);
-  const outline = faceOutline(world, index, hit.faceIndex, normal);
+  const point = (i) => {
+    if (!done[i]) {
+      v.fromBufferAttribute(source, i).applyMatrix4(mesh.matrixWorld);
+      world[i * 3] = v.x;
+      world[i * 3 + 1] = v.y;
+      world[i * 3 + 2] = v.z;
+      done[i] = 1;
+    }
+    return [world[i * 3], world[i * 3 + 1], world[i * 3 + 2]];
+  };
+  const outline = faceOutline(world, index, hit.faceIndex, normal, undefined, { adjacency, point });
+  // The centroid reads every corner of the face's triangles.
+  for (const t of outline.triangles) for (let k = 0; k < 3; k++) point(index[t * 3 + k]);
   const frame = faceFrame(normal, outline.points);
   return {
     ...info,
@@ -3716,11 +4130,25 @@ function pickedFace(hit) {
 const SNAP_COLORS = { flush: '#e0861a', aligned: '#2f9be6', mark: MARK_COLOR, 'mark centre': MARK_COLOR };
 // Outline the moving box's face at each snapped plane (for a centre snap, the
 // moving box's outline through its middle at that plane).
+// One material per colour, kept on the layer for the viewport's life
+// (docs/perf-pass-3.md §5 B1.3): a material disposed and made again on every
+// drag step was the only user of its program, so three destroyed and
+// relinked it each move (the placement layer's overlay materials had the
+// same bug). disposeSnapMaterials releases them on unmount.
+function snapMaterial(layer, color) {
+  const cache = (layer.userData.materials ||= new Map());
+  let material = cache.get(color);
+  if (!material) cache.set(color, (material = new THREE.LineBasicMaterial({ color, depthTest: false })));
+  return material;
+}
+function disposeSnapMaterials(layer) {
+  for (const material of layer.userData.materials?.values() || []) material.dispose();
+  layer.userData.materials = null;
+}
 function drawSnapHighlights(layer, state) {
   layer.traverse((obj) => {
     if (obj === layer) return;
     obj.geometry?.dispose();
-    obj.material?.dispose();
   });
   layer.clear();
   if (!state) return;
@@ -3738,10 +4166,7 @@ function drawSnapHighlights(layer, state) {
     const ring = [corner(min[a], min[b]), corner(max[a], min[b]), corner(max[a], max[b]), corner(min[a], max[b])];
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute([...ring, ring[0]].flat(), 3));
-    const line = new THREE.Line(
-      geometry,
-      new THREE.LineBasicMaterial({ color: SNAP_COLORS[snap.kind] || SNAP_COLORS.aligned, depthTest: false }),
-    );
+    const line = new THREE.Line(geometry, snapMaterial(layer, SNAP_COLORS[snap.kind] || SNAP_COLORS.aligned));
     line.renderOrder = 40;
     line.name = `snap-${snap.kind}`;
     line.userData.snap = snap;

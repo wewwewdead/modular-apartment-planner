@@ -1,8 +1,9 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { windowOutlineOnWall, wallDirection } from '@/geometry/wallGeometry';
 import { perpendicular, scale, add } from '@/geometry/point';
 import { DRAWING_GRAPHICS, PRESENTATION_GRAPHICS } from '@/sheets/standards';
 import { isPresentationStyle, usePlanStyle } from './PlanStyleContext';
+import { firstWallById } from './DoorRenderer';
 
 function offsetLine(info, perp, distance) {
   const offset = scale(perp, distance);
@@ -285,38 +286,44 @@ function JalousieWindow({ win, info, wall }) {
   );
 }
 
+// One memoised item per window, as for doors: it reads itself, its host wall
+// and the style.
+const WindowItem = memo(function WindowItem({ win, wall, presentation }) {
+  const info = windowOutlineOnWall(wall, win);
+  const type = win.type || 'standard';
+
+  return (
+    <g data-id={win.id} data-type="window">
+      {/* White rectangle to mask wall */}
+      <polygon
+        points={`${info.p1.x},${info.p1.y} ${info.p2.x},${info.p2.y} ${info.p3.x},${info.p3.y} ${info.p4.x},${info.p4.y}`}
+        fill="white"
+        stroke="none"
+      />
+      {presentation ? (
+        <PresentationWindow win={win} info={info} wall={wall} />
+      ) : (
+        <>
+          {type === 'standard' && <StandardWindow info={info} wall={wall} />}
+          {type === 'casement' && <CasementWindow win={win} info={info} />}
+          {type === 'awning' && <AwningWindow win={win} info={info} />}
+          {type === 'fixed' && <FixedWindow info={info} />}
+          {type === 'jalousie' && <JalousieWindow win={win} info={info} wall={wall} />}
+        </>
+      )}
+    </g>
+  );
+});
+
 function WindowRenderer({ windows, walls }) {
   const presentation = isPresentationStyle(usePlanStyle());
+  const wallsById = useMemo(() => firstWallById(walls), [walls]);
   return (
     <g className="windows">
       {windows.map((win) => {
-        const wall = walls.find((w) => w.id === win.wallId);
+        const wall = wallsById.get(win.wallId);
         if (!wall) return null;
-
-        const info = windowOutlineOnWall(wall, win);
-        const type = win.type || 'standard';
-
-        return (
-          <g key={win.id} data-id={win.id} data-type="window">
-            {/* White rectangle to mask wall */}
-            <polygon
-              points={`${info.p1.x},${info.p1.y} ${info.p2.x},${info.p2.y} ${info.p3.x},${info.p3.y} ${info.p4.x},${info.p4.y}`}
-              fill="white"
-              stroke="none"
-            />
-            {presentation ? (
-              <PresentationWindow win={win} info={info} wall={wall} />
-            ) : (
-              <>
-                {type === 'standard' && <StandardWindow info={info} wall={wall} />}
-                {type === 'casement' && <CasementWindow win={win} info={info} />}
-                {type === 'awning' && <AwningWindow win={win} info={info} />}
-                {type === 'fixed' && <FixedWindow info={info} />}
-                {type === 'jalousie' && <JalousieWindow win={win} info={info} wall={wall} />}
-              </>
-            )}
-          </g>
-        );
+        return <WindowItem key={win.id} win={win} wall={wall} presentation={presentation} />;
       })}
     </g>
   );

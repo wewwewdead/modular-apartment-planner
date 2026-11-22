@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { doorOutlineOnWall } from '@/geometry/wallGeometry';
 import { DRAWING_GRAPHICS, PRESENTATION_GRAPHICS } from '@/sheets/standards';
 import { isPresentationStyle, usePlanStyle } from './PlanStyleContext';
@@ -195,40 +195,55 @@ function SlidingDoor({ door, info }) {
   );
 }
 
+// Each door is its own memoised item: it reads only itself, its host wall and
+// the style, so moving one door redraws that door and nothing else.
+const DoorItem = memo(function DoorItem({ door, wall, presentation }) {
+  const info = doorOutlineOnWall(wall, door);
+  const type = door.type || 'swing';
+
+  return (
+    <g data-id={door.id} data-type="door">
+      {/* White rectangle to mask wall */}
+      <polygon
+        points={`${info.p1.x},${info.p1.y} ${info.p2.x},${info.p2.y} ${info.p3.x},${info.p3.y} ${info.p4.x},${info.p4.y}`}
+        fill="white"
+        stroke="none"
+      />
+      {presentation ? (
+        <>
+          {type === 'double' && <PresentationDoubleDoor door={door} info={info} />}
+          {type === 'sliding' && <PresentationSlidingDoor door={door} info={info} />}
+          {type === 'swing' && <PresentationSwingDoor door={door} info={info} />}
+        </>
+      ) : (
+        <>
+          {type === 'double' && <DoubleDoor door={door} info={info} />}
+          {type === 'sliding' && <SlidingDoor door={door} info={info} />}
+          {type === 'swing' && <SwingDoor door={door} info={info} />}
+        </>
+      )}
+    </g>
+  );
+});
+
+/** The first wall with each id, as `walls.find` would pick it. */
+export function firstWallById(walls) {
+  const byId = new Map();
+  for (const wall of walls || []) {
+    if (!byId.has(wall.id)) byId.set(wall.id, wall);
+  }
+  return byId;
+}
+
 function DoorRenderer({ doors, walls }) {
   const presentation = isPresentationStyle(usePlanStyle());
+  const wallsById = useMemo(() => firstWallById(walls), [walls]);
   return (
     <g className="doors">
       {doors.map((door) => {
-        const wall = walls.find((w) => w.id === door.wallId);
+        const wall = wallsById.get(door.wallId);
         if (!wall) return null;
-
-        const info = doorOutlineOnWall(wall, door);
-        const type = door.type || 'swing';
-
-        return (
-          <g key={door.id} data-id={door.id} data-type="door">
-            {/* White rectangle to mask wall */}
-            <polygon
-              points={`${info.p1.x},${info.p1.y} ${info.p2.x},${info.p2.y} ${info.p3.x},${info.p3.y} ${info.p4.x},${info.p4.y}`}
-              fill="white"
-              stroke="none"
-            />
-            {presentation ? (
-              <>
-                {type === 'double' && <PresentationDoubleDoor door={door} info={info} />}
-                {type === 'sliding' && <PresentationSlidingDoor door={door} info={info} />}
-                {type === 'swing' && <PresentationSwingDoor door={door} info={info} />}
-              </>
-            ) : (
-              <>
-                {type === 'double' && <DoubleDoor door={door} info={info} />}
-                {type === 'sliding' && <SlidingDoor door={door} info={info} />}
-                {type === 'swing' && <SwingDoor door={door} info={info} />}
-              </>
-            )}
-          </g>
-        );
+        return <DoorItem key={door.id} door={door} wall={wall} presentation={presentation} />;
       })}
     </g>
   );

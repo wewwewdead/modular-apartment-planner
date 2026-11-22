@@ -64,6 +64,8 @@ export const HORN_GAP = 5;
 export const MIN_BEND_MS = 350;
 // The sheet turned over on the die (brake flip tooling §5.1, view only): about half a second.
 export const TURN_MS = 500;
+// The sheet slid along the bed to the pieces picked (piece pick §6.2, view only).
+export const SLIDE_MS = 300;
 // Gauge edges: straight outline edges at least this long; an edge whose both
 // corners turn less than SMOOTH_TURN is a chord of a sampled curve, not a side.
 const MIN_GAUGE_EDGE = 3;
@@ -442,7 +444,7 @@ const widerDie = (dieEntry) =>
  * Returns { error } when the fold refuses the line, else { fold, bend (the
  * resolved bend), punch, die, dieAuto, readouts, refusals, warnings }.
  */
-export function brakeHit({ feature, profile, params = {}, bend, machine, gauge = null }) {
+export function brakeHit({ feature, profile, params = {}, bend, machine, gauge = null, side = null, lineSign = 1 }) {
   // A stroke may make several bends (shop floor §6.1): `bend` is one or a list.
   const members = Array.isArray(bend) ? bend : [bend];
   // The fold names bends by their place among the bends (a bend-on hit is none, tight bends §4.1).
@@ -462,6 +464,10 @@ export function brakeHit({ feature, profile, params = {}, bend, machine, gauge =
     dieAuto: !members[0].die,
     label: 'This hit',
     angles: Object.fromEntries(ids.map((id) => [id, 0])),
+    // The sheet slid (docs/sketch-studio-sheet-slide.md §3): the side to the back, for left and
+    // right; the session line's way along the first bend's u, for a fix's slide.
+    side,
+    lineSign: typeof lineSign === 'function' ? lineSign(fold.bends.find((b) => b.id === ids[0])) : lineSign,
   });
 }
 
@@ -497,8 +503,9 @@ export function strokeInLine(fold, bendIds, angles = {}) {
       dot3(f.z, first.z) < cosTol ||
       dot3(f.side, first.side) < cosTol,
   );
+  // A plain click on a piece bends only it (piece pick §5.6): the one-at-a-time way.
   return apart
-    ? 'The sheet is already bent between these flanges, so they are no longer in line. Bend them one at a time: click a segment on the flat blank to leave it out.'
+    ? 'The sheet is already bent between these flanges, so they are no longer in line. Bend them one at a time: click a piece to bend only it.'
     : null;
 }
 
@@ -508,7 +515,11 @@ export function strokeInLine(fold, bendIds, angles = {}) {
  * foldSheet); `dieAuto` says the die was chosen automatically. Same result
  * shape as brakeHit.
  */
-export function assessBend(fold, bendId, { machine, gauge = null, dieAuto = false, label = null, angles = null } = {}) {
+export function assessBend(
+  fold,
+  bendId,
+  { machine, gauge = null, dieAuto = false, label = null, angles = null, side = null, lineSign = 1 } = {},
+) {
   // A stroke (shop floor §6.1): `bendId` may list its bends. The first is the
   // one read for the tooling and the numbers (a stroke's members share them);
   // the force is the sum, the span the union, the legs checked per member.
@@ -532,8 +543,22 @@ export function assessBend(fold, bendId, { machine, gauge = null, dieAuto = fals
   const force = tonnage(stock, t, length, die);
   // Brake tool length (§3.3): a punch or die set shorter or longer than the
   // bend. Each tool carries the force over the length of it under the bend.
-  const trimmed = Boolean(resolved.punchTrim || resolved.dieTrim);
-  const cover = trimmed ? toolingCover(strokeTooling(fold, ids, { bed: press.bed })) : null;
+  // The sheet slid under the punch (docs/sketch-studio-sheet-slide.md §4) is read the same way.
+  const slid = Boolean(resolved.slide);
+  const trimmed = Boolean(resolved.punchTrim || resolved.dieTrim || slid);
+  const tooling = trimmed ? strokeTooling(fold, ids, { bed: press.bed }) : null;
+  const cover = trimmed ? toolingCover(tooling) : null;
+  // Left and right (sheet slide §3): only where the side to the back is known (the pending hit's `side`).
+  const sign = side ? frameSign(resolved, side) : null;
+  // The same hit with the sheet centred: what "Centre the sheet" would leave (§4.4).
+  const centred = slid
+    ? toolingCover(
+        strokeTooling({ ...fold, bends: fold.bends.map((b) => (ids.includes(b.id) ? { ...b, slide: 0 } : b)) }, ids, {
+          bed: press.bed,
+        }),
+      )
+    : null;
+  const centre = { label: 'Centre the sheet', session: { slide: 0 } };
   const under = cover
     ? { punch: (cover.punch.length / cover.bend) * length, die: (cover.die.length / cover.bend) * length }
     : null;
@@ -593,7 +618,10 @@ export function assessBend(fold, bendId, { machine, gauge = null, dieAuto = fals
   const needed = minLeg(die, hitAngle);
   // A radius-punch bend whose leg is short: the other way, bump hits at the same radius (§12.4).
   const bumpWay = punch.round ? bumpAlternative(fold, resolved) : null;
-  for (const [k, member] of members.entries())
+  // An angle past the die's widest (the `angle` refusal above): its legs have nothing true
+  // to say (minLeg there is no length), so they are not checked (the PK-1 audit).
+  const legsChecked = !(hitAngle > widest + 1e-9);
+  for (const [k, member] of legsChecked ? members.entries() : [])
     for (const [side, label] of [
       ['moving', 'flange'],
       ['fixed', 'other leg'],
@@ -667,27 +695,60 @@ export function assessBend(fold, bendId, { machine, gauge = null, dieAuto = fals
       ['punch', 'punchTrim'],
       ['die', 'dieTrim'],
     ]) {
-      if (!resolved[key]) continue;
+      // The punch is read with a slide too (sheet slide §4); the die only with its own length.
+      if (!resolved[key] && !(tool === 'punch' && slid)) continue;
       const own = cover[tool];
-      const fit = { label: `Fit the ${tool} to the bend`, session: { [key]: null } };
+      const fitOnly = { label: `Fit the ${tool} to the bend`, session: { [key]: null } };
+      // With the sheet slid: centred instead, where the same tool centred has no such finding (§4.4).
+      const centredClear = (test) => (slid && tool === 'punch' && !test(centred[tool]) ? centre : null);
+      const coverFinding = (c) => c.bare.length > 0 || c.length < MIN_COVERAGE * cover.bend - 1e-9;
+      const fit = centredClear(coverFinding) || (resolved[key] ? fitOnly : centre);
       if (own.shortest < SHORTEST_SECTION - 1e-9)
         refuse(
           'tool-short',
           `The ${tool} would be ${fmt(Math.max(0, own.shortest))} mm long: the shortest section is ${SHORTEST_SECTION} mm.`,
+          resolved[key] ? fitOnly : centre,
+        );
+      else if (own.bare.length && members.length > 1)
+        // Several pieces in the hit (piece pick §5.4): the way to the one wanted is to pick it.
+        refuse(
+          'tool-cover',
+          `The ${tool} is ${fmt(own.runs.reduce((sum, [a, b]) => sum + (b - a), 0))} mm long and does not reach every piece this hit bends (${cover.pieces} pieces, ${fmt(cover.extent)} mm end to end). Click the piece to bend: it comes under the punch. Or fit the ${tool} to the bend.`,
           fit,
         );
       else if (own.bare.length)
-        refuse(
-          'tool-cover',
-          `The ${tool} stands over none of ${members.length > 1 ? `tab ${own.bare.join(', ')}` : 'the bend'}: ${members.length > 1 && own.bare.length === 1 ? 'that tab is' : 'it is'} not pressed.`,
-          fit,
-        );
+        refuse('tool-cover', `The ${tool} stands over none of the bend: it is not pressed.`, fit);
       else if (own.length < MIN_COVERAGE * cover.bend - 1e-9)
         refuse(
           'tool-cover',
-          `The ${tool} stands over ${fmt(own.length)} mm of the ${fmt(cover.bend)} mm bend: less than half of it is pressed. Make it longer, or fit it to the bend.`,
+          // One piece (§5.4): it bends whole, so the words say what would let a part of it bend alone.
+          `The ${tool} stands over ${fmt(own.length)} mm of the ${fmt(cover.bend)} mm bend: less than half of it is pressed. Make it longer, or fit it to the bend.${cover.pieces === 1 ? ' A piece of sheet bends whole. To bend a part of it alone, cut a relief across the bend line between that part and the rest (Relief, in the sketcher).' : ''}`,
           fit,
         );
+      // A punch over a piece this hit leaves flat would bend it too (§5.4); a die under flat sheet presses nothing.
+      // Its fix (sheet slide §4.4), only one that works: the smallest slide that takes the punch
+      // off every piece left flat while it still covers the whole hit; else, slid, the centred
+      // sheet when that is clear; else the punch fitted.
+      if (tool === 'punch' && own.overFlat > 1e-6) {
+        const off = clearSlide(tooling, press.bed / 2);
+        const sheetGoes = (value) => (sign == null ? 'along the bed' : `to the ${endSide(sign, -value)}`);
+        const fix =
+          off != null
+            ? {
+                label: slid
+                  ? `Slide the sheet to ${fmt(Math.abs(off))} mm ${sign == null ? 'off' : `${endSide(sign, -off)} of`} centre`
+                  : `Slide the sheet ${fmt(Math.abs(off))} mm ${sheetGoes(off)}`,
+                session: { slide: Math.round(off * lineSign * 1e6) / 1e6 },
+              }
+            : slid && centred.punch.overFlat <= 1e-6
+              ? centre
+              : fitOnly;
+        refuse(
+          'tool-over-flat',
+          `The punch stands over ${fmt(own.overFlat)} mm of a piece this hit leaves flat: it would bend that too. Make the punch shorter, or fit it to the bend.`,
+          fix,
+        );
+      }
     }
   // Horn sections stand at both ends of every run (punch library §4.1): a run
   // shorter than two horns and the shortest section between them has no room.
@@ -709,6 +770,18 @@ export function assessBend(fold, bendId, { machine, gauge = null, dieAuto = fals
       'bed',
       `The bend runs ${fmt(span)} mm; the bed of the ${press.name} is ${press.bed} mm. ${bigger ? `Use the ${bigger.name}` : 'No press in the shop is long enough'}.`,
     );
+  } else if (slid) {
+    // The bend must still stand on the bed where the slide puts it (sheet slide §4): the bed
+    // centred on the punch, the bend `slide` along u the other way.
+    const bent = tooling.bent.flat();
+    const lo = Math.min(...bent.map((r) => r[0])) - resolved.slide,
+      hi = Math.max(...bent.map((r) => r[1])) - resolved.slide;
+    const halfBed = press.bed / 2;
+    const over = Math.max(hi - halfBed, -halfBed - lo);
+    if (over > 1e-9) {
+      const end = sign == null ? 'one' : `the ${endSide(sign, hi - halfBed >= -halfBed - lo ? 1 : -1)}`;
+      refuse('bed', `The bend would stand ${fmt(over)} mm past ${end} end of the bed: slide the sheet back.`, centre);
+    }
   }
   const reach = press.backgauge || BACKGAUGE;
   const outOfReach = (L) => L < reach.min - 1e-9 || L > reach.max + 1e-9;
@@ -740,15 +813,28 @@ export function assessBend(fold, bendId, { machine, gauge = null, dieAuto = fals
       const own = cover[tool];
       if (!own.runs.length || own.bare.length || own.length >= cover.bend - 0.05) continue;
       const [a, b] = own.short;
+      // Per end where the operator's left and right are known (sheet slide §4.4): `a` at the −u end.
+      const named = sign != null && Math.abs(a - b) >= 0.05;
+      const [more, less] = a >= b ? [a, b] : [b, a];
       const where =
         Math.abs(a - b) < 0.05
           ? a > 0.05
             ? `stops ${fmt(a)} mm short of each end of the bend`
             : 'leaves gaps along the bend'
-          : `stops ${fmt(Math.max(a, b))} mm short of one end of the bend${Math.min(a, b) > 0.05 ? ` and ${fmt(Math.min(a, b))} mm of the other` : ''}`;
+          : named
+            ? `stops ${fmt(more)} mm short of the ${endSide(sign, a >= b ? -1 : 1)} end of the bend${less > 0.05 ? ` and ${fmt(less)} mm short of the ${endSide(sign, a >= b ? 1 : -1)} end` : ''}`
+            : `stops ${fmt(Math.max(a, b))} mm short of one end of the bend${Math.min(a, b) > 0.05 ? ` and ${fmt(Math.min(a, b))} mm of the other` : ''}`;
+      const tail =
+        named && less <= 0.05
+          ? 'that end is not pressed and comes out a little open.'
+          : 'the ends are not pressed and come out a little open.';
+      // Slid, and the same tool centred leaves no such ends: Centre the sheet.
+      const unequal = (c) => c.runs.length && !c.bare.length && c.length < cover.bend - 0.05;
+      const fix = slid && tool === 'punch' && !unequal(centred.punch) ? centre : null;
       warnings.push({
         code: 'tool-short-ends',
-        message: `The ${tool} ${where}: the ends are not pressed and come out a little open.`,
+        message: `The ${tool} ${where}: ${tail}`,
+        ...(fix ? { fix } : {}),
       });
     }
   // A die much wider than the pitch lets the part already bumped sink into its opening (§5.4).
@@ -928,10 +1014,15 @@ export function brakeFrame(
     Y = scale3(Y, -1);
   }
   const height = tr.origin ? restHeight(outer, dieEntry, (Math.abs(theta) || 0) / 2) : 0;
-  const translation = [-dot3(X, P), -dot3(Y, P), height - dot3(Z, P)];
-  const matrix = [X[0], Y[0], Z[0], 0, X[1], Y[1], Z[1], 0, X[2], Y[2], Z[2], 0, ...translation, 1];
   // Flat s along the bend → machine X (X may run against u).
   const sign = dot3(X, turn(F, u)) >= 0 ? 1 : -1;
+  // The sheet slid under the punch (docs/sketch-studio-sheet-slide.md §4): the
+  // frame is centred on the punch, not on the bend, so the machine (the punch,
+  // its holders, the ram, the bed) stands where it always does and the sheet,
+  // with the die under its bend, stands `slide` off: X −sign × slide. 0: as before.
+  const shift = bend.slide ? -sign * bend.slide : 0;
+  const translation = [-dot3(X, P) + shift, -dot3(Y, P), height - dot3(Z, P)];
+  const matrix = [X[0], Y[0], Z[0], 0, X[1], Y[1], Z[1], 0, X[2], Y[2], Z[2], 0, ...translation, 1];
   const toX = ([a, b]) => [sign * (a - sMid), sign * (b - sMid)].sort((p, q) => p - q);
   const fitted = toolingRuns(posed, bend, kept)
     .map(toX)
@@ -944,9 +1035,16 @@ export function brakeFrame(
     tipZ: tr.origin ? height - radius : t,
     centre: tr.origin ? height : null,
     back,
-    span: [s0 - sMid, s1 - sMid],
+    // Flat s → machine X: +1 along u, −1 against it (sheet slide §3, the one rule for left and right).
+    sign,
+    // The sheet's move along the bed from centred under the punch (mm, machine X; 0 centred).
+    shift,
+    span: shift ? [s0 - sMid + shift, s1 - sMid + shift] : [s0 - sMid, s1 - sMid],
     ranges: trimRuns(fitted, bend.punchTrim, half),
-    dieRanges: trimRuns(fitted, bend.dieTrim, half),
+    // The die is set up under the bend (sheet slide §3): it goes with the sheet.
+    dieRanges: shift
+      ? clampRuns(trimRuns(shiftRuns(fitted, shift), bend.dieTrim), half)
+      : trimRuns(fitted, bend.dieTrim, half),
     // Horn sections at the ends of the punch's runs (punch library §4.2), only when set.
     // The record's own value (§4.8): true (the standard) or a horn's key.
     ...(hornOf(bend.horns) ? { horns: bend.horns } : {}),
@@ -988,8 +1086,14 @@ export function machineFrom(fold, bendIds, { gaugePoint = null, turned = false }
  * line crosses that the stroke leaves flat does. [[s0, s1], …] in order.
  */
 export function toolingRuns(posed, bend, kept) {
+  return lineMaterial(posed, bend, kept).runs;
+}
+// The material on a stroke's line (flat s along `bend`), read once for
+// toolingRuns' runs and for the stretches the stroke leaves flat (piece pick
+// §5.4: the material that breaks a run). { runs, flat }; flat [] with no blank.
+function lineMaterial(posed, bend, kept) {
   const ordered = [...kept].sort((p, q) => p[0] - q[0]);
-  if (!posed.blank) return [[ordered[0][0], ordered.at(-1)[1]]];
+  if (!posed.blank) return { runs: [[ordered[0][0], ordered.at(-1)[1]]], flat: [] };
   const FAR = 1e5;
   const start = [bend.a[0] - bend.u[0] * FAR, bend.a[1] - bend.u[1] * FAR];
   const material = lineSegments(posed.blank, {
@@ -997,15 +1101,19 @@ export function toolingRuns(posed, bend, kept) {
     b: [bend.a[0] + bend.u[0] * FAR, bend.a[1] + bend.u[1] * FAR],
   }).map(({ s0, s1 }) => [s0 - FAR, s1 - FAR]);
   const bent = ([m0, m1]) => ordered.some(([k0, k1]) => Math.min(m1, k1) - Math.max(m0, k0) > 1e-6);
-  const runs = [];
+  const runs = [],
+    flat = [];
   let open = null;
   for (const interval of material) {
     if (bent(interval)) {
       if (open) open[1] = interval[1];
       else runs.push((open = [...interval]));
-    } else open = null;
+    } else {
+      open = null;
+      flat.push([...interval]);
+    }
   }
-  return runs.length ? runs : [[ordered[0][0], ordered.at(-1)[1]]];
+  return { runs: runs.length ? runs : [[ordered[0][0], ordered.at(-1)[1]]], flat };
 }
 
 // ---------------------------------------------------------------- the tool's length (brake tool length §3)
@@ -1033,6 +1141,73 @@ export function trimRuns(runs, trim, half = Infinity) {
   return out;
 }
 
+// Runs moved by `by` mm (sheet slide §4).
+const shiftRuns = (runs, by) => runs.map(([a, b]) => [a + by, b + by]);
+// Runs kept within [lo, hi] (the bed), one trimmed to nothing left out.
+const clampRuns = (runs, half, lo = -half, hi = half) =>
+  runs.map(([a, b]) => [Math.max(lo, a), Math.min(hi, b)]).filter(([a, b]) => b - a > 1e-9);
+
+/**
+ * Left and right for the operator in front of the machine (docs/sketch-
+ * sheet-slide.md §3, the one helper): +X along the bed is the operator's
+ * right (X along the bed, Y toward the backgauge, Z up). `sign`: the frame's
+ * flat s → machine X (brakeFrame's `sign`, or frameSign); `along`: a
+ * direction along the bend's u (> 0 its +u end). 'left' | 'right'.
+ */
+export const endSide = (sign, along) => (sign * along > 0 ? 'right' : 'left');
+
+/**
+ * brakeFrame's `sign` without posing (sheet slide §3): which way machine X
+ * runs along a bend's u, from the side that goes to the back (backSide:
+ * `gaugePoint`, `turned`) and its direction. The frame's Y points to the back
+ * and its Z opens the bend (up: +z), X = Y × Z… so u runs along +X when the
+ * moving side goes back on an up bend, or the fixed side on a down one.
+ */
+export function frameSign(bend, { gaugePoint = null, turned = false } = {}) {
+  const back = backSide(bend, { gaugePoint, turned });
+  return (bend.direction === 'up') === (back === 'moving') ? 1 : -1;
+}
+
+/**
+ * Where a tool's ends stand against the bend's (sheet slide §4.4): mm short
+ * of each end (positive) or past it (negative), as the operator sees them.
+ * `tooling`: strokeTooling; `sign`: frameSign (or the frame's). { left, right }.
+ */
+export function toolEnds(tooling, sign, tool = 'punch') {
+  const bent = tooling.bent.flat();
+  const runs = tooling[tool];
+  const b0 = Math.min(...bent.map((r) => r[0])),
+    b1 = Math.max(...bent.map((r) => r[1]));
+  const atMin = runs.length ? Math.min(...runs.map((r) => r[0])) - b0 : b1 - b0,
+    atMax = runs.length ? b1 - Math.max(...runs.map((r) => r[1])) : b1 - b0;
+  return endSide(sign, -1) === 'left' ? { left: atMin, right: atMax } : { left: atMax, right: atMin };
+}
+
+/**
+ * The smallest slide (mm along the first bend's u, the punch off the middle of
+ * the pieces in the hit) at which the punch stands over no piece the hit
+ * leaves flat and still covers every piece it bends (sheet slide §4.4): pure
+ * arithmetic on the runs, so exact. `tooling`: strokeTooling; `half`: the
+ * bed's half length (the punch runs as set up there). null when none does.
+ */
+export function clearSlide(tooling, half = Infinity) {
+  const runs = trimRuns(tooling.fitted, tooling.punchTrim, half);
+  const bent = tooling.bent.flat();
+  const flat = tooling.flat || [];
+  const works = (slide) => {
+    const at = shiftRuns(runs, slide);
+    const covered = bent.every(([a, b]) => at.some(([c, d]) => c <= a + 1e-6 && d >= b - 1e-6));
+    return covered && overlapLength(at, flat) <= 1e-6;
+  };
+  const tries = [0];
+  for (const [c, d] of runs) {
+    for (const [a, b] of bent) tries.push(a - c, b - d);
+    for (const [a, b] of flat) tries.push(a - d, b - c);
+  }
+  const fine = tries.filter(works).sort((p, q) => Math.abs(p) - Math.abs(q));
+  return fine.length ? Math.round(fine[0] * 1e6) / 1e6 : null;
+}
+
 // Total length of the overlap of two sorted lists of runs.
 const overlapLength = (runs, others) =>
   runs.reduce(
@@ -1046,7 +1221,9 @@ const overlapLength = (runs, others) =>
  * the first bend, measured from the middle of the stroke. { fitted (the runs
  * fitted to the bend), punch, die (trimmed by the first bend's `punchTrim` /
  * `dieTrim` and kept on a bed `bed` mm long), punchTrim, dieTrim (0 when
- * fitted), bent (each member's intervals: [[s0, s1], …] per member) }.
+ * fitted), bent (each member's intervals: [[s0, s1], …] per member), flat
+ * (the material on the line this stroke leaves flat, [[s0, s1], …] in order,
+ * piece pick §5.4: what breaks a run) }.
  */
 export function strokeTooling(fold, bendIds, { bed = null } = {}) {
   const ids = Array.isArray(bendIds) ? bendIds : [bendIds];
@@ -1057,19 +1234,27 @@ export function strokeTooling(fold, bendIds, { bed = null } = {}) {
   const s0 = Math.min(...kept.map((i) => i[0])),
     s1 = Math.max(...kept.map((i) => i[1]));
   const sMid = (s0 + s1) / 2;
-  const fitted = toolingRuns(fold, bend, kept)
-    .map(([a, b]) => [a - sMid, b - sMid])
-    .sort((p, q) => p[0] - q[0]);
+  const material = lineMaterial(fold, bend, kept);
+  const fitted = material.runs.map(([a, b]) => [a - sMid, b - sMid]).sort((p, q) => p[0] - q[0]);
   const half = bed ? bed / 2 : Infinity;
+  // The sheet slid (sheet slide §4): the punch stands `slide` along u off the
+  // middle, its run on the bed (centred on the punch); the die stays under the bend.
+  const slide = bend.slide || 0;
   return {
     fitted,
-    punch: trimRuns(fitted, bend.punchTrim, half),
-    die: trimRuns(fitted, bend.dieTrim, half),
+    punch: slide ? shiftRuns(trimRuns(fitted, bend.punchTrim, half), slide) : trimRuns(fitted, bend.punchTrim, half),
+    die: slide
+      ? clampRuns(trimRuns(fitted, bend.dieTrim), half, slide - half, slide + half)
+      : trimRuns(fitted, bend.dieTrim, half),
     punchTrim: bend.punchTrim || 0,
     dieTrim: bend.dieTrim || 0,
+    slide,
+    // Where s 0 lies on the flat blank (the first bend's line, from the middle): for the card's punch bar.
+    line: { a: [bend.a[0] + bend.u[0] * sMid, bend.a[1] + bend.u[1] * sMid], u: bend.u },
     bent: members.map((m) =>
       m.intervals.map((iv) => iv.map((s) => along(m, s) - sMid).sort((p, q) => p - q)).sort((p, q) => p[0] - q[0]),
     ),
+    flat: material.flat.map(([a, b]) => [a - sMid, b - sMid]).sort((p, q) => p[0] - q[0]),
   };
 }
 
@@ -1111,7 +1296,16 @@ export function toolLengths(fold, bendIds, { bed = null } = {}) {
     if (tooling.fitted.length === 1 && runs.length === 1) return `${Number((runs[0][1] - runs[0][0]).toFixed(1))} mm`;
     return `${runs.length} sections, ${fmt(Math.abs(trim))} mm ${trim > 0 ? 'shorter' : 'longer'} at each end`;
   };
-  return { punch: words(tooling.punch, tooling.punchTrim), die: words(tooling.die, tooling.dieTrim) };
+  // A slid punch (docs/sketch-studio-sheet-slide.md §4): "9 mm off centre", no left or right (a
+  // stored step does not say which way round the sheet went); a fitted one slid names its length too.
+  const fittedLength =
+    tooling.fitted.length === 1 && tooling.punch.length === 1
+      ? `${Number((tooling.punch[0][1] - tooling.punch[0][0]).toFixed(1))} mm`
+      : 'fitted';
+  const slid = tooling.slide
+    ? `${words(tooling.punch, tooling.punchTrim) || fittedLength}, ${fmt(Math.abs(tooling.slide))} mm off centre`
+    : null;
+  return { punch: slid || words(tooling.punch, tooling.punchTrim), die: words(tooling.die, tooling.dieTrim) };
 }
 
 /**
@@ -1119,7 +1313,9 @@ export function toolLengths(fold, bendIds, { bed = null } = {}) {
  * ('punch', 'die') { runs, length (of it under the bend), short: [start,
  * end] (mm of the bend's extent it leaves bare at each end), bare (the tab
  * numbers, 1-based, it stands over nowhere), shortest (its shortest run, or
- * 0 with none) }, and `bend` the bend's total length. `tooling`: strokeTooling.
+ * 0 with none), overFlat (mm of it over material the stroke leaves flat, piece
+ * pick §5.4) }, `bend` the bend's total length, `pieces` the stretches of
+ * material it bends and `extent` their span end to end. `tooling`: strokeTooling.
  */
 export function toolingCover(tooling) {
   const bent = tooling.bent.flat().sort((p, q) => p[0] - q[0]);
@@ -1136,8 +1332,15 @@ export function toolingCover(tooling) {
       : [ends[1] - ends[0], ends[1] - ends[0]],
     bare: tooling.bent.flatMap((intervals, k) => (overlapLength(runs, intervals) > 1e-6 ? [] : [k + 1])),
     shortest: runs.length ? Math.min(...runs.map(([a, b]) => b - a)) : 0,
+    overFlat: overlapLength(runs, tooling.flat || []),
   });
-  return { bend: length, punch: tool(tooling.punch), die: tool(tooling.die) };
+  return {
+    bend: length,
+    pieces: bent.length,
+    extent: ends[1] - ends[0],
+    punch: tool(tooling.punch),
+    die: tool(tooling.die),
+  };
 }
 
 /**

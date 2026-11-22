@@ -645,6 +645,50 @@ export function roofMaterialKeyForCovering(kind) {
   return 'roof_tile';
 }
 
+// ── Per-owner material keys (docs/multi-roof.md §6) ──────────────────────────
+
+/**
+ * The palette keys a roof is drawn in. Each roof wears its own copy of them,
+ * keyed by its id (`ownerMaterialKey`), so two roofs can be two colours.
+ */
+export const ROOF_OWNER_MATERIAL_KEYS = Object.freeze([
+  'roof_metal',
+  'roof_tile',
+  'roof_membrane',
+  'roof_slab',
+  'roofRidgeCap',
+  'roofTrim',
+  'roofGutter',
+  'roofDownpipe',
+  'roofSoffit',
+]);
+/** The palette keys a truss system's gable-end closures are drawn in, keyed by the system's id. */
+export const CLOSURE_OWNER_MATERIAL_KEYS = Object.freeze(['gableInfill']);
+
+const OWNER_KEY_SEPARATOR = '@';
+const OWNER_BASE_KEYS = new Set([...ROOF_OWNER_MATERIAL_KEYS, ...CLOSURE_OWNER_MATERIAL_KEYS]);
+
+/**
+ * `roof_metal@roof_abc_1`: the base key's material, as worn by one owner (a
+ * roof for the roof keys, a truss system for `gableInfill`). The key names the
+ * owner and never the colour, so a colour edit leaves every descriptor equal
+ * and the preview cache carries the meshes over; the colour reaches the
+ * owner's material at runtime (`applyRoofAppearanceToPalette`).
+ */
+export function ownerMaterialKey(baseKey, ownerId) {
+  return `${baseKey}${OWNER_KEY_SEPARATOR}${ownerId}`;
+}
+
+/** `{baseKey, ownerId}` for an owner key, or null for any other key. */
+export function parseOwnerMaterialKey(key) {
+  if (typeof key !== 'string') return null;
+  const at = key.indexOf(OWNER_KEY_SEPARATOR);
+  if (at <= 0 || at === key.length - 1) return null;
+  const baseKey = key.slice(0, at);
+  if (!OWNER_BASE_KEYS.has(baseKey)) return null;
+  return { baseKey, ownerId: key.slice(at + 1) };
+}
+
 // Mirrors `DEFAULT_END_CLOSURE_COLOUR` in trussModels.js (which imports this
 // module, so the default is restated here rather than imported back).
 const DEFAULT_CLOSURE_COLOUR = Object.freeze({
@@ -654,30 +698,36 @@ const DEFAULT_CLOSURE_COLOUR = Object.freeze({
   solarAbsorptance: null,
 });
 
-/**
- * What the 3D preview paints the roof with, read through the normalizers so
- * an old save without a covering still answers. `closures` carries the
- * gable-end infill colour (RT-2): the preview has one `gableInfill` material,
- * so the colour is per truss system and the FIRST system's wins
- * (docs/roof-truss-industrial.md §4.3 amendment). A project with trusses but no
- * roof still answers for its closures; covering, trims and soffit are null
- * then, and the palette keeps their colours.
- */
-export function resolveRoofAppearance(roofSystem, trussSystems = []) {
-  const closureSource = (trussSystems || []).find((entry) => entry && typeof entry === 'object') || null;
-  const closures = closureSource
-    ? [{ hex: normalizeRoofColour(closureSource.endClosures?.colour, DEFAULT_CLOSURE_COLOUR).hex }]
-    : [];
-  if (!roofSystem) {
-    return closures.length ? { covering: null, trims: null, soffit: null, closures } : null;
-  }
+function resolveOneRoofAppearance(roofSystem) {
   const roofType = roofSystem.roofType || 'flat';
   const covering = normalizeRoofCovering(roofSystem.covering, roofType, roofSystem.slabThickness);
   const trims = normalizeRoofTrims(roofSystem.trims, roofType);
   return {
+    id: roofSystem.id,
     covering: { kind: covering.kind, hex: covering.colour.hex, finish: covering.finish },
     trims: { hex: trims.colour.hex },
     soffit: { hex: trims.soffit.colour.hex },
-    closures,
   };
+}
+
+/**
+ * What the 3D preview paints each roof and each truss system's gable-end
+ * closures with, read through the normalizers so an old save without a
+ * covering still answers: `{roofs: [{id, covering, trims, soffit}], closures:
+ * [{id, hex}]}`, one entry per roof and per truss system, in project order.
+ * Every owner wears its own materials (docs/multi-roof.md §6), so nothing here
+ * picks a winner. Null when there is neither.
+ */
+export function resolveRoofAppearances(roofs = [], trussSystems = []) {
+  const roofEntries = (roofs || [])
+    .filter((roofSystem) => roofSystem && typeof roofSystem === 'object' && roofSystem.id)
+    .map(resolveOneRoofAppearance);
+  const closures = (trussSystems || [])
+    .filter((entry) => entry && typeof entry === 'object' && entry.id)
+    .map((entry) => ({
+      id: entry.id,
+      hex: normalizeRoofColour(entry.endClosures?.colour, DEFAULT_CLOSURE_COLOUR).hex,
+    }));
+  if (!roofEntries.length && !closures.length) return null;
+  return { roofs: roofEntries, closures };
 }

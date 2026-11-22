@@ -11,6 +11,29 @@ import ExpressionInput, { ParameterContext } from './ExpressionInput.jsx';
 import NumericInput from '../components/NumericInput.jsx';
 import { FieldSessionContext, LIVE_DEBOUNCE_MS, liveFieldValue, stepFieldValue } from './liveField.js';
 
+// What a number field's handler returns when the text it was given reads as
+// no number. The field then shows the value in force again, as every number
+// box in the app does on commit (src/hooks/useNumericDraft.js), instead of
+// keeping the text on screen with nothing said about it.
+export const NOT_A_NUMBER = Symbol('not a number');
+// A typed value (a number or =expression) for `handler`; anything else
+// changes nothing and is NOT_A_NUMBER.
+export const numberFor = (values) => (handler) => (value) => {
+  let resolved;
+  try {
+    resolved = numeric(value, values || {});
+  } catch {
+    return NOT_A_NUMBER;
+  }
+  if (!Number.isFinite(resolved)) return NOT_A_NUMBER;
+  handler(resolved);
+};
+// numberFor with the workspace's parameter values.
+export function useNumber() {
+  const { values } = useContext(ParameterContext);
+  return numberFor(values);
+}
+
 // A Properties field (Phase L, docs/sketch-studio-live-fields.md §3). The
 // value applies as you type, LIVE_DEBOUNCE_MS after the last keystroke,
 // whenever the text is committable (liveFieldValue): onChange(next, { live:
@@ -66,7 +89,7 @@ export function ValueField({ label, value, onChange, asText = false, live = true
   const send = (next, meta) => {
     if (channel) channel.current = meta;
     try {
-      latest.current(next, meta);
+      return latest.current(next, meta);
     } finally {
       if (channel) channel.current = null;
     }
@@ -116,10 +139,12 @@ export function ValueField({ label, value, onChange, asText = false, live = true
           const text = raw.trim();
           if (text === String(value ?? '')) return;
           if (liveFieldValue(text, { asText, values }) === undefined) setHeld({ text: raw, value });
-          send(!asText && text !== '' && Number.isFinite(Number(text)) ? Number(text) : text, {
+          const taken = send(!asText && text !== '' && Number.isFinite(Number(text)) ? Number(text) : text, {
             live: false,
             session: session.session,
           });
+          // A number field that could not read it: the value in force shows again.
+          if (taken === NOT_A_NUMBER) setHeld(null);
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur();

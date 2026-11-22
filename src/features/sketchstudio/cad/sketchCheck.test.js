@@ -316,6 +316,49 @@ describe('fixes', () => {
     expect(stale.entities).toBe(fixed.entities);
     expect(stale.message).toBe('That problem is no longer in the drawing.');
   });
+
+  it('leaves a sound selection: a dimension it took away is let go, an action left with nothing ends', () => {
+    next = 0;
+    const drawing = [rect([0, 0], [100, 50]), circle([50, 25], 0.002), circle([20, 25], 5)];
+    const onTiny = { id: 'd1', type: 'radial', mode: 'diameter', center: [50, 25], radius: 0.002, at: [50, 40] };
+    const onHole = { id: 'd2', type: 'radial', mode: 'diameter', center: [20, 25], radius: 5, at: [20, 40] };
+    const start = createSketchState(drawing, {}, [onTiny, onHole]);
+    const problem = checkDrawing(drawing).problems.find((p) => p.kind === 'tiny');
+    const run = (state, ...actions) => actions.reduce(sketchReducer, state);
+    const click = (point) => ({ type: 'click', point });
+    // The dimension on the tiny circle selected: Remove it takes both, and the selection with them.
+    const fixed = run(start, { type: 'select', dimensionId: 'd1' }, { type: 'fix', problem });
+    expect(fixed.dimensions).toEqual([onHole]);
+    expect(fixed.selectedDimensionId).toBe(null);
+    // One the fix leaves stays selected.
+    expect(run(start, { type: 'select', dimensionId: 'd2' }, { type: 'fix', problem }).selectedDimensionId).toBe('d2');
+    // Move on the tiny circle alone: the fix ends it, and the next click adds no step.
+    const moving = run(start, { type: 'select', id: 'e2' }, { type: 'op', kind: 'move' }, click([50, 25]));
+    const ended = sketchReducer(moving, { type: 'fix', problem });
+    expect(ended).toMatchObject({ op: null, selectedIds: [] });
+    expect(sketchReducer(ended, click([60, 25])).history.undo).toHaveLength(1);
+    // Copy ends as Esc ends it: its copies that remain become the selection.
+    const copying = run(
+      start,
+      { type: 'select', id: 'e2' },
+      { type: 'op', kind: 'copy' },
+      click([50, 25]),
+      click([50, 45]),
+    );
+    expect(copying.op.copies).toEqual(['e4']);
+    expect(sketchReducer(copying, { type: 'fix', problem })).toMatchObject({ op: null, selectedIds: ['e4'] });
+    // With a selection left the action goes on.
+    const both = run(
+      start,
+      { type: 'select', id: 'e2' },
+      { type: 'select', id: 'e3', toggle: true },
+      { type: 'op', kind: 'move' },
+    );
+    expect(sketchReducer(both, { type: 'fix', problem })).toMatchObject({
+      op: { kind: 'move', step: 'base' },
+      selectedIds: ['e3'],
+    });
+  });
 });
 
 describe('agreement with entitiesToProfile', () => {

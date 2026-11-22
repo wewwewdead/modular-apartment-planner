@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { findSheetFor } from './model.js';
 import { memberIds, sheetSubject, treeRows } from './groups.js';
 import { LOADING_COPY, renderingSheetPdf } from '@/ui/loading';
@@ -119,7 +119,12 @@ export default function SheetsPanel({
   }, [focus]);
   const [checked, setChecked] = useState(() => new Set());
   const [renaming, setRenaming] = useState(null);
-  const rows = flatRows(treeRows(model));
+  // The tree reads only the instances and groups: once per change to either,
+  // not on every render of the panel.
+  const rows = useMemo(
+    () => flatRows(treeRows({ instances: model.instances, groups: model.groups })),
+    [model.instances, model.groups],
+  );
   // Parts in tree order (a part's first instance), then any part not placed.
   const partIds = [
     ...new Set([

@@ -1,8 +1,6 @@
 import {
-  cancelAnchorDrag,
   cancelHandleDrag,
   cancelTransform,
-  endAnchorDrag,
   endHandleDrag,
   endPan,
   endSelectionBox,
@@ -30,7 +28,6 @@ export const INTERACTION_END = Object.freeze({
   panning: Object.freeze({ release: 'end', abort: 'end', escape: 'end', undo: 'end' }),
   'selection-box': Object.freeze({ release: 'end', abort: 'end', escape: 'end', undo: 'end' }),
   'handle-drag': Object.freeze({ release: 'commit', abort: 'commit', escape: 'cancel', undo: 'cancel' }),
-  'anchor-drag': Object.freeze({ release: 'commit', abort: 'commit', escape: 'cancel', undo: 'cancel' }),
   transform: Object.freeze({ release: 'commit', abort: 'commit', escape: 'cancel', undo: 'cancel' }),
 });
 
@@ -38,7 +35,6 @@ const END_ACTIONS = {
   panning: { end: endPan },
   'selection-box': { end: endSelectionBox },
   'handle-drag': { commit: endHandleDrag, cancel: cancelHandleDrag },
-  'anchor-drag': { commit: endAnchorDrag, cancel: cancelAnchorDrag },
   transform: { commit: endTransform, cancel: cancelTransform },
 };
 

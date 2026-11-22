@@ -389,7 +389,7 @@ function createSceneDescriptor(floors) {
     activeFloorId: floors[0]?.floorId || null,
     visibleFloorIds: floors.filter((f) => f.visible).map((f) => f.floorId),
     floors,
-    roofLayerId: null,
+    roofLayerIds: [],
     bounds: { minX: 0, maxX: 10000, minY: 0, maxY: 10000, minElevation: 0, maxElevation: 3000 },
     groundLevel: 0,
     hasVisibleObjects: true,

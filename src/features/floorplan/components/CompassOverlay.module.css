@@ -4,9 +4,11 @@
   padding: 8px;
   border: 1px solid rgba(87, 98, 112, 0.24);
   border-radius: 20px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(244, 247, 250, 0.8));
+  /* Nearly opaque, and no backdrop blur: the compass sits over the live 3D
+     canvas, which changes every frame, and a blur behind it was re-run every
+     frame for a frosted look. */
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(244, 247, 250, 0.93));
   box-shadow: 0 10px 24px rgba(22, 28, 34, 0.12);
-  backdrop-filter: blur(8px);
 }
 
 .rose {

@@ -100,7 +100,7 @@ describe('filterProjectByPhase — project-level collections', () => {
       id: 'proj-1',
       phases: PHASES,
       floors: [floorFixture()],
-      roofSystem: null,
+      roofSystems: [],
       trussSystems: [{ id: 'truss_p1', phaseId: 'p1' }],
       ceilings: [
         { id: 'ceiling_p1', floorId: 'floor-1', phaseId: 'p1' },
@@ -130,6 +130,19 @@ describe('filterProjectByPhase — project-level collections', () => {
   it('returns the project untouched on the All-view fast path', () => {
     const project = projectFixture();
     expect(filterProjectByPhase(project, null, PHASE_VIEW.ALL)).toBe(project);
+  });
+
+  it('filters each roof on its own phase', () => {
+    const project = {
+      ...projectFixture(),
+      roofSystems: [
+        { id: 'roof_p1', phaseId: 'p1' },
+        { id: 'roof_p3', phaseId: 'p3' },
+        { id: 'roof_unphased', phaseId: null },
+      ],
+    };
+    expect(ids(filterProjectByPhase(project, 'p3', PHASE_VIEW.SINGLE).roofSystems)).toEqual(['roof_p3']);
+    expect(ids(filterProjectByPhase(project, 'p3', PHASE_VIEW.CUMULATIVE).roofSystems)).toEqual(['roof_p1', 'roof_p3']);
   });
 });
 

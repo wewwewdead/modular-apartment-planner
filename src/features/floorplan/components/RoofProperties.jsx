@@ -8,6 +8,7 @@ import {
   createRoofSystemForProject,
   deriveRoofBoundaryFromProject,
   getAttachableRoofTrussSystems,
+  getRooflessRoofTrussSystems,
   getRoofTypeLabel,
   roofPitchDirectionFromAngle,
   roofPitchDirectionToAngle,
@@ -20,6 +21,7 @@ import {
   resolveParapetLine,
 } from '@/geometry/roofPlanGeometry';
 import { buildRoofScheduleSummary } from '@/roof/roofSchedule';
+import { getRoofForTrussSystem } from '@/domain/projectRoofs';
 import { isRoofAccessOpening, isSkylightRoofOpening, normalizeRoofOpeningType } from '@/roof/openings';
 import { polygonArea } from '@/geometry/polygon';
 import { resolveTrussSystemRoofAttachmentType } from '@/truss/roofAttachment';
@@ -89,7 +91,8 @@ function parapetPlacementHint(roofSystem) {
 }
 
 export function RoofEmptyState({ project, dispatch, editorDispatch, activePhaseId = null }) {
-  const attachableTrussSystems = getAttachableRoofTrussSystems(project);
+  // Only systems that carry no roof yet: one roof per truss system.
+  const attachableTrussSystems = getRooflessRoofTrussSystems(project);
   const [preferredTrussSystemId, setPreferredTrussSystemId] = useState(attachableTrussSystems[0]?.id || '');
   const selectedTrussSystemId = attachableTrussSystems.some((entry) => entry.id === preferredTrussSystemId)
     ? preferredTrussSystemId
@@ -209,7 +212,7 @@ export function RoofSystemProperties({
       },
     );
 
-    dispatch({ type: 'ROOF_PLANE_ADD', roofPlane: nextPlane });
+    dispatch({ type: 'ROOF_PLANE_ADD', roofId: roofSystem.id, roofPlane: nextPlane });
     editorDispatch({ type: 'SELECT_OBJECT', id: nextPlane.id, objectType: 'roofPlane' });
   };
 
@@ -257,17 +260,22 @@ export function RoofSystemProperties({
               Select truss system
             </option>
           )}
-          {trussSystems.map((trussSystem) => (
-            <option
-              key={trussSystem.id}
-              value={trussSystem.id}
-              disabled={!resolveTrussSystemRoofAttachmentType(trussSystem)}
-            >
-              {resolveTrussSystemRoofAttachmentType(trussSystem)
-                ? trussSystem.name
-                : `${trussSystem.name} (roof fit unavailable)`}
-            </option>
-          ))}
+          {trussSystems.map((trussSystem) => {
+            // One roof per truss system: a system another roof sits on is not
+            // offered (the store would refuse the move anyway).
+            const otherRoof = getRoofForTrussSystem(project, trussSystem.id);
+            const takenByOtherRoof = Boolean(otherRoof && otherRoof.id !== roofSystem.id);
+            const roofReady = Boolean(resolveTrussSystemRoofAttachmentType(trussSystem));
+            return (
+              <option key={trussSystem.id} value={trussSystem.id} disabled={!roofReady || takenByOtherRoof}>
+                {takenByOtherRoof
+                  ? `${trussSystem.name} (has a roof)`
+                  : roofReady
+                    ? trussSystem.name
+                    : `${trussSystem.name} (roof fit unavailable)`}
+              </option>
+            );
+          })}
         </select>
       </div>
       {attachedTruss && (
@@ -870,6 +878,7 @@ export function RoofEdgeProperties({ roofEdge, roofSystem, dispatch, u }) {
   const updateRole = (edgeRole) => {
     dispatch({
       type: 'ROOF_EDGE_UPDATE',
+      roofId: roofSystem?.id || null,
       roofEdge: {
         id: roofEdge.id,
         geometryKey: roofEdge.geometryKey,

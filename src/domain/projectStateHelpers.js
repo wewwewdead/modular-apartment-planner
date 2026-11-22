@@ -1,5 +1,6 @@
 import { sortFloors } from '@/domain/floorModels';
-import { syncProjectRoofSystem } from '@/domain/roofModels';
+import { getProjectRoofs } from '@/domain/projectRoofs';
+import { syncProjectRoofSystems } from '@/domain/roofModels';
 import { syncProjectTrussSystems } from '@/domain/trussModels';
 import { syncCanonicalBuilding } from '@/domain/buildingModels';
 import { syncProjectWallHeights } from '@/domain/wallFit';
@@ -9,7 +10,7 @@ export const HISTORY_LIMIT = 100;
 // Wall heights are fitted first: the massing, roof and truss syncs downstream
 // read wall tops, so they must see the height the wall actually ends up with.
 export function syncProjectStructures(project) {
-  return syncCanonicalBuilding(syncProjectRoofSystem(syncProjectTrussSystems(syncProjectWallHeights(project))));
+  return syncCanonicalBuilding(syncProjectRoofSystems(syncProjectTrussSystems(syncProjectWallHeights(project))));
 }
 
 export function applyProjectUpdate(state, nextProject, recordHistory = true) {
@@ -65,14 +66,40 @@ export function replaceFloors(state, floors, recordHistory = true) {
   );
 }
 
-export function updateRoofSystem(state, updater, recordHistory = true) {
-  const nextRoofSystem = updater(state.project.roofSystem);
+/**
+ * Replaces the project's roof list with what `updater` makes of it. An updater
+ * that hands the list back untouched is no edit: the state is returned as it
+ * was, with no history entry (a refused ROOF_CREATE, say).
+ */
+export function updateRoofSystems(state, updater, recordHistory = true) {
+  const roofSystems = getProjectRoofs(state.project);
+  const nextRoofSystems = updater(roofSystems);
+  if (nextRoofSystems === roofSystems) return state;
   return applyProjectUpdate(
     state,
     {
       ...state.project,
       updatedAt: new Date().toISOString(),
-      roofSystem: nextRoofSystem,
+      roofSystems: nextRoofSystems,
+    },
+    recordHistory,
+  );
+}
+
+/**
+ * Updates the one roof `roofId` names; the other roofs keep their identity.
+ * No such roof, or an updater that returns the roof it was given, leaves the
+ * state as it was.
+ */
+export function updateRoofSystem(state, roofId, updater, recordHistory = true) {
+  return updateRoofSystems(
+    state,
+    (roofSystems) => {
+      const index = roofSystems.findIndex((roofSystem) => roofSystem.id === roofId);
+      if (index === -1) return roofSystems;
+      const nextRoofSystem = updater(roofSystems[index]);
+      if (nextRoofSystem === roofSystems[index]) return roofSystems;
+      return roofSystems.map((roofSystem, roofIndex) => (roofIndex === index ? nextRoofSystem : roofSystem));
     },
     recordHistory,
   );

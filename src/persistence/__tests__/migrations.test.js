@@ -781,13 +781,14 @@ describe('migration_29_to_30 roof covering and edge-kit backfill', () => {
   it('backfills through a full deserialize from schema 29', async () => {
     const { deserializeProject } = await import('../deserialize.js');
     const { createProject } = await import('@/domain/models');
-    const payload = createProject('Pre-covering save');
+    // A schema-29 file holds the single roof slot, not the list (schema 32).
+    const { roofSystems: _roofList, ...payload } = createProject('Pre-covering save');
     payload.roofSystem = { id: 'roof_1', name: 'Roof', roofType: 'shed' };
 
     const { project } = deserializeProject({ schemaVersion: 29, version: payload.version, data: payload });
 
-    expect(project.roofSystem.covering.kind).toBe('metal_corrugated');
-    expect(project.roofSystem.trims.fascia.enabled).toBe(true);
+    expect(project.roofSystems[0].covering.kind).toBe('metal_corrugated');
+    expect(project.roofSystems[0].trims.fascia.enabled).toBe(true);
     expect(project.version).toBe(23);
   });
 });
@@ -875,9 +876,81 @@ describe('migration_30_to_31 attached roof attachmentOffset reset (RT-3.1)', () 
     expect(demo.data.roofSystem.attachmentOffset).toBe(-200);
 
     const { project } = deserializeProject(demo);
-    expect(project.roofSystem.attachmentOffset).toBe(0);
+    expect(project.roofSystems[0].attachmentOffset).toBe(0);
     const synced = syncProjectStructures(project);
-    expect(synced.roofSystem.attachmentOffset).toBe(0);
-    expect(synced.roofSystem.baseElevation).toBeCloseTo(getRoofAttachmentElevation(synced, synced.roofSystem), 6);
+    expect(synced.roofSystems[0].attachmentOffset).toBe(0);
+    expect(synced.roofSystems[0].baseElevation).toBeCloseTo(
+      getRoofAttachmentElevation(synced, synced.roofSystems[0]),
+      6,
+    );
+  });
+});
+
+describe('migration_31_to_32 one roof slot becomes a roof list (MR-1)', () => {
+  const migrate = async (project) => (await import('../migrations/migration_31_to_32.js')).migrateV31toV32(project);
+
+  it('moves the one roof into the list, untouched and with its id, and drops the slot', async () => {
+    const roofSystem = { id: 'roof_1', name: 'Roof', roofType: 'gable', trussAttachmentId: 'ts_1' };
+    const result = await migrate({ id: 'p1', version: 23, floors: [], roofSystem });
+
+    expect(result.roofSystems).toEqual([roofSystem]);
+    expect(result.roofSystems[0]).toBe(roofSystem);
+    expect(result).not.toHaveProperty('roofSystem');
+    expect(result.version).toBe(23);
+  });
+
+  it('turns no roof into an empty list', async () => {
+    expect(await migrate({ id: 'p1', floors: [], roofSystem: null })).toEqual({
+      id: 'p1',
+      floors: [],
+      roofSystems: [],
+    });
+    expect(await migrate({ id: 'p1', floors: [] })).toEqual({ id: 'p1', floors: [], roofSystems: [] });
+  });
+
+  it('keeps a list a newer build already wrote', async () => {
+    const roofs = [{ id: 'roof_1' }, { id: 'roof_2' }];
+    expect((await migrate({ id: 'p1', floors: [], roofSystems: roofs })).roofSystems).toBe(roofs);
+  });
+
+  it('loads the playground demo with its one roof, same id', async () => {
+    const { deserializeProject } = await import('../deserialize.js');
+    const demo = (await import('@/pages/playground-demo.json')).default;
+    const storedRoofId = demo.data.roofSystem.id;
+
+    const { project } = deserializeProject(demo);
+
+    expect(project.roofSystems).toHaveLength(1);
+    expect(project.roofSystems[0].id).toBe(storedRoofId);
+    expect(project).not.toHaveProperty('roofSystem');
+  });
+
+  it('leaves the document signature of a single-roof file where it was', async () => {
+    const { deriveDocumentModelSignature } = await import('@/domain/documentSignature');
+    // The signature as it was computed before schema 32, off the one roof slot.
+    // Sheets store it and compare it with the live one, so the list of one must
+    // hash the same or every issued sheet would read as out of date after the upgrade.
+    const legacySignature = (project) => {
+      const serialized = JSON.stringify({
+        building: project.building,
+        floors: project.floors,
+        roofSystem: project.roofSystem,
+        trussSystems: project.trussSystems,
+        ceilings: project.ceilings,
+      });
+      let hash = 2166136261;
+      for (let index = 0; index < serialized.length; index += 1) {
+        hash ^= serialized.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+      }
+      return (hash >>> 0).toString(16).padStart(8, '0');
+    };
+    const roofSystem = { id: 'roof_1', name: 'Roof', roofType: 'gable' };
+    const base = { id: 'p1', building: { id: 'b1' }, floors: [], trussSystems: [], ceilings: [] };
+
+    const oneRoof = { ...base, roofSystem };
+    expect(deriveDocumentModelSignature(await migrate(oneRoof))).toBe(legacySignature(oneRoof));
+    const noRoof = { ...base, roofSystem: null };
+    expect(deriveDocumentModelSignature(await migrate(noRoof))).toBe(legacySignature(noRoof));
   });
 });

@@ -83,7 +83,7 @@ export function resolveRoofBearingOutline(roofSystem, trussSystem = null) {
  * plain value or a project object reference, so a preview cache keyed on it
  * stays honest (see `buildPreviewScene`).
  */
-export function resolveRoofEdgeKitContext(project, roofSystem = project?.roofSystem || null) {
+export function resolveRoofEdgeKitContext(project, roofSystem = null) {
   const trussSystem =
     roofSystem?.trussAttachmentId && project ? getProjectTrussSystem(project, roofSystem.trussAttachmentId) : null;
   return {

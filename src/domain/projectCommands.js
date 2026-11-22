@@ -38,10 +38,13 @@ export function replaceDeletedFloorReferences(project, deletedFloorId, fallbackF
 }
 
 /**
- * Clear stair roof-access references (all, or for a specific roofOpeningId).
- * Pure function: (project, roofOpeningId?) => nextProject
+ * Clear stair roof-access references: all of them, those through one
+ * roofOpeningId, or those through any of a list of ids (a deleted roof's
+ * openings; an empty list clears nothing).
+ * Pure function: (project, roofOpeningId? | roofOpeningIds[]) => nextProject
  */
 export function clearStairRoofAccessReferences(project, roofOpeningId = null) {
+  const clearedIds = Array.isArray(roofOpeningId) ? new Set(roofOpeningId) : null;
   return {
     ...project,
     floors: (project.floors || []).map((floor) => ({
@@ -49,7 +52,8 @@ export function clearStairRoofAccessReferences(project, roofOpeningId = null) {
       stairs: (floor.stairs || []).map((stair) => {
         const currentRoofOpeningId = stair.roofAccess?.roofOpeningId || null;
         if (!currentRoofOpeningId) return stair;
-        if (roofOpeningId && currentRoofOpeningId !== roofOpeningId) return stair;
+        if (clearedIds && !clearedIds.has(currentRoofOpeningId)) return stair;
+        if (!clearedIds && roofOpeningId && currentRoofOpeningId !== roofOpeningId) return stair;
         return { ...stair, roofAccess: null };
       }),
     })),

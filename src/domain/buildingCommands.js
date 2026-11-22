@@ -9,6 +9,7 @@ import {
 } from './buildingModels';
 import { validateBuildingCoordination } from './buildingGraph';
 import { applyColumnUpdate } from './projectCommands';
+import { findRoofOwner, getProjectRoof, getProjectRoofs } from './projectRoofs';
 import { deriveAreaLedger, isSimplePolygon } from './siteModels';
 import { isValidTraverseLine, traverseBoundary } from './surveyTraverse';
 import { ROOM_USE_CATEGORIES, createSpaceProgram, createUnitInstance, createUnitType } from './apartmentProgram';
@@ -1109,7 +1110,7 @@ function configureEquipmentZone(project, command) {
       'Floor-hosted equipment must reference an existing floor.',
     );
   }
-  if (command.location === 'roof' && !project.roofSystem) {
+  if (command.location === 'roof' && !getProjectRoofs(project).length) {
     return commandError(project, command, 'equipment-roof-missing', 'Roof-hosted equipment requires a modeled roof.');
   }
   const zone = createEquipmentZone({ ...command, id: command.zoneId });
@@ -1214,7 +1215,13 @@ function configureElectricalPoint(project, command) {
 }
 
 function configureRoofDrainagePath(project, command) {
-  if (!project.roofSystem) return commandError(project, command, 'roof-system-missing', 'A modeled roof is required.');
+  // The roof the command names, else the roof that already holds the drain, else the first roof.
+  const targetRoof =
+    getProjectRoof(project, command.roofId) ||
+    findRoofOwner(project, 'drain', command.drainId) ||
+    getProjectRoofs(project)[0] ||
+    null;
+  if (!targetRoof) return commandError(project, command, 'roof-system-missing', 'A modeled roof is required.');
   if (
     !command.drainId ||
     !validPoint(command.position) ||
@@ -1259,7 +1266,7 @@ function configureRoofDrainagePath(project, command) {
       'Roof drain plumbing-shaft outlet was not found.',
     );
   }
-  const existing = (project.roofSystem.drains || []).find((entry) => entry.id === command.drainId);
+  const existing = (targetRoof.drains || []).find((entry) => entry.id === command.drainId);
   const drain = createDrain(command.position, {
     ...existing,
     id: command.drainId,
@@ -1271,17 +1278,18 @@ function configureRoofDrainagePath(project, command) {
     routePoints: command.routePoints,
   });
   const drainageProfile = {
-    ...(project.roofSystem.drainageProfile || {}),
+    ...(targetRoof.drainageProfile || {}),
     ...(command.profile || {}),
   };
   const roofSystem = {
-    ...project.roofSystem,
+    ...targetRoof,
     drainageProfile,
     drains: existing
-      ? project.roofSystem.drains.map((entry) => (entry.id === drain.id ? drain : entry))
-      : [...(project.roofSystem.drains || []), drain],
+      ? targetRoof.drains.map((entry) => (entry.id === drain.id ? drain : entry))
+      : [...(targetRoof.drains || []), drain],
   };
-  return commandSuccess(project, { ...project, roofSystem }, command, [
+  const roofSystems = getProjectRoofs(project).map((entry) => (entry.id === targetRoof.id ? roofSystem : entry));
+  return commandSuccess(project, { ...project, roofSystems }, command, [
     { operation: existing ? 'replace' : 'create', entityType: 'roofDrain', id: drain.id, outletRef: drain.outletRef },
   ]);
 }

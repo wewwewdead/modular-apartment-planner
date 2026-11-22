@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { buildFloorObjectGroup, buildPreviewObjectRoot } from './buildPreviewObjects';
-import { createMaterialPalette } from './materials';
+import { createMaterialPalette, paletteMaterialFor } from './materials';
 import { buildPreviewScene } from '@/three/scene/buildPreviewScene';
 import { deserializeProject } from '@/persistence/deserialize';
 import demoData from '@/pages/playground-demo.json';
@@ -14,7 +14,7 @@ import demoData from '@/pages/playground-demo.json';
 function roofFloor() {
   const { project } = deserializeProject(demoData);
   const scene = buildPreviewScene(project);
-  return { project, scene, floor: scene.floors.find((entry) => entry.floorId === project.roofSystem.id) };
+  return { project, scene, floor: scene.floors.find((entry) => entry.floorId === project.roofSystems[0].id) };
 }
 
 function localAxis(object, axis) {
@@ -85,15 +85,20 @@ describe('the playground roof in 3D', () => {
     for (const part of ['fascia', 'gutter', 'downpipe', 'ridgeCap', 'soffit']) expect(parts.has(part), part).toBe(true);
     for (const descriptor of floor.objects.filter((entry) => entry.metadata?.part)) {
       expect(descriptor.kind).toBe('roofSystem');
-      expect(descriptor.metadata.sourceId).toBe(project.roofSystem.id);
+      expect(descriptor.metadata.sourceId).toBe(project.roofSystems[0].id);
     }
   });
 
-  it('draws the body in the covering family and the kit in its own keys', () => {
-    const body = floor.objects.find((descriptor) => descriptor.id === project.roofSystem.id);
-    expect(body.materialKey).toBe('roof_metal');
+  it("draws the body in the covering family and the kit in its own keys, all of them the roof's own", () => {
+    // docs/multi-roof.md §6: the scene points every roof key at the roof's own
+    // copy (`<key>@<roof id>`); the kit itself still emits the base keys.
+    const roofId = project.roofSystems[0].id;
+    const body = floor.objects.find((descriptor) => descriptor.id === roofId);
+    expect(body.materialKey).toBe(`roof_metal@${roofId}`);
     const keys = new Set(floor.objects.filter((d) => d.metadata?.part).map((d) => d.materialKey));
-    expect([...keys].sort()).toEqual(['roofDownpipe', 'roofGutter', 'roofRidgeCap', 'roofSoffit', 'roofTrim']);
+    expect([...keys].sort()).toEqual(
+      ['roofDownpipe', 'roofGutter', 'roofRidgeCap', 'roofSoffit', 'roofTrim'].map((key) => `${key}@${roofId}`),
+    );
   });
 
   it('meshes every descriptor with a palette material and an outline', () => {
@@ -106,7 +111,8 @@ describe('the playground roof in 3D', () => {
       entry.object.traverse((node) => {
         if (!mesh && node.isMesh) mesh = node;
       });
-      expect(mesh.material).toBe(palette[descriptor.materialKey]);
+      expect(mesh.material).toBe(paletteMaterialFor(palette, descriptor.materialKey));
+      expect(mesh.material).toBeInstanceOf(THREE.MeshStandardMaterial);
       // Outlines are cut here (palette default) and marked on the mesh.
       expect(mesh.children.some((child) => child.isLineSegments)).toBe(true);
     }
@@ -114,8 +120,8 @@ describe('the playground roof in 3D', () => {
 
   it('keeps the roof layer cache honest about what the kit reads', () => {
     const { scene } = roofFloor();
-    const roof = scene.floors.find((entry) => entry.floorId === project.roofSystem.id);
-    expect(roof.sourceKey.trussSystem?.id).toBe(project.roofSystem.trussAttachmentId);
+    const roof = scene.floors.find((entry) => entry.floorId === project.roofSystems[0].id);
+    expect(roof.sourceKey.trussSystem?.id).toBe(project.roofSystems[0].trussAttachmentId);
     expect(roof.sourceKey.groundElevation).toBe(0);
   });
 });

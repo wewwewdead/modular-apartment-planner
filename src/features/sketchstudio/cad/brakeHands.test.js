@@ -15,6 +15,7 @@ import { brakePatch, brakeSessionDefaults, brakeStation, turnAround } from './br
 import { sheetMetalKiosk } from './shopExamples.js';
 import {
   BACK_SAME,
+  CLICK_PX,
   COMMIT_DEGREES,
   backDirection,
   brakeActPatch,
@@ -52,6 +53,8 @@ import {
   turnChanged,
   typedL,
 } from './brakeHands.js';
+import { SLIDE_DETENT_PX, slideChip, slideOffer, slideReadout, slideSnap, typedSlide } from './brakeHands.js';
+import { FIRST_LIP_EDGE, lipTrayModel } from './piecePick.fixtures.js';
 
 const rect = (width, height) => ({ type: 'rectangle', width, height, origin: [0, 0] });
 const sheet = (bends = []) => ({
@@ -280,7 +283,7 @@ describe('the words on the sheet (§4.3, §5.2, §5.5)', () => {
     expect(brakeHint(false)).toBe('Click an edge of the sheet: it goes to the backgauge · F flips the sheet');
     expect(brakeHint(false, 'points')).toBe('Click two points on the flat blank · F flips the sheet');
     expect(brakeHint(true)).toBe(
-      'Drag a ring on the sheet to flip or turn it · F flip · T turn around · Enter bends · Esc clears the line',
+      'Drag a ring to flip or turn the sheet, the arrow to slide it · F flip · T turn around · Enter bends · Esc clears the line',
     );
     // No em dashes and none of the words the brief keeps off the screen.
     const words = [
@@ -304,6 +307,19 @@ describe('a drag on a handle (§5.2)', () => {
     expect(gripDrag({ travel: 9, degrees: COMMIT_DEGREES }).commit).toBe(true);
     expect(gripDrag({ travel: 9, degrees: -90 }).commit).toBe(true);
     expect(gripDrag({ travel: 9, degrees: 270 })).toMatchObject({ progress: 1, commit: true });
+  });
+  it('has the one click threshold of the viewport: 4 px, a click at or under it', () => {
+    // The rule as each of its three copies wrote it before there was one constant.
+    const frozenDeadZone = (travel) => travel > 4;
+    const frozenViewportClick = (travel) => travel <= 4;
+    const frozenPointerUpRefuses = (travel) => travel > 4;
+    expect(CLICK_PX).toBe(4);
+    for (let travel = 0; travel <= 12; travel += 0.125)
+      for (const t of [travel, 4 - 1e-9, 4, 4 + 1e-9]) {
+        expect(gripDrag({ travel: t, degrees: 30 }).dragging).toBe(frozenDeadZone(t));
+        expect(t <= CLICK_PX).toBe(frozenViewportClick(t));
+        expect(t > CLICK_PX).toBe(frozenPointerUpRefuses(t));
+      }
   });
   it('picks a handle within 12 px of its arc, the nearest first', () => {
     const arc = [
@@ -563,8 +579,8 @@ describe('an edge on the sheet (§6.1)', () => {
 });
 
 describe('what is under the pointer (§6.3)', () => {
-  it('asks in the order grip, fingers, blades, edges, and no further than it must', () => {
-    expect(HAND_ORDER).toEqual(['grip', 'fingers', 'blade', 'edge']);
+  it('asks in the order grip, fingers, blades, pieces, edges, and no further than it must', () => {
+    expect(HAND_ORDER).toEqual(['grip', 'fingers', 'blade', 'piece', 'edge']);
     let asked = [];
     const ask = (kind, found) => () => {
       asked.push(kind);
@@ -723,5 +739,50 @@ describe('the backgauge in the hand (§6.2)', () => {
       fingerReadout(187, '113.45'),
     ].join(' ');
     expect(words).not.toMatch(/—|heading|alternate|trial|gizmo/);
+  });
+});
+
+// ---------------------------------------------------------------- the sheet slid by hand (docs/sketch-studio-sheet-slide.md §6.1)
+describe('Slide sheet: the offer, the detents, the readout (sheet slide §6.1)', () => {
+  // The lip tray's first lip alone, punch 100 (9 mm past each end centred).
+  const tray = lipTrayModel();
+  const start = session({ mode: 'gauge', angle: 90 });
+  const line = brakePatch(
+    start,
+    { edge: FIRST_LIP_EDGE, distance: 15 },
+    brakeStation({ model: tray, session: start, advise: false }),
+  );
+  const lip = (extra = {}) => ({ ...line, skip: [1, 2], punchTrim: -9, ...extra });
+  const offerOf = (s) => slideOffer(brakeStation({ model: tray, session: s, advise: false }).pending.tooling, s.slide);
+  it('offers the punch, the pieces and the detents in the sheet’s move to the right', () => {
+    const offer = offerOf(lip());
+    expect(offer).toMatchObject({ offered: true, value: 0, punch: [-50, 50], bent: [-41, 41] });
+    // Centred; an end of the punch flush with an end of the lip; the punch's end at the flange's near end.
+    expect(offer.detents).toEqual([-9, -5, 0, 9]);
+    // Stopped where less than 10 mm of the punch would stand over the lip.
+    expect([offer.min, offer.max]).toEqual([-81, 81]);
+    // The session's slide −5 (along the line) is the sheet 5 mm to the left.
+    expect(offerOf(lip({ slide: -5 })).value).toBe(-5);
+    expect(slideOffer(null, 0)).toEqual({ offered: false });
+  });
+  it('snaps to a detent within 6 px, in whole mm else, a tenth with Alt (which passes through them)', () => {
+    const offer = offerOf(lip());
+    expect(SLIDE_DETENT_PX).toBe(6);
+    // 2 px per mm: −6.4 mm is 2.8 px from the −5 detent.
+    expect(slideSnap(-6.4, offer, 2)).toBe(-5);
+    expect(slideSnap(-6.4, offer, 2, { free: true })).toBe(-6.4);
+    expect(slideSnap(-20.4, offer, 2)).toBe(-20);
+    expect(slideSnap(-200, offer, 2)).toBe(-81);
+  });
+  it('says where the sheet stands: the chip, the readout per end, a typed slide', () => {
+    const offer = offerOf(lip());
+    expect(slideChip(offer)).toBe('Slide sheet · drag along the bed · centred');
+    expect(slideChip(offerOf(lip({ slide: -5 })))).toBe('Slide sheet · drag along the bed · 5 mm to the left');
+    expect(slideReadout(offer, 0)).toBe('Slide 0 · centred');
+    expect(slideReadout(offer, -9)).toBe('Slide 9 mm left · punch flush at the left, 18 mm past the right end');
+    expect(slideReadout(offer, 9)).toBe('Slide 9 mm right · punch 18 mm past the left end, flush at the right');
+    expect(typedSlide('-3')).toBe(-3);
+    expect(typedSlide('12.5')).toBe(12.5);
+    for (const bad of ['', '-', '1-', 'x']) expect(typedSlide(bad)).toBe(null);
   });
 });

@@ -15,12 +15,25 @@
  * of view or of workspace mode. Without them the tool stays the furniture tool
  * but places a kitchen top, and the menu shows nothing checked.
  *
- * Each one is read by a handler that copes with the rest of the bag empty. The
- * truss settings and `ceilingTargetFloorId` are left out because they name
- * something on one floor; `cantileverMode` and `cantileverPick` belong to a
- * plate that the reset deselects.
+ * Each one is read by a handler that copes with the rest of the bag empty: the
+ * door's swing (`openDirection`, flipped with F) and the furniture's turn
+ * (`previewRotation`, turned with R) as much as the furniture piece itself.
+ * `targetTrussSystemId` and `ceilingTargetFloorId` are left out because they
+ * name something on one floor. The truss type and material do not; they are
+ * left out with the target because they are seeded from it when the tool is
+ * entered (`Toolbar.jsx`, the T key), so a type changed in the truss panel is
+ * dropped by the reset as well, and the draw tool falls back to the
+ * catalogue's first. `cantileverMode` and `cantileverPick` belong to a plate
+ * that the reset deselects.
  */
-export const ARMED_SETTING_KEYS = Object.freeze(['fixtureType', 'deviceType', 'beamPlacementMode', 'radius']);
+export const ARMED_SETTING_KEYS = Object.freeze([
+  'fixtureType',
+  'deviceType',
+  'beamPlacementMode',
+  'radius',
+  'openDirection',
+  'previewRotation',
+]);
 
 /** The armed settings of `toolState`, and nothing else, as a fresh bag. */
 export function keepArmedSettings(toolState) {
@@ -30,6 +43,31 @@ export function keepArmedSettings(toolState) {
     if (toolState[key] != null) kept[key] = toolState[key];
   }
   return kept;
+}
+
+/**
+ * Enter a tool with a selection, settings and a prompt already in place.
+ *
+ * `SET_TOOL` clears the selection, the tool state and the status line, so
+ * whatever the tool should start with has to follow it: the object it works
+ * on, then what it is armed with, then the prompt, the order every site used.
+ * Each part is sent only when given, so a site that sends only some of them
+ * sends the same actions it always did. A function over `dispatch` rather than
+ * one reducer action, so every site keeps producing exactly the actions it
+ * produced.
+ *
+ * @param {Function} dispatch the editor dispatch
+ * @param {object} entry
+ * @param {string} entry.tool
+ * @param {{ id: string, objectType: string }} [entry.selection]
+ * @param {object} [entry.toolState] merged into the empty tool state
+ * @param {string} [entry.statusMessage]
+ */
+export function enterTool(dispatch, { tool, selection, toolState, statusMessage }) {
+  dispatch({ type: 'SET_TOOL', tool });
+  if (selection) dispatch({ type: 'SELECT_OBJECT', id: selection.id, objectType: selection.objectType });
+  if (toolState) dispatch({ type: 'UPDATE_TOOL_STATE', payload: toolState });
+  if (statusMessage != null) dispatch({ type: 'SET_STATUS_MESSAGE', message: statusMessage });
 }
 
 /**

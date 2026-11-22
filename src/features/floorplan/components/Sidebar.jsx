@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useDeferredValue, useMemo, useState } from 'react';
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
 import { useEditorState } from '@/features/floorplan/context/FloorplanContext';
 import { useConfirmDialog } from '@/ui/ConfirmDialog';
@@ -7,7 +7,9 @@ import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { getColumnListLabel } from '@/domain/columnLabels';
 import { createFloorAboveHighest, getFloorElevation, getFloorLevelIndex, getOrderedFloors } from '@/domain/floorModels';
 import { createPhase, getNextPhaseOrder, getOrderedPhases, PHASE_COLORS, reorderPhases } from '@/domain/phaseModels';
-import { getAttachableRoofTrussSystems, getRoofTypeLabel } from '@/domain/roofModels';
+import { getAttachableRoofTrussSystems, getRooflessRoofTrussSystems, getRoofTypeLabel } from '@/domain/roofModels';
+import { getProjectRoofs, resolveActiveRoof } from '@/domain/projectRoofs';
+import { addRoofToTrussSystem } from '@/features/floorplan/utils/addRoofEntry';
 import { CEILING_ATTACHMENT_MODES, CEILING_BOUNDARY_SOURCES, getProjectCeilings } from '@/domain/ceilingModels';
 import { enterAddCeiling } from '@/features/floorplan/utils/addCeilingEntry';
 import { ELECTRICAL_DEVICE_DEFAULTS, TOOLS } from '@/editor/tools';
@@ -126,6 +128,20 @@ function Section({ title, count, collapsed, onToggle, collapsible = true, action
 
 // Commits the name once on Enter or blur (see useTextDraft): dispatching every
 // keystroke made each character an undo step and a coordination pass.
+/**
+ * The project as the sidebar's heavy panels see it — the three studies and the
+ * lifecycle panel — one step behind a drag. A drag rewrites the project every
+ * frame; these panels show nothing that moves with it, so during the frame they
+ * keep the inputs they last drew (memoised, they skip) and catch up in a render
+ * React runs once the frame is done. The project, its derived models and the
+ * roof the drainage form writes to travel together, so a panel never pairs one
+ * edit's project with another's results. Its own component, so only this part
+ * re-renders for the catch-up, not the whole sidebar.
+ */
+function DeferredPanelInputs({ inputs, children }) {
+  return children(useDeferredValue(inputs));
+}
+
 export function ProjectNameInput({ name, dispatch }) {
   const commitName = useCallback((value) => dispatch({ type: 'PROJECT_SET_NAME', name: value }), [dispatch]);
   const { displayValue, handleChange, handleKeyDown, handleBlur } = useTextDraft(name, commitName);
@@ -152,6 +168,7 @@ function Sidebar() {
     modelTarget,
     activePhaseId,
     phaseViewMode,
+    activeRoofId,
     lifecycleStage,
     showFloorBelowUnderlay,
     sunStudy,
@@ -170,11 +187,15 @@ function Sidebar() {
     () => orderedFloors.find((entry) => entry.id === activeFloorId) || null,
     [orderedFloors, activeFloorId],
   );
-  const roofSystem = project.roofSystem || null;
+  // Every roof gets a card; the roof workspace edits the active one, and its
+  // objects are what the roof context sections below list.
+  const projectRoofs = getProjectRoofs(project);
+  const roofSystem = resolveActiveRoof(project, activeRoofId);
   const trussSystems = project.trussSystems || [];
   const floorCeilings = useMemo(() => getProjectCeilings(project, activeFloorId), [project, activeFloorId]);
   const attachableRoofTrussSystems = useMemo(() => getAttachableRoofTrussSystems(project), [project]);
-  const roofPhase = roofSystem?.phaseId ? orderedPhases.find((phase) => phase.id === roofSystem.phaseId) || null : null;
+  // Roof-ready systems with no roof yet: one "Add roof to …" row each.
+  const rooflessRoofTrussSystems = useMemo(() => getRooflessRoofTrussSystems(project), [project]);
   const [collapsedSections, setCollapsedSections] = useState({
     lifecycle: false,
     floors: false,
@@ -213,6 +234,17 @@ function Sidebar() {
     (command) => dispatch({ type: 'EXECUTE_BUILDING_COMMAND', command }),
     [dispatch],
   );
+  // Stable for the same reason: the three study panels are memoised too.
+  const patchSunStudy = useCallback((patch) => editorDispatch({ type: 'SET_SUN_STUDY', patch }), [editorDispatch]);
+  const toggleSunStudy = useCallback(() => editorDispatch({ type: 'TOGGLE_SUN_STUDY' }), [editorDispatch]);
+  const patchDaylight = useCallback((patch) => editorDispatch({ type: 'SET_DAYLIGHT_STUDY', patch }), [editorDispatch]);
+  const toggleDaylight = useCallback(() => editorDispatch({ type: 'TOGGLE_DAYLIGHT_STUDY' }), [editorDispatch]);
+  const patchSolarAccess = useCallback(
+    (patch) => editorDispatch({ type: 'SET_SOLAR_ACCESS', patch }),
+    [editorDispatch],
+  );
+  const toggleSolarAccess = useCallback(() => editorDispatch({ type: 'TOGGLE_SOLAR_ACCESS' }), [editorDispatch]);
+  const panelInputs = useMemo(() => ({ project, derived, activeRoofId }), [project, derived, activeRoofId]);
 
   const lifecycleStageEntry = LIFECYCLE_STAGES.find((stage) => stage.id === lifecycleStage) || LIFECYCLE_STAGES[0];
   const lifecycleStageSummary = `${lifecycleStageEntry.index} · ${lifecycleStageEntry.label}`;
@@ -352,8 +384,20 @@ function Sidebar() {
     openRoofWorkspace();
   };
 
+  // From the Roof section the new roof opens in the roof workspace.
+  const addRoofTo = (trussSystem) => {
+    addRoofToTrussSystem({ project, trussSystem, phaseId: activePhaseId, dispatch, editorDispatch, open: true });
+  };
+
+  /*
+   * The Trusses "+" always starts a NEW truss system (docs/multi-roof.md §5.4,
+   * T-1). A system carries one roof, so drawing into whatever system happened
+   * to be selected used to leave a second roof nowhere to go. The selection
+   * still lends the new truss its type and material; "Draw another truss" in
+   * the truss panel is the way to add a run to an existing system.
+   */
   const createTruss = () => {
-    const targetTrussSystem =
+    const templateTrussSystem =
       selectedType === 'trussSystem'
         ? (project.trussSystems || []).find((entry) => entry.id === selectedId) || null
         : selectedType === 'trussInstance'
@@ -362,14 +406,17 @@ function Sidebar() {
             ) || null
           : null;
     const selectedTrussInstance =
-      selectedType === 'trussInstance' && targetTrussSystem
-        ? (targetTrussSystem.trussInstances || []).find((entry) => entry.id === selectedId) || null
+      selectedType === 'trussInstance' && templateTrussSystem
+        ? (templateTrussSystem.trussInstances || []).find((entry) => entry.id === selectedId) || null
         : null;
     const lastSystemInstance =
-      targetTrussSystem && (targetTrussSystem.trussInstances || []).length
-        ? targetTrussSystem.trussInstances[targetTrussSystem.trussInstances.length - 1]
+      templateTrussSystem && (templateTrussSystem.trussInstances || []).length
+        ? templateTrussSystem.trussInstances[templateTrussSystem.trussInstances.length - 1]
         : null;
 
+    // Nothing selected: the draw tool falls back to the selected system when
+    // no target is set, so the selection goes before the tool starts.
+    editorDispatch({ type: 'DESELECT' });
     editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'truss' });
     editorDispatch({ type: 'SET_ACTIVE_FLOOR', floorId: activeFloorId });
     editorDispatch({ type: 'SET_VIEW_MODE', viewMode: 'plan' });
@@ -377,7 +424,7 @@ function Sidebar() {
     editorDispatch({
       type: 'UPDATE_TOOL_STATE',
       payload: {
-        targetTrussSystemId: targetTrussSystem?.id || null,
+        targetTrussSystemId: null,
         trussTypeId: selectedTrussInstance?.trussTypeId || lastSystemInstance?.trussTypeId || null,
         trussMaterial: selectedTrussInstance?.material || lastSystemInstance?.material || null,
       },
@@ -414,46 +461,52 @@ function Sidebar() {
       {/* Sits above the lifecycle block because it collapses to a single line
           when idle, and because a view toggle you reach for constantly should
           not be behind a long form. */}
-      <SunStudyPanel
-        project={project}
-        sunStudy={sunStudy}
-        study={daylightStudy.sunStudy}
-        recomputing={daylightStudy.sunRecomputing}
-        studyError={daylightStudy.sunError}
-        lastCommand={derived?.lastCommand}
-        onExecuteCommand={(command) => dispatch({ type: 'EXECUTE_BUILDING_COMMAND', command })}
-        onPatch={(patch) => editorDispatch({ type: 'SET_SUN_STUDY', patch })}
-        onToggle={() => editorDispatch({ type: 'TOGGLE_SUN_STUDY' })}
-      />
+      <DeferredPanelInputs inputs={panelInputs}>
+        {(deferred) => (
+          <>
+            <SunStudyPanel
+              project={deferred.project}
+              sunStudy={sunStudy}
+              study={daylightStudy.sunStudy}
+              recomputing={daylightStudy.sunRecomputing}
+              studyError={daylightStudy.sunError}
+              lastCommand={deferred.derived?.lastCommand}
+              onExecuteCommand={executeBuildingCommand}
+              onPatch={patchSunStudy}
+              onToggle={toggleSunStudy}
+            />
 
-      {/* Sits with the sun study because the two answer the same question from
-          opposite ends: one is about direct sun on a given day, the other about
-          diffuse light on the worst of them. */}
-      <DaylightPanel
-        project={project}
-        daylight={daylight}
-        study={daylightStudy.study}
-        gridStatus={daylightStudy.gridStatus}
-        gridProgress={daylightStudy.gridProgress}
-        gridError={daylightStudy.gridError}
-        gridStale={daylightStudy.gridStale}
-        onPatch={(patch) => editorDispatch({ type: 'SET_DAYLIGHT_STUDY', patch })}
-        onToggle={() => editorDispatch({ type: 'TOGGLE_DAYLIGHT_STUDY' })}
-      />
+            {/* Sits with the sun study because the two answer the same question
+                from opposite ends: one is about direct sun on a given day, the
+                other about diffuse light on the worst of them. */}
+            <DaylightPanel
+              project={deferred.project}
+              daylight={daylight}
+              study={daylightStudy.study}
+              gridStatus={daylightStudy.gridStatus}
+              gridProgress={daylightStudy.gridProgress}
+              gridError={daylightStudy.gridError}
+              gridStale={daylightStudy.gridStale}
+              onPatch={patchDaylight}
+              onToggle={toggleDaylight}
+            />
 
-      {/* Direct sun on the building's own skin. Reads the same site location
-          the sun study sets, so it sits with the other two. */}
-      <SolarAccessPanel
-        project={project}
-        solarAccess={solarAccess}
-        study={daylightStudy.solarStudy}
-        status={daylightStudy.solarStatus}
-        progress={daylightStudy.solarProgress}
-        error={daylightStudy.solarError}
-        stale={daylightStudy.solarStale}
-        onPatch={(patch) => editorDispatch({ type: 'SET_SOLAR_ACCESS', patch })}
-        onToggle={() => editorDispatch({ type: 'TOGGLE_SOLAR_ACCESS' })}
-      />
+            {/* Direct sun on the building's own skin. Reads the same site
+                location the sun study sets, so it sits with the other two. */}
+            <SolarAccessPanel
+              project={deferred.project}
+              solarAccess={solarAccess}
+              study={daylightStudy.solarStudy}
+              status={daylightStudy.solarStatus}
+              progress={daylightStudy.solarProgress}
+              error={daylightStudy.solarError}
+              stale={daylightStudy.solarStale}
+              onPatch={patchSolarAccess}
+              onToggle={toggleSolarAccess}
+            />
+          </>
+        )}
+      </DeferredPanelInputs>
 
       {/* The lifecycle panel is the tallest block here, so it folds like the
           rest; folded, the header still says which stage it is on. */}
@@ -463,13 +516,18 @@ function Sidebar() {
         collapsed={collapsedSections.lifecycle}
         onToggle={() => toggleSection('lifecycle')}
       >
-        <ProjectLifecyclePanel
-          project={project}
-          derived={derived}
-          activeStage={lifecycleStage}
-          onStageChange={setLifecycleStage}
-          onExecuteCommand={executeBuildingCommand}
-        />
+        <DeferredPanelInputs inputs={panelInputs}>
+          {(deferred) => (
+            <ProjectLifecyclePanel
+              project={deferred.project}
+              derived={deferred.derived}
+              activeRoofId={deferred.activeRoofId}
+              activeStage={lifecycleStage}
+              onStageChange={setLifecycleStage}
+              onExecuteCommand={executeBuildingCommand}
+            />
+          )}
+        </DeferredPanelInputs>
       </Section>
 
       <Section
@@ -534,38 +592,60 @@ function Sidebar() {
 
       <Section
         title="Roof"
-        count={roofSystem ? 1 : 0}
+        count={projectRoofs.length}
         collapsed={collapsedSections.roof}
         onToggle={() => toggleSection('roof')}
         action={
-          !roofSystem ? (
-            <button type="button" className={styles.sectionAddBtn} onClick={createRoof} title="Create Roof">
+          rooflessRoofTrussSystems.length ? (
+            <button
+              type="button"
+              className={styles.sectionAddBtn}
+              onClick={() => addRoofTo(rooflessRoofTrussSystems[0])}
+              title={`Add roof to ${rooflessRoofTrussSystems[0].name || 'Truss System'}`}
+            >
               +
             </button>
           ) : undefined
         }
       >
-        {roofSystem ? (
-          <div
-            className={`${styles.floorCard} ${workspaceMode === 'model' && modelTarget === 'roof' ? styles.floorCardActive : ''}`}
-          >
+        {projectRoofs.map((entry) => {
+          const roofPhase = entry.phaseId ? orderedPhases.find((phase) => phase.id === entry.phaseId) || null : null;
+          const isActiveRoof = workspaceMode === 'model' && modelTarget === 'roof' && entry.id === roofSystem?.id;
+          return (
+            <div key={entry.id} className={`${styles.floorCard} ${isActiveRoof ? styles.floorCardActive : ''}`}>
+              <button
+                type="button"
+                className={styles.floorButton}
+                onClick={() => selectRoofObject(entry.id, 'roofSystem')}
+              >
+                <span className={styles.floorName}>{entry.name || 'Roof'}</span>
+                <span className={styles.floorMeta}>
+                  {Math.round(entry.baseElevation || 0)} mm
+                  {' · '}
+                  {getRoofTypeLabel(entry.roofType || 'flat')}
+                  {roofPhase ? ` · ${roofPhase.name}` : ''}
+                </span>
+              </button>
+            </div>
+          );
+        })}
+        {rooflessRoofTrussSystems.map((trussSystem) => {
+          const label = `Add roof to ${trussSystem.name || 'Truss System'}`;
+          return (
             <button
+              key={trussSystem.id}
               type="button"
-              className={styles.floorButton}
-              onClick={() => selectRoofObject(roofSystem.id, 'roofSystem')}
+              className={styles.item}
+              onClick={() => addRoofTo(trussSystem)}
+              title={label}
             >
-              <span className={styles.floorName}>{roofSystem.name || 'Roof'}</span>
-              <span className={styles.floorMeta}>
-                {Math.round(roofSystem.baseElevation || 0)} mm
-                {' · '}
-                {getRoofTypeLabel(roofSystem.roofType || 'flat')}
-                {roofPhase ? ` · ${roofPhase.name}` : ''}
-              </span>
+              <span className={styles.itemLabel}>{label}</span>
             </button>
-          </div>
-        ) : (
+          );
+        })}
+        {!projectRoofs.length && !attachableRoofTrussSystems.length && (
           <div className={styles.item} onClick={createRoof}>
-            {attachableRoofTrussSystems.length ? 'Create roof from truss' : 'Add truss system before roof'}
+            Add truss system before roof
           </div>
         )}
       </Section>
@@ -576,7 +656,7 @@ function Sidebar() {
         collapsed={collapsedSections.trusses}
         onToggle={() => toggleSection('trusses')}
         action={
-          <button type="button" className={styles.sectionAddBtn} onClick={createTruss} title="Draw Truss">
+          <button type="button" className={styles.sectionAddBtn} onClick={createTruss} title="Draw a new truss system">
             +
           </button>
         }

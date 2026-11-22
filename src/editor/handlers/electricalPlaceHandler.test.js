@@ -213,4 +213,37 @@ describe('electricalPlaceHandler keys', () => {
     harness.key({ key: 'F' });
     expect(harness.getToolState().previewSide).toBe('right');
   });
+
+  it('keeps the flipped face while the cursor moves along the same wall, and places on it', () => {
+    const harness = createHarness();
+    harness.move({ x: 1000, y: 250 });
+    harness.key({ key: 'f' });
+
+    harness.move({ x: 1200, y: 250 });
+    harness.move({ x: 1400, y: 300 });
+
+    expect(harness.getToolState()).toMatchObject({ previewWallId: 'wall_1', previewSide: 'left' });
+    harness.down({ x: 1400, y: 300 });
+    expect(harness.dispatched[0].device.side).toBe('left');
+  });
+
+  it('lets the face follow the cursor again on another wall', () => {
+    const floor = makeFloor({
+      walls: [
+        { id: 'wall_1', start: { x: 0, y: 0 }, end: { x: 6000, y: 0 }, thickness: 200 },
+        { id: 'wall_2', start: { x: 0, y: 3000 }, end: { x: 6000, y: 3000 }, thickness: 200 },
+      ],
+    });
+    const harness = createHarness({ floor });
+    harness.move({ x: 1000, y: 250 });
+    harness.key({ key: 'f' });
+    expect(harness.getToolState().previewSide).toBe('left');
+
+    harness.move({ x: 1000, y: 3250 });
+    expect(harness.getToolState()).toMatchObject({ previewWallId: 'wall_2', previewSide: 'right' });
+
+    // Back on the first wall the flip is not remembered: the cursor decides.
+    harness.move({ x: 1000, y: 250 });
+    expect(harness.getToolState()).toMatchObject({ previewWallId: 'wall_1', previewSide: 'right' });
+  });
 });

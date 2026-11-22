@@ -46,7 +46,8 @@ export default function useCadModel(model, enabled = true) {
   }, []);
   useEffect(() => {
     // Kernel-inert edits (docs/sketch-studio-fab-shop.md §4.3): when only
-    // finishes, prints or the fabrication settings changed since the snapshot on show was built,
+    // finishes, prints, the fabrication settings, Measure marks or an instance's
+    // group, Hide / Show or name changed since the snapshot on show was built,
     // it stays: the source moves to this model under the same revision, so
     // request() (drawings, exports) keeps working without a rebuild.
     const current = shown.current;

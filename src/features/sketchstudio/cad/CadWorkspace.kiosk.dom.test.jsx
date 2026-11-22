@@ -114,16 +114,26 @@ it('loads Example: kiosk from More: fresh ids, every record names its parts and 
   const harness = setup();
   shopMore('Example: kiosk');
   const model = harness.model();
+  // One piece of metal is one part (docs/sketch-studio-own-bends.md §4.2): the commit gives each
+  // sheet-metal blank a part of its own, after its original, named as the part (every one of the
+  // kiosk's instances has a name of its own): 5 sheet-metal parts become 11.
   expect(model.parts.map((p) => p.name)).toEqual([
+    'Kiosk face frame — sheet metal',
     'Kiosk face frame — sheet metal',
     'Kiosk shelf tray — sheet metal',
     'Kiosk base channel — sheet metal',
+    'Kiosk base channel — sheet metal',
     'Kiosk lower cover — sheet metal',
-    'Kiosk corner piece — sheet metal',
+    'Kiosk lower cover — sheet metal',
+    ...Array(4).fill('Kiosk corner piece — sheet metal'),
     'Display',
     'Pan head machine screw M4',
     'Hex nut M4',
   ]);
+  const blanks = model.instances.filter((i) =>
+    model.parts.find((p) => p.id === i.partId).features.some((f) => f.type === 'sheetmetal'),
+  );
+  expect(new Set(blanks.map((i) => i.partId)).size).toBe(blanks.length);
   expect(
     [model.instances, model.finishes, model.prints, model.connections, model.groups].map((list) => list.length),
   ).toEqual([37, 11, 2, 24, 2]);

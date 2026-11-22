@@ -9,10 +9,10 @@ import { computeSelectionBounds } from '../utils/transformUtils';
 export default function useSketchSelection(state, groupIndex = state.document.groupIndex) {
   const selectedIds = state.selection.selectedIds;
 
-  const selectedEntities = useMemo(
-    () => state.document.entities.filter((entity) => selectedIds.includes(entity.id)),
-    [state.document.entities, selectedIds],
-  );
+  const selectedEntities = useMemo(() => {
+    const selectedIdSet = new Set(selectedIds);
+    return state.document.entities.filter((entity) => selectedIdSet.has(entity.id));
+  }, [state.document.entities, selectedIds]);
 
   const selectedEntity = useMemo(
     () =>

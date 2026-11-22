@@ -36,34 +36,45 @@ function RoomWallShadow({ room, clipId }) {
   );
 }
 
+// One memoised item per room; a selection change redraws the two rooms whose
+// `isSelected` flipped and no others.
+const RoomItem = memo(function RoomItem({ room, isSelected, presentation, interactive }) {
+  const hasPolygon = room.points?.length >= 3;
+  const zone = presentation ? resolveRoomZone(room) : undefined;
+  const fill = presentation
+    ? resolveRoomPresentationFill(room, PRESENTATION_GRAPHICS.plan.zoneFill)
+    : DRAWING_GRAPHICS.plan.roomFill.fill;
+
+  return (
+    <g data-id={room.id} data-type="room" data-zone={zone}>
+      {hasPolygon && (
+        <polygon
+          points={room.points.map((p) => `${p.x},${p.y}`).join(' ')}
+          fill={fill}
+          fillOpacity={isSelected ? 0.72 : 1}
+          stroke="none"
+          style={{ pointerEvents: interactive ? 'all' : 'none', cursor: interactive ? 'pointer' : 'default' }}
+        />
+      )}
+      {presentation && hasPolygon ? <RoomWallShadow room={room} clipId={`room-shadow-${room.id}`} /> : null}
+    </g>
+  );
+});
+
 function RoomRenderer({ rooms, selectedId, interactive = true }) {
   const presentation = isPresentationStyle(usePlanStyle());
 
   return (
     <g className="rooms">
-      {rooms.map((room) => {
-        const hasPolygon = room.points?.length >= 3;
-        const isSelected = room.id === selectedId;
-        const zone = presentation ? resolveRoomZone(room) : undefined;
-        const fill = presentation
-          ? resolveRoomPresentationFill(room, PRESENTATION_GRAPHICS.plan.zoneFill)
-          : DRAWING_GRAPHICS.plan.roomFill.fill;
-
-        return (
-          <g key={room.id} data-id={room.id} data-type="room" data-zone={zone}>
-            {hasPolygon && (
-              <polygon
-                points={room.points.map((p) => `${p.x},${p.y}`).join(' ')}
-                fill={fill}
-                fillOpacity={isSelected ? 0.72 : 1}
-                stroke="none"
-                style={{ pointerEvents: interactive ? 'all' : 'none', cursor: interactive ? 'pointer' : 'default' }}
-              />
-            )}
-            {presentation && hasPolygon ? <RoomWallShadow room={room} clipId={`room-shadow-${room.id}`} /> : null}
-          </g>
-        );
-      })}
+      {rooms.map((room) => (
+        <RoomItem
+          key={room.id}
+          room={room}
+          isSelected={room.id === selectedId}
+          presentation={presentation}
+          interactive={interactive}
+        />
+      ))}
     </g>
   );
 }

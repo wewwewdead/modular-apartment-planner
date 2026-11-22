@@ -62,6 +62,7 @@ import {
 } from '@/domain/wallAccents';
 import { defaultAccentFinish } from '@/domain/wallAccentModel';
 import { generateId } from '@/domain/ids';
+import { isTypingTarget } from '@/utils/keyboard';
 import {
   WALL_JURISDICTION_PROFILES,
   WALL_PRODUCT_PROFILES,
@@ -116,6 +117,13 @@ import {
   selectionTagLines,
 } from './wallDetailSelectionReadout';
 import { friendlyAnchorPhrase, wallLocalToSvg, wallUnitsPerPixel } from './wallDetailCanvasMath';
+import {
+  isMeasureClick,
+  isSpaceKey,
+  spaceArmsPanLatch,
+  spaceKeyUpTaken,
+  travelledPastClick,
+} from './detailCanvasRules';
 import { DimensionAcquisitionGraphic, DimensionGraphic } from './WallDimensionGraphics';
 import {
   AdvancedGroup,
@@ -142,6 +150,7 @@ import styles from './WallDetailEditor.module.css';
 import { wallElevationSilhouette } from '@/features/floorplan/components/preview/loadingSilhouettes';
 import { LOADING_COPY, PanePlaceholder } from '@/ui/loading';
 import { useShellFirst } from './useShellFirst';
+import { useDeferredCoordination } from '../ceiling-detail/useDeferredCoordination';
 import {
   FOCUS_MODE_STORAGE_KEY,
   WallEditorOpeningShell,
@@ -792,6 +801,357 @@ export default function WallDetailEditor({ mountShellFirst = false }) {
   return <WallDetailEditorBody openedAt={openedAt} />;
 }
 
+/*
+ * The elevation's committed drawing, in three memoised layers. Panning re-renders
+ * the editor on every pointer move, and none of this depends on where the view
+ * sits: the one viewport value it reads is `unitPx`, which follows the zoom and
+ * never the pan. The in-flight previews (a board being drawn, a stud being
+ * dragged, the measure tool's marker) stay in the editor, between these layers,
+ * so a gesture redraws its preview and not the sheet. Three layers rather than
+ * one because the previews sit between them in the drawing order.
+ *
+ * Every prop is either one of the editor's memoised derivations or a value, so
+ * the memo holds; the pointer handlers come through `handlers`, whose identity
+ * never changes (see `stableCanvasHandlers`).
+ */
+
+/** Grid, opening voids, boards, siding courses and accents: under the framing. */
+const WallElevationUnderLayers = memo(function WallElevationUnderLayers({
+  bounds,
+  snapStep,
+  unitPx,
+  snapEnabled,
+  detail,
+  face,
+  layerVisibility,
+  panels,
+  selection,
+  panelFill,
+  sizePrecision,
+  activeBoardLabel,
+  sidingCoursePath,
+  activeSide,
+  sidingClipId,
+  faceAccents,
+  accentClipId,
+  handlers,
+}) {
+  const formatMm = (value) => formatWallDimensionValue(value, face.dimensions.precision);
+  return (
+    <>
+      <WallCanvasGrid bounds={bounds} snapStep={snapStep} unitPx={unitPx} active={snapEnabled} />
+      {detail.openings.map((opening) => (
+        <rect
+          key={`${opening.id}:void`}
+          className={styles.openingVoid}
+          x={opening.u0}
+          y={opening.v0}
+          width={opening.u1 - opening.u0}
+          height={opening.v1 - opening.v0}
+        />
+      ))}
+      {layerVisibility.panels &&
+        panels.flatMap((panel) =>
+          panel.polygonal
+            ? panel.regions.map((region, index) => (
+                <path
+                  key={`${panel.id}:region:${index}`}
+                  className={styles.panelShape}
+                  data-selected={selection?.type === 'panel' && selection.id === panel.localId ? 'true' : 'false'}
+                  d={panelRegionPath(region)}
+                  fill={panelFill}
+                  fillRule="evenodd"
+                  vectorEffect="non-scaling-stroke"
+                  onPointerDown={(event) => handlers.beginElementMove(event, 'panel', panel.localId, panel)}
+                >
+                  <title>{`${panel.label} · ${faceSizeLine(panel.width, panel.height, sizePrecision)} · ${activeBoardLabel}`}</title>
+                </path>
+              ))
+            : panel.fragments.map((fragment, index) => (
+                <rect
+                  key={`${panel.id}:${index}`}
+                  className={styles.panelShape}
+                  data-selected={selection?.type === 'panel' && selection.id === panel.localId ? 'true' : 'false'}
+                  x={fragment.u0}
+                  y={fragment.v0}
+                  width={fragment.u1 - fragment.u0}
+                  height={fragment.v1 - fragment.v0}
+                  fill={panelFill}
+                  vectorEffect="non-scaling-stroke"
+                  onPointerDown={(event) => handlers.beginElementMove(event, 'panel', panel.localId, panel)}
+                >
+                  <title>{`${panel.label} · ${faceSizeLine(panel.width, panel.height, sizePrecision)} · ${activeBoardLabel}`}</title>
+                </rect>
+              )),
+        )}
+      {layerVisibility.panels && sidingCoursePath ? (
+        <g pointerEvents="none" data-siding-courses={activeSide}>
+          <clipPath id={sidingClipId}>
+            {panels.flatMap((panel) =>
+              panel.regions.map((region, index) => (
+                <path key={`${panel.id}:clip:${index}`} d={panelRegionPath(region)} clipRule="evenodd" />
+              )),
+            )}
+          </clipPath>
+          <path
+            className={styles.sidingCourses}
+            d={sidingCoursePath}
+            clipPath={`url(#${sidingClipId})`}
+            vectorEffect="non-scaling-stroke"
+          />
+        </g>
+      ) : null}
+      {/* Accent panels: over the boards, under the framing,
+          screws and dimensions, clipped to the boards so the
+          openings and the reveals cut them as they cut the
+          board. Selection changes the fill, never the line. */}
+      {layerVisibility.panels && faceAccents.length ? (
+        <g data-accents={activeSide}>
+          <clipPath id={accentClipId}>
+            {panels.flatMap((panel) =>
+              panel.regions.map((region, index) => (
+                <path key={`${panel.id}:accent-clip:${index}`} d={panelRegionPath(region)} clipRule="evenodd" />
+              )),
+            )}
+          </clipPath>
+          <g clipPath={`url(#${accentClipId})`}>
+            {faceAccents
+              .filter((accent) => accent.u1 > accent.u0 && accent.v1 > accent.v0)
+              .map((accent) => (
+                <rect
+                  key={accent.id}
+                  className={styles.accentShape}
+                  data-accent-id={accent.id}
+                  data-selected={selection?.type === 'accent' && selection.id === accent.id ? 'true' : 'false'}
+                  x={accent.u0}
+                  y={accent.v0}
+                  width={accent.u1 - accent.u0}
+                  height={accent.v1 - accent.v0}
+                  fill={wallFinishDrawingTint(accent.finish.colour.hex)}
+                  vectorEffect="non-scaling-stroke"
+                  onPointerDown={(event) => handlers.beginElementMove(event, 'accent', accent.id, accent.requested)}
+                >
+                  <title>{`${accent.label || 'Accent'} · ${formatMm(accent.width)} × ${formatMm(
+                    accent.height,
+                  )} · ${describeWallFinish(accent.finish)}`}</title>
+                </rect>
+              ))}
+          </g>
+        </g>
+      ) : null}
+    </>
+  );
+});
+
+/** Framing, screws, opening outlines and as-built lines. */
+const WallElevationMemberLayers = memo(function WallElevationMemberLayers({
+  detail,
+  face,
+  assembly,
+  layerVisibility,
+  drawnFrameMembers,
+  framingContactById,
+  sizePrecision,
+  selection,
+  fasteners,
+  panelFill,
+  unitPx,
+  handlers,
+}) {
+  const formatMm = (value) => formatWallDimensionValue(value, face.dimensions.precision);
+  /** Plain-language verdict on how a framing member meets the nearest opening. */
+  const describeOpeningContact = (contact) => {
+    const opening = contact.openingKind === 'window' ? 'window' : 'door';
+    if (contact.contact === 'clear') return `${formatMm(contact.separation)} mm clear of ${opening}`;
+    if (contact.contact === 'flush') return `flush with ${opening}`;
+    if (contact.contact === 'jamb') return `laps ${opening} edge by ${formatMm(contact.overlap)} mm`;
+    return `inside ${opening} by ${formatMm(contact.overlap)} mm`;
+  };
+  return (
+    <>
+      {layerVisibility.framing &&
+        drawnFrameMembers.map((member) => {
+          const contact = framingContactById.get(member.id);
+          const described = describeSelectedFraming(member, assembly.framing, sizePrecision);
+          return (
+            <rect
+              key={member.id}
+              className={styles.frameShape}
+              data-selected={selection?.type === 'framing' && selection.id === member.id ? 'true' : 'false'}
+              data-contact={contact?.contact}
+              x={member.u0}
+              y={member.v0}
+              width={member.u1 - member.u0}
+              height={member.v1 - member.v0}
+              vectorEffect="non-scaling-stroke"
+              onPointerDown={(event) => handlers.beginElementMove(event, 'framing', member.id, member)}
+            >
+              <title>
+                {`${described.name} · ${described.size} · ${described.note} · ${described.setOut}${
+                  contact ? ` · ${describeOpeningContact(contact)}` : ''
+                }`}
+              </title>
+            </rect>
+          );
+        })}
+      {layerVisibility.fasteners &&
+        fasteners.map((fastener) => (
+          <FastenerGraphic
+            key={fastener.id}
+            fastener={fastener}
+            appearance={face.fasteners.appearance}
+            boardFill={panelFill}
+            headDiameter={face.fasteners.headDiameter}
+            unitPx={unitPx}
+            selected={selection?.type === 'fastener' && selection.id === fastener.id}
+            title={`Screw · ${describeSelectedFastener(fastener, face.fasteners.headDiameter, sizePrecision).note}`}
+            onPointerDown={(event) => handlers.beginElementMove(event, 'fastener', fastener.id, fastener)}
+          />
+        ))}
+      {detail.openings.map((opening) => (
+        <rect
+          key={`${opening.id}:profile`}
+          className={styles.openingProfile}
+          x={opening.u0}
+          y={opening.v0}
+          width={opening.u1 - opening.u0}
+          height={opening.v1 - opening.v0}
+          vectorEffect="non-scaling-stroke"
+        >
+          <title>
+            {`${opening.kind} · U ${formatMm(opening.u0)} → ${formatMm(opening.u1)} · V ${formatMm(
+              opening.v0,
+            )} → ${formatMm(opening.v1)}`}
+          </title>
+        </rect>
+      ))}
+      {layerVisibility.asBuilt &&
+        detail.asBuilt.map((measurement) =>
+          measurement.axis === 'u' ? (
+            <line
+              key={measurement.id}
+              x1={measurement.measuredValue}
+              x2={measurement.measuredValue}
+              y1={0}
+              y2={detail.height}
+              className={styles.asBuiltLine}
+              data-status={measurement.status}
+              strokeWidth="1.25"
+              strokeDasharray="9 6"
+              vectorEffect="non-scaling-stroke"
+            />
+          ) : (
+            <line
+              key={measurement.id}
+              x1={0}
+              x2={detail.length}
+              y1={measurement.measuredValue}
+              y2={measurement.measuredValue}
+              className={styles.asBuiltLine}
+              data-status={measurement.status}
+              strokeWidth="1.25"
+              strokeDasharray="9 6"
+              vectorEffect="non-scaling-stroke"
+            />
+          ),
+        )}
+    </>
+  );
+});
+
+/**
+ * Slab bands, the board overhang, pencil guides and the measurements, drawn in
+ * un-flipped SVG space. `dimensionGesturePreview` is the measurement under a
+ * drag, drawn in its own place in the list: only that drag re-renders this.
+ */
+const WallElevationAnnotationLayers = memo(function WallElevationAnnotationLayers({
+  detail,
+  face,
+  bounds,
+  unitPx,
+  boardSpan,
+  layerVisibility,
+  fastenerGuideLayouts,
+  fastenerGuideDraft,
+  dimensions,
+  dimensionGesturePreview,
+  selection,
+  canvasTool,
+  dimensionHandleRadius,
+  dimensionFontSize,
+  handlers,
+}) {
+  const formatMm = (value) => formatWallDimensionValue(value, face.dimensions.precision);
+  return (
+    <>
+      {(detail.slabBands || []).map((band) => (
+        <SlabBandGraphic key={band.slabId} band={band} view={bounds} unitPx={unitPx} format={formatMm} />
+      ))}
+      {boardSpan ? <BoardOverhangGraphic span={boardSpan} view={bounds} unitPx={unitPx} format={formatMm} /> : null}
+      {layerVisibility.fasteners &&
+        fastenerGuideLayouts.map((guide) => (
+          <FastenerGuideGraphic
+            key={guide.id}
+            guide={guide}
+            view={bounds}
+            precision={face.dimensions.precision}
+            selected={fastenerGuideDraft.id === guide.id}
+          />
+        ))}
+      {layerVisibility.dimensions &&
+        dimensions.map((dimension) => {
+          const renderedDimension = dimensionGesturePreview?.id === dimension.id ? dimensionGesturePreview : dimension;
+          const selected = selection?.type === 'dimension' && selection.id === dimension.id;
+          const editable = selected && dimension.source === 'custom' && canvasTool === CANVAS_TOOLS.SELECT;
+          return (
+            <DimensionGraphic
+              key={dimension.id}
+              dimension={renderedDimension}
+              view={bounds}
+              selected={selected}
+              editable={editable}
+              showScrewGuide={dimension.source === 'custom' && canvasTool === CANVAS_TOOLS.ADD_FASTENER}
+              unitPx={unitPx}
+              handleRadius={dimensionHandleRadius}
+              fontSize={dimensionFontSize}
+              title={`${dimension.name || 'Measurement'} · ${dimension.label}`}
+              onPointerDown={(event) =>
+                dimension.source === 'custom'
+                  ? handlers.beginDimensionMove(event, dimension)
+                  : handlers.selectDimension(event, dimension)
+              }
+              onStartHandlePointerDown={(event) => handlers.beginDimensionEndpointMove(event, dimension, 'start')}
+              onEndHandlePointerDown={(event) => handlers.beginDimensionEndpointMove(event, dimension, 'end')}
+            />
+          );
+        })}
+    </>
+  );
+});
+
+/*
+ * The framing the elevation draws (the near frame only) and how each member
+ * meets the openings, kept per frame-members array: the derived detail is
+ * memoised on the wall and its floor, so a pan or a selection change hands back
+ * the same array and the same answer, and the member layer's memo holds.
+ */
+const framingContactCache = new WeakMap();
+
+function drawnFramingContact(frameMembers, openings) {
+  const cached = framingContactCache.get(frameMembers);
+  if (cached && cached.openings === openings) return cached;
+  const drawnFrameMembers = frameMembers.filter((member) => member.frameIndex === 0);
+  const framingClashes = findFramingOpeningClashes(drawnFrameMembers, openings);
+  const entry = {
+    openings,
+    drawnFrameMembers,
+    framingClashes,
+    framingContactById: new Map(framingClashes.map((clash) => [clash.memberId, clash])),
+  };
+  if (frameMembers.length) framingContactCache.set(frameMembers, entry);
+  return entry;
+}
+
 // The editor proper; the workspace loads it on demand behind the shell
 // (WallDetailEditorLazy).
 export function WallDetailEditorBody({ openedAt }) {
@@ -877,6 +1237,39 @@ export function WallDetailEditorBody({ openedAt }) {
   // Stable identity for the 3D pane's memo; the body below keeps it current.
   const previewPickRef = useRef(null);
   const handlePreviewPick = useCallback((part) => previewPickRef.current?.(part), []);
+  // Every edit made here is sent `coordination: 'defer'`, as the ceiling
+  // editor's are: none of the whole-project coordination models is needed
+  // while the wall is being detailed, and the pass was most of a commit's cost.
+  // The hook settles them once the editor has been idle for a moment, and
+  // straight away when it closes.
+  const scheduleCoordinationSettle = useDeferredCoordination(dispatch, Boolean(wallDetailEditor));
+  /*
+    The drawing's box, taken when a button goes down and kept while it is held,
+    so a drag measures every move against the box its press was measured in
+    instead of forcing a layout per move. Only while held: a move with no button
+    down (a hover, the gap between the clicks of a trace or a measurement)
+    measures afresh and lets the pin go, and anything that moves the drawing for
+    real (zoom, Fit, a pan) lets it go too. A pin kept past its press is what
+    made the ceiling editor's trace preview point backwards after a pan.
+  */
+  const gestureRectRef = useRef(null);
+  // The frame pan's latest pointer position, applied once per animation frame.
+  const pendingPanRef = useRef(null);
+  const panFrameRef = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(panFrameRef.current), []);
+  /*
+    The elevation's layers are memoised, so the handlers they hold have to keep
+    one identity from render to render or the memo never holds. These forward to
+    whatever this render's closures are, which is what the layers would have
+    captured anyway.
+  */
+  const canvasHandlersRef = useRef({});
+  const stableCanvasHandlers = useRef({
+    beginElementMove: (...args) => canvasHandlersRef.current.beginElementMove?.(...args),
+    beginDimensionMove: (...args) => canvasHandlersRef.current.beginDimensionMove?.(...args),
+    selectDimension: (...args) => canvasHandlersRef.current.selectDimension?.(...args),
+    beginDimensionEndpointMove: (...args) => canvasHandlersRef.current.beginDimensionEndpointMove?.(...args),
+  }).current;
 
   // Capture phase: this editor is modal, so the keys it claims must never reach the
   // floorplan canvas listening on the same window (its own Delete would remove walls).
@@ -905,8 +1298,7 @@ export function WallDetailEditorBody({ openedAt }) {
       // An open popover takes Escape for itself (WallDetailUiKit Popover).
       if (isPopoverOpen()) return;
       // Escape in a field throws away what was typed there, and nothing else.
-      const target = event.target;
-      if (target?.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target?.tagName)) return;
+      if (isTypingTarget(event.target)) return;
       event.preventDefault();
       setPanelTrace(null);
     };
@@ -914,17 +1306,16 @@ export function WallDetailEditorBody({ openedAt }) {
     return () => window.removeEventListener('keydown', cancelTrace);
   }, [panelTrace]);
 
+  // Space held pans the drawing, anywhere but in a field (detailCanvasRules).
   useEffect(() => {
-    const isEditableTarget = (target) =>
-      target?.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target?.tagName);
     const enableSpacePan = (event) => {
-      if (event.code !== 'Space' || isEditableTarget(event.target)) return;
+      if (!spaceArmsPanLatch(event)) return;
       event.preventDefault();
       setSpacePanActive(true);
     };
     const disableSpacePan = (event) => {
-      if (event.code !== 'Space') return;
-      event.preventDefault();
+      if (!isSpaceKey(event)) return;
+      if (spaceKeyUpTaken(event)) event.preventDefault();
       setSpacePanActive(false);
     };
     const cancelSpacePan = () => setSpacePanActive(false);
@@ -958,13 +1349,18 @@ export function WallDetailEditorBody({ openedAt }) {
   const detail = useMemo(() => (wall && floor ? deriveWallDetail(wall, floor) : null), [floor, wall]);
   const configuration = detail?.configuration || null;
   const face = configuration?.sides?.[activeSide] || null;
-  const panels = detail?.panels?.[activeSide] || [];
-  const fasteners = detail?.fasteners?.[activeSide] || [];
-  const dimensions = detail?.dimensions?.[activeSide] || [];
-  const frameMembers = detail?.framing || [];
+  // Memoised so a face with none of a kind hands the memoised layers and
+  // derivations below the same empty list each render, not a fresh one.
+  const panels = useMemo(() => detail?.panels?.[activeSide] || [], [activeSide, detail]);
+  const fasteners = useMemo(() => detail?.fasteners?.[activeSide] || [], [activeSide, detail]);
+  const dimensions = useMemo(() => detail?.dimensions?.[activeSide] || [], [activeSide, detail]);
+  const frameMembers = useMemo(() => detail?.framing || [], [detail]);
   const profile = face ? getWallProductProfile(face.productProfileId) : null;
   const jurisdiction = configuration ? getWallJurisdictionProfile(configuration.jurisdictionProfileId) : null;
-  const assembly = wall ? resolveWallAssembly(wall) : null;
+  const assembly = useMemo(() => (wall ? resolveWallAssembly(wall) : null), [wall]);
+  // The stud a board lands on. A masonry wall has no frame (`framing` is null),
+  // and reads as a wall with no studs: nothing to land on.
+  const studSupportWidth = Math.max(0, Number(assembly?.framing?.studWidth) || 0);
   // A face elevation is always drawn as seen standing in front of that face.
   // The face on the wall's far side (relative to the U axis viewpoint) renders
   // and reads mirrored — the same reflection the built wall shows in 3D.
@@ -973,9 +1369,13 @@ export function WallDetailEditorBody({ openedAt }) {
   // lines and dimensions drawn over it still read, or the board's stock tint.
   // Read off the derived layers — the one place a face's finish is answered
   // (docs/wall-cladding-finishes.md §5.5).
-  const activeFinishHex = assembly
-    ? wallFinishHex(deriveWallAssemblyLayers(assembly).find((layer) => layer.side === activeSide))
-    : null;
+  // The face's layer of the assembly, derived once for the finish here and
+  // for the siding courses and the 3D pane's facing below.
+  const activeLayer = useMemo(
+    () => (assembly ? deriveWallAssemblyLayers(assembly).find((layer) => layer.side === activeSide) : null),
+    [activeSide, assembly],
+  );
+  const activeFinishHex = assembly ? wallFinishHex(activeLayer) : null;
   const panelFill = activeFinishHex
     ? wallFinishDrawingTint(activeFinishHex)
     : faceColor(assembly?.[activeSide]?.material);
@@ -984,30 +1384,39 @@ export function WallDetailEditorBody({ openedAt }) {
   // clamps or bills reads that — while `u0`/`u1`/`spanU` say how much drawing
   // there is around it.
   const boardSpan = detail?.boardSpans?.[activeSide] || null;
+  // Which way the 3D pane looks to see this face (docs/wall-fastener-visibility.md §2.1).
+  const previewFacing = wall ? wallFacePreviewFacing(wall, activeLayer) : null;
   // A siding face's course lines, from the one set-out the 3D preview also
   // draws (`wallSiding.js`), so the joints on this drawing are the joints on
   // the model (docs/wall-cladding-finishes.md §6.1).
-  const activeLayer = assembly ? deriveWallAssemblyLayers(assembly).find((layer) => layer.side === activeSide) : null;
-  // Which way the 3D pane looks to see this face (docs/wall-fastener-visibility.md §2.1).
-  const previewFacing = wall ? wallFacePreviewFacing(wall, activeLayer) : null;
-  const sidingCoursePath =
-    detail && wall && activeLayer?.material === WALL_BOARD_MATERIALS.SIDING
-      ? sidingCoursePathData(activeLayer.course, wall, resolveWallDetailFrame(wall, floor), boardSpan)
-      : null;
+  const sidingCoursePath = useMemo(
+    () =>
+      detail && wall && activeLayer?.material === WALL_BOARD_MATERIALS.SIDING
+        ? sidingCoursePathData(activeLayer.course, wall, resolveWallDetailFrame(wall, floor), boardSpan)
+        : null,
+    [activeLayer, boardSpan, detail, floor, wall],
+  );
   // The accent panels on the face being edited (docs/wall-cladding-finishes.md
   // §7.1), placed by the one derivation the 3D preview and the bill also read.
   const accentsAllowed = wall ? wallFaceAcceptsAccents(wall, activeSide) : false;
-  const faceAccents = wall && floor && accentsAllowed ? resolveWallAccents(wall, floor, activeSide) : EMPTY_ACCENTS;
-  const bounds = detail
-    ? {
-        length: detail.length,
-        height: detail.height,
-        mirrorU,
-        u0: boardSpan ? Math.min(0, boardSpan.u0) : 0,
-        u1: boardSpan ? Math.max(detail.length, boardSpan.u1) : detail.length,
-        spanU: boardSpan ? Math.max(detail.length, boardSpan.u1) - Math.min(0, boardSpan.u0) : detail.length,
-      }
-    : null;
+  const faceAccents = useMemo(
+    () => (wall && floor && accentsAllowed ? resolveWallAccents(wall, floor, activeSide) : EMPTY_ACCENTS),
+    [accentsAllowed, activeSide, floor, wall],
+  );
+  const bounds = useMemo(
+    () =>
+      detail
+        ? {
+            length: detail.length,
+            height: detail.height,
+            mirrorU,
+            u0: boardSpan ? Math.min(0, boardSpan.u0) : 0,
+            u1: boardSpan ? Math.max(detail.length, boardSpan.u1) : detail.length,
+            spanU: boardSpan ? Math.max(detail.length, boardSpan.u1) - Math.min(0, boardSpan.u0) : detail.length,
+          }
+        : null,
+    [boardSpan, detail, mirrorU],
+  );
   const canvasMetrics = useWallCanvasMetrics(canvasFrameRef, bounds, workspaceView);
   const previewProject = useMemo(
     () => createWallDetailPreviewProject(project, floor?.id, wall?.id),
@@ -1055,12 +1464,19 @@ export function WallDetailEditorBody({ openedAt }) {
         : [],
     [activeSide, detail, wall],
   );
-  const screwMeasurementTargets = collectWallDimensionGuideTargets(
-    dimensions.filter((dimension) => dimension.source === 'custom'),
+  const screwMeasurementTargets = useMemo(
+    () => collectWallDimensionGuideTargets(dimensions.filter((dimension) => dimension.source === 'custom')),
+    [dimensions],
   );
-  const fastenerGuideLayouts =
-    face && bounds ? face.fasteners.guides.map((guide) => deriveFastenerGuideLayout(guide, bounds, { panels })) : [];
-  const fastenerGuideDraftLayout = bounds ? deriveFastenerGuideLayout(fastenerGuideDraft, bounds, { panels }) : null;
+  const fastenerGuideLayouts = useMemo(
+    () =>
+      face && bounds ? face.fasteners.guides.map((guide) => deriveFastenerGuideLayout(guide, bounds, { panels })) : [],
+    [bounds, face, panels],
+  );
+  const fastenerGuideDraftLayout = useMemo(
+    () => (bounds ? deriveFastenerGuideLayout(fastenerGuideDraft, bounds, { panels }) : null),
+    [bounds, fastenerGuideDraft, panels],
+  );
   // Keyed on the wall and its floor's openings, so the 3D pane's memo holds.
   const floorDoors = floor?.doors;
   const floorWindows = floor?.windows;
@@ -1151,7 +1567,9 @@ export function WallDetailEditorBody({ openedAt }) {
         id: wall.id,
         assembly: { ...wall.assembly, detailing: createWallDetailing(next) },
       },
+      coordination: 'defer',
     });
+    scheduleCoordinationSettle();
   };
 
   const commitAssembly = (nextAssembly) => {
@@ -1164,7 +1582,9 @@ export function WallDetailEditorBody({ openedAt }) {
         thickness: wallAssemblyThickness(nextAssembly),
         structuralRole: nextAssembly.system === 'framed' ? 'nonstructural' : wall.structuralRole,
       },
+      coordination: 'defer',
     });
+    scheduleCoordinationSettle();
   };
 
   const updateAssembly = (patch) =>
@@ -1212,7 +1632,13 @@ export function WallDetailEditorBody({ openedAt }) {
       { ...assembly, [activeSide]: { ...assembly[activeSide], accents } },
       wall.thickness,
     );
-    dispatch({ type: 'WALL_UPDATE', floorId: floor.id, wall: { id: wall.id, assembly: nextAssembly } });
+    dispatch({
+      type: 'WALL_UPDATE',
+      floorId: floor.id,
+      wall: { id: wall.id, assembly: nextAssembly },
+      coordination: 'defer',
+    });
+    scheduleCoordinationSettle();
   };
   const placeAccent = (accent, rect) =>
     placeAccentAt(accent, rect, { frame: resolveWallDetailFrame(wall, floor), openings: detail.openings });
@@ -1290,6 +1716,12 @@ export function WallDetailEditorBody({ openedAt }) {
     setGesture(null);
     setDimensionAcquisition(null);
     if (tool !== CANVAS_TOOLS.TRACE_PANEL) setPanelTrace(null);
+  };
+
+  // Drops the gesture in flight, and its pick-up marker; the tool stays armed.
+  const dropCanvasGesture = () => {
+    setGesture(null);
+    setDimensionAcquisition(null);
   };
 
   const chooseSide = (side) => {
@@ -1709,8 +2141,28 @@ export function WallDetailEditorBody({ openedAt }) {
     else if (selection?.type === 'dimension') deleteSelectedDimension();
   };
 
+  /** The drawing's box for this pointer event: pinned while a button is held (see `gestureRectRef`). */
+  const canvasRectFor = (event) => {
+    const type = event?.type;
+    const press = event?.nativeEvent || event;
+    if (type === 'pointerdown') {
+      if (gestureRectRef.current?.press !== press) {
+        gestureRectRef.current = { press, rect: svgRef.current?.getBoundingClientRect() || null };
+      }
+      return gestureRectRef.current.rect;
+    }
+    if (type === 'pointerup' || event?.buttons) {
+      if (!gestureRectRef.current) {
+        gestureRectRef.current = { press: null, rect: svgRef.current?.getBoundingClientRect() || null };
+      }
+      return gestureRectRef.current.rect;
+    }
+    gestureRectRef.current = null;
+    return svgRef.current?.getBoundingClientRect();
+  };
+
   const eventToLocal = (event, withSnap = true, revealAware = false) => {
-    const rect = svgRef.current?.getBoundingClientRect();
+    const rect = canvasRectFor(event);
     if (!rect) return { u: 0, v: 0 };
     const point = screenPointToWallLocal(event, rect, bounds);
     return withSnap
@@ -1723,7 +2175,7 @@ export function WallDetailEditorBody({ openedAt }) {
   };
 
   const eventToDimensionEndpoint = (event) => {
-    const rect = svgRef.current?.getBoundingClientRect();
+    const rect = canvasRectFor(event);
     if (!rect) return { point: { u: 0, v: 0 }, reference: null };
     const raw = screenPointToWallLocal(event, rect, bounds);
     const markerRadius =
@@ -1753,7 +2205,7 @@ export function WallDetailEditorBody({ openedAt }) {
   };
 
   const eventToFastenerPoint = (event) => {
-    const rect = svgRef.current?.getBoundingClientRect();
+    const rect = canvasRectFor(event);
     if (!rect) return { point: { u: 0, v: 0 }, reference: null, markerRadius: 10 };
     const raw = screenPointToWallLocal(event, rect, bounds);
     const markerRadius =
@@ -1771,6 +2223,8 @@ export function WallDetailEditorBody({ openedAt }) {
   };
 
   const zoomViewportAt = (requestedZoom, clientX, clientY) => {
+    // Zoom moves the drawing for real: a gesture running through it re-measures.
+    gestureRectRef.current = null;
     setViewport((current) => {
       const rawZoom = typeof requestedZoom === 'function' ? requestedZoom(current.zoom) : requestedZoom;
       const zoom = Math.max(0.35, Math.min(5, rawZoom));
@@ -1802,23 +2256,44 @@ export function WallDetailEditorBody({ openedAt }) {
     });
   };
 
+  // The pan is measured from where it started, so only the latest pointer
+  // position matters: moves between two frames collapse into one view update.
+  const applyPendingPan = () => {
+    cancelAnimationFrame(panFrameRef.current);
+    panFrameRef.current = 0;
+    const pending = pendingPanRef.current;
+    pendingPanRef.current = null;
+    if (!pending) return;
+    gestureRectRef.current = null;
+    setViewport((current) =>
+      panWallViewport({ ...current, panU: pending.panU, panV: pending.panV }, { u: pending.du, v: pending.dv }),
+    );
+  };
+
   const updateViewportPan = (event) => {
     if (!panGesture || panGesture.pointerId !== event.pointerId) return;
-    setViewport((current) =>
-      panWallViewport(
-        { ...current, panU: panGesture.panU, panV: panGesture.panV },
-        { u: event.clientX - panGesture.clientX, v: event.clientY - panGesture.clientY },
-      ),
-    );
+    pendingPanRef.current = {
+      panU: panGesture.panU,
+      panV: panGesture.panV,
+      du: event.clientX - panGesture.clientX,
+      dv: event.clientY - panGesture.clientY,
+    };
+    if (!panFrameRef.current) panFrameRef.current = requestAnimationFrame(applyPendingPan);
   };
 
   const finishViewportPan = (event) => {
     if (!panGesture || panGesture.pointerId !== event.pointerId) return;
+    // The last move lands before the pan ends, as it did when every move did.
+    applyPendingPan();
     canvasFrameRef.current?.releasePointerCapture?.(event.pointerId);
     setPanGesture(null);
   };
 
-  const fitWallInViewport = () => setViewport({ zoom: 1, panU: 0, panV: 0 });
+  const fitWallInViewport = () => {
+    // Fit moves the drawing as zoom does.
+    gestureRectRef.current = null;
+    setViewport({ zoom: 1, panU: 0, panV: 0 });
+  };
 
   const movedGestureEntity = (value = gesture) => {
     if (!value || value.kind !== 'move') return null;
@@ -1875,7 +2350,7 @@ export function WallDetailEditorBody({ openedAt }) {
     if (value.tool === CANVAS_TOOLS.DRAW_PANEL) {
       const panel = createDrawnPanel(value.start, value.current, bounds);
       if (!snapEnabled) return panel;
-      const threshold = Math.max(20, assembly.framing.studWidth / 2 + 12);
+      const threshold = Math.max(20, studSupportWidth / 2 + 12);
       const framed = fitPanelToFramingReveal(
         panel,
         frameMembers,
@@ -1922,7 +2397,7 @@ export function WallDetailEditorBody({ openedAt }) {
   const commitPanelTrace = (points = panelTrace?.points || []) => {
     const traced = createTracedPanel(points, bounds);
     if (!traced) return false;
-    const threshold = Math.max(20, assembly.framing.studWidth / 2 + 12);
+    const threshold = Math.max(20, studSupportWidth / 2 + 12);
     const framed = snapEnabled
       ? fitPanelToFramingReveal(
           traced,
@@ -1954,12 +2429,12 @@ export function WallDetailEditorBody({ openedAt }) {
   const beginCanvasGesture = (event) => {
     if (event.button !== 0) return;
     if (canvasTool === CANVAS_TOOLS.PAN || spacePanActive) return;
-    if (canvasTool === CANVAS_TOOLS.DRAW_ACCENT && !accentsAllowed) return;
+    if (!canvasToolAvailable(TOOL_BY_ID[canvasTool])) return;
     if (canvasTool === CANVAS_TOOLS.TRACE_PANEL) {
       event.preventDefault();
       const point = eventToLocal(event, true, true);
       const points = panelTrace?.points || [];
-      const rect = svgRef.current?.getBoundingClientRect();
+      const rect = canvasRectFor(event);
       const closeDistance = Math.max(8, (detail.length / Math.max(1, rect?.width || 1)) * 12);
       if (points.length >= 3 && Math.hypot(point.u - points[0].u, point.v - points[0].v) <= closeDistance) {
         commitPanelTrace(points);
@@ -2049,6 +2524,9 @@ export function WallDetailEditorBody({ openedAt }) {
       endpoint,
       current: acquisition.point,
       reference: acquisition.reference,
+      // Where the pointer went down, unsnapped: the release is judged a click
+      // or a drag against this, as a move is.
+      pressPoint: eventToLocal(event, false),
       pointerId: event.pointerId,
     });
   };
@@ -2157,12 +2635,17 @@ export function WallDetailEditorBody({ openedAt }) {
   const finishCanvasGesture = (event) => {
     if (panGesture) return;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
-    // Judged in pixels, not millimetres: at fit zoom a millimetre is well under
-    // a pixel, so a bare click used to clear a millimetre test and commit a
-    // "move" — which on a generated board, stud or screw layout also froze the
-    // whole pattern into custom pieces.
-    const clickTravel = Math.max(1, wallUnitsPerPixel(canvasMetrics, viewport, bounds) * 2);
+    // A click or a drag is judged in pixels (detailCanvasRules), so this is the
+    // screen scale the release is read at.
+    const clickUnitPx = wallUnitsPerPixel(canvasMetrics, viewport, bounds);
     if (gesture.kind === 'dimension_endpoint') {
+      // A grip that was only clicked keeps its end exactly as stored: acquiring
+      // it again would snap, round or level an end that was typed in.
+      if (!travelledPastClick(gesture.pressPoint, eventToLocal(event, false), clickUnitPx)) {
+        svgRef.current?.releasePointerCapture?.(event.pointerId);
+        setGesture(null);
+        return;
+      }
       const acquisition = orthoDimensionEndpoint(
         event,
         gesture.endpoint === 'start' ? gesture.dimension.end : gesture.dimension.start,
@@ -2192,7 +2675,7 @@ export function WallDetailEditorBody({ openedAt }) {
       const moved = moveWallDimensionWithinBounds(gesture.dimension, delta, bounds, face.dimensions.precision);
       svgRef.current?.releasePointerCapture?.(event.pointerId);
       setGesture(null);
-      if (Math.hypot(delta.u, delta.v) < clickTravel) return;
+      if (!travelledPastClick(gesture.start, current, clickUnitPx)) return;
       if (gesture.copy) {
         // The copy measures its own two points from here on: dragging it away
         // from the geometry it was snapped to would otherwise leave it claiming
@@ -2216,11 +2699,7 @@ export function WallDetailEditorBody({ openedAt }) {
     if (dimensionEndpoint) {
       // A stationary press is the first click of a click-click measurement:
       // keep the gesture alive and wait for the second point.
-      const dragPixels = Math.hypot(
-        event.clientX - (gesture.screenX ?? event.clientX),
-        event.clientY - (gesture.screenY ?? event.clientY),
-      );
-      if (dragPixels < 5) {
+      if (isMeasureClick(gesture, event)) {
         svgRef.current?.releasePointerCapture?.(event.pointerId);
         setDimensionAcquisition(dimensionEndpoint);
         setGesture((value) => (value ? { ...value, awaitingSecondClick: true } : value));
@@ -2271,13 +2750,9 @@ export function WallDetailEditorBody({ openedAt }) {
     }
 
     const moved = movedGestureEntity(finalGesture);
-    const movedDistance = Math.hypot(
-      finalGesture.current.u - finalGesture.start.u,
-      finalGesture.current.v - finalGesture.start.v,
-    );
     // A copy dropped exactly on its original would be invisible and impossible
     // to select apart, so the same "did it actually move?" guard covers both.
-    if (!moved || movedDistance < clickTravel) return;
+    if (!moved || !travelledPastClick(finalGesture.start, finalGesture.current, clickUnitPx)) return;
     if (finalGesture.copy) {
       commitElementCopy(finalGesture, moved);
       return;
@@ -2369,7 +2844,7 @@ export function WallDetailEditorBody({ openedAt }) {
     !(selection.type === 'fastener' && selectedFastenerGuide),
   );
   const currentTakeoff = detail.takeoff.sides[activeSide];
-  const supportWidth = Math.max(0, Number(assembly.framing.studWidth) || 0);
+  const supportWidth = studSupportWidth;
   const verticalJointLanding = Math.max(0, (supportWidth - face.layout.horizontalGap) / 2);
   const horizontalJointLanding = Math.max(0, (supportWidth - face.layout.verticalGap) / 2);
   const rawGesturePreview = gesture?.kind === 'draw' ? drawnGestureEntity() : movedGestureEntity();
@@ -2454,9 +2929,7 @@ export function WallDetailEditorBody({ openedAt }) {
   const dimensionFontSize = 12.5 * unitPx;
   // The elevation only draws the near frame, so clashes are measured against
   // exactly what is on screen rather than against studs hidden behind it.
-  const drawnFrameMembers = frameMembers.filter((member) => member.frameIndex === 0);
-  const framingClashes = findFramingOpeningClashes(drawnFrameMembers, detail.openings);
-  const framingContactById = new Map(framingClashes.map((clash) => [clash.memberId, clash]));
+  const { drawnFrameMembers, framingClashes, framingContactById } = drawnFramingContact(frameMembers, detail.openings);
   const intrusionCount = framingClashes.filter((clash) => clash.contact === 'intrusion').length;
   // The member under the cursor turns red the moment it eats into an opening,
   // so a stud is never committed into a doorway by accident.
@@ -2467,6 +2940,17 @@ export function WallDetailEditorBody({ openedAt }) {
   const framingPreviewFouls = Boolean(framingPreviewContact && framingPreviewContact.overlap > 0.05);
   const activeToolDefinition = TOOL_BY_ID[canvasTool];
   const framedAssembly = assembly.system === 'framed';
+  /**
+   * Whether a tool is on offer: the framing tools on a framed wall, the Accent
+   * tool on a face that takes accents. The one rule behind the buttons'
+   * `disabled`, the shortcut keys and the press.
+   */
+  const canvasToolAvailable = (definition) =>
+    !((definition?.framedOnly && !framedAssembly) || (definition?.accentsOnly && !accentsAllowed));
+  // A tool that stops being on offer under the user — another face, another
+  // material — hands the canvas back to Select, instead of staying armed with
+  // its button greyed out and every press on the drawing doing nothing.
+  if (!canvasToolAvailable(activeToolDefinition)) chooseCanvasTool(CANVAS_TOOLS.SELECT);
 
   const referenceEntityName = (reference) => {
     if (reference.entityType === 'wall') return 'Wall';
@@ -2627,21 +3111,28 @@ export function WallDetailEditorBody({ openedAt }) {
     event.stopPropagation();
   };
 
+  canvasHandlersRef.current = {
+    beginElementMove,
+    beginDimensionMove,
+    selectDimension,
+    beginDimensionEndpointMove,
+  };
+
   shortcutHandlerRef.current = (event) => {
     if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
-    const target = event.target;
-    if (target?.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target?.tagName)) return;
+    if (isTypingTarget(event.target)) return;
     if (event.key === 'Escape') {
       // An open popover owns Escape (it closes, and nothing else happens);
       // a closed one never sees it.
       if (isPopoverOpen()) return;
       // The panel-trace effect owns Escape while a trace is open; never swallow it here.
       if (panelTrace) return;
-      if (gesture || dimensionAcquisition) {
-        // First Escape cancels the in-flight gesture but keeps the tool active.
+      // First Escape cancels the in-flight gesture but keeps the tool active.
+      // The pick-up marker a hover draws is not a gesture: with nothing in
+      // flight, Escape leaves the tool at once, as the ceiling editor's does.
+      if (gesture) {
         event.preventDefault();
-        setGesture(null);
-        setDimensionAcquisition(null);
+        dropCanvasGesture();
         return;
       }
       if (canvasTool === CANVAS_TOOLS.SELECT) return;
@@ -2652,6 +3143,10 @@ export function WallDetailEditorBody({ openedAt }) {
     }
     if (event.key === 'Delete' || event.key === 'Backspace') {
       claimShortcut(event);
+      // A drag in flight is dropped first. Its release would otherwise commit
+      // the piece it picked up at the press: a move of something no longer
+      // there, or a copy that brings the deleted piece back.
+      if (gesture) dropCanvasGesture();
       if (selectionIsDeletable) deleteSelection();
       return;
     }
@@ -2673,8 +3168,7 @@ export function WallDetailEditorBody({ openedAt }) {
     const definition = TOOL_SHORTCUTS[event.key.toLowerCase()];
     if (!definition) return;
     claimShortcut(event);
-    if (definition.framedOnly && !framedAssembly) return;
-    if (definition.accentsOnly && !accentsAllowed) return;
+    if (!canvasToolAvailable(definition)) return;
     chooseCanvasTool(definition.tool);
     flashToolHud(definition);
   };
@@ -2697,7 +3191,7 @@ export function WallDetailEditorBody({ openedAt }) {
         shortcut={definition.shortcut}
         title={definition.title}
         active={canvasTool === definition.tool}
-        disabled={Boolean((definition.framedOnly && !framedAssembly) || (definition.accentsOnly && !accentsAllowed))}
+        disabled={!canvasToolAvailable(definition)}
         onClick={() => chooseCanvasTool(definition.tool)}
         {...overrides}
       />
@@ -3788,6 +4282,7 @@ export function WallDetailEditorBody({ openedAt }) {
                       if (!gesture) setDimensionAcquisition(null);
                     }}
                     onPointerCancel={() => {
+                      gestureRectRef.current = null;
                       setGesture(null);
                       setDimensionAcquisition(null);
                     }}
@@ -3803,122 +4298,26 @@ export function WallDetailEditorBody({ openedAt }) {
                           : `translate(0 ${detail.height}) scale(1 -1)`
                       }
                     >
-                      <WallCanvasGrid bounds={bounds} snapStep={snapStep} unitPx={unitPx} active={snapEnabled} />
-                      {detail.openings.map((opening) => (
-                        <rect
-                          key={`${opening.id}:void`}
-                          className={styles.openingVoid}
-                          x={opening.u0}
-                          y={opening.v0}
-                          width={opening.u1 - opening.u0}
-                          height={opening.v1 - opening.v0}
-                        />
-                      ))}
-                      {layerVisibility.panels &&
-                        panels.flatMap((panel) =>
-                          panel.polygonal
-                            ? panel.regions.map((region, index) => (
-                                <path
-                                  key={`${panel.id}:region:${index}`}
-                                  className={styles.panelShape}
-                                  data-selected={
-                                    selection?.type === 'panel' && selection.id === panel.localId ? 'true' : 'false'
-                                  }
-                                  d={panelRegionPath(region)}
-                                  fill={panelFill}
-                                  fillRule="evenodd"
-                                  vectorEffect="non-scaling-stroke"
-                                  onPointerDown={(event) => beginElementMove(event, 'panel', panel.localId, panel)}
-                                >
-                                  <title>{`${panel.label} · ${faceSizeLine(panel.width, panel.height, sizePrecision)} · ${activeBoardLabel}`}</title>
-                                </path>
-                              ))
-                            : panel.fragments.map((fragment, index) => (
-                                <rect
-                                  key={`${panel.id}:${index}`}
-                                  className={styles.panelShape}
-                                  data-selected={
-                                    selection?.type === 'panel' && selection.id === panel.localId ? 'true' : 'false'
-                                  }
-                                  x={fragment.u0}
-                                  y={fragment.v0}
-                                  width={fragment.u1 - fragment.u0}
-                                  height={fragment.v1 - fragment.v0}
-                                  fill={panelFill}
-                                  vectorEffect="non-scaling-stroke"
-                                  onPointerDown={(event) => beginElementMove(event, 'panel', panel.localId, panel)}
-                                >
-                                  <title>{`${panel.label} · ${faceSizeLine(panel.width, panel.height, sizePrecision)} · ${activeBoardLabel}`}</title>
-                                </rect>
-                              )),
-                        )}
-                      {layerVisibility.panels && sidingCoursePath ? (
-                        <g pointerEvents="none" data-siding-courses={activeSide}>
-                          <clipPath id={sidingClipId}>
-                            {panels.flatMap((panel) =>
-                              panel.regions.map((region, index) => (
-                                <path
-                                  key={`${panel.id}:clip:${index}`}
-                                  d={panelRegionPath(region)}
-                                  clipRule="evenodd"
-                                />
-                              )),
-                            )}
-                          </clipPath>
-                          <path
-                            className={styles.sidingCourses}
-                            d={sidingCoursePath}
-                            clipPath={`url(#${sidingClipId})`}
-                            vectorEffect="non-scaling-stroke"
-                          />
-                        </g>
-                      ) : null}
-                      {/* Accent panels: over the boards, under the framing,
-                          screws and dimensions, clipped to the boards so the
-                          openings and the reveals cut them as they cut the
-                          board. Selection changes the fill, never the line. */}
-                      {layerVisibility.panels && faceAccents.length ? (
-                        <g data-accents={activeSide}>
-                          <clipPath id={accentClipId}>
-                            {panels.flatMap((panel) =>
-                              panel.regions.map((region, index) => (
-                                <path
-                                  key={`${panel.id}:accent-clip:${index}`}
-                                  d={panelRegionPath(region)}
-                                  clipRule="evenodd"
-                                />
-                              )),
-                            )}
-                          </clipPath>
-                          <g clipPath={`url(#${accentClipId})`}>
-                            {faceAccents
-                              .filter((accent) => accent.u1 > accent.u0 && accent.v1 > accent.v0)
-                              .map((accent) => (
-                                <rect
-                                  key={accent.id}
-                                  className={styles.accentShape}
-                                  data-accent-id={accent.id}
-                                  data-selected={
-                                    selection?.type === 'accent' && selection.id === accent.id ? 'true' : 'false'
-                                  }
-                                  x={accent.u0}
-                                  y={accent.v0}
-                                  width={accent.u1 - accent.u0}
-                                  height={accent.v1 - accent.v0}
-                                  fill={wallFinishDrawingTint(accent.finish.colour.hex)}
-                                  vectorEffect="non-scaling-stroke"
-                                  onPointerDown={(event) =>
-                                    beginElementMove(event, 'accent', accent.id, accent.requested)
-                                  }
-                                >
-                                  <title>{`${accent.label || 'Accent'} · ${formatMm(accent.width)} × ${formatMm(
-                                    accent.height,
-                                  )} · ${describeWallFinish(accent.finish)}`}</title>
-                                </rect>
-                              ))}
-                          </g>
-                        </g>
-                      ) : null}
+                      <WallElevationUnderLayers
+                        bounds={bounds}
+                        snapStep={snapStep}
+                        unitPx={unitPx}
+                        snapEnabled={snapEnabled}
+                        detail={detail}
+                        face={face}
+                        layerVisibility={layerVisibility}
+                        panels={panels}
+                        selection={selection}
+                        panelFill={panelFill}
+                        sizePrecision={sizePrecision}
+                        activeBoardLabel={activeBoardLabel}
+                        sidingCoursePath={sidingCoursePath}
+                        activeSide={activeSide}
+                        sidingClipId={sidingClipId}
+                        faceAccents={faceAccents}
+                        accentClipId={accentClipId}
+                        handlers={stableCanvasHandlers}
+                      />
                       {gesturePreview && gesturePreviewType === 'accent' ? (
                         <rect
                           className={styles.drawPreview}
@@ -3930,96 +4329,20 @@ export function WallDetailEditorBody({ openedAt }) {
                           vectorEffect="non-scaling-stroke"
                         />
                       ) : null}
-                      {layerVisibility.framing &&
-                        drawnFrameMembers.map((member) => {
-                          const contact = framingContactById.get(member.id);
-                          const described = describeSelectedFraming(member, assembly.framing, sizePrecision);
-                          return (
-                            <rect
-                              key={member.id}
-                              className={styles.frameShape}
-                              data-selected={
-                                selection?.type === 'framing' && selection.id === member.id ? 'true' : 'false'
-                              }
-                              data-contact={contact?.contact}
-                              x={member.u0}
-                              y={member.v0}
-                              width={member.u1 - member.u0}
-                              height={member.v1 - member.v0}
-                              vectorEffect="non-scaling-stroke"
-                              onPointerDown={(event) => beginElementMove(event, 'framing', member.id, member)}
-                            >
-                              <title>
-                                {`${described.name} · ${described.size} · ${described.note} · ${described.setOut}${
-                                  contact ? ` · ${describeOpeningContact(contact)}` : ''
-                                }`}
-                              </title>
-                            </rect>
-                          );
-                        })}
-                      {layerVisibility.fasteners &&
-                        fasteners.map((fastener) => (
-                          <FastenerGraphic
-                            key={fastener.id}
-                            fastener={fastener}
-                            appearance={face.fasteners.appearance}
-                            boardFill={panelFill}
-                            headDiameter={face.fasteners.headDiameter}
-                            unitPx={unitPx}
-                            selected={selection?.type === 'fastener' && selection.id === fastener.id}
-                            title={`Screw · ${
-                              describeSelectedFastener(fastener, face.fasteners.headDiameter, sizePrecision).note
-                            }`}
-                            onPointerDown={(event) => beginElementMove(event, 'fastener', fastener.id, fastener)}
-                          />
-                        ))}
-                      {detail.openings.map((opening) => (
-                        <rect
-                          key={`${opening.id}:profile`}
-                          className={styles.openingProfile}
-                          x={opening.u0}
-                          y={opening.v0}
-                          width={opening.u1 - opening.u0}
-                          height={opening.v1 - opening.v0}
-                          vectorEffect="non-scaling-stroke"
-                        >
-                          <title>
-                            {`${opening.kind} · U ${formatMm(opening.u0)} → ${formatMm(opening.u1)} · V ${formatMm(
-                              opening.v0,
-                            )} → ${formatMm(opening.v1)}`}
-                          </title>
-                        </rect>
-                      ))}
-                      {layerVisibility.asBuilt &&
-                        detail.asBuilt.map((measurement) =>
-                          measurement.axis === 'u' ? (
-                            <line
-                              key={measurement.id}
-                              x1={measurement.measuredValue}
-                              x2={measurement.measuredValue}
-                              y1={0}
-                              y2={detail.height}
-                              className={styles.asBuiltLine}
-                              data-status={measurement.status}
-                              strokeWidth="1.25"
-                              strokeDasharray="9 6"
-                              vectorEffect="non-scaling-stroke"
-                            />
-                          ) : (
-                            <line
-                              key={measurement.id}
-                              x1={0}
-                              x2={detail.length}
-                              y1={measurement.measuredValue}
-                              y2={measurement.measuredValue}
-                              className={styles.asBuiltLine}
-                              data-status={measurement.status}
-                              strokeWidth="1.25"
-                              strokeDasharray="9 6"
-                              vectorEffect="non-scaling-stroke"
-                            />
-                          ),
-                        )}
+                      <WallElevationMemberLayers
+                        detail={detail}
+                        face={face}
+                        assembly={assembly}
+                        layerVisibility={layerVisibility}
+                        drawnFrameMembers={drawnFrameMembers}
+                        framingContactById={framingContactById}
+                        sizePrecision={sizePrecision}
+                        selection={selection}
+                        fasteners={fasteners}
+                        panelFill={panelFill}
+                        unitPx={unitPx}
+                        handlers={stableCanvasHandlers}
+                      />
                       {gesturePreview && gesturePreviewType === 'panel' ? (
                         <g className={styles.drawPreview}>
                           <rect
@@ -4095,51 +4418,23 @@ export function WallDetailEditorBody({ openedAt }) {
                         />
                       ) : null}
                     </g>
-                    {(detail.slabBands || []).map((band) => (
-                      <SlabBandGraphic key={band.slabId} band={band} view={bounds} unitPx={unitPx} format={formatMm} />
-                    ))}
-                    {boardSpan ? (
-                      <BoardOverhangGraphic span={boardSpan} view={bounds} unitPx={unitPx} format={formatMm} />
-                    ) : null}
-                    {layerVisibility.fasteners &&
-                      fastenerGuideLayouts.map((guide) => (
-                        <FastenerGuideGraphic
-                          key={guide.id}
-                          guide={guide}
-                          view={bounds}
-                          precision={face.dimensions.precision}
-                          selected={fastenerGuideDraft.id === guide.id}
-                        />
-                      ))}
-                    {layerVisibility.dimensions &&
-                      dimensions.map((dimension) => {
-                        const renderedDimension =
-                          dimensionGesturePreview?.id === dimension.id ? dimensionGesturePreview : dimension;
-                        const selected = selection?.type === 'dimension' && selection.id === dimension.id;
-                        const editable =
-                          selected && dimension.source === 'custom' && canvasTool === CANVAS_TOOLS.SELECT;
-                        return (
-                          <DimensionGraphic
-                            key={dimension.id}
-                            dimension={renderedDimension}
-                            view={bounds}
-                            selected={selected}
-                            editable={editable}
-                            showScrewGuide={dimension.source === 'custom' && canvasTool === CANVAS_TOOLS.ADD_FASTENER}
-                            unitPx={unitPx}
-                            handleRadius={dimensionHandleRadius}
-                            fontSize={dimensionFontSize}
-                            title={`${dimension.name || 'Measurement'} · ${dimension.label}`}
-                            onPointerDown={(event) =>
-                              dimension.source === 'custom'
-                                ? beginDimensionMove(event, dimension)
-                                : selectDimension(event, dimension)
-                            }
-                            onStartHandlePointerDown={(event) => beginDimensionEndpointMove(event, dimension, 'start')}
-                            onEndHandlePointerDown={(event) => beginDimensionEndpointMove(event, dimension, 'end')}
-                          />
-                        );
-                      })}
+                    <WallElevationAnnotationLayers
+                      detail={detail}
+                      face={face}
+                      bounds={bounds}
+                      unitPx={unitPx}
+                      boardSpan={boardSpan}
+                      layerVisibility={layerVisibility}
+                      fastenerGuideLayouts={fastenerGuideLayouts}
+                      fastenerGuideDraft={fastenerGuideDraft}
+                      dimensions={dimensions}
+                      dimensionGesturePreview={dimensionGesturePreview}
+                      selection={selection}
+                      canvasTool={canvasTool}
+                      dimensionHandleRadius={dimensionHandleRadius}
+                      dimensionFontSize={dimensionFontSize}
+                      handlers={stableCanvasHandlers}
+                    />
                     {gesturePreview && gesturePreviewType === 'dimension' ? (
                       <DimensionGraphic
                         dimension={gesturePreview}

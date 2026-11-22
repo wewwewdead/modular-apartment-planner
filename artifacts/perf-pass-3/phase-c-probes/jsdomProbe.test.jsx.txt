@@ -1,0 +1,543 @@
+/* @vitest-environment jsdom */
+// TEMPORARY perf probe for perf pass 3, phase C. Deleted before hand-off.
+import { afterEach, beforeEach, describe, it, vi } from 'vitest';
+import { act, cleanup, render } from '@testing-library/react';
+
+const counters = vi.hoisted(() => ({
+  entityLayerRenders: 0,
+  entityElements: 0,
+  entityShapeRenders: 0,
+  dimensionLayerRenders: 0,
+  normalizeDoc: 0,
+  normalizeModel: 0,
+  pairTests: 0,
+  distance: 0,
+  trimIntersections: 0,
+}));
+globalThis.__perfCounters = counters;
+
+vi.mock('./components/EntityRenderer', async (importOriginal) => {
+  const actual = await importOriginal();
+  const { memo } = await import('react');
+  const Real = actual.default;
+  const inner = Real.$$typeof ? Real.type : Real;
+  function Counted(props) {
+    counters.entityLayerRenders += 1;
+    counters.entityElements += props.entities.filter((e) => e.visible !== false && e.type !== 'dimension').length;
+    return inner(props);
+  }
+  return { ...actual, default: Real.$$typeof ? memo(Counted) : Counted };
+});
+vi.mock('./components/DimensionRenderer', async (importOriginal) => {
+  const actual = await importOriginal();
+  const { memo } = await import('react');
+  const Real = actual.default;
+  const inner = Real.$$typeof ? Real.type : Real;
+  function Counted(props) {
+    counters.dimensionLayerRenders += 1;
+    return inner(props);
+  }
+  return { ...actual, default: Real.$$typeof ? memo(Counted) : Counted };
+});
+vi.mock('./utils/arcUtils', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    getArcPath: (...args) => {
+      counters.entityShapeRenders += 1;
+      return actual.getArcPath(...args);
+    },
+  };
+});
+const timers = vi.hoisted(() => ({}));
+globalThis.__timers = timers;
+function timedModule(name, fn) {
+  return (...args) => {
+    const start = performance.now();
+    try {
+      return fn(...args);
+    } finally {
+      timers[name] = (timers[name] ?? 0) + performance.now() - start;
+    }
+  };
+}
+vi.mock('./craftsman/hooks/useSketchBOM', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, default: timedModule('useSketchBOM', actual.default) };
+});
+vi.mock('./craftsman/utils/entityBomAdapter', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, buildBomEntityList: timedModule('buildBomEntityList', actual.buildBomEntityList) };
+});
+vi.mock('./craftsman/components/ExportBar', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, default: timedModule('ExportBar', actual.default) };
+});
+vi.mock('./craftsman/components/ShelfSagPanel', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, default: timedModule('ShelfSagPanel', actual.default) };
+});
+vi.mock('./craftsman/components/MaterialPicker', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, default: timedModule('MaterialPicker', actual.default) };
+});
+vi.mock('./craftsman/components/FastenerPanel', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, default: timedModule('FastenerPanel', actual.default) };
+});
+vi.mock('./craftsman/components/MaterialEditorPanel', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, default: timedModule('MaterialEditorPanel', actual.default) };
+});
+vi.mock('./craftsman/components/BomPanel', async (importOriginal) => {
+  const actual = await importOriginal();
+  const { memo } = await import('react');
+  const Real = actual.default;
+  return { ...actual, default: Real.$$typeof ? memo(timedModule('BomPanel', Real.type)) : timedModule('BomPanel', Real) };
+});
+vi.mock('./craftsman/utils/materialSelectionUtils', async (importOriginal) => {
+  const actual = await importOriginal();
+  const out = { ...actual };
+  for (const [key, value] of Object.entries(actual)) if (typeof value === 'function') out[key] = timedModule(key, value);
+  return out;
+});
+vi.mock('./utils/sketchDocumentUtils', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    normalizeSketchDocument: (...args) => {
+      counters.normalizeDoc += 1;
+      return actual.normalizeSketchDocument(...args);
+    },
+  };
+});
+vi.mock('./cad/model', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    normalizeModel: (...args) => {
+      counters.normalizeModel += 1;
+      return actual.normalizeModel(...args);
+    },
+  };
+});
+vi.mock('./utils/hitTest', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    getSegmentIntersectionPoint: (...args) => {
+      counters.pairTests += 1;
+      return actual.getSegmentIntersectionPoint(...args);
+    },
+  };
+});
+vi.mock('./utils/canvasMath', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    calculateDistance: (...args) => {
+      counters.distance += 1;
+      return actual.calculateDistance(...args);
+    },
+  };
+});
+
+import useSketchStudio from './hooks/useSketchStudio';
+import SketchStudioLayout from './components/SketchStudioLayout';
+import sampleDocument from './data/sampleDocument';
+import { ConfirmDialogProvider } from '../../ui/ConfirmDialog';
+import { MemoryRouter } from 'react-router-dom';
+
+function reset() {
+  for (const key of Object.keys(counters)) counters[key] = 0;
+}
+
+function createRandom(seed) {
+  let state = seed >>> 0 || 1;
+  return () => {
+    state ^= state << 13;
+    state >>>= 0;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    state >>>= 0;
+    return state / 4294967296;
+  };
+}
+
+function buildLines(count, seed = 7) {
+  const random = createRandom(seed);
+  const entities = [];
+  for (let index = 0; index < count; index += 1) {
+    const x = random() * 20000;
+    const y = random() * 20000;
+    const angle = random() * Math.PI;
+    const length = 200 + random() * 1800;
+    entities.push({
+      id: `line-${index}`,
+      type: 'line',
+      x1: x,
+      y1: y,
+      x2: x + Math.cos(angle) * length,
+      y2: y + Math.sin(angle) * length,
+      layerId: 'default',
+      visible: true,
+      locked: false,
+      meta: {},
+    });
+  }
+  return entities;
+}
+
+function buildArcs(count, seed = 11) {
+  const random = createRandom(seed);
+  const entities = [];
+  for (let index = 0; index < count; index += 1) {
+    const x = random() * 20000;
+    const y = random() * 20000;
+    entities.push({
+      id: `arc-${index}`,
+      type: 'arc',
+      start: { x, y },
+      control: { x: x + 200, y: y + 400 },
+      end: { x: x + 400, y },
+      layerId: 'default',
+      visible: true,
+      locked: false,
+      meta: {},
+    });
+  }
+  return entities;
+}
+
+function pointer({ x = 0, y = 0, button = 0, buttons = 1 } = {}) {
+  return {
+    clientX: x,
+    clientY: y,
+    button,
+    buttons,
+    ctrlKey: false,
+    shiftKey: false,
+    metaKey: false,
+    pointerId: 1,
+    preventDefault() {},
+    stopPropagation() {},
+    currentTarget: { setPointerCapture() {}, hasPointerCapture: () => true, releasePointerCapture() {} },
+  };
+}
+
+let studio = null;
+let layoutRenders = 0;
+function Harness() {
+  studio = useSketchStudio();
+  layoutRenders += 1;
+  return <SketchStudioLayout {...studio} />;
+}
+
+function mount(entities, viewport = { zoom: 0.05, panX: 0, panY: 0 }) {
+  render(
+    <MemoryRouter>
+      <ConfirmDialogProvider>
+        <Harness />
+      </ConfirmDialogProvider>
+    </MemoryRouter>,
+  );
+  act(() => studio.loadTemplate({ document: { ...sampleDocument, entities }, viewport }));
+  return () => studio;
+}
+
+function timed(fn) {
+  const start = performance.now();
+  act(fn);
+  return performance.now() - start;
+}
+
+function snapshot(label, moves, ms) {
+  const per = (value) => +(value / moves).toFixed(2);
+  return {
+    label,
+    layoutRendersPerMove: per(layoutRenders),
+    entityLayerRendersPerMove: per(counters.entityLayerRenders),
+    entityElementsPerMove: per(counters.entityElements),
+    entityShapeRendersPerMove: per(counters.entityShapeRenders),
+    dimensionLayerRendersPerMove: per(counters.dimensionLayerRenders),
+    normalizeDocPerMove: per(counters.normalizeDoc),
+    normalizeModelPerMove: per(counters.normalizeModel),
+    pairTestsPerMove: per(counters.pairTests),
+    distancePerMove: per(counters.distance),
+    msPerMove: +(ms / moves).toFixed(2),
+  };
+}
+
+function resetAll() {
+  reset();
+  layoutRenders = 0;
+}
+
+const results = [];
+
+beforeEach(() => localStorage.clear());
+afterEach(cleanup);
+
+describe('perf probe', () => {
+  it('select tool: pointer moves over empty space, hover changes, pan frames', () => {
+    const lines = buildLines(5000);
+    mount(lines);
+    // Warm.
+    act(() => studio.onCanvasPointerMove(pointer({ x: 1100, y: 1100, buttons: 0 })));
+
+    // Empty space (outside the drawing: x > 20000 mm at zoom 0.05 = 1000 px).
+    resetAll();
+    let ms = 0;
+    for (let index = 0; index < 20; index += 1) {
+      ms += timed(() => studio.onCanvasPointerMove(pointer({ x: 1100 + index, y: 1100, buttons: 0 })));
+    }
+    results.push(snapshot('select: move over empty space (5000 lines)', 20, ms));
+
+    // Hover changes: alternate between two line midpoints.
+    const a = lines[10];
+    const b = lines[20];
+    const mid = (line) => ({ x: ((line.x1 + line.x2) / 2) * 0.05, y: ((line.y1 + line.y2) / 2) * 0.05 });
+    resetAll();
+    ms = 0;
+    for (let index = 0; index < 10; index += 1) {
+      const target = index % 2 ? mid(a) : mid(b);
+      ms += timed(() => studio.onCanvasPointerMove(pointer({ ...target, buttons: 0 })));
+    }
+    results.push({ ...snapshot('select: hover change A<->B (5000 lines)', 10, ms), hovered: studio.hover.hoveredId });
+
+    // Pan frames: middle button.
+    act(() => studio.onCanvasPointerDown(pointer({ x: 1100, y: 1100, button: 1 })));
+    resetAll();
+    ms = 0;
+    for (let index = 1; index <= 10; index += 1) {
+      ms += timed(() => studio.onCanvasPointerMove(pointer({ x: 1100 + index * 5, y: 1100, button: 1, buttons: 4 })));
+    }
+    results.push(snapshot('pan frame (5000 lines)', 10, ms));
+    act(() => studio.onCanvasPointerUp(pointer({ x: 1150, y: 1100, button: 1 })));
+  });
+
+  it('select tool on 5000 arcs: empty space, hover change, pan', () => {
+    const arcs = buildArcs(5000);
+    mount(arcs);
+    act(() => studio.onCanvasPointerMove(pointer({ x: 1100, y: 1100, buttons: 0 })));
+    resetAll();
+    let ms = 0;
+    for (let index = 0; index < 20; index += 1) {
+      ms += timed(() => studio.onCanvasPointerMove(pointer({ x: 1100 + index, y: 1100, buttons: 0 })));
+    }
+    results.push(snapshot('arcs: select move over empty space (5000 arcs)', 20, ms));
+    const peak = (arc) => ({ x: (arc.start.x + 200) * 0.05, y: (arc.start.y + 200) * 0.05 });
+    resetAll();
+    ms = 0;
+    for (let index = 0; index < 10; index += 1) {
+      ms += timed(() => studio.onCanvasPointerMove(pointer({ ...peak(index % 2 ? arcs[10] : arcs[20]), buttons: 0 })));
+    }
+    results.push({ ...snapshot('arcs: hover change A<->B (5000 arcs)', 10, ms), hovered: studio.hover.hoveredId });
+    act(() => studio.onCanvasPointerDown(pointer({ x: 1100, y: 1100, button: 1 })));
+    resetAll();
+    ms = 0;
+    for (let index = 1; index <= 10; index += 1) {
+      ms += timed(() => studio.onCanvasPointerMove(pointer({ x: 1100 + index * 5, y: 1100, button: 1, buttons: 4 })));
+    }
+    results.push(snapshot('arcs: pan frame (5000 arcs)', 10, ms));
+    act(() => studio.onCanvasPointerUp(pointer({ x: 1150, y: 1100, button: 1 })));
+  });
+
+  for (const count of [3000, 10000]) {
+    it(`line tool snap: ${count} segments`, () => {
+      const lines = buildLines(count);
+      mount(lines, { zoom: 1, panX: 0, panY: 0 });
+      act(() => studio.setActiveTool('line'));
+      act(() => studio.onCanvasPointerMove(pointer({ x: 1100, y: 1100, buttons: 0 })));
+      // Near geometry: cursor at a line's midpoint (in screen px at zoom 0.05).
+      const line = lines[5];
+      const near = { x: line.x1 + (line.x2 - line.x1) * 0.3 + 2, y: line.y1 + (line.y2 - line.y1) * 0.3 + 2 };
+      resetAll();
+      let ms = 0;
+      for (let index = 0; index < 3; index += 1) {
+        ms += timed(() => studio.onCanvasPointerMove(pointer({ x: near.x + index, y: near.y, buttons: 0 })));
+      }
+      results.push({ ...snapshot(`line tool: move near geometry (${count} lines)`, 3, ms), snap: studio.snap.snapType });
+      resetAll();
+      ms = 0;
+      for (let index = 0; index < 3; index += 1) {
+        ms += timed(() => studio.onCanvasPointerMove(pointer({ x: 30000 + index, y: 30000, buttons: 0 })));
+      }
+      results.push(snapshot(`line tool: move over empty space (${count} lines)`, 3, ms));
+    });
+  }
+
+  it('transform drag of one selected line (5000 lines)', () => {
+    const lines = buildLines(5000);
+    mount(lines);
+    const line = lines[42];
+    const start = { x: ((line.x1 + line.x2) / 2) * 0.05, y: ((line.y1 + line.y2) / 2) * 0.05 };
+    act(() => studio.onCanvasPointerMove(pointer({ ...start, buttons: 0 })));
+    act(() => studio.onCanvasPointerDown(pointer(start)));
+    act(() => studio.onCanvasPointerUp(pointer(start)));
+    act(() => studio.onCanvasClick(pointer(start)));
+    // Press on the selected line again: a transform.
+    act(() => studio.onCanvasPointerDown(pointer(start)));
+    const stringify = vi.spyOn(JSON, 'stringify');
+    resetAll();
+    let ms = 0;
+    for (let index = 1; index <= 10; index += 1) {
+      ms += timed(() => studio.onCanvasPointerMove(pointer({ x: start.x + index * 4, y: start.y, buttons: 1 })));
+    }
+    const histogram = {};
+    for (const [value] of stringify.mock.calls) {
+      const kind = value?.kind ?? (Array.isArray(value) ? `array[${value.length}]` : value?.type ?? typeof value);
+      const size = (stringify.getMockImplementation() ? 0 : 0);
+      histogram[kind] = (histogram[kind] ?? 0) + 1;
+    }
+    results.push({
+      ...snapshot('transform drag frame (5000 lines)', 10, ms),
+      stringifyHistogram: histogram,
+      stringifyPerFrame: stringify.mock.calls.length / 10,
+      mode: studio.interaction.mode,
+      dirty: studio.documentPersistence.isDirty,
+    });
+    stringify.mockClear();
+    resetAll();
+    ms = timed(() => studio.onCanvasPointerUp(pointer({ x: start.x + 40, y: start.y })));
+    results.push({
+      ...snapshot('transform drag end (5000 lines)', 1, ms),
+      stringify: stringify.mock.calls.length,
+      dirty: studio.documentPersistence.isDirty,
+    });
+    stringify.mockRestore();
+  });
+
+  it('fillet hover (2000 lines)', () => {
+    const lines = buildLines(2000);
+    mount(lines);
+    act(() => studio.setActiveTool('fillet'));
+    const line = lines[5];
+    const warmStart = performance.now();
+    act(() => studio.onCanvasPointerMove(pointer({ x: line.x1 * 0.05 - 1, y: line.y1 * 0.05, buttons: 0 })));
+    results.push({ label: 'fillet first move (2000 lines)', msPerMove: +(performance.now() - warmStart).toFixed(2) });
+    resetAll();
+    let ms = 0;
+    for (let index = 0; index < 3; index += 1) {
+      ms += timed(() =>
+        studio.onCanvasPointerMove(pointer({ x: line.x1 * 0.05 + index, y: line.y1 * 0.05, buttons: 0 })),
+      );
+    }
+    results.push(snapshot('fillet hover (2000 lines)', 3, ms));
+  });
+
+  it('trim hover (5000 lines)', () => {
+    const lines = buildLines(5000);
+    mount(lines);
+    act(() => studio.setActiveTool('trim'));
+    const line = lines[5];
+    const near = { x: ((line.x1 + line.x2) / 2) * 0.05, y: ((line.y1 + line.y2) / 2) * 0.05 };
+    act(() => studio.onCanvasPointerMove(pointer({ x: near.x, y: near.y - 0.01, buttons: 0 })));
+    resetAll();
+    let ms = 0;
+    for (let index = 0; index < 3; index += 1) {
+      ms += timed(() => studio.onCanvasPointerMove(pointer({ x: near.x, y: near.y + index * 0.01, buttons: 0 })));
+    }
+    results.push(snapshot('trim hover (5000 lines)', 3, ms));
+  });
+
+  for (const craftsman of [false, true]) {
+    it(`craftsman ${craftsman}: transform drag of one rect among 2000 rects with materials`, async () => {
+      const random = createRandom(5);
+      const rects = Array.from({ length: 2000 }, (_, index) => ({
+        id: `rect-${index}`,
+        type: 'rect',
+        x: random() * 20000,
+        y: random() * 20000,
+        width: 300 + random() * 600,
+        height: 18,
+        rotation: 0,
+        materialId: 'birch-plywood-18',
+        thickness: 18,
+        layerId: 'default',
+        visible: true,
+        locked: false,
+        meta: {},
+      }));
+      mount(rects);
+      if (craftsman) act(() => studio.toggleCraftsmanMode());
+      const rect = rects[42];
+      const start = { x: (rect.x + rect.width / 2) * 0.05, y: rect.y * 0.05 };
+      act(() => studio.onCanvasPointerMove(pointer({ ...start, buttons: 0 })));
+      act(() => studio.onCanvasPointerDown(pointer(start)));
+      act(() => studio.onCanvasPointerUp(pointer(start)));
+      act(() => studio.onCanvasClick(pointer(start)));
+      act(() => studio.onCanvasPointerDown(pointer(start)));
+      resetAll();
+      for (const key of Object.keys(timers)) delete timers[key];
+      let ms = 0;
+      const inspector = await import('node:inspector');
+      const session = new inspector.Session();
+      session.connect();
+      const post = (method, params) => new Promise((resolve, reject) => session.post(method, params, (error, result) => (error ? reject(error) : resolve(result))));
+      if (craftsman) {
+        await post('Profiler.enable');
+        await post('Profiler.start');
+      }
+      for (let index = 1; index <= 10; index += 1) {
+        ms += timed(() => studio.onCanvasPointerMove(pointer({ x: start.x + index * 4, y: start.y, buttons: 1 })));
+      }
+      if (craftsman) {
+        const { profile } = await post('Profiler.stop');
+        const fs = await import('node:fs');
+        fs.writeFileSync(process.env.PROBE_OUT.replace('.json', '.cpuprofile'), JSON.stringify(profile));
+      }
+      session.disconnect();
+      results.push({ ...snapshot(`craftsman ${craftsman}: drag frame (2000 rects)`, 10, ms), mode: studio.interaction.mode, timers: { ...timers } });
+      for (const key of Object.keys(timers)) delete timers[key];
+      act(() => studio.onCanvasPointerUp(pointer({ x: start.x + 40, y: start.y })));
+    });
+  }
+
+  it('C1 raw: old all-pairs vs new findIntersectionSnapPoint', async () => {
+    const { collectSnapSegmentsFromEntities, findIntersectionSnapPoint } = await import('./utils/snapUtils');
+    const { getSegmentIntersectionPoint } = await vi.importActual('./utils/hitTest');
+    function oldFind(segments, worldPoint, tolerance) {
+      let nearest = null;
+      let nearestDistance = Infinity;
+      for (let i = 0; i < segments.length; i += 1) {
+        for (let j = i + 1; j < segments.length; j += 1) {
+          const p = getSegmentIntersectionPoint(segments[i].start, segments[i].end, segments[j].start, segments[j].end);
+          if (!p) continue;
+          const d = Math.hypot(worldPoint.x - p.x, worldPoint.y - p.y);
+          if (d <= tolerance && d < nearestDistance) {
+            nearest = p;
+            nearestDistance = d;
+          }
+        }
+      }
+      return nearest;
+    }
+    for (const count of [3000, 10000]) {
+      const segments = collectSnapSegmentsFromEntities(buildLines(count));
+      const line = buildLines(count)[5];
+      const cursor = { x: (line.x1 + line.x2) / 2 + 60, y: (line.y1 + line.y2) / 2 + 60 };
+      const tolerance = 12 / 0.05;
+      let start = performance.now();
+      const oldResult = count <= 3000 ? oldFind(segments, cursor, tolerance) : 'skipped';
+      const oldMs = performance.now() - start;
+      reset();
+      start = performance.now();
+      const newResult = findIntersectionSnapPoint(segments, cursor, tolerance);
+      const newMs = performance.now() - start;
+      results.push({
+        label: `C1 raw ${count} segments`,
+        oldPairs: (count * (count - 1)) / 2,
+        oldMs: +oldMs.toFixed(2),
+        newPairs: counters.pairTests,
+        newMs: +newMs.toFixed(2),
+        same: count <= 3000 ? JSON.stringify(oldResult) === JSON.stringify(newResult && { x: newResult.x, y: newResult.y }) : 'n/a',
+      });
+    }
+  });
+
+  it('report', async () => {
+    const fs = await import('node:fs');
+    fs.writeFileSync(process.env.PROBE_OUT, JSON.stringify(results, null, 1));
+  });
+});

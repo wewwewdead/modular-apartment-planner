@@ -6,10 +6,8 @@
 // and the records already made. Only the station buttons and a placed print's
 // fields edit the model; numbers come from paintStation.js, printStation.js
 // and shopCatalog.js.
-import { useContext, useRef } from 'react';
-import { numeric } from './model.js';
-import { ValueField } from './CadEditors.jsx';
-import { ParameterContext } from './ExpressionInput.jsx';
+import { useRef } from 'react';
+import { ValueField, useNumber } from './CadEditors.jsx';
 import { FINISH_GLOSS_NAMES, POWDER, PRINT_METHOD_NAMES, PRINT_RULES, RAL_CLASSIC, ralOf } from './shopCatalog.js';
 import { PRINT_FONTS, textPoints } from './printStation.js';
 import { MachineNumbers, PrimaryButton, ProblemCard, Readout, Result, StationShell } from './ShopFloor.jsx';
@@ -27,19 +25,6 @@ function Segmented({ label, options, value, onChange, disabled = false }) {
       ))}
     </span>
   );
-}
-// A typed value (a number or =expression) for a handler; anything else waits.
-function useNumber() {
-  const { values } = useContext(ParameterContext);
-  return (handler) => (value) => {
-    let resolved;
-    try {
-      resolved = numeric(value, values || {});
-    } catch {
-      return;
-    }
-    if (Number.isFinite(resolved)) handler(resolved);
-  };
 }
 // Refusals (role alert) or warnings (role note) as problem cards.
 const Cards = ({ items, tone = 'warning' }) =>

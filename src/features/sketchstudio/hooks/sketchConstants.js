@@ -139,6 +139,12 @@ export const TOOL_SHORTCUT_MAP = new Map(TOOL_DEFINITIONS.map((tool) => [tool.sh
 // leaves the tool instead.
 export const HOVER_DRAFT_TOOLS = new Set(['fillet', 'chamfer', 'trim', 'extend', 'fastener']);
 
+// Tools that need the entity under the cursor: select picks it, offset copies
+// it, fillet reads its corner, mirror can use a clicked line as the axis, and a
+// fastener lands on the part it is placed over. Every other tool works from
+// points and snaps alone, and skips the hit test on each move.
+export const HOVER_ENTITY_TOOLS = new Set(['select', 'offset', 'fillet', 'mirror', 'fastener']);
+
 // Object snap overrides Ortho (the standard CAD rule). A snap that lands on a
 // definite point of an entity -- endpoint, vertex, midpoint, corner, centre,
 // intersection, control or arc point -- is used exactly, because forcing it
@@ -176,6 +182,12 @@ export function isEditableTarget(target) {
 
   const tagName = target.tagName.toLowerCase();
   return target.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+}
+
+// The precision HUD takes focus whenever a draft has a value to type, so a key
+// meant for the canvas often lands in its input instead.
+export function isPrecisionHudTarget(target) {
+  return target instanceof HTMLElement && Boolean(target.closest('[data-precision-hud]'));
 }
 
 export function mergeSelection(existingIds, nextIds, additive) {

@@ -254,7 +254,6 @@ const MODE_STATE = {
   panning: { mode: 'panning', panButton: 0 },
   'selection-box': { mode: 'selection-box' },
   'handle-drag': { mode: 'handle-drag', handleDrag: { entityId: 'x', handleId: 'end' } },
-  'anchor-drag': { mode: 'anchor-drag', anchorDrag: {} },
   transform: { mode: 'transform', transform: { startWorld: { x: 0, y: 0 } } },
 };
 
@@ -262,10 +261,8 @@ const END_TYPES = new Set([
   SKETCH_STUDIO_ACTIONS.END_PAN,
   SKETCH_STUDIO_ACTIONS.END_SELECTION_BOX,
   SKETCH_STUDIO_ACTIONS.END_HANDLE_DRAG,
-  SKETCH_STUDIO_ACTIONS.END_ANCHOR_DRAG,
   SKETCH_STUDIO_ACTIONS.END_TRANSFORM,
   SKETCH_STUDIO_ACTIONS.CANCEL_HANDLE_DRAG,
-  SKETCH_STUDIO_ACTIONS.CANCEL_ANCHOR_DRAG,
   SKETCH_STUDIO_ACTIONS.CANCEL_TRANSFORM,
 ]);
 
@@ -284,9 +281,8 @@ describe('every way out agrees with the table', () => {
     ['panning', [SKETCH_STUDIO_ACTIONS.END_PAN]],
     ['selection-box', [SKETCH_STUDIO_ACTIONS.END_SELECTION_BOX]],
     ['handle-drag', [SKETCH_STUDIO_ACTIONS.END_HANDLE_DRAG]],
-    ['anchor-drag', [SKETCH_STUDIO_ACTIONS.END_ANCHOR_DRAG]],
     ['transform', [SKETCH_STUDIO_ACTIONS.END_TRANSFORM]],
-    ['idle', [SKETCH_STUDIO_ACTIONS.SET_POINTER_DOWN]],
+    ['idle', []],
   ])('pointer-cancel ends %s exactly as before', (mode, expected) => {
     const { pointerHook, types } = pointerHookIn(MODE_STATE[mode] ?? { mode });
     pointerHook.handlePointerCancel();
@@ -298,13 +294,18 @@ describe('every way out agrees with the table', () => {
     ['panning', [SKETCH_STUDIO_ACTIONS.END_PAN]],
     ['selection-box', [SKETCH_STUDIO_ACTIONS.END_SELECTION_BOX]],
     ['handle-drag', [SKETCH_STUDIO_ACTIONS.CANCEL_HANDLE_DRAG]],
-    ['anchor-drag', [SKETCH_STUDIO_ACTIONS.CANCEL_ANCHOR_DRAG]],
     ['transform', [SKETCH_STUDIO_ACTIONS.CANCEL_TRANSFORM]],
   ])('undo ends %s exactly as before', (mode, expected) => {
     const { history, types } = pointerHookIn(MODE_STATE[mode]);
     history.handleUndo();
     expect(types()).toEqual(expected);
     expect(expected).toEqual([interactionEndAction(mode, 'undo').type]);
+  });
+
+  it('pointer-up with no gesture under way dispatches nothing', () => {
+    const { pointerHook, types } = pointerHookIn({ mode: 'idle' });
+    pointerHook.handlePointerUp(pointer());
+    expect(types()).toEqual([]);
   });
 });
 
@@ -365,6 +366,173 @@ describe('tool shortcuts during a drag', () => {
   });
 });
 
+describe('a release that never arrives', () => {
+  it('window blur ends a move the way a pointer-cancel does: it keeps the move', () => {
+    const env = mountStudio();
+    selectLine(env);
+    startMove(env);
+
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+    });
+
+    expect(env.studio().interaction.mode).toBe('idle');
+    expect(env.entity('line-a').y1).toBe(40);
+    env.run('undo');
+    expect(env.entity('line-a').y1).toBe(0);
+  });
+
+  it('a move with no button held ends the drag where the last real move left it', () => {
+    const env = mountStudio();
+    selectLine(env);
+    startMove(env);
+
+    env.run('onCanvasPointerMove', { ...pointer({ x: 50, y: 90 }), buttons: 0 });
+
+    expect(env.studio().interaction.mode).toBe('idle');
+    expect(env.entity('line-a').y1).toBe(40);
+    // The shape no longer follows the cursor.
+    env.run('onCanvasPointerMove', { ...pointer({ x: 50, y: 120 }), buttons: 0 });
+    expect(env.entity('line-a').y1).toBe(40);
+  });
+
+  it('a move with no button held ends a pan', () => {
+    const env = mountStudio();
+    env.run('onCanvasPointerDown', pointer({ x: 300, y: 300, button: 1 }));
+    env.run('onCanvasPointerMove', { ...pointer({ x: 320, y: 330, button: 1 }), buttons: 4 });
+    expect(env.studio().interaction.mode).toBe('panning');
+
+    env.run('onCanvasPointerMove', { ...pointer({ x: 340, y: 360 }), buttons: 0 });
+
+    expect(env.studio().interaction.mode).toBe('idle');
+  });
+});
+
+describe('keys that act on the selection during a drag', () => {
+  it('Delete waits, so the next move cannot bring the deleted shape back', () => {
+    const env = mountStudio();
+    selectLine(env);
+    startMove(env);
+
+    press('Delete');
+
+    expect(env.entity('line-a')).toBeTruthy();
+    env.run('onCanvasPointerMove', pointer({ x: 50, y: 60 }));
+    env.run('onCanvasPointerUp', pointer({ x: 50, y: 60 }));
+    expect(env.entity('line-a').y1).toBe(60);
+    // The drag is one undo step, with nothing half-done inside it.
+    env.run('undo');
+    expect(env.entity('line-a').y1).toBe(0);
+    expect(env.studio().canUndo).toBe(false);
+  });
+
+  it('an arrow nudge waits', () => {
+    const env = mountStudio();
+    selectLine(env);
+    startMove(env);
+
+    press('ArrowRight');
+
+    expect(env.entity('line-a').x1).toBe(0);
+  });
+
+  it('grouping waits', () => {
+    const env = mountStudio();
+    act(() => env.studio().duplicateEntities(['line-a']));
+    expect(env.studio().selection.selectedIds).toHaveLength(1);
+    const [copyId] = env.studio().selection.selectedIds;
+    env.run('onCanvasPointerDown', pointer({ x: 500, y: 500 }));
+    env.run('onCanvasPointerMove', pointer({ x: -50, y: -50 }));
+    env.run('onCanvasPointerUp', pointer({ x: -50, y: -50 }));
+    env.run('onCanvasClick', pointer({ x: -50, y: -50 }));
+    expect(env.studio().selection.selectedIds.length).toBeGreaterThanOrEqual(2);
+    startMove(env);
+
+    press('g', { ctrlKey: true });
+
+    expect(env.entity('line-a').meta?.groupId).toBeFalsy();
+    expect(env.entity(copyId).meta?.groupId).toBeFalsy();
+  });
+
+  it('redo ends the drag the way undo does, and redoes nothing', () => {
+    const env = mountStudio();
+    act(() => env.studio().duplicateEntities(['line-b']));
+    env.run('undo');
+    expect(env.studio().canRedo).toBe(true);
+    selectLine(env);
+    startMove(env);
+
+    press('z', { ctrlKey: true, shiftKey: true });
+
+    expect(env.studio().interaction.mode).toBe('idle');
+    expect(env.entity('line-a').y1).toBe(0);
+    expect(env.studio().document.entities).toHaveLength(2);
+    expect(env.studio().canRedo).toBe(true);
+  });
+});
+
+describe('the selection handles and move frame', () => {
+  /** Draw a line with the line tool; it stays selected and the tool stays armed. */
+  function drawLine(env) {
+    env.run('setActiveTool', 'line');
+    env.run('onCanvasClick', pointer({ x: 500, y: 500 }));
+    env.run('onCanvasPointerMove', pointer({ x: 700, y: 500 }));
+    env.run('onCanvasClick', pointer({ x: 700, y: 500 }));
+    const [id] = env.studio().selection.selectedIds;
+    expect(env.entity(id)).toMatchObject({ x1: 500, y1: 500, x2: 700, y2: 500 });
+    expect(env.studio().activeTool).toBe('line');
+    expect(env.studio().draft.type).toBeNull();
+    return id;
+  }
+
+  it('take no press while a drawing tool is armed, so a click on the last end starts the next line', () => {
+    const env = mountStudio();
+    const id = drawLine(env);
+
+    // The press lands on the end handle first and bubbles to the canvas.
+    const press = pointer({ x: 700, y: 500 });
+    act(() => env.studio().handleBindings.onHandlePointerDown({ id: 'end' }, press));
+    env.run('onCanvasPointerDown', press);
+    env.run('onCanvasPointerMove', pointer({ x: 702, y: 501 }));
+    env.run('onCanvasPointerUp', pointer({ x: 702, y: 501 }));
+    env.run('onCanvasClick', pointer({ x: 702, y: 501 }));
+
+    expect(env.entity(id)).toMatchObject({ x2: 700, y2: 500 });
+    expect(env.studio().draft.type).toBe('line');
+  });
+
+  it('do not move the selection from inside its frame while a drawing tool is armed', () => {
+    const env = mountStudio();
+    const id = drawLine(env);
+
+    act(() =>
+      env.studio().handleBindings.onTransformPointerDown('move', pointer({ x: 600, y: 500 }), {
+        pivot: { x: 600, y: 500 },
+      }),
+    );
+    env.run('onCanvasPointerMove', pointer({ x: 640, y: 540 }));
+
+    expect(env.studio().interaction.mode).not.toBe('transform');
+    expect(env.entity(id)).toMatchObject({ x1: 500, y1: 500, x2: 700, y2: 500 });
+  });
+
+  it('still drag under the select tool', () => {
+    const env = mountStudio();
+    const id = drawLine(env);
+    env.run('setActiveTool', 'select');
+
+    act(() =>
+      env.studio().handleBindings.onTransformPointerDown('move', pointer({ x: 600, y: 500 }), {
+        pivot: { x: 600, y: 500 },
+      }),
+    );
+    env.run('onCanvasPointerMove', pointer({ x: 640, y: 540 }));
+
+    expect(env.studio().interaction.mode).toBe('transform');
+    expect(env.entity(id)).toMatchObject({ x1: 540, y1: 540 });
+  });
+});
+
 describe('hover tools', () => {
   const HOVER_TOOLS = ['fillet', 'chamfer', 'trim', 'extend', 'fastener'];
 
@@ -403,5 +571,34 @@ describe('hover tools', () => {
     press('Escape');
     expect(env.studio().activeTool).toBe('select');
     expect(env.studio().draft.type).toBeNull();
+  });
+});
+
+describe('the value a corner tool was set to', () => {
+  const CORNER = [line('a', 0, 0, 100, 0), line('b', 100, 0, 100, 100)];
+
+  it.each([
+    ['fillet', 'radius'],
+    ['chamfer', 'distance'],
+  ])('survives undo and redo of a %s', (tool, field) => {
+    const env = mountStudio(CORNER);
+    env.run('setActiveTool', tool);
+    env.run('onCanvasPointerMove', pointer({ x: 100, y: 0 }));
+    // Down two steps from the default.
+    press('[');
+    press('[');
+    expect(env.studio().draft.precisionInput[field]).toBe('30');
+    env.run('onCanvasClick', pointer({ x: 100, y: 0 }));
+    expect(env.studio().document.entities).toHaveLength(3);
+
+    env.run('undo');
+    env.run('onCanvasPointerMove', pointer({ x: 100, y: 0 }));
+    expect(env.studio().document.entities).toHaveLength(2);
+    expect(env.studio().draft.precisionInput[field]).toBe('30');
+
+    env.run('redo');
+    env.run('onCanvasPointerMove', pointer({ x: 100, y: 0 }));
+    expect(env.studio().document.entities).toHaveLength(3);
+    expect(env.studio().draft.precisionInput[field]).toBe('30');
   });
 });

@@ -1,0 +1,387 @@
+[
+  {
+    "variant": "lines",
+    "entityNodes": 5000,
+    "canvas": {
+      "width": 1166,
+      "height": 794
+    },
+    "calibration": {
+      "label": "calibration: an event nobody handles",
+      "moves": 42,
+      "commitsPerMove": 0,
+      "syncHandlerMs": {
+        "mean": 0.04,
+        "p50": 0,
+        "max": 0.1
+      },
+      "jsMs": {
+        "mean": 1.55,
+        "p50": 0.2,
+        "max": 7
+      },
+      "toSecondFrameMs": {
+        "mean": 13.91,
+        "p50": 13.9,
+        "max": 14.8
+      },
+      "status": "Tool SelectLayer DefaultZoom 5%X 20911.1Y 7133.3Snap -Snap Pt -Ortho OffView PlanSelected 0Profiles 0Object -Sketch reco"
+    },
+    "selectEmpty": {
+      "label": "select: empty space",
+      "moves": 42,
+      "commitsPerMove": 1,
+      "syncHandlerMs": {
+        "mean": 0.36,
+        "p50": 0.3,
+        "max": 0.7
+      },
+      "jsMs": {
+        "mean": 6.93,
+        "p50": 7.2,
+        "max": 10.3
+      },
+      "toSecondFrameMs": {
+        "mean": 17.3,
+        "p50": 15.8,
+        "max": 37.5
+      },
+      "status": "Tool SelectLayer DefaultZoom 5%X 20911.1Y 7133.3Snap -Snap Pt -Ortho OffView PlanSelected 0Profiles 0Object -Sketch reco"
+    },
+    "selectEmptyWork": {
+      "SketchStudioContent": 4,
+      "SketchStudioLayout": 4,
+      "LoadingBar": 4,
+      "LeftToolbar": 4,
+      "DraftingCanvas": 4,
+      "EntityRenderer": 4,
+      "EntityShape2": 5,
+      "DimensionRenderer": 4,
+      "DraftRenderer": 4,
+      "SelectionOverlay": 4,
+      "TransformOverlay": 4,
+      "SnapOverlay": 4,
+      "EditHandles": 4,
+      "PrecisionHud": 4
+    },
+    "selectHover": {
+      "label": "select: hover change every move",
+      "moves": 42,
+      "commitsPerMove": 1,
+      "syncHandlerMs": {
+        "mean": 0.15,
+        "p50": 0.1,
+        "max": 0.3
+      },
+      "jsMs": {
+        "mean": 7.69,
+        "p50": 7.7,
+        "max": 9.6
+      },
+      "toSecondFrameMs": {
+        "mean": 44.48,
+        "p50": 39.2,
+        "max": 142.7
+      },
+      "status": "Tool SelectLayer DefaultZoom 5%X 10778.7Y 14033.4Snap -Snap Pt -Ortho OffView PlanSelected 0Profiles 0Object -Sketch rec"
+    },
+    "selectHoverWork": {
+      "SketchStudioContent": 42,
+      "SketchStudioLayout": 42,
+      "LoadingBar": 42,
+      "LeftToolbar": 42,
+      "DraftingCanvas": 42,
+      "EntityRenderer": 42,
+      "EntityShape2": 83,
+      "DimensionRenderer": 42,
+      "DraftRenderer": 42,
+      "SelectionOverlay": 42,
+      "TransformOverlay": 42,
+      "SnapOverlay": 42,
+      "EditHandles": 42,
+      "PrecisionHud": 42
+    },
+    "selectAlongLine": {
+      "label": "select: along one line (hover unchanged)",
+      "moves": 42,
+      "commitsPerMove": 1,
+      "syncHandlerMs": {
+        "mean": 0.42,
+        "p50": 0.2,
+        "max": 8.6
+      },
+      "jsMs": {
+        "mean": 6.63,
+        "p50": 6.8,
+        "max": 16.8
+      },
+      "toSecondFrameMs": {
+        "mean": 17.37,
+        "p50": 14.3,
+        "max": 122
+      },
+      "status": "Tool SelectLayer DefaultZoom 5%X 10678.8Y 14259.5Snap -Snap Pt -Ortho OffView PlanSelected 0Profiles 0Object -Sketch rec"
+    },
+    "lineToolNear": {
+      "label": "line tool: along a line (snap)",
+      "moves": 42,
+      "commitsPerMove": 1,
+      "syncHandlerMs": {
+        "mean": 0.66,
+        "p50": 0.6,
+        "max": 1.3
+      },
+      "jsMs": {
+        "mean": 6.39,
+        "p50": 6,
+        "max": 10.4
+      },
+      "toSecondFrameMs": {
+        "mean": 15.3,
+        "p50": 14.1,
+        "max": 21.3
+      },
+      "status": "Tool LineLayer DefaultZoom 5%X 10678.8Y 14259.5Snap endpointSnap Pt 10577.9, 14257.6Ortho OffView PlanSelected 0Profiles"
+    },
+    "lineToolEmpty": {
+      "label": "line tool: empty space",
+      "moves": 42,
+      "commitsPerMove": 1,
+      "syncHandlerMs": {
+        "mean": 0.85,
+        "p50": 0.7,
+        "max": 4.4
+      },
+      "jsMs": {
+        "mean": 6.21,
+        "p50": 6.2,
+        "max": 10.9
+      },
+      "toSecondFrameMs": {
+        "mean": 16.44,
+        "p50": 14.2,
+        "max": 22.8
+      },
+      "status": "Tool LineLayer DefaultZoom 5%X 20911.1Y 7133.3Snap nearestSnap Pt 20916.6, 6888.3Ortho OffView PlanSelected 0Profiles 0O"
+    },
+    "pan": {
+      "wallMs": 679,
+      "frames": 41,
+      "meanFrameMs": 15.78,
+      "p95FrameMs": 20.8,
+      "maxFrameMs": 146.1
+    },
+    "afterPanTransform": "translate(-180 100) scale(0.045)",
+    "selected": 1,
+    "drag": {
+      "wallMs": 1736,
+      "frames": 123,
+      "meanFrameMs": 14.08,
+      "p95FrameMs": 41.5,
+      "maxFrameMs": 126.4
+    },
+    "afterDragStatus": "Sketch dirtyEsc",
+    "wheel": {
+      "wallMs": 385,
+      "frames": 68,
+      "meanFrameMs": 11.21,
+      "p95FrameMs": 34.7,
+      "maxFrameMs": 34.7
+    },
+    "zoomText": "Zoom 13%",
+    "errors": ["Failed to load resource: the server responded with a status of 404 (Not Found)"]
+  },
+  {
+    "variant": "mixed",
+    "entityNodes": 4800,
+    "canvas": {
+      "width": 1166,
+      "height": 794
+    },
+    "calibration": {
+      "label": "calibration: an event nobody handles",
+      "moves": 42,
+      "commitsPerMove": 0,
+      "syncHandlerMs": {
+        "mean": 0.03,
+        "p50": 0,
+        "max": 0.2
+      },
+      "jsMs": {
+        "mean": 0.2,
+        "p50": 0.2,
+        "max": 0.5
+      },
+      "toSecondFrameMs": {
+        "mean": 14.08,
+        "p50": 13.9,
+        "max": 20.9
+      },
+      "status": "Tool SelectLayer DefaultZoom 5%X 20911.1Y 7133.3Snap -Snap Pt -Ortho OffView PlanSelected 0Profiles 0Object -Sketch reco"
+    },
+    "selectEmpty": {
+      "label": "select: empty space",
+      "moves": 42,
+      "commitsPerMove": 1,
+      "syncHandlerMs": {
+        "mean": 0.61,
+        "p50": 0.6,
+        "max": 1.2
+      },
+      "jsMs": {
+        "mean": 8.25,
+        "p50": 7.3,
+        "max": 12.6
+      },
+      "toSecondFrameMs": {
+        "mean": 18.61,
+        "p50": 19,
+        "max": 40.8
+      },
+      "status": "Tool SelectLayer DefaultZoom 5%X 20911.1Y 7133.3Snap -Snap Pt -Ortho OffView PlanSelected 0Profiles 0Object -Sketch reco"
+    },
+    "selectEmptyWork": {
+      "SketchStudioContent": 2,
+      "SketchStudioLayout": 2,
+      "LoadingBar": 2,
+      "LeftToolbar": 2,
+      "DraftingCanvas": 2,
+      "EntityRenderer": 2,
+      "EntityShape2": 2,
+      "DimensionRenderer": 2,
+      "DraftRenderer": 2,
+      "SelectionOverlay": 2,
+      "TransformOverlay": 2,
+      "SnapOverlay": 2,
+      "EditHandles": 2,
+      "PrecisionHud": 2,
+      "DimensionShape2": 1
+    },
+    "selectHover": {
+      "label": "select: hover change every move",
+      "moves": 42,
+      "commitsPerMove": 1,
+      "syncHandlerMs": {
+        "mean": 0.44,
+        "p50": 0.4,
+        "max": 1.2
+      },
+      "jsMs": {
+        "mean": 6.66,
+        "p50": 6.7,
+        "max": 7.8
+      },
+      "toSecondFrameMs": {
+        "mean": 34.31,
+        "p50": 29.4,
+        "max": 130.8
+      },
+      "status": "Tool SelectLayer DefaultZoom 5%X 10778.7Y 14033.4Snap -Snap Pt -Ortho OffView PlanSelected 0Profiles 0Object -Sketch rec"
+    },
+    "selectHoverWork": {
+      "SketchStudioContent": 42,
+      "SketchStudioLayout": 42,
+      "LoadingBar": 42,
+      "LeftToolbar": 42,
+      "DraftingCanvas": 42,
+      "EntityRenderer": 42,
+      "DimensionRenderer": 42,
+      "DimensionShape2": 84,
+      "DraftRenderer": 42,
+      "SelectionOverlay": 42,
+      "TransformOverlay": 42,
+      "SnapOverlay": 42,
+      "EditHandles": 42,
+      "PrecisionHud": 42
+    },
+    "selectAlongLine": {
+      "label": "select: along one line (hover unchanged)",
+      "moves": 42,
+      "commitsPerMove": 1,
+      "syncHandlerMs": {
+        "mean": 0.47,
+        "p50": 0.4,
+        "max": 1.1
+      },
+      "jsMs": {
+        "mean": 6.51,
+        "p50": 6.6,
+        "max": 7.9
+      },
+      "toSecondFrameMs": {
+        "mean": 14.08,
+        "p50": 13.9,
+        "max": 20.1
+      },
+      "status": "Tool SelectLayer DefaultZoom 5%X 10678.8Y 14259.5Snap -Snap Pt -Ortho OffView PlanSelected 0Profiles 0Object -Sketch rec"
+    },
+    "lineToolNear": {
+      "label": "line tool: along a line (snap)",
+      "moves": 42,
+      "commitsPerMove": 1,
+      "syncHandlerMs": {
+        "mean": 0.95,
+        "p50": 0.8,
+        "max": 1.8
+      },
+      "jsMs": {
+        "mean": 7.64,
+        "p50": 7.5,
+        "max": 10.3
+      },
+      "toSecondFrameMs": {
+        "mean": 17.13,
+        "p50": 14.1,
+        "max": 32.5
+      },
+      "status": "Tool LineLayer DefaultZoom 5%X 10678.8Y 14259.5Snap endpointSnap Pt 10577.9, 14257.6Ortho OffView PlanSelected 0Profiles"
+    },
+    "lineToolEmpty": {
+      "label": "line tool: empty space",
+      "moves": 42,
+      "commitsPerMove": 1,
+      "syncHandlerMs": {
+        "mean": 2.16,
+        "p50": 1.7,
+        "max": 7.3
+      },
+      "jsMs": {
+        "mean": 8.89,
+        "p50": 8.5,
+        "max": 13.2
+      },
+      "toSecondFrameMs": {
+        "mean": 22.8,
+        "p50": 16,
+        "max": 40.5
+      },
+      "status": "Tool LineLayer DefaultZoom 5%X 20911.1Y 7133.3Snap nearestSnap Pt 20916.6, 6888.3Ortho OffView PlanSelected 0Profiles 0O"
+    },
+    "pan": {
+      "wallMs": 1133,
+      "frames": 41,
+      "meanFrameMs": 26.81,
+      "p95FrameMs": 34.9,
+      "maxFrameMs": 55.8
+    },
+    "afterPanTransform": "translate(-180 100) scale(0.045)",
+    "selected": 0,
+    "drag": {
+      "wallMs": 3484,
+      "frames": 153,
+      "meanFrameMs": 21.83,
+      "p95FrameMs": 54.7,
+      "maxFrameMs": 140.2
+    },
+    "afterDragStatus": "Sketch dirtyEsc",
+    "wheel": {
+      "wallMs": 516,
+      "frames": 42,
+      "meanFrameMs": 12.42,
+      "p95FrameMs": 27.8,
+      "maxFrameMs": 41.9
+    },
+    "zoomText": "Zoom 15%",
+    "errors": ["Failed to load resource: the server responded with a status of 404 (Not Found)"]
+  }
+]

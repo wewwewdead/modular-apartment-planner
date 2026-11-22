@@ -143,7 +143,7 @@ function createBoxDescriptor(id, kind, center, size, baseElevation, rotation = 0
  * the edge kit (fascia, barge, gutters, downpipes, capping, soffit).
  *
  * `context` is what the kit reads from outside the roof —
- * `resolveRoofEdgeKitContext(project)`: the bearing outline the overhang is
+ * `resolveRoofEdgeKitContext(project, roofSystem)`: the bearing outline the overhang is
  * measured to, and the ground floor the downpipes run down to. Without it the
  * roof's own boundary stands in for the bearing line and no downpipes are
  * drawn.

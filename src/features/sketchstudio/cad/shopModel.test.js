@@ -123,7 +123,7 @@ describe('shop model keys', () => {
   });
   it('tells a kernel-inert change from one that needs a rebuild', () => {
     const model = normalizeModel(base());
-    expect(KERNEL_INERT_KEYS).toEqual(['finishes', 'prints', 'fabrication']);
+    expect(KERNEL_INERT_KEYS).toEqual(['finishes', 'prints', 'fabrication', 'marks']);
     expect(sameKernelInput(model, { ...model, finishes: [finish('f', 'i1')] })).toBe(true);
     // The press brake's machine (and the kerf, stock and sheet sizes) never reach the kernel.
     expect(
@@ -134,8 +134,58 @@ describe('shop model keys', () => {
     ).toBe(true);
     expect(sameKernelInput(model, { ...model, finishes: [], prints: [] })).toBe(true);
     expect(sameKernelInput(model, { ...model, instances: [...model.instances] })).toBe(false);
-    expect(sameKernelInput(model, { ...model, marks: [] })).toBe(false);
     expect(sameKernelInput(model, null)).toBe(false);
+  });
+  it('keeps the solids for a Measure mark, Hide / Show and an instance rename (perf pass 3, B2.2)', () => {
+    const model = normalizeModel(base());
+    const mark = {
+      id: 'm',
+      from: { instanceId: 'i1', local: [0, 0, 0] },
+      to: { instanceId: 'i2', local: [1, 0, 0] },
+      along: 'X',
+      offset: [0, 0, 5],
+    };
+    // Adding, editing and removing a mark.
+    const marked = { ...model, marks: [mark] };
+    expect(sameKernelInput(model, marked)).toBe(true);
+    expect(sameKernelInput(marked, { ...marked, marks: [{ ...mark, along: 'aligned' }] })).toBe(true);
+    expect(sameKernelInput(marked, model)).toBe(true);
+    // Hide, Show and a name of the instance's own, on one record or several.
+    const hidden = { ...model, instances: [{ ...model.instances[0], visible: false }, model.instances[1]] };
+    expect(sameKernelInput(model, hidden)).toBe(true);
+    expect(sameKernelInput(hidden, model)).toBe(true);
+    expect(
+      sameKernelInput(model, {
+        ...model,
+        instances: model.instances.map((i) => ({ ...i, name: 'Left leg', visible: true })),
+      }),
+    ).toBe(true);
+    // With a group move in the same commit.
+    expect(
+      sameKernelInput(model, {
+        ...model,
+        groups: [{ id: 'g', name: 'G', parentId: null }],
+        instances: [{ ...model.instances[0], visible: false, groupId: 'g' }, model.instances[1]],
+      }),
+    ).toBe(true);
+    // Anything the kernel reads on an instance still rebuilds alongside one.
+    for (const change of [
+      { position: [1, 0, 0] },
+      { rotation: [0, 0, 90] },
+      { partId: 'q' },
+      { id: 'i3' },
+      { attached: true },
+    ])
+      expect(
+        sameKernelInput(model, {
+          ...model,
+          instances: [{ ...model.instances[0], visible: false, ...change }, model.instances[1]],
+        }),
+      ).toBe(false);
+    // A rename of the part, a sketch, a sheet or a connection is no instance edit: it rebuilds.
+    expect(sameKernelInput(model, { ...model, parts: [{ ...model.parts[0], name: 'Lid' }] })).toBe(false);
+    expect(sameKernelInput(model, { ...model, sheets: [{ ...model.sheets[0], title: 'Lid' }] })).toBe(false);
+    expect(sameKernelInput(model, { ...model, connections: [] })).toBe(false);
   });
   it('treats a group edit as kernel-inert (grouping parts never rebuilds them)', () => {
     const model = normalizeModel(base());
@@ -153,9 +203,10 @@ describe('shop model keys', () => {
         instances: [grouped.instances[0], { ...grouped.instances[1], position: [11, 0, 0] }],
       }),
     ).toBe(false);
-    // A record with another key changed, or a different count, still rebuilds.
+    // A record with another key changed, or a different count, still rebuilds
+    // (`visible` was the other key here until B2.2 made Hide / Show inert too).
     expect(
-      sameKernelInput(model, { ...model, instances: [{ ...model.instances[0], visible: false }, model.instances[1]] }),
+      sameKernelInput(model, { ...model, instances: [{ ...model.instances[0], partId: 'q' }, model.instances[1]] }),
     ).toBe(false);
     expect(sameKernelInput(model, { ...model, instances: model.instances.slice(0, 1) })).toBe(false);
     expect(sameKernelInput(model, { ...model, groups: [{ id: 'g', name: 'G', parentId: null }] })).toBe(true);
@@ -179,11 +230,14 @@ describe('shop model keys', () => {
 });
 
 describe('a file saved with the Weld and Assembly stations (docs/sketch-studio-shop-trim.md §4.2)', () => {
-  // What an instance is, where it stands and what was done to it.
+  // What an instance is, where it stands and what was done to it. Its part by
+  // what it is, not by its id: one piece of metal is one part
+  // (docs/sketch-studio-own-bends.md §4.2), so a sheet-metal part saved with
+  // several instances opens as that many parts, the old one but for id and name.
   const state = (model) =>
     model.instances.map((i) => ({
       id: i.id,
-      partId: i.partId,
+      part: (({ id: _id, name: _name, ...part }) => part)(model.parts.find((p) => p.id === i.partId)),
       position: i.position,
       rotation: i.rotation,
       group: i.groupId ?? null,
@@ -205,8 +259,10 @@ describe('a file saved with the Weld and Assembly stations (docs/sketch-studio-s
       expect(state(opened)).toEqual(state(old));
       // The groups stay, with their names, parents and members; the weldment flag goes.
       expect(opened.groups).toEqual(old.groups.map(({ weldment: _weldment, ...group }) => group));
-      for (const key of ['parts', 'sketches', 'connections', 'sheets', 'finishes', 'prints', 'fabrication'])
+      for (const key of ['sketches', 'connections', 'sheets', 'finishes', 'prints', 'fabrication'])
         expect(opened[key]).toEqual(old[key]);
+      // The parts saved are there as they were; the new ones are their blanks.
+      expect(opened.parts.filter((p) => old.parts.some((o) => o.id === p.id))).toEqual(old.parts);
     });
   it('never validates the old records: a malformed seam or step does not refuse the file', () => {
     const old = {

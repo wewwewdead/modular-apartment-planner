@@ -4,6 +4,8 @@ import { buildRoofEdgeKitQuantities, resolveRoofEdgeKitContext } from '@/roof/ro
 import { buildEndClosureLayout } from '@/truss/endClosures';
 import { buildProjectTrussQuantities } from '@/truss/trussSchedule';
 import { buildRoofScheduleSummary } from '@/roof/roofSchedule';
+import { getProjectRoofs, getRoofForTrussSystem } from './projectRoofs';
+import { memoizePerProject } from './projectMemo';
 import { WALL_BOARD_MATERIALS, boardLayerUSpan, deriveWallFramingLayout, resolveWallAssembly } from './wallAssemblies';
 import { SIDING_BOARD_LENGTH, sidingCoursePitch } from './wallSiding';
 import { resolveWallAccents } from './wallAccents';
@@ -271,7 +273,17 @@ function openingArea(opening) {
   return Math.max(0, Number(opening.width) || 0) * Math.max(0, Number(opening.height) || 0);
 }
 
-function deriveGeometry(project) {
+/*
+ * The measured quantities of a project, memoised per project object
+ * (projectMemo.js). They depend on neither the scenario nor the price profile,
+ * yet every takeoff measured them afresh, and one settled edit asks for a
+ * takeoff sixteen times on the playground and over sixty times on a building
+ * with two feasibility scenarios. The result is read, never written:
+ * `deriveQuantityTakeoff` below is its only reader.
+ */
+const deriveGeometry = memoizePerProject('deriveGeometry', (project) => measureGeometry(project));
+
+function measureGeometry(project) {
   let columnVolumeMm3 = 0;
   let columnFormworkMm2 = 0;
   let beamVolumeMm3 = 0;
@@ -456,27 +468,36 @@ function deriveGeometry(project) {
   // preset roof (flat, shed, gable, hip and the truss-driven shapes) stores no
   // planes at all — it used to report 0 m² — and takes the roof schedule's net
   // surface area, which is the same surface the 3D draws, openings deducted.
-  const roofSystem = project.roofSystem || null;
+  // The building's roofing is every roof's, summed.
+  const roofSystems = getProjectRoofs(project);
   let roofingAreaMm2 = 0;
-  if (roofSystem && (roofSystem.roofType || 'flat') !== 'custom') {
-    const schedule = buildRoofScheduleSummary(roofSystem);
-    // A flat roof is flat whatever pitch it still stores; the schedule's surface
-    // factor reads `pitch.slope` for its one plane, so take the plan area.
-    roofingAreaMm2 = (roofSystem.roofType || 'flat') === 'flat' ? schedule.netPlanArea : schedule.netSurfaceArea;
-  } else {
-    for (const plane of roofSystem?.roofPlanes || []) {
-      const projectedArea = polygonArea(plane.boundaryPoints || []);
-      const slopeRatio = Math.max(0, Number(plane.slope) || 0) / 100;
-      roofingAreaMm2 += projectedArea * Math.sqrt(1 + slopeRatio * slopeRatio);
+  for (const roofSystem of roofSystems) {
+    if ((roofSystem.roofType || 'flat') !== 'custom') {
+      const schedule = buildRoofScheduleSummary(roofSystem);
+      // A flat roof is flat whatever pitch it still stores; the schedule's surface
+      // factor reads `pitch.slope` for its one plane, so take the plan area.
+      roofingAreaMm2 += (roofSystem.roofType || 'flat') === 'flat' ? schedule.netPlanArea : schedule.netSurfaceArea;
+    } else {
+      for (const plane of roofSystem.roofPlanes || []) {
+        const projectedArea = polygonArea(plane.boundaryPoints || []);
+        const slopeRatio = Math.max(0, Number(plane.slope) || 0) / 100;
+        roofingAreaMm2 += projectedArea * Math.sqrt(1 + slopeRatio * slopeRatio);
+      }
     }
   }
-  const roofTrims = roofSystem
-    ? buildRoofEdgeKitQuantities(roofSystem, resolveRoofEdgeKitContext(project, roofSystem))
-    : { fasciaLm: 0, bargeLm: 0, gutterLm: 0, downpipeCount: 0, ridgeCapLm: 0, soffitM2: 0 };
+  const presetRoofCount = roofSystems.filter((roofSystem) => (roofSystem.roofType || 'flat') !== 'custom').length;
+  const roofingAreaSource =
+    presetRoofCount === 0 ? 'roof_planes' : presetRoofCount === roofSystems.length ? 'roof_schedule' : 'mixed';
+  const roofTrims = { fasciaLm: 0, bargeLm: 0, gutterLm: 0, downpipeCount: 0, ridgeCapLm: 0, soffitM2: 0 };
+  for (const roofSystem of roofSystems) {
+    const kit = buildRoofEdgeKitQuantities(roofSystem, resolveRoofEdgeKitContext(project, roofSystem));
+    for (const key of Object.keys(roofTrims)) roofTrims[key] += kit[key] || 0;
+  }
   // Gable-end infill (RT-2): every built closure once, vents deducted — the
-  // same panels the 3D draws, out of the same layout.
+  // same panels the 3D draws, out of the same layout, each under its own roof.
   const gableInfillM2 = (project.trussSystems || []).reduce(
-    (sum, trussSystem) => sum + buildEndClosureLayout(trussSystem, null, roofSystem).totalAreaM2,
+    (sum, trussSystem) =>
+      sum + buildEndClosureLayout(trussSystem, null, getRoofForTrussSystem(project, trussSystem.id)).totalAreaM2,
     0,
   );
   // Trusses (RT-3, spec §7.5): count, timber by section, purlins — off the
@@ -512,7 +533,7 @@ function deriveGeometry(project) {
     floorFinishAreaM2: squareMeters(floorFinishAreaMm2),
     floorFinishUsedSlabFallback,
     roofingAreaM2: squareMeters(roofingAreaMm2),
-    roofingAreaSource: roofSystem && (roofSystem.roofType || 'flat') !== 'custom' ? 'roof_schedule' : 'roof_planes',
+    roofingAreaSource,
     fasciaLm: roofTrims.fasciaLm,
     bargeLm: roofTrims.bargeLm,
     gutterLm: roofTrims.gutterLm,
@@ -782,7 +803,9 @@ export function deriveQuantityTakeoff(project, options = {}) {
           source:
             geometry.roofingAreaSource === 'roof_schedule'
               ? 'roof_schedule_net_surface_area'
-              : 'roof_planes_and_configured_slopes',
+              : geometry.roofingAreaSource === 'mixed'
+                ? 'roof_schedule_and_roof_planes'
+                : 'roof_planes_and_configured_slopes',
         },
       },
       profile,

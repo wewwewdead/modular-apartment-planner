@@ -8,6 +8,28 @@ import {
 } from '@/domain/defaults';
 import { findCorner, computeFilletGeometry } from '@/geometry/filletGeometry';
 
+/**
+ * The tool-state change for a new fillet radius: the radius, and the preview
+ * redrawn at it for the corner under the cursor. The preview is what a click
+ * applies, so every way of changing the radius (the [ and ] keys, the Radius
+ * field in the properties panel) redraws it at once rather than at the next
+ * mouse move — the same computation the move makes.
+ */
+export function filletRadiusPatch(toolState, radius) {
+  const corner = toolState?.hoveredCorner;
+  if (!corner) return { radius };
+  return {
+    radius,
+    previewGeometry: computeFilletGeometry(
+      corner.wall1,
+      corner.wall1Endpoint,
+      corner.wall2,
+      corner.wall2Endpoint,
+      radius,
+    ),
+  };
+}
+
 export function createFilletPlaceHandler({
   dispatch,
   editorDispatch,
@@ -102,35 +124,18 @@ export function createFilletPlaceHandler({
 
       const radius = toolState.radius ?? FILLET_DEFAULT_RADIUS;
 
-      // The preview is what a click applies, so it is redrawn at the new radius
-      // now rather than at the next mouse move — the same computation the move
-      // makes for the corner under the cursor.
-      const previewFor = (newRadius) => {
-        const corner = toolState.hoveredCorner;
-        if (!corner) return {};
-        return {
-          previewGeometry: computeFilletGeometry(
-            corner.wall1,
-            corner.wall1Endpoint,
-            corner.wall2,
-            corner.wall2Endpoint,
-            newRadius,
-          ),
-        };
-      };
-
       if (e.key === ']') {
         const newRadius = Math.min(FILLET_MAX_RADIUS, radius + FILLET_RADIUS_STEP);
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
-          payload: { ...toolState, radius: newRadius, ...previewFor(newRadius) },
+          payload: { ...toolState, ...filletRadiusPatch(toolState, newRadius) },
         });
       }
       if (e.key === '[') {
         const newRadius = Math.max(FILLET_MIN_RADIUS, radius - FILLET_RADIUS_STEP);
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
-          payload: { ...toolState, radius: newRadius, ...previewFor(newRadius) },
+          payload: { ...toolState, ...filletRadiusPatch(toolState, newRadius) },
         });
       }
     },

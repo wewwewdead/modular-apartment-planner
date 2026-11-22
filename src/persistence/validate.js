@@ -8,7 +8,9 @@ import {
   selectPreferredCeilingBeamLevel,
 } from '@/domain/ceilingBeamAttachment';
 import { syncCanonicalBuilding } from '@/domain/buildingModels';
-import { getFloorTopElevation, getOrderedFloors, getProjectFloor } from '@/domain/floorModels';
+import { getFloorStackBounds, getFloorTopElevation, getOrderedFloors, getProjectFloor } from '@/domain/floorModels';
+import { generateId } from '@/domain/ids';
+import { getProjectRoofs } from '@/domain/projectRoofs';
 import { QUANTITY_RATE_KEYS } from '@/domain/quantityTakeoff';
 
 // A stored datum is compared against the storey top it was written from, so the
@@ -762,15 +764,18 @@ export function validateProjectReferences(project) {
       });
     }
   }
-  const roofPlaneIds = new Set((project.roofSystem?.roofPlanes || []).map((plane) => plane.id));
-  for (const drain of project.roofSystem?.drains || []) {
-    const brokenCatchment = (drain.catchmentPlaneIds || []).some((id) => !roofPlaneIds.has(id));
-    const brokenShaft = drain.outletRef?.kind === 'plumbing_shaft' && !plumbingShaftIds.has(drain.outletRef.id);
-    if (brokenCatchment || brokenShaft) {
-      warnings.push({
-        path: `roofDrain ${drain.id}`,
-        message: 'References a non-existent catchment plane or plumbing shaft',
-      });
+  // A drain's catchment is planes of its OWN roof; another roof's plane is no catchment for it.
+  for (const roofSystem of getProjectRoofs(project)) {
+    const roofPlaneIds = new Set((roofSystem?.roofPlanes || []).map((plane) => plane.id));
+    for (const drain of roofSystem?.drains || []) {
+      const brokenCatchment = (drain.catchmentPlaneIds || []).some((id) => !roofPlaneIds.has(id));
+      const brokenShaft = drain.outletRef?.kind === 'plumbing_shaft' && !plumbingShaftIds.has(drain.outletRef.id);
+      if (brokenCatchment || brokenShaft) {
+        warnings.push({
+          path: `roofDrain ${drain.id}`,
+          message: 'References a non-existent catchment plane or plumbing shaft',
+        });
+      }
     }
   }
   for (const exit of egressExits.values()) {
@@ -874,12 +879,14 @@ export function validateProjectReferences(project) {
       });
   }
 
-  // Check phaseId on roof system and truss systems
-  if (project.roofSystem?.phaseId && !phaseIds.has(project.roofSystem.phaseId)) {
-    warnings.push({
-      path: 'roofSystem',
-      message: `phaseId references non-existent phase ${project.roofSystem.phaseId}`,
-    });
+  // Check phaseId on roof systems and truss systems
+  for (const roofSystem of getProjectRoofs(project)) {
+    if (roofSystem?.phaseId && !phaseIds.has(roofSystem.phaseId)) {
+      warnings.push({
+        path: `roofSystem ${roofSystem.id}`,
+        message: `phaseId references non-existent phase ${roofSystem.phaseId}`,
+      });
+    }
   }
   for (const ts of project.trussSystems || []) {
     if (ts.phaseId && !phaseIds.has(ts.phaseId)) {
@@ -1035,14 +1042,15 @@ export function repairBrokenReferences(project) {
     return repairedFloor;
   });
 
-  // Nullify invalid phaseId on roof system
-  let roofSystem = project.roofSystem;
-  if (roofSystem?.phaseId && !phaseIds.has(roofSystem.phaseId)) {
-    roofSystem = { ...roofSystem, phaseId: null };
-  }
-  if (roofSystem) {
+  // Nullify invalid phaseId on each roof, and drop the drain references its own
+  // roof (or the building) no longer has.
+  const roofSystems = getProjectRoofs(project).map((storedRoofSystem) => {
+    let roofSystem = storedRoofSystem;
+    if (roofSystem?.phaseId && !phaseIds.has(roofSystem.phaseId)) {
+      roofSystem = { ...roofSystem, phaseId: null };
+    }
     const roofPlaneIds = new Set((roofSystem.roofPlanes || []).map((plane) => plane.id));
-    roofSystem = {
+    return {
       ...roofSystem,
       drains: (roofSystem.drains || []).map((drain) => ({
         ...drain,
@@ -1053,7 +1061,7 @@ export function repairBrokenReferences(project) {
             : drain.outletRef,
       })),
     };
-  }
+  });
 
   // Nullify invalid phaseId on truss systems
   const trussSystems = (project.trussSystems || []).map((ts) =>
@@ -1318,7 +1326,7 @@ export function repairBrokenReferences(project) {
     },
   };
 
-  return { ...project, building, floors: repairedFloors, roofSystem, trussSystems, ceilings, sheets };
+  return { ...project, building, floors: repairedFloors, roofSystems, trussSystems, ceilings, sheets };
 }
 
 /**
@@ -1378,7 +1386,70 @@ export function reattachStoreyTopCeilings(project) {
   return changed ? { ...project, ceilings } : project;
 }
 
+/**
+ * The roof list, made to hold its invariants (docs/multi-roof.md §3.2) on every
+ * load, whatever wrote the file. Runs before anything else reads the roofs.
+ *
+ * - A stray legacy `roofSystem` key (a hand-built or half-migrated payload) is
+ *   folded into the list, unless the list already has that roof, and removed:
+ *   nothing reads the old slot any more, so a roof left in it would be lost.
+ * - Roof ids are unique; a duplicate is given a fresh one. Its sub-object ids
+ *   are left alone: they are only ever resolved within their own roof.
+ * - One roof per truss system: every roof after the first that claims the same
+ *   system is detached and kept where it stands, the way a detach in the roof
+ *   panel keeps it (its offset re-measured from the floor stack it now sits on).
+ *
+ * Returns the project it was given when there was nothing to repair.
+ */
+export function repairProjectRoofList(project) {
+  if (!project || typeof project !== 'object') return project;
+
+  const hasLegacyKey = Object.prototype.hasOwnProperty.call(project, 'roofSystem');
+  const legacyRoof = project.roofSystem && typeof project.roofSystem === 'object' ? project.roofSystem : null;
+  const storedRoofs = Array.isArray(project.roofSystems) ? project.roofSystems : null;
+  let changed = hasLegacyKey || !storedRoofs;
+
+  const roofs = (storedRoofs || []).filter((roofSystem) => Boolean(roofSystem) && typeof roofSystem === 'object');
+  if (roofs.length !== (storedRoofs || []).length) changed = true;
+  if (legacyRoof && !roofs.some((roofSystem) => roofSystem.id && roofSystem.id === legacyRoof.id)) {
+    roofs.push(legacyRoof);
+  }
+
+  const seenIds = new Set();
+  const claimedTrussIds = new Set();
+  let detachedDatum = null;
+  const roofSystems = roofs.map((storedRoofSystem) => {
+    let roofSystem = storedRoofSystem;
+    if (!roofSystem.id || seenIds.has(roofSystem.id)) {
+      roofSystem = { ...roofSystem, id: generateId('roof') };
+      changed = true;
+    }
+    seenIds.add(roofSystem.id);
+
+    const trussAttachmentId = roofSystem.trussAttachmentId || null;
+    if (trussAttachmentId && claimedTrussIds.has(trussAttachmentId)) {
+      detachedDatum ??= getFloorStackBounds(project).maxElevation;
+      roofSystem = {
+        ...roofSystem,
+        trussAttachmentId: null,
+        pitchSource: 'manual',
+        attachmentOffset: (roofSystem.baseElevation ?? detachedDatum) - detachedDatum,
+      };
+      changed = true;
+    } else if (trussAttachmentId) {
+      claimedTrussIds.add(trussAttachmentId);
+    }
+    return roofSystem;
+  });
+
+  if (!changed) return project;
+  const repaired = { ...project, roofSystems };
+  delete repaired.roofSystem;
+  return repaired;
+}
+
 export function validateAndRepair(project) {
+  project = repairProjectRoofList(project);
   const structuralErrors = validateProjectStructure(project);
   if (structuralErrors.length > 0) {
     throw new ProjectValidationError(

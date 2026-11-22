@@ -59,6 +59,7 @@ import {
   getCircleRadiusPointFromDraft,
   buildOffsetEntityFromDraft,
   HIT_TOLERANCE_PX,
+  shouldSnapOverrideOrtho,
 } from './sketchConstants';
 import { commitSelectionCopyResult } from './selectionCopyCommit';
 
@@ -164,8 +165,11 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
           }
 
           // Picking a line entity uses that whole line as the axis: its two
-          // endpoints define the mirror in a single click.
-          if (hoveredEntity?.type === 'line' && !snap.point) {
+          // endpoints define the mirror in a single click. Snapping is on by
+          // default and a click on a line's body always snaps to the nearest
+          // point on it, so only a definite point (an end, the middle, a
+          // crossing) means "start a free axis here" instead.
+          if (hoveredEntity?.type === 'line' && !shouldSnapOverrideOrtho(snap)) {
             commitSelectionCopyResult(
               dispatch,
               buildSketchMirrorResult({

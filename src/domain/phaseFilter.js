@@ -1,4 +1,5 @@
 import { PHASE_ASSIGNABLE_KEYS } from './phaseAssignments';
+import { getProjectRoofs } from './projectRoofs';
 
 export const PHASE_VIEW = {
   ALL: 'all',
@@ -83,10 +84,9 @@ export function filterProjectByPhase(project, activePhaseId, phaseViewMode) {
   if (phaseViewMode === PHASE_VIEW.ALL && !hasHiddenPhases) return project;
   if (!activePhaseId && !hasHiddenPhases) return project;
 
-  const roofSystem =
-    project.roofSystem && isObjectVisibleInPhase(project.roofSystem, phases, activePhaseId, phaseViewMode)
-      ? project.roofSystem
-      : null;
+  const roofSystems = getProjectRoofs(project).filter((roofSystem) =>
+    isObjectVisibleInPhase(roofSystem, phases, activePhaseId, phaseViewMode),
+  );
   const trussSystems = (project.trussSystems || []).filter((trussSystem) =>
     isObjectVisibleInPhase(trussSystem, phases, activePhaseId, phaseViewMode),
   );
@@ -97,7 +97,7 @@ export function filterProjectByPhase(project, activePhaseId, phaseViewMode) {
   return {
     ...project,
     floors: project.floors.map((floor) => filterFloorByPhase(floor, phases, activePhaseId, phaseViewMode)),
-    roofSystem,
+    roofSystems,
     trussSystems,
     ceilings,
   };

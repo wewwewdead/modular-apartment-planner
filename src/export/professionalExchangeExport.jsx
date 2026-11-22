@@ -11,6 +11,7 @@ import {
 } from '@/domain/professionalExchange';
 import { deriveDocumentationRealization } from '@/domain/documentationRealization';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
+import { getProjectRoofs } from '@/domain/projectRoofs';
 
 export const PROFESSIONAL_EXCHANGE_ARCHIVE_MIME_TYPE = 'application/zip';
 
@@ -198,7 +199,8 @@ function entitiesForSheet(project, sheet) {
     if (viewport.sourceView === 'site_plan')
       content += modelPolygon('C-SITE', project.building?.site?.boundary || [], true);
     if (viewport.sourceView === 'roof_plan') {
-      for (const plane of project.roofSystem?.roofPlanes || [])
+      // Every roof's planes, into the one roof plan.
+      for (const plane of getProjectRoofs(project).flatMap((roofSystem) => roofSystem.roofPlanes || []))
         content += modelPolygon('A-ROOF', plane.boundaryPoints || plane.points || [], true);
     }
     if (viewport.sourceView === 'building_report')

@@ -11,6 +11,7 @@ import {
   roofContainsPoint,
   roofOpeningContainsPoint,
 } from '@/geometry/roofPlanGeometry';
+import { findContextRoofAt } from './roofContextPick';
 
 function hitTestRoof(modelPos, roofSystem, viewport) {
   for (const drain of roofSystem.drains || []) {
@@ -89,10 +90,26 @@ function shiftOffsetsOnEdge(startOffset, endOffset, delta, edgeLength) {
   };
 }
 
-export function createRoofSelectHandler({ dispatch, editorDispatch, roofSystem, viewport }) {
+/** The roof drag's fields at rest: what a release, Escape and Delete each write. */
+const IDLE_ROOF_DRAG_STATE = Object.freeze({
+  dragging: false,
+  dragType: null,
+  handle: null,
+  handleIndex: null,
+  startPos: null,
+});
+
+export function createRoofSelectHandler({ dispatch, editorDispatch, roofSystem, contextRoofSystems = [], viewport }) {
   return {
     onMouseDown(modelPos, e) {
-      if (e.button !== 0 || !roofSystem) return;
+      if (e.button !== 0) return;
+      if (!roofSystem) {
+        // The roof being edited is hidden by the phase view; the others it
+        // shows can still be switched to.
+        const contextRoof = findContextRoofAt(contextRoofSystems, modelPos);
+        if (contextRoof) editorDispatch({ type: 'SELECT_OBJECT', id: contextRoof.id, objectType: 'roofSystem' });
+        return;
+      }
 
       const target = e.target;
       if (target.dataset.handle) {
@@ -109,8 +126,18 @@ export function createRoofSelectHandler({ dispatch, editorDispatch, roofSystem, 
         return;
       }
 
+      // The active roof first, exactly as with one roof. A miss that lands in
+      // another roof drawn as context makes that roof the active one
+      // (SELECT_OBJECT of a roof does) and selects it; no drag starts, so a
+      // press meant as a switch never moves anything. A miss on every roof
+      // deselects.
       const hit = hitTestRoof(modelPos, roofSystem, viewport);
       if (!hit) {
+        const contextRoof = findContextRoofAt(contextRoofSystems, modelPos);
+        if (contextRoof) {
+          editorDispatch({ type: 'SELECT_OBJECT', id: contextRoof.id, objectType: 'roofSystem' });
+          return;
+        }
         editorDispatch({ type: 'DESELECT' });
         return;
       }
@@ -311,24 +338,29 @@ export function createRoofSelectHandler({ dispatch, editorDispatch, roofSystem, 
     },
 
     onMouseUp() {
-      editorDispatch({
-        type: 'UPDATE_TOOL_STATE',
-        payload: {
-          dragging: false,
-          dragType: null,
-          handle: null,
-          handleIndex: null,
-          startPos: null,
-        },
-      });
+      editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: IDLE_ROOF_DRAG_STATE });
     },
 
     onKeyDown(e, toolState, selectedId, selectedType) {
+      // Ahead of the selection check: a drag can outlive its selection (Ctrl+Z
+      // deselects mid-drag), and Escape still has to end it.
+      if (e.key === 'Escape' && toolState.dragging) {
+        // Every roof drag commits on each pointer frame, so cancelling means
+        // putting back the project the store held when the press opened the
+        // drag gesture — the plan's select tool does the same. A drag that has
+        // not moved yet recorded nothing, and the cancel leaves it alone. With
+        // the selection gone there is nothing to put back: Ctrl+Z already took
+        // the gesture's entry, and cancelling would restore the one before it.
+        if (selectedId) dispatch({ type: 'CANCEL_DRAG_GESTURE' });
+        editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: IDLE_ROOF_DRAG_STATE });
+        return;
+      }
+
       if (!selectedId) return;
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedType === 'roofSystem') {
-          dispatch({ type: 'ROOF_DELETE' });
+          dispatch({ type: 'ROOF_DELETE', roofId: selectedId });
         } else if (selectedType === 'parapet') {
           dispatch({ type: 'PARAPET_DELETE', parapetId: selectedId });
         } else if (selectedType === 'drain') {
@@ -338,29 +370,14 @@ export function createRoofSelectHandler({ dispatch, editorDispatch, roofSystem, 
         } else if (selectedType === 'roofPlane') {
           dispatch({ type: 'ROOF_PLANE_DELETE', roofPlaneId: selectedId });
         } else if (selectedType === 'roofEdge') {
-          dispatch({ type: 'ROOF_EDGE_DELETE', roofEdgeId: selectedId });
+          dispatch({ type: 'ROOF_EDGE_DELETE', roofId: roofSystem?.id || null, roofEdgeId: selectedId });
         } else {
           return;
         }
         editorDispatch({ type: 'DESELECT' });
-      }
-
-      if (e.key === 'Escape' && toolState.dragging) {
-        // Every roof drag commits on each pointer frame, so cancelling means
-        // putting back the project the store held when the press opened the
-        // drag gesture — the plan's select tool does the same. A drag that has
-        // not moved yet recorded nothing, and the cancel leaves it alone.
-        dispatch({ type: 'CANCEL_DRAG_GESTURE' });
-        editorDispatch({
-          type: 'UPDATE_TOOL_STATE',
-          payload: {
-            dragging: false,
-            dragType: null,
-            handle: null,
-            handleIndex: null,
-            startPos: null,
-          },
-        });
+        // A drag of what was just deleted ends with it; left standing, a later
+        // Escape would cancel the gesture and bring the deleted object back.
+        if (toolState.dragging) editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: IDLE_ROOF_DRAG_STATE });
       }
     },
 

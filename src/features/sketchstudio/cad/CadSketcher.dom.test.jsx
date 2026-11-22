@@ -1559,6 +1559,59 @@ it('puts a drag-move back on a window blur and on a missed release: nothing move
   expect(undo.disabled).toBe(true);
 });
 
+it('ends a box with a tool key or Ctrl+A pressed in the middle of it: the next move and the release select nothing', () => {
+  const viewport = createRef();
+  render(<DimensionHarness onFinish={vi.fn()} viewport={viewport} entities={panel} />);
+  const canvas = document.querySelector('canvas');
+  const at = screenMap(viewport);
+  // L with the button still down: the box goes and Line is on; moving on and releasing selects nothing.
+  dragTo(canvas, at([220, 120]), at([520, 380]));
+  expect(named('sketch-box')).toHaveLength(1);
+  fireEvent.keyDown(window, { key: 'l' });
+  expect(pressed('Line')).toBe('true');
+  expect(named('sketch-box')).toHaveLength(0);
+  pointer(canvas, 'pointermove', ...at([560, 400]));
+  expect(named('sketch-box')).toHaveLength(0);
+  pointer(canvas, 'pointerup', ...at([560, 400]));
+  expect(note()).toBeNull();
+  expect(pressed('Line')).toBe('true');
+  expect(statusText()).toContain('Click the start point');
+  fireEvent.keyDown(screen.getByLabelText('Sketch x'), { key: 'Escape' });
+  expect(pressed('Line')).toBe('false');
+  // Ctrl+A with the button still down: every entity, and the release keeps them.
+  dragTo(canvas, at([220, 120]), at([520, 380]));
+  fireEvent.keyDown(window, { key: 'a', ctrlKey: true });
+  expect(note().textContent).toBe('6 selected: 1 rectangle, 5 circles · Delete removes them');
+  pointer(canvas, 'pointermove', ...at([560, 400]));
+  expect(named('sketch-box')).toHaveLength(0);
+  pointer(canvas, 'pointerup', ...at([560, 400]));
+  expect(note().textContent).toBe('6 selected: 1 rectangle, 5 circles · Delete removes them');
+});
+
+it('ends a selection drag with Ctrl+Z pressed in the middle of it: the step goes back and the release moves nothing', () => {
+  const viewport = createRef();
+  render(<DimensionHarness onFinish={vi.fn()} viewport={viewport} entities={panel} />);
+  const canvas = document.querySelector('canvas');
+  const at = screenMap(viewport);
+  clickAt(canvas, at([400, 250]));
+  // One move to undo.
+  dragTo(canvas, at([400, 250]), at([400, 420]), 6);
+  pointer(canvas, 'pointerup', ...at([400, 420]));
+  expect(note().textContent).toBe('Circle Ø20 at (400, 420) · Delete removes it');
+  // Dragged again, Ctrl+Z with the button still down: the first move is undone and this one is gone.
+  dragTo(canvas, at([400, 420]), at([600, 420]), 6);
+  expect(overlayProbe().dragOffset).toEqual([200, 0]);
+  fireEvent.keyDown(document.body, { key: 'z', ctrlKey: true });
+  expect(note().textContent).toBe('Circle Ø20 at (400, 250) · Delete removes it');
+  expect(overlayProbe().dragOffset).toBe(null);
+  pointer(canvas, 'pointermove', ...at([650, 420]));
+  expect(overlayProbe().dragOffset).toBe(null);
+  pointer(canvas, 'pointerup', ...at([650, 420]));
+  expect(note().textContent).toBe('Circle Ø20 at (400, 250) · Delete removes it');
+  expect(screen.getByRole('button', { name: 'Undo last' }).disabled).toBe(true);
+  expect(screen.getByRole('button', { name: 'Redo' }).disabled).toBe(false);
+});
+
 it('frames the span asked for on a zoomed orthographic camera (§8.0, HD-3 judgment call 22)', async () => {
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400);
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(200);

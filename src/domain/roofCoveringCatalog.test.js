@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CLOSURE_OWNER_MATERIAL_KEYS,
   ROOF_COLOUR_CATALOG,
+  ROOF_OWNER_MATERIAL_KEYS,
   ROOF_COVERING_CATALOG,
   ROOF_COVERING_KINDS,
   catalogueColour,
@@ -12,7 +14,9 @@ import {
   normalizeHexColour,
   normalizeRoofCovering,
   normalizeRoofTrims,
-  resolveRoofAppearance,
+  ownerMaterialKey,
+  parseOwnerMaterialKey,
+  resolveRoofAppearances,
   resolveRoofCoveringProduct,
   roofMaterialKeyForCovering,
   solarAbsorptanceClass,
@@ -192,30 +196,81 @@ describe('covering and trim defaults', () => {
   });
 });
 
-describe('resolveRoofAppearance', () => {
+describe('resolveRoofAppearances (docs/multi-roof.md §6)', () => {
   const roof = { id: 'roof_1', roofType: 'gable' };
 
-  it('takes the gable infill colour from the first truss system (RT-2)', () => {
-    const appearance = resolveRoofAppearance(roof, [
-      { id: 'a', endClosures: { colour: { hex: '#5e1d0e', name: 'Manor Red', catalogue: 'colorbond' } } },
-      { id: 'b', endClosures: { colour: { hex: '#000000' } } },
+  it('answers for every roof and every truss system, each under its own id', () => {
+    const appearances = resolveRoofAppearances(
+      [
+        roof,
+        {
+          id: 'roof_2',
+          roofType: 'gable',
+          covering: { kind: 'metal_corrugated', colour: { hex: '#5e1d0e' }, finish: 'gloss' },
+        },
+      ],
+      [
+        { id: 'a', endClosures: { colour: { hex: '#5e1d0e', name: 'Manor Red', catalogue: 'colorbond' } } },
+        { id: 'b', endClosures: { colour: { hex: '#000000' } } },
+      ],
+    );
+    expect(appearances.roofs.map((entry) => entry.id)).toEqual(['roof_1', 'roof_2']);
+    expect(appearances.roofs[0].covering.hex).toBe('#BDBFBA');
+    expect(appearances.roofs[1].covering).toEqual({ kind: 'metal_corrugated', hex: '#5E1D0E', finish: 'gloss' });
+    expect(appearances.roofs[1].trims.hex).toMatch(HEX);
+    expect(appearances.roofs[1].soffit.hex).toMatch(HEX);
+    // No first-system-wins any more: each system keeps its own infill colour.
+    expect(appearances.closures).toEqual([
+      { id: 'a', hex: '#5E1D0E' },
+      { id: 'b', hex: '#000000' },
     ]);
-    expect(appearance.closures).toEqual([{ hex: '#5E1D0E' }]);
-    expect(appearance.covering.hex).toBe('#BDBFBA');
   });
 
   it('falls back to the default infill colour for a system saved before closures existed', () => {
-    expect(resolveRoofAppearance(roof, [{ id: 'old' }]).closures).toEqual([{ hex: '#E9E5DD' }]);
+    expect(resolveRoofAppearances([roof], [{ id: 'old' }]).closures).toEqual([{ id: 'old', hex: '#E9E5DD' }]);
   });
 
-  it('has no closures without truss systems, and answers for closures alone without a roof', () => {
-    expect(resolveRoofAppearance(roof).closures).toEqual([]);
-    expect(resolveRoofAppearance(null, [])).toBeNull();
-    expect(resolveRoofAppearance(null, [{ id: 'a' }])).toEqual({
-      covering: null,
-      trims: null,
-      soffit: null,
-      closures: [{ hex: '#E9E5DD' }],
+  it('has no closures without truss systems, answers for closures alone without a roof, and is null with neither', () => {
+    expect(resolveRoofAppearances([roof]).closures).toEqual([]);
+    expect(resolveRoofAppearances([], [])).toBeNull();
+    expect(resolveRoofAppearances(null, null)).toBeNull();
+    expect(resolveRoofAppearances([], [{ id: 'a' }])).toEqual({ roofs: [], closures: [{ id: 'a', hex: '#E9E5DD' }] });
+  });
+});
+
+describe('owner material keys (docs/multi-roof.md §6)', () => {
+  it('round-trips a roof key and a closure key', () => {
+    expect(ownerMaterialKey('roof_metal', 'roof_m1abc_1')).toBe('roof_metal@roof_m1abc_1');
+    expect(parseOwnerMaterialKey('roof_metal@roof_m1abc_1')).toEqual({
+      baseKey: 'roof_metal',
+      ownerId: 'roof_m1abc_1',
     });
+    expect(parseOwnerMaterialKey('gableInfill@ts_1')).toEqual({ baseKey: 'gableInfill', ownerId: 'ts_1' });
+    for (const baseKey of ROOF_OWNER_MATERIAL_KEYS) {
+      expect(parseOwnerMaterialKey(ownerMaterialKey(baseKey, 'r'))).toEqual({ baseKey, ownerId: 'r' });
+    }
+  });
+
+  it('answers null for every other key', () => {
+    for (const key of [
+      'roof_metal',
+      'gableInfill',
+      'wall@x',
+      'roof_metal@',
+      '@roof_1',
+      'wallFinish:paint:fc:#5E1D0E:matte',
+      'wallFastenerTonal:wall',
+      null,
+      undefined,
+    ]) {
+      expect(parseOwnerMaterialKey(key), String(key)).toBeNull();
+    }
+  });
+
+  it('owns the body family the covering kinds map onto, and the closures key', () => {
+    for (const kind of ['metal_standing_seam', 'slate', 'membrane', 'concrete_slab']) {
+      expect(ROOF_OWNER_MATERIAL_KEYS).toContain(roofMaterialKeyForCovering(kind));
+    }
+    expect(CLOSURE_OWNER_MATERIAL_KEYS).toEqual(['gableInfill']);
   });
 });

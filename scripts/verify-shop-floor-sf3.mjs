@@ -188,10 +188,11 @@ try {
   await expect(brake.getByRole('alert').first()).toContainText('no longer in line');
   await expect(pedal()).toBeDisabled();
   await shots('03-brake-not-in-line');
-  const segments = map.getByRole('button', { name: /^Segment \d of 2$/ });
+  const segments = map.getByRole('button', { name: /^Piece \d of 2$/ });
   await expect(segments).toHaveCount(2);
-  // One tab clicked out of the hit: the other alone hits the bed, tilted by the crease.
-  await segments.nth(1).click();
+  // One tab Ctrl+clicked out of the hit (a plain click bends only it, docs/sketch-studio-piece-pick.md
+  // §5.6): the other alone hits the bed, tilted by the crease.
+  await segments.nth(1).click({ modifiers: ['Control'] });
   await expect(segments.nth(1)).toHaveAttribute('aria-pressed', 'false');
   const collision = brake.getByRole('alert', { name: 'Collision' });
   await expect(collision).toContainText('hits the bed');
@@ -211,8 +212,8 @@ try {
     .getByRole('button', { name: 'Remove', exact: true })
     .click();
   await savedWhen((m) => m.parts[0].features[0].bends.length === 0, 'the crease removed');
-  // The line is still on etched line 1: the tab clicked out goes back into the hit.
-  await segments.nth(1).click();
+  // The line is still on etched line 1: the tab Ctrl+clicked out goes back into the hit.
+  await segments.nth(1).click({ modifiers: ['Control'] });
   await expect(segments.nth(1)).toHaveAttribute('aria-pressed', 'true');
 
   // 4. The five etched lines in order: one click and the pedal each.

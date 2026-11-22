@@ -70,7 +70,7 @@ describe('normalizeProjectEnvelope', () => {
       expect(project.id).toBe('proj_mmh5hhtx_0');
       // Proof it went through migration 14 -> 15, not just straight through.
       expect(project.sheets).toEqual([]);
-      expect(project.roofSystem).toBeNull();
+      expect(project.roofSystems).toEqual([]);
       expect(project.trussSystems).toEqual([]);
       expect(project.documentDefaults).toEqual({ drawnBy: '', checkedBy: '' });
     });

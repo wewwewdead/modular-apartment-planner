@@ -4,6 +4,7 @@ import { getDefaultActiveFloorId, getFloorTopElevation, getProjectFloor } from '
 import { deriveBeamSupportedInstanceGeometry } from '@/truss/beamSupports';
 import { normalizePlanLengthScale, normalizePlanOffset, normalizeRotationDegrees } from '@/truss/systemTransform';
 import { normalizeRoofColour } from './roofCoveringCatalog';
+import { getProjectRoofs, getRoofForTrussSystem } from './projectRoofs';
 import { reuseArrayIfSameElements, reuseIfEqual } from './structuralSharing';
 
 const TRUSS_FAMILIES = new Set(['shed', 'gable', 'flat']);
@@ -57,8 +58,9 @@ export const TRUSS_SUPPORT_MODES = {
 // `spanEnd`: a shed's high side, a flat truss's depth). Every side defaults to
 // INFILL, old saves included (spec §4.3, §9.2): nobody wants an open gable by
 // default; 'open' is for exposed-truss designs. The cladding colour is one per
-// system (`endClosures.colour`), because the preview paints every infill with
-// the one `gableInfill` palette material (spec §4.3 amendment).
+// system (`endClosures.colour`, spec §4.3 amendment): the preview paints a
+// system's infills with that system's own `gableInfill@<system id>` material
+// (docs/multi-roof.md §6).
 export const TRUSS_END_CLOSURE_SIDES = Object.freeze(['start', 'end', 'spanStart', 'spanEnd']);
 export const TRUSS_END_CLOSURE_MODES = Object.freeze(['infill', 'open']);
 export const TRUSS_END_CLOSURE_PRESETS = Object.freeze(['fiber_cement', 'plywood', 'mixed_board', 'chb']);
@@ -488,8 +490,10 @@ export function createPurlinSystem(options = {}, defaultRole = 'purlin') {
   };
 }
 
-function normalizePurlinSystem(purlinSystem = {}, project = null) {
-  const coveringKind = project?.roofSystem?.covering?.kind || null;
+// The default role follows the covering of the roof on THIS system; a system
+// with no roof takes the no-covering default, as a project without a roof did.
+function normalizePurlinSystem(purlinSystem = {}, project = null, trussSystemId = null) {
+  const coveringKind = getRoofForTrussSystem(project, trussSystemId)?.covering?.kind || null;
   return createPurlinSystem(purlinSystem || {}, defaultPurlinRoleForCovering(coveringKind));
 }
 
@@ -684,6 +688,20 @@ export function createTrussSystem(name = 'Truss System', options = {}) {
   };
 }
 
+/**
+ * `Truss System` for the first system, then `Truss System 2`, `Truss System 3`
+ * … skipping names already in use, as roofs are named. Each system can carry
+ * its own roof (docs/multi-roof.md), and "Add roof to <system name>" is only
+ * useful when the names tell the systems apart.
+ */
+export function getNextTrussSystemName(project) {
+  const usedNames = new Set((project?.trussSystems || []).map((trussSystem) => trussSystem?.name));
+  if (!usedNames.has('Truss System')) return 'Truss System';
+  let index = 2;
+  while (usedNames.has(`Truss System ${index}`)) index += 1;
+  return `Truss System ${index}`;
+}
+
 export function createTrussSystemForProject(project, floorId = null, options = {}) {
   const resolvedFloorId = floorId || getDefaultActiveFloorId(project, floorId);
   const floor = getProjectFloor(project, resolvedFloorId);
@@ -709,7 +727,7 @@ export function createTrussSystemForProject(project, floorId = null, options = {
 export function normalizeTrussSystem(trussSystem = {}, project = null, catalog = getDefaultTrussTypes()) {
   const floorId = trussSystem?.floorId || getDefaultActiveFloorId(project, trussSystem?.floorId);
   const floor = project ? getProjectFloor(project, floorId) : null;
-  const roofAttachmentId = project?.roofSystem?.trussAttachmentId === trussSystem?.id ? project.roofSystem.id : null;
+  const roofAttachmentId = getRoofForTrussSystem(project, trussSystem?.id)?.id || null;
 
   const trussInstances = (trussSystem?.trussInstances || []).map((instance) => ({
     ...normalizeTrussInstance(instance, floorId, catalog),
@@ -731,7 +749,7 @@ export function normalizeTrussSystem(trussSystem = {}, project = null, catalog =
     planRotationOffsetDegrees: normalizeRotationDegrees(trussSystem?.planRotationOffsetDegrees),
     planOffset: clonePlanOffset(trussSystem?.planOffset),
     planLengthScale: normalizePlanLengthScale(trussSystem?.planLengthScale),
-    purlinSystem: normalizePurlinSystem(trussSystem?.purlinSystem, project),
+    purlinSystem: normalizePurlinSystem(trussSystem?.purlinSystem, project, trussSystem?.id),
     endClosures: normalizeTrussEndClosures(trussSystem?.endClosures),
     memberSizes: normalizeTrussMemberSizes(trussSystem?.memberSizes),
     heel: normalizeTrussHeel(trussSystem?.heel),
@@ -808,8 +826,7 @@ function syncTrussSystemGeometry(trussSystem, project, catalog) {
   const floor = getProjectFloor(project, normalizedSystem.floorId);
   if (!floor) return null;
 
-  const roofAttachmentId =
-    project?.roofSystem?.trussAttachmentId === normalizedSystem.id ? project.roofSystem.id : null;
+  const roofAttachmentId = getRoofForTrussSystem(project, normalizedSystem.id)?.id || null;
   const syncedInstances = (normalizedSystem.trussInstances || [])
     .map((instance) => syncBeamSupportedInstance(instance, floor, catalog, roofAttachmentId))
     .filter(Boolean);
@@ -846,21 +863,23 @@ export function syncProjectTrussSystems(project) {
       .filter(Boolean),
   );
 
+  // A roof whose truss system is gone stays behind, detached; the list keeps its
+  // identity when every roof still has its trusses.
   const validTrussIds = new Set(normalizedTrussSystems.map((entry) => entry.id));
-  const roofSystem =
-    project.roofSystem &&
-    project.roofSystem.trussAttachmentId &&
-    !validTrussIds.has(project.roofSystem.trussAttachmentId)
-      ? {
-          ...project.roofSystem,
-          trussAttachmentId: null,
-        }
-      : project.roofSystem;
+  const roofSystems = getProjectRoofs(project);
+  const syncedRoofSystems = reuseArrayIfSameElements(
+    roofSystems,
+    roofSystems.map((roofSystem) =>
+      roofSystem?.trussAttachmentId && !validTrussIds.has(roofSystem.trussAttachmentId)
+        ? { ...roofSystem, trussAttachmentId: null }
+        : roofSystem,
+    ),
+  );
 
   return {
     ...project,
     version: Math.max(CURRENT_PROJECT_VERSION, Number(project.version || 0)),
-    roofSystem,
+    roofSystems: syncedRoofSystems,
     trussSystems: normalizedTrussSystems,
   };
 }

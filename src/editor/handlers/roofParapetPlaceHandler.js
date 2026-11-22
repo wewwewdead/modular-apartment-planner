@@ -1,7 +1,8 @@
 import { MIN_WALL_LENGTH, SNAP_DISTANCE_PX } from '@/domain/defaults';
 import { createParapet } from '@/domain/roofModels';
 import { distance } from '@/geometry/point';
-import { findNearestParapetCandidateEdge } from '@/geometry/roofPlanGeometry';
+import { findNearestParapetCandidateEdge, roofContainsPoint } from '@/geometry/roofPlanGeometry';
+import { findContextRoofAt, otherRoofMessage } from './roofContextPick';
 
 function resetToolState(editorDispatch) {
   editorDispatch({
@@ -16,13 +17,55 @@ function resetToolState(editorDispatch) {
   });
 }
 
-export function createRoofParapetPlaceHandler({ dispatch, editorDispatch, roofSystem, viewport }) {
+// An edge-following parapet already standing on exactly this edge, end to end.
+function edgeAlreadyHasParapet(roofSystem, edge) {
+  return (roofSystem.parapets || []).some(
+    (entry) =>
+      entry.attachment?.type === 'roof_edge' &&
+      entry.attachment.edgeIndex === edge.index &&
+      entry.startPoint?.x === edge.start.x &&
+      entry.startPoint?.y === edge.start.y &&
+      entry.endPoint?.x === edge.end.x &&
+      entry.endPoint?.y === edge.end.y,
+  );
+}
+
+export function createRoofParapetPlaceHandler({
+  dispatch,
+  editorDispatch,
+  roofSystem,
+  contextRoofSystems = [],
+  viewport,
+}) {
+  const snapDistance = () => SNAP_DISTANCE_PX / Math.max(0.0001, viewport.zoom);
+
   return {
     onMouseDown(modelPos, e, toolState) {
       if (e.button !== 0 || !roofSystem) return;
 
       const start = toolState.roofParapetStart;
       const snapEdge = toolState.roofParapetSnapEdge;
+
+      // A second press with no move between (a double-click) finds the snap
+      // edge already cleared by the first press's commit, and would start a
+      // free parapet on the spot; with a move between, it would stack a second
+      // parapet on the same edge. Either way the edge under the press already
+      // carries the parapet the first press made, so the press does nothing.
+      if (!start && !e.shiftKey) {
+        const edgeHere = snapEdge || findNearestParapetCandidateEdge(roofSystem, modelPos, snapDistance())?.edge;
+        if (edgeHere && edgeAlreadyHasParapet(roofSystem, edgeHere)) return;
+      }
+
+      // A first press that is neither on an edge of the active roof nor inside
+      // it, but inside another roof, was meant for that roof: the tool stays on
+      // the active one and says so, rather than starting a free parapet there.
+      if (!start && !snapEdge && !roofContainsPoint(roofSystem, modelPos)) {
+        const otherRoof = findContextRoofAt(contextRoofSystems, modelPos);
+        if (otherRoof) {
+          editorDispatch({ type: 'SET_STATUS_MESSAGE', message: otherRoofMessage(otherRoof) });
+          return;
+        }
+      }
 
       if (!start && snapEdge && !e.shiftKey) {
         const parapet = createParapet(snapEdge.start, snapEdge.end, {
@@ -33,7 +76,7 @@ export function createRoofParapetPlaceHandler({ dispatch, editorDispatch, roofSy
             endOffset: snapEdge.length,
           },
         });
-        dispatch({ type: 'PARAPET_ADD', parapet });
+        dispatch({ type: 'PARAPET_ADD', roofId: roofSystem?.id || null, parapet });
         editorDispatch({ type: 'SELECT_OBJECT', id: parapet.id, objectType: 'parapet' });
         editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Created edge-following parapet.' });
         resetToolState(editorDispatch);
@@ -57,7 +100,7 @@ export function createRoofParapetPlaceHandler({ dispatch, editorDispatch, roofSy
       if (distance(start, modelPos) < MIN_WALL_LENGTH) return;
 
       const parapet = createParapet(start, modelPos);
-      dispatch({ type: 'PARAPET_ADD', parapet });
+      dispatch({ type: 'PARAPET_ADD', roofId: roofSystem?.id || null, parapet });
       editorDispatch({ type: 'SELECT_OBJECT', id: parapet.id, objectType: 'parapet' });
       editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Created parapet.' });
       resetToolState(editorDispatch);
@@ -65,8 +108,7 @@ export function createRoofParapetPlaceHandler({ dispatch, editorDispatch, roofSy
 
     onMouseMove(modelPos, e, toolState) {
       if (!toolState.roofParapetStart) {
-        const snapDistance = SNAP_DISTANCE_PX / Math.max(0.0001, viewport.zoom);
-        const nearestEdge = findNearestParapetCandidateEdge(roofSystem, modelPos, snapDistance);
+        const nearestEdge = findNearestParapetCandidateEdge(roofSystem, modelPos, snapDistance());
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
           payload: {

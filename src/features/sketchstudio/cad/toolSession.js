@@ -2,8 +2,9 @@
 // it that are written down as tables (src/shared/machine.js).
 //
 // CadWorkspace keeps "which tool is active" in separate pieces of state (an
-// operation draft, a sketch session, a mate session, Measure, the hole tool).
-// They stay where they are; this module only names what they add up to.
+// operation draft, a sketch session, a mate session, Measure, the hole tool,
+// the press brake, the shop session). They stay where they are; this module
+// only names what they add up to.
 import { defineMachine } from '@/shared/machine.js';
 
 // Face-to-face mate (CadWorkspace `mateSession`; null is idle). The first pick
@@ -44,11 +45,14 @@ export const PDF_RUN = defineMachine({
 // the bend (or, re-running a step, only shows it) and returns to setup for
 // the next hit. Leave, Esc with nothing picked or a new selection end it; a
 // stroke is never cut short by a key, only by the station going away.
+//
+// RESUME_SETUP is the replay putting back the brake it started over (see
+// resumeSession below).
 export const BRAKE = defineMachine({
   id: 'cad-brake',
   initial: 'idle',
   states: {
-    idle: { START: 'setup' },
+    idle: { START: 'setup', RESUME_SETUP: 'setup' },
     setup: { STROKE: 'stroke', END: 'idle' },
     stroke: { DONE: 'setup', END: 'idle' },
   },
@@ -64,15 +68,16 @@ export const BRAKE = defineMachine({
 // Paint: pick a part (or start on a selected part or group) to choose what is
 // painted, set the powder, Paint commits the finish rows. A target with
 // prints asks first (CONFIRM): painting removes them. Strip paint confirms the
-// same way. Esc steps back (confirm → colour → pick) and then leaves.
+// same way. Esc steps back (confirm → colour → pick) and then leaves. Every
+// target gone (an Undo) is GONE, straight back to the pick.
 export const PAINT = defineMachine({
   id: 'cad-paint',
   initial: 'idle',
   states: {
-    idle: { START: 'pick', TARGET: 'colour' },
+    idle: { START: 'pick', TARGET: 'colour', RESUME_PICK: 'pick', RESUME_COLOUR: 'colour', RESUME_CONFIRM: 'confirm' },
     pick: { PICK: 'colour', END: 'idle' },
-    colour: { PICK: 'colour', APPLY: 'colour', CONFIRM: 'confirm', BACK: 'pick', END: 'idle' },
-    confirm: { APPLY: 'colour', BACK: 'colour', END: 'idle' },
+    colour: { PICK: 'colour', APPLY: 'colour', CONFIRM: 'confirm', BACK: 'pick', GONE: 'pick', END: 'idle' },
+    confirm: { APPLY: 'colour', BACK: 'colour', GONE: 'pick', END: 'idle' },
   },
 });
 
@@ -85,7 +90,7 @@ export const PRINT = defineMachine({
   id: 'cad-print',
   initial: 'idle',
   states: {
-    idle: { START: 'face' },
+    idle: { START: 'face', RESUME_FACE: 'face', RESUME_ARTWORK: 'artwork' },
     face: { PICK: 'artwork', SELECT: 'artwork', END: 'idle' },
     artwork: { PICK: 'artwork', SELECT: 'artwork', NEW: 'face', END: 'idle' },
   },
@@ -93,12 +98,14 @@ export const PRINT = defineMachine({
 // Laser (§9 SM-4): the selected sheet-metal part's blank nested on the stock
 // sheet. At `sheet` the sheet, the quantity and the etched marks are set; Cut
 // runs the cut-path animation (`cutting`), whose end (DONE) or Stop (STOP)
-// comes back to the sheet. Esc stops a cut, then leaves.
+// comes back to the sheet. Esc stops a cut, then leaves. Cut on the laser
+// (the Cut panel) opens it already cutting: AUTOCUT. A model change under a
+// cut stops it (STOP).
 export const LASER = defineMachine({
   id: 'cad-laser',
   initial: 'idle',
   states: {
-    idle: { START: 'sheet' },
+    idle: { START: 'sheet', AUTOCUT: 'cutting', RESUME_SHEET: 'sheet' },
     sheet: { CUT: 'cutting', END: 'idle' },
     cutting: { DONE: 'sheet', STOP: 'sheet', END: 'idle' },
   },
@@ -128,9 +135,26 @@ export const SHOP_STATIONS = Object.freeze({
   film: FILM,
 });
 
-// The tool that owns the viewport's clicks, or null when none does. Only one
-// is meant to be open at a time; if two ever are, the first listed wins.
-export function activeTool({
+// The replay keeps the station it started over and puts it back as it ends
+// (CadWorkspace putBackFilm): a move from idle straight back to the stage the
+// stored session was in, one RESUME_<STAGE> event per stage a replay can
+// start over. A press brake stroke and a laser cut keep the replay out, so
+// `stroke` and `cutting` have none.
+export const resumeEvent = (stage) => `RESUME_${String(stage).toUpperCase()}`;
+
+// A stored station `session` back through its `machine`: the very same
+// session when the table resumes its stage, else null (nothing to put back).
+export function resumeSession(machine, session) {
+  if (!session || !machine) return null;
+  return machine.next(machine.initial, resumeEvent(session.stage)) === session.stage ? session : null;
+}
+
+// Every open tool, in this order. Only one is meant to be open at a time, but
+// a rule that asks "is another tool open" must not be fooled when two are:
+// Measure left open under a replay would read as `measure` alone and hide the
+// film. So those rules read this list, never the first name. A station added
+// to the shop session is in it without touching any of them.
+export function openTools({
   operationDraft,
   sketchSession,
   mateSession,
@@ -139,12 +163,39 @@ export function activeTool({
   brakeSession,
   shopSession = null,
 }) {
-  if (operationDraft) return 'operation';
-  if (sketchSession) return 'sketch';
-  if (mateSession) return 'mate';
-  if (measureSession) return 'measure';
-  if (holeMode) return 'hole';
-  if (brakeSession) return 'brake';
-  if (shopSession) return shopSession.station;
-  return null;
+  const tools = [];
+  if (operationDraft) tools.push('operation');
+  if (sketchSession) tools.push('sketch');
+  if (mateSession) tools.push('mate');
+  if (measureSession) tools.push('measure');
+  if (holeMode) tools.push('hole');
+  if (brakeSession) tools.push('brake');
+  if (shopSession) tools.push(shopSession.station);
+  return tools;
+}
+
+// The tool that owns the viewport's clicks, or null when none does: the first
+// open one.
+export function activeTool(state) {
+  const tools = openTools(state);
+  return tools.length ? tools[0] : null;
+}
+
+// Measure and the hole tool give way: every other tool's entry ends them (an
+// operation, a sketch, a mate, the press brake, a station), so what opens a
+// tool never waits for them.
+export const LIGHT_TOOLS = Object.freeze(['measure', 'hole']);
+
+// What a selection change ends or leaves alone: it cancels an operation and
+// ends the hole tool, and Measure belongs to no part. Every other tool holds
+// the selection while it runs, so the parts tree waits for it.
+export const SELECTION_FREE_TOOLS = Object.freeze(['operation', 'measure', 'hole']);
+
+// The tools outside the shop the route waits for. The press brake, the
+// stations, Measure and the hole tool are left by the route itself.
+export const ROUTE_WAITS_FOR = Object.freeze(['operation', 'sketch', 'mate']);
+
+// Whether `tools` (openTools) holds a tool that is not in `except`.
+export function toolOpenBesides(tools, except = []) {
+  return tools.some((tool) => !except.includes(tool));
 }

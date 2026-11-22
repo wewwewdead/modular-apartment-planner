@@ -17,6 +17,8 @@ import useSketchBOM from '../craftsman/hooks/useSketchBOM';
 import { buildBomEntityList } from '../craftsman/utils/entityBomAdapter';
 
 const NO_BOM_ENTITIES = [];
+// A stable empty list, so the canvas's memoised layers see the same prop.
+const NO_PREVIEW_ENTITIES = [];
 const CadWorkspace = lazy(() => import('../cad/CadWorkspace'));
 
 export default function SketchStudioLayout(props) {
@@ -73,6 +75,7 @@ export default function SketchStudioLayout(props) {
     precisionBindings,
     handleBindings,
     canvasRef,
+    cursorChannel,
     onCanvasClick,
     onCanvasPointerDown,
     onCanvasPointerMove,
@@ -110,11 +113,22 @@ export default function SketchStudioLayout(props) {
     if (ui.focusedJointId) clearFocusedJoint();
     if (ui.editingJointId) clearEditingJoint();
   }, [selection.selectedIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  // While a move or a handle drag is under way the document changes on every
+  // frame, and the bill of materials (and the cut-list and assembly panels that
+  // read it) would be rebuilt and redrawn each time. They hold the entities the
+  // drag started from and catch up when it ends. (The joinery export set is
+  // only re-resolved at the end of a drag anyway.)
+  const isDocumentDrag = interaction.mode === 'transform' || interaction.mode === 'handle-drag';
+  const settledEntities = useMemo(
+    () => document.entities,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- held on purpose while a drag is under way
+    [isDocumentDrag ? null : document.entities],
+  );
   // Joinery fasteners are billed from the export set, so only joints that are
   // actually fabricable contribute hardware to the cutting list.
   const bomEntities = useMemo(
-    () => (ui.craftsmanMode ? buildBomEntityList(document.entities, manufacturingExportEntities) : NO_BOM_ENTITIES),
-    [ui.craftsmanMode, document.entities, manufacturingExportEntities],
+    () => (ui.craftsmanMode ? buildBomEntityList(settledEntities, manufacturingExportEntities) : NO_BOM_ENTITIES),
+    [ui.craftsmanMode, settledEntities, manufacturingExportEntities],
   );
   const { bomRows, totalCost, costByMaterial } = useSketchBOM(bomEntities);
 
@@ -141,6 +155,33 @@ export default function SketchStudioLayout(props) {
 
     importInputRef.current?.click();
   }, [openSketch]);
+
+  const showGalleryPanel = useCallback(() => setShowGallery(true), []);
+  const { setWorkspaceMode } = props;
+  // The TopBar's extra buttons, built once per change of what they show: a
+  // fresh children element per render re-rendered the memoised TopBar on
+  // every pointer move.
+  const topBarExtras = useMemo(
+    () => (
+      <>
+        <CraftsmanToggle isActive={ui.craftsmanMode} onToggle={toggleCraftsmanMode} />
+        <button className="sketchStudioToolbarButton" onClick={() => setWorkspaceMode('model')}>
+          3D Model & workshop
+        </button>
+        <button
+          className="sketchStudioToolbarButton"
+          title="Copy closed 2D profiles into extruded 3D parts"
+          onClick={() => {
+            setImportProfileIds((selectedEntities || []).map((entity) => entity.id));
+            setWorkspaceMode('model');
+          }}
+        >
+          {selectedEntities?.length ? 'Send selection to 3D' : 'Import drawing into 3D'}
+        </button>
+      </>
+    ),
+    [ui.craftsmanMode, toggleCraftsmanMode, setWorkspaceMode, selectedEntities],
+  );
 
   const handleImportSketchChange = async (event) => {
     const file = event.target.files?.[0] || null;
@@ -229,20 +270,7 @@ export default function SketchStudioLayout(props) {
           onSetIsometricPlane={props.setIsometricPlane}
           onDocumentNameCommit={commitDocumentName}
         >
-          <CraftsmanToggle isActive={ui.craftsmanMode} onToggle={toggleCraftsmanMode} />
-          <button className="sketchStudioToolbarButton" onClick={() => props.setWorkspaceMode('model')}>
-            3D Model & workshop
-          </button>
-          <button
-            className="sketchStudioToolbarButton"
-            title="Copy closed 2D profiles into extruded 3D parts"
-            onClick={() => {
-              setImportProfileIds((selectedEntities || []).map((entity) => entity.id));
-              props.setWorkspaceMode('model');
-            }}
-          >
-            {selectedEntities?.length ? 'Send selection to 3D' : 'Import drawing into 3D'}
-          </button>
+          {topBarExtras}
         </TopBar>
         <div className="sketchStudioWorkspace">
           <LeftToolbar tools={tools} activeTool={activeTool} onToolChange={setActiveTool} />
@@ -258,12 +286,13 @@ export default function SketchStudioLayout(props) {
             draftPreview={draftPreview}
             precisionHud={precisionHud}
             snap={snap}
-            manufacturingPreviewEntities={ui.craftsmanMode ? manufacturingPreviewEntities : []}
+            manufacturingPreviewEntities={ui.craftsmanMode ? manufacturingPreviewEntities : NO_PREVIEW_ENTITIES}
             onJoineryClick={ui.craftsmanMode ? focusJoint : undefined}
             selectedHandles={selectedHandles}
             selectionBounds={selectionBounds}
             isPanning={interaction.mode === 'panning'}
             canvasRef={canvasRef}
+            cursorChannel={cursorChannel}
             onCanvasClick={onCanvasClick}
             onCanvasPointerDown={onCanvasPointerDown}
             onCanvasPointerMove={onCanvasPointerMove}
@@ -302,7 +331,7 @@ export default function SketchStudioLayout(props) {
                 onJointAdd={addJoint}
                 onJointUpdate={updateJoint}
                 onJointRemove={removeJoint}
-                onLoadTemplate={() => setShowGallery(true)}
+                onLoadTemplate={showGalleryPanel}
                 onDuplicateEntities={duplicateEntities}
                 onEntityFieldCommit={updateSelectedEntityField}
                 activeTool={activeTool}
@@ -354,7 +383,7 @@ export default function SketchStudioLayout(props) {
         )}
         <StatusBar
           zoom={viewport.zoom}
-          cursorWorld={status.cursorWorld}
+          cursorChannel={cursorChannel}
           activeTool={activeTool}
           activeLayer={activeLayer}
           tools={tools}

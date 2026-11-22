@@ -50,7 +50,9 @@ export function createProject(name = 'Untitled Project') {
     updatedAt: new Date().toISOString(),
     floors,
     building: createCanonicalBuilding(id, floors),
-    roofSystem: null,
+    // One roof per truss system at most (docs/multi-roof.md); read it through
+    // domain/projectRoofs.js, never off the project directly.
+    roofSystems: [],
     trussSystems: [],
     ceilings: [],
     sheets: [],

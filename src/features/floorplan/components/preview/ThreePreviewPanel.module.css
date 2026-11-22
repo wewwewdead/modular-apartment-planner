@@ -428,8 +428,9 @@
   padding: 4px 10px;
   border-radius: var(--radius-xl);
   border: 1px solid var(--color-border);
-  background: var(--color-surface-glass);
-  backdrop-filter: blur(6px);
+  /* Solid enough to read without a backdrop blur, which over a canvas that is
+     redrawing — as it is for as long as this chip shows — re-blurs every frame. */
+  background: rgba(255, 255, 255, 0.92);
   font-size: 11px;
   font-weight: 600;
   color: var(--color-text-secondary);

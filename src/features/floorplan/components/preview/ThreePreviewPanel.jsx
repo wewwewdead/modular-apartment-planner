@@ -2,10 +2,12 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEditorState } from '@/features/floorplan/context/FloorplanContext';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { buildPreviewScene } from '@/three/scene/buildPreviewScene';
-import { buildSelectionOverlay } from './buildPreviewObjects';
+import { buildSelectionOverlay, sameOverlayDescriptors, selectionOverlayDescriptors } from './buildPreviewObjects';
 import { createPreviewSceneCache } from './previewSceneCache';
 import { resolveLightPoolPolicy } from './fixtureLightPool';
 import { createPreviewViewport } from './createPreviewViewport';
+import { createResizeCoalescer } from './resizeCoalescer';
+import { PREVIEW_PERF_ENABLED, noteSceneDescriptor, recordSceneRebuild } from './previewPerf';
 import { previewPickHit } from './previewPick';
 import { getOrderedFloors } from '@/domain/floorModels';
 import { getPreviewInspection } from './previewInspection';
@@ -26,7 +28,8 @@ import CompassOverlay from '@/features/floorplan/components/CompassOverlay';
 import { CameraIcon, ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
 import { VIEW_PRESET_OPTIONS, resolveFacing } from './previewCameraMath';
 import { PALETTE_LOOKS } from './materials';
-import { resolveRoofAppearance } from '@/domain/roofCoveringCatalog';
+import { resolveRoofAppearances } from '@/domain/roofCoveringCatalog';
+import { findRoofOwner, getProjectRoofs, resolveActiveRoof } from '@/domain/projectRoofs';
 import { isTypingTarget } from '@/utils/keyboard';
 import {
   DEFAULT_VIEW_MODE,
@@ -42,6 +45,12 @@ import styles from './ThreePreviewPanel.module.css';
 
 // ~15 scene rebuilds a second while the project is changing every frame.
 const MIN_SCENE_REBUILD_INTERVAL_MS = 66;
+// Picked objects that live inside one roof; picking one activates that roof.
+const ROOF_SUB_OBJECT_KINDS = new Set(['parapet', 'drain', 'roofOpening', 'roofPlane', 'roofEdge']);
+
+// The words for a pane whose WebGL context was lost (a GPU reset, a driver
+// update, too many 3D views open at once), above its Try again.
+const PREVIEW_LOST_MESSAGE = "The 3D preview's graphics context was lost, so it stopped drawing.";
 
 /**
  * `My House` + `iso_northeast` → `my-house-iso_northeast.png`, and
@@ -205,6 +214,7 @@ function ThreePreviewPanelBody({
   const {
     selectedId,
     selectedType,
+    activeRoofId,
     activePhaseId,
     phaseViewMode,
     sunStudy,
@@ -228,26 +238,43 @@ function ThreePreviewPanelBody({
     return undefined;
   }, [previewScope, orderedFloors]);
 
-  const sceneDescriptor = useMemo(
-    () =>
-      buildPreviewScene(filteredProject, {
-        activeFloorId,
-        visibleFloorIds,
-        // An assembly editor's pane draws the wall or ceiling it is editing and
-        // keeps its own layer switches for what to leave out, so the plan's
-        // "strip the boards and look at the frame" must not follow the object
-        // in here — the preview project reuses the real wall/ceiling id, and
-        // passing these would silently unboard the drawing being worked on.
-        hiddenWallBoards: assemblyDriven ? undefined : hiddenWallBoards,
-        hiddenCeilingBoards: assemblyDriven ? undefined : hiddenCeilingBoards,
-        // An assembly editor is looking at one wall or one ceiling from a metre
-        // away, so it gets the parts a whole-building view cannot afford —
-        // every ceiling screw. Same switch as the selection: this pane belongs
-        // to an editor, so it draws what the editor is editing.
-        assemblyDetail: assemblyDriven,
-      }),
-    [filteredProject, activeFloorId, visibleFloorIds, hiddenWallBoards, hiddenCeilingBoards, assemblyDriven],
-  );
+  // This pane's descriptor memo (`buildPreviewScene`, "Descriptor memo"): a
+  // plan drag commits the project fifteen-plus times a second, and the floors
+  // it is not touching come back as the same descriptors instead of being
+  // generated again for the scene cache to discard. Kept for the pane's life.
+  const [descriptorMemo] = useState(() => ({}));
+  const sceneDescriptor = useMemo(() => {
+    const startedAt = PREVIEW_PERF_ENABLED ? performance.now() : 0;
+    const descriptor = buildPreviewScene(filteredProject, {
+      activeFloorId,
+      visibleFloorIds,
+      // An assembly editor's pane draws the wall or ceiling it is editing and
+      // keeps its own layer switches for what to leave out, so the plan's
+      // "strip the boards and look at the frame" must not follow the object
+      // in here — the preview project reuses the real wall/ceiling id, and
+      // passing these would silently unboard the drawing being worked on.
+      hiddenWallBoards: assemblyDriven ? undefined : hiddenWallBoards,
+      hiddenCeilingBoards: assemblyDriven ? undefined : hiddenCeilingBoards,
+      // An assembly editor is looking at one wall or one ceiling from a metre
+      // away, so it gets the parts a whole-building view cannot afford —
+      // every ceiling screw. Same switch as the selection: this pane belongs
+      // to an editor, so it draws what the editor is editing.
+      assemblyDetail: assemblyDriven,
+      memo: descriptorMemo,
+    });
+    // Under the perf gate only: what a plan drag's descriptors cost (see
+    // `recordSceneRebuild`).
+    if (PREVIEW_PERF_ENABLED) noteSceneDescriptor(descriptor, performance.now() - startedAt);
+    return descriptor;
+  }, [
+    filteredProject,
+    activeFloorId,
+    visibleFloorIds,
+    hiddenWallBoards,
+    hiddenCeilingBoards,
+    assemblyDriven,
+    descriptorMemo,
+  ]);
 
   const activeFloor = useMemo(
     () => (project?.floors || []).find((floor) => floor.id === activeFloorId) || null,
@@ -256,15 +283,19 @@ function ThreePreviewPanelBody({
   // A walk over every object in the scene, for two numbers in the status line.
   // Keyed on the descriptor, which is already the thing that changes when the
   // counts do.
-  const { visibleCount, visibleFloorCount } = useMemo(() => {
+  const { visibleCount, visibleFloorCount, visibleRoofLayers } = useMemo(() => {
     let objects = 0;
     let floors = 0;
+    const roofs = [];
+    // Each roof is a layer of its own in `floors`; only storeys are counted.
+    const roofLayerIds = new Set(sceneDescriptor.roofLayerIds || []);
     for (const floor of sceneDescriptor.floors) {
       if (!floor.visible) continue;
       objects += floor.objects.length;
-      if (floor.floorId !== sceneDescriptor.roofLayerId) floors += 1;
+      if (roofLayerIds.has(floor.floorId)) roofs.push(floor.floorId);
+      else floors += 1;
     }
-    return { visibleCount: objects, visibleFloorCount: floors };
+    return { visibleCount: objects, visibleFloorCount: floors, visibleRoofLayers: roofs.join(' ') };
   }, [sceneDescriptor]);
   const inspection = useMemo(
     () => getPreviewInspection(project, selectedType, selectedId),
@@ -310,9 +341,17 @@ function ThreePreviewPanelBody({
         editorDispatch({ type: 'SET_ACTIVE_FLOOR', floorId: target.floorId });
       }
 
+      // A parapet, drain or opening belongs to one roof, and the roof workspace
+      // edits one roof at a time: its owner becomes the active roof first. A
+      // roof itself becomes active through the SELECT_OBJECT below.
+      if (ROOF_SUB_OBJECT_KINDS.has(target.kind)) {
+        const owner = findRoofOwner(project, target.kind, target.sourceId);
+        if (owner) editorDispatch({ type: 'SET_ACTIVE_ROOF', roofId: owner.id });
+      }
+
       editorDispatch({ type: 'SELECT_OBJECT', id: target.sourceId, objectType: target.kind });
     },
-    [activeFloorId, assemblyDriven, editorDispatch, onAssemblyPick],
+    [activeFloorId, assemblyDriven, editorDispatch, onAssemblyPick, project],
   );
 
   useEffect(() => {
@@ -331,9 +370,13 @@ function ThreePreviewPanelBody({
     viewportRef.current = viewport;
     sceneCacheRef.current = createPreviewSceneCache({ lightPool: resolveLightPoolPolicy(lightPoolKindRef.current) });
 
+    // A splitter drag resizes the pane every frame; the renderer follows the
+    // first callback of a burst at once and the rest once the size settles,
+    // the canvas stretching by CSS in between (`resizeCoalescer.js`).
+    const resizes = createResizeCoalescer({ apply: () => viewport.resize() });
     if ('ResizeObserver' in window) {
       const observer = new ResizeObserver(() => {
-        viewport.resize();
+        resizes.request();
       });
       observer.observe(containerRef.current);
       resizeObserverRef.current = observer;
@@ -344,6 +387,7 @@ function ThreePreviewPanelBody({
     return () => {
       resizeObserverRef.current?.disconnect?.();
       resizeObserverRef.current = null;
+      resizes.cancel();
       // Dispose viewport first (removes worldRoot from scene without disposing,
       // since the cache owns those geometries), then let the cache dispose the
       // per-floor groups it built.
@@ -354,23 +398,46 @@ function ThreePreviewPanelBody({
     };
   }, []);
 
-  // The roof's colours are a palette mutation, not part of the scene build, so
-  // a colour change never re-triangulates anything. Keyed on the primitives:
-  // the roof object is re-normalized on every edit, its colours rarely change.
-  // Runs right after the viewport is created on mount (effects run in order),
-  // so the first frame already carries the project's colours. An assembly
-  // editor's pane keeps the classic palette untouched.
-  // The gable-end infill colour lives on the truss systems (RT-2), so they
-  // key the memo too.
-  const roofAppearanceSource = assemblyDriven ? null : project?.roofSystem || null;
+  // The roofs' colours are a palette mutation, not part of the scene build, so
+  // a colour change never re-triangulates anything. Keyed on the whole
+  // appearances JSON: the roofs are re-normalized on every edit, their colours
+  // rarely change. Runs right after the viewport is created on mount (effects
+  // run in order), so the first frame already carries the project's colours;
+  // a material the build asks for later is born with them anyway (the palette
+  // remembers the last appearances). An assembly editor's pane keeps the
+  // classic palette untouched.
+  // Each roof wears its own materials, and so does each truss system's
+  // gable-end infill (docs/multi-roof.md §6), so every roof and every truss
+  // system keys the memo.
+  const roofAppearanceSource = assemblyDriven ? null : getProjectRoofs(project);
   const closureAppearanceSource = assemblyDriven ? null : project?.trussSystems || null;
   const roofAppearanceKey = useMemo(() => {
-    const appearance = resolveRoofAppearance(roofAppearanceSource, closureAppearanceSource || []);
-    return appearance ? JSON.stringify(appearance) : '';
+    const appearances = resolveRoofAppearances(roofAppearanceSource || [], closureAppearanceSource || []);
+    return appearances ? JSON.stringify(appearances) : '';
   }, [roofAppearanceSource, closureAppearanceSource]);
-  const roofAppearance = useMemo(() => (roofAppearanceKey ? JSON.parse(roofAppearanceKey) : null), [roofAppearanceKey]);
-  const roofColourHex = roofAppearance?.covering?.hex;
-  const closureColourHex = roofAppearance?.closures?.[0]?.hex;
+  const roofAppearances = useMemo(
+    () => (roofAppearanceKey ? JSON.parse(roofAppearanceKey) : null),
+    [roofAppearanceKey],
+  );
+  // For the verify scripts. `data-roof-colour` is the covering of the roof the
+  // roof panel edits (the active one, else the first) and `data-closure-colour`
+  // the infill of the truss system under it (else the first system's), so a
+  // one-roof project reads exactly as it always has; `data-roof-colours` and
+  // `data-closure-colours` list every owner as `id=#HEX`, in project order.
+  const activeRoof = assemblyDriven ? null : resolveActiveRoof(project, activeRoofId);
+  const roofColourAttributes = useMemo(() => {
+    const roofs = roofAppearances?.roofs || [];
+    const closures = roofAppearances?.closures || [];
+    const roof = roofs.find((entry) => entry.id === activeRoof?.id) || null;
+    const closure = closures.find((entry) => entry.id === activeRoof?.trussAttachmentId) || closures[0] || null;
+    return {
+      roofColourHex: roof?.covering?.hex,
+      closureColourHex: closure?.hex,
+      roofColours: roofs.length ? roofs.map((entry) => `${entry.id}=${entry.covering?.hex}`).join(' ') : undefined,
+      closureColours: closures.length ? closures.map((entry) => `${entry.id}=${entry.hex}`).join(' ') : undefined,
+    };
+  }, [roofAppearances, activeRoof]);
+  const { roofColourHex, closureColourHex, roofColours, closureColours } = roofColourAttributes;
 
   useEffect(() => {
     if (!roofAppearanceKey) return;
@@ -416,8 +483,11 @@ function ThreePreviewPanelBody({
     if (!viewport) return;
     const dataUrl = viewport.captureImage();
     if (!dataUrl) return;
-    downloadDataUrl(dataUrl, imageFileName(project?.name, viewPreset, viewMode));
-  }, [project?.name, viewPreset, viewMode]);
+    // Named after the mode on screen, read now: this pane's `viewMode` is the
+    // request, which runs ahead of the picture while a first see-through
+    // toggle's programs compile, and the capture is of the picture.
+    downloadDataUrl(dataUrl, imageFileName(project?.name, viewPreset, viewport.getViewMode()));
+  }, [project?.name, viewPreset]);
 
   useEffect(() => {
     viewportRef.current?.setPickContext({ activeFloorId });
@@ -486,12 +556,15 @@ function ThreePreviewPanelBody({
 
     const runBuild = () => {
       lastBuildAt.current = performance.now();
+      const buildStartedAt = lastBuildAt.current;
       // Incremental build: reuse THREE groups for floors whose source geometry is
       // unchanged (immutable reducer updates preserve floor object identity), and
       // only rebuild floors that actually changed.
       const { root, batchRoot, meshMap, lightsChanged } = sceneCache.build(sceneDescriptor, viewport.materialPalette);
       meshMapRef.current = meshMap;
       viewport.setWorld(root, sceneDescriptor.bounds, sceneDescriptor.groundLevel, { batchRoot, lightsChanged });
+      if (PREVIEW_PERF_ENABLED)
+        recordSceneRebuild({ buildMs: Math.round((performance.now() - buildStartedAt) * 1000) / 1000 });
       setSceneBuildId((id) => id + 1);
     };
 
@@ -519,6 +592,14 @@ function ThreePreviewPanelBody({
   // Keyed on the build counter rather than the descriptor: a throttled
   // descriptor has no meshes yet, and re-highlighting against the previous
   // meshMap would point the overlay at meshes that are about to be replaced.
+  //
+  // A rebuild that left the selected object exactly as it was would build the
+  // same overlay again — mesh, outline and all — and replace the one on screen
+  // with it. So the overlay remembers what it was built from, and a rebuild
+  // whose selected descriptors compare equal (the scene cache's own test for
+  // carrying a mesh over) keeps it. The viewport only ever drops an overlay
+  // when a whole new world root arrives, which the scene cache never hands it.
+  const overlaySourceRef = useRef(null);
   useEffect(() => {
     const viewport = viewportRef.current;
     const meshMap = meshMapRef.current;
@@ -527,8 +608,19 @@ function ThreePreviewPanelBody({
     const selection = assemblyDriven
       ? { part: assemblyPartId ? { kind: assemblyPartKind, id: assemblyPartId, side: assemblyPartSide } : null }
       : { selectedId, selectedType };
+    const descriptors = selectionOverlayDescriptors(meshMap, selection);
+    const previous = overlaySourceRef.current;
+    if (
+      previous &&
+      previous.viewport === viewport &&
+      previous.accent === selectionAccent &&
+      sameOverlayDescriptors(previous.descriptors, descriptors)
+    ) {
+      return;
+    }
     const overlay = buildSelectionOverlay(meshMap, selection, viewport.materialPalette, selectionAccent);
     viewport.setSelectionOverlay(overlay);
+    overlaySourceRef.current = { viewport, accent: selectionAccent, descriptors };
   }, [
     assemblyDriven,
     assemblyPartKind,
@@ -601,7 +693,15 @@ function ThreePreviewPanelBody({
    * it: a woken pane re-drawing the edits made behind an overlay keeps the old
    * picture up under a thin bar, with words only if it takes a while.
    */
-  const firstPictureState = viewportError
+  // `lost` is for good (`loadPhase.js`): the canvas is dead, and only Try
+  // again, which remounts, brings a picture back. Shown as the failure it is.
+  const contextLost = loadStatus.phase === 'lost';
+  const viewportFailure = viewportError
+    ? { message: LOADING_COPY.previewFailed, onRetry: onRetryViewport }
+    : contextLost
+      ? { message: PREVIEW_LOST_MESSAGE, onRetry: onRetryViewport }
+      : null;
+  const firstPictureState = viewportFailure
     ? 'error'
     : presented
       ? 'ready'
@@ -617,7 +717,7 @@ function ThreePreviewPanelBody({
   const catchingUp = presented && !suspended && (loadStatus.phase === 'waking' || loadStatus.phase === 'compiling');
   // Realistic keeps refining after the camera stops; say so, but not for the
   // moment-long restarts an orbit causes.
-  const refining = useDelayedFlag(presented && renderStyle === 'realistic' && !refined, {
+  const refining = useDelayedFlag(presented && !contextLost && renderStyle === 'realistic' && !refined, {
     delayMs: 300,
     minVisibleMs: 400,
   });
@@ -720,6 +820,8 @@ function ThreePreviewPanelBody({
         aria-busy={firstPictureState === 'ready' || firstPictureState === 'error' ? 'false' : 'true'}
         data-roof-colour={roofColourHex}
         data-closure-colour={closureColourHex}
+        data-roof-colours={roofColours}
+        data-closure-colours={closureColours}
       >
         <div className={styles.headerCompact}>
           {viewModeToggle}
@@ -763,7 +865,7 @@ function ThreePreviewPanelBody({
             showDetail={firstPictureState === 'compiling' && Boolean(placeholderDetail)}
             silhouette={silhouette}
             since={loadingSince}
-            error={viewportError ? { message: LOADING_COPY.previewFailed, onRetry: onRetryViewport } : null}
+            error={viewportFailure}
           />
           <LoadingBar active={catchingUp} placement="region" tone={placeholderTone} />
           <LoadingPill active={catchingUp} label={LOADING_COPY.catchingUp} placement="region" tone={placeholderTone} />
@@ -796,6 +898,11 @@ function ThreePreviewPanelBody({
       aria-busy={firstPictureState === 'ready' || firstPictureState === 'error' ? 'false' : 'true'}
       data-roof-colour={roofColourHex}
       data-closure-colour={closureColourHex}
+      data-roof-colours={roofColours}
+      data-closure-colours={closureColours}
+      // The roof layers the scene hands the cache, visible ones only (one per
+      // roof, docs/multi-roof.md §5.5), for the verify scripts to read.
+      data-roof-layers={visibleRoofLayers}
     >
       <div className={`${styles.header} ${isFocused ? styles.headerFocused : ''}`}>
         <div className={styles.titleGroup}>
@@ -865,8 +972,14 @@ function ThreePreviewPanelBody({
               type="button"
               className={`${styles.button} ${styles.saveImageButton}`}
               onClick={handleSaveImage}
-              disabled={!refined || !sceneDescriptor.hasVisibleObjects}
-              title={refined ? 'Save the picture on screen as a PNG' : LOADING_COPY.refiningTooltip}
+              disabled={!refined || contextLost || !sceneDescriptor.hasVisibleObjects}
+              title={
+                contextLost
+                  ? PREVIEW_LOST_MESSAGE
+                  : refined
+                    ? 'Save the picture on screen as a PNG'
+                    : LOADING_COPY.refiningTooltip
+              }
               aria-label="Save image"
             >
               <CameraIcon />
@@ -918,7 +1031,7 @@ function ThreePreviewPanelBody({
           showDetail={firstPictureState === 'compiling' && Boolean(placeholderDetail)}
           silhouette={silhouette}
           since={loadingSince}
-          error={viewportError ? { message: LOADING_COPY.previewFailed, onRetry: onRetryViewport } : null}
+          error={viewportFailure}
         />
         <LoadingBar active={catchingUp} placement="region" tone={placeholderTone} />
         <LoadingPill active={catchingUp} label={LOADING_COPY.catchingUp} placement="region" tone={placeholderTone} />

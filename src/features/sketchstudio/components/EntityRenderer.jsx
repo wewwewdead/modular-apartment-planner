@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import { getArcPath, getArcMidpoint } from '../utils/arcUtils';
 import { getRectCorners } from '../utils/entityUtils';
 import { getFastenerDrillingDefaults, getHardwarePattern, isFastenerEntity } from '../utils/fastenerUtils';
@@ -244,47 +245,61 @@ function renderEntity(entity, className, interactive) {
   return null;
 }
 
-export default function EntityRenderer({
-  entities,
-  hoveredId,
-  selectedIds,
-  baseClassName = 'sketchStudioEntity',
-  onEntityClick,
-}) {
+/**
+ * One entity. Memoised on its own props: an entity object keeps its identity
+ * until it is edited, so a pointer move, a pan or a hover change re-renders
+ * only the entities whose hover or selection state actually changed.
+ */
+const EntityShape = memo(function EntityShape({ entity, isHovered, isSelected, baseClassName, onEntityClick }) {
   const interactive = !!onEntityClick;
+  const className = [
+    baseClassName,
+    entity.meta?.lineStyle === 'broken' ? 'is-broken-line' : '',
+    isHovered ? 'is-hovered' : '',
+    isSelected ? 'is-selected' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const rendered = renderEntity(entity, className, interactive);
+  if (interactive && rendered) {
+    return (
+      <g
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          onEntityClick(entity);
+        }}
+      >
+        {rendered}
+      </g>
+    );
+  }
+  return rendered;
+});
+
+// `selectedIds` is an array or a Set; either way it is looked up once per
+// entity in constant time.
+function EntityRenderer({ entities, hoveredId, selectedIds, baseClassName = 'sketchStudioEntity', onEntityClick }) {
+  const selectedIdSet = useMemo(() => (selectedIds instanceof Set ? selectedIds : new Set(selectedIds)), [selectedIds]);
   return (
     <g className="sketchStudioEntities">
       {entities
         .filter((entity) => entity.visible !== false)
         .filter((entity) => entity.type !== 'dimension')
-        .map((entity) => {
-          const isSelected = selectedIds.includes(entity.id);
-          const isHovered = hoveredId === entity.id;
-          const className = [
-            baseClassName,
-            entity.meta?.lineStyle === 'broken' ? 'is-broken-line' : '',
-            isHovered ? 'is-hovered' : '',
-            isSelected ? 'is-selected' : '',
-          ]
-            .filter(Boolean)
-            .join(' ');
-          const rendered = renderEntity(entity, className, interactive);
-          if (interactive && rendered) {
-            return (
-              <g
-                key={`click-${entity.id}`}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEntityClick(entity);
-                }}
-              >
-                {rendered}
-              </g>
-            );
-          }
-          return rendered;
-        })}
+        .map((entity) => (
+          <EntityShape
+            key={onEntityClick ? `click-${entity.id}` : entity.id}
+            entity={entity}
+            isHovered={hoveredId === entity.id}
+            isSelected={selectedIdSet.has(entity.id)}
+            baseClassName={baseClassName}
+            onEntityClick={onEntityClick}
+          />
+        ))}
     </g>
   );
 }
+
+// The whole layer is skipped when none of its props changed (a viewport-only
+// or cursor-only render of the canvas).
+export default memo(EntityRenderer);

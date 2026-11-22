@@ -5,6 +5,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import { createRef } from 'react';
+import * as THREE from 'three';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import CadViewport from './CadViewport.jsx';
 import { createOperationDraft } from './operations.js';
 import { placeClick, placementView, startPlacement } from './placementTool.js';
@@ -38,6 +40,11 @@ vi.mock('three/addons/controls/TransformControls.js', async () => {
   const { EventDispatcher, Object3D } = await import('three');
   return {
     TransformControls: class extends EventDispatcher {
+      static current;
+      constructor() {
+        super();
+        TransformControls.current = this;
+      }
       getHelper() {
         return new Object3D();
       }
@@ -323,6 +330,121 @@ it('Esc during a drag restores the value and orbiting, and reports nothing', () 
   expect(state().handles.find((h) => h.id === 'distance').value).toBe(18);
   pointer('pointerup', [head.x, head.y], { button: 0 });
   expect(onPlacementDrag).not.toHaveBeenCalled();
+});
+
+// The placed profile of shaped(), as its view, for a test that re-renders it.
+const shapedView = () =>
+  placementView(
+    placeClick(
+      placeDraft(),
+      {
+        kind: 'face',
+        planar: true,
+        instanceId: 'board',
+        partId: 'board',
+        point: [300, 200, 18],
+        normal: [0, 0, 1],
+        faceFrame: { origin: [0, 0, 18], x: [1, 0, 0], y: [0, 1, 0], normal: [0, 0, 1] },
+        outline: [],
+      },
+      ctx,
+    ),
+    ctx,
+  );
+
+it('a placement view that goes away under a handle drag ends the drag: orbit back, nothing reported', () => {
+  const ref = createRef();
+  const callbacks = { onPlacementDrag: vi.fn(), onPlacementCancelDrag: vi.fn() };
+  const view = render(<CadViewport {...props({ ref, placement: shapedView(), view: 'front', ...callbacks })} />);
+  const head = arrowHead();
+  pointer('pointerdown', [head.x, head.y], { button: 0 });
+  const up = viewportEl().cadProject([head.at[0], head.at[1], head.at[2] + 30]);
+  pointer('pointermove', up, { buttons: 1 });
+  expect(state()).toMatchObject({ dragging: 'distance', orbit: false });
+  // The operation's view is gone (a commit or an undo elsewhere made the draft stale).
+  view.rerender(<CadViewport {...props({ ref, placement: null, view: 'front', ...callbacks })} />);
+  expect(state()).toMatchObject({ active: false, dragging: null, orbit: true });
+  expect(ref.current.isDragging()).toBe(false);
+  pointer('pointermove', [up[0], up[1] - 20], { buttons: 1 });
+  pointer('pointerup', [up[0], up[1] - 20], { button: 0 });
+  expect(callbacks.onPlacementDrag).not.toHaveBeenCalled();
+});
+
+it('a rebuild landing under a handle drag leaves the orbit held until the release', () => {
+  const callbacks = { onPlacementDrag: vi.fn() };
+  const placement = shapedView();
+  const view = render(<CadViewport {...props({ placement, view: 'front', ...callbacks })} />);
+  const head = arrowHead();
+  pointer('pointerdown', [head.x, head.y], { button: 0 });
+  const up = viewportEl().cadProject([head.at[0], head.at[1], head.at[2] + 30]);
+  pointer('pointermove', up, { buttons: 1 });
+  view.rerender(<CadViewport {...props({ placement, snapshot: { ...snapshot }, view: 'front', ...callbacks })} />);
+  expect(state()).toMatchObject({ dragging: 'distance', orbit: false });
+  pointer('pointerup', up, { button: 0 });
+  expect(callbacks.onPlacementDrag).toHaveBeenCalledOnce();
+  expect(state()).toMatchObject({ dragging: null, orbit: true });
+});
+
+it('a Transform view that goes away under a gizmo drag ends it: the gizmo lets go, nothing reported', () => {
+  const ref = createRef();
+  const onPlacementDrag = vi.fn();
+  const draft = createOperationDraft({
+    type: 'transform',
+    model,
+    partId: 'board',
+    placement: startPlacement({ type: 'transform', hostInstanceId: 'board' }),
+  });
+  const view = render(<CadViewport {...props({ ref, placement: placementView(draft, ctx), onPlacementDrag })} />);
+  const transform = TransformControls.current;
+  act(() => {
+    transform.dragging = true;
+    transform.dispatchEvent({ type: 'mouseDown' });
+    transform.object.position.add(new THREE.Vector3(40, 0, 0));
+    transform.dispatchEvent({ type: 'objectChange' });
+  });
+  expect(state().dragging).toBe('tool');
+  view.rerender(<CadViewport {...props({ ref, placement: null, onPlacementDrag })} />);
+  expect(state()).toMatchObject({ dragging: null, tool3d: null });
+  expect(transform.dragging).toBe(false);
+  expect(ref.current.isDragging()).toBe(false);
+  // The release: TransformControls reports mouseUp only for a drag it still has.
+  act(() => {
+    if (transform.dragging) transform.dispatchEvent({ type: 'mouseUp' });
+    transform.dragging = false;
+  });
+  expect(onPlacementDrag).not.toHaveBeenCalled();
+});
+
+it('a Transform drop the workspace refuses puts the ghost back where the draft has it', () => {
+  vi.useFakeTimers();
+  try {
+    const onPlacementDrag = vi.fn();
+    const draft = createOperationDraft({
+      type: 'transform',
+      model,
+      partId: 'board',
+      placement: startPlacement({ type: 'transform', hostInstanceId: 'board' }),
+    });
+    render(<CadViewport {...props({ placement: placementView(draft, ctx), onPlacementDrag })} />);
+    const transform = TransformControls.current;
+    act(() => {
+      transform.dragging = true;
+      transform.dispatchEvent({ type: 'mouseDown' });
+      transform.object.position.add(new THREE.Vector3(40, 0, 0));
+      transform.dispatchEvent({ type: 'objectChange' });
+      transform.dispatchEvent({ type: 'mouseUp' });
+      transform.dragging = false;
+    });
+    expect(onPlacementDrag).toHaveBeenCalledOnce();
+    expect(onPlacementDrag.mock.calls[0][0].id).toBe('tool');
+    // Dropped: the ghost waits there for the workspace's new view.
+    state().tool3d.pivot.forEach((v, i) => expect(v).toBeCloseTo([340, 200, 9][i], 6));
+    // None comes (the change was refused): it goes back.
+    act(() => vi.advanceTimersByTime(400));
+    state().tool3d.pivot.forEach((v, i) => expect(v).toBeCloseTo([300, 200, 9][i], 6));
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it('drags the corner grip to a centred size and the slide square onto the plane grid', () => {

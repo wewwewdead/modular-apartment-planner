@@ -312,17 +312,21 @@ describe('the net: a session that reaches the station unseated (§7.4 (c))', () 
       [30 + dx, -1],
       [30 + dx, 301],
     ]);
-  it('a line along a made tab that also crosses an unbent one does not seat: the net, the toggles kept', () => {
+  it('a line along a made tab that also crosses an unbent one does not seat: the made tab starts left flat, the net when it is put back', () => {
     // Tab 1 made alone; the line on it exactly, and 0.4 mm off it, set through brakePatch.
     const model = modelOf([tab('t1')], NOTCHED, 1.5);
     const exact = pick(model, full(), session(notchedPoints([])));
     expect('seated' in exact.session).toBe(false);
     expect(exact.session.points).toEqual(full().points);
-    expect(exact.station.segments.map((s) => s.skipped)).toEqual([false, false]);
-    expect(exact.station.pending.error).toBe(
-      "This line is bend 1's line, but the pieces in this hit are not the ones bend 1 bends: a made bend is bent on whole, and nothing else with it. Click a piece on the flat blank to leave it out of this hit.",
-    );
-    expect(exact.station.pending.seat).toMatchObject({ key: 't1', number: 1, label: 'Bend 1 on instead' });
+    // Tab 1's piece is a made bend's beside an unbent one (piece pick §5.3): it starts left
+    // flat, and the line bends tab 2 as a new bend.
+    expect(exact.session.skip).toEqual([0]);
+    expect(exact.station.segments.map((s) => s.skipped)).toEqual([true, false]);
+    const tab2 = exact.station.pending;
+    expect([tab2.error, tab2.again, tab2.seat]).toEqual([undefined, undefined, undefined]);
+    expect(tab2.data).toHaveLength(1);
+    expect(Math.min(tab2.data[0].a[1], tab2.data[0].b[1])).toBeGreaterThan(159);
+    expect(tab2.refusals).toEqual([]);
     const beside = pick(model, full(0.4), session(notchedPoints([])));
     expect('seated' in beside.session).toBe(false);
     expect(beside.station.segments.map((s) => s.skipped)).toEqual([false, false]);
@@ -330,14 +334,14 @@ describe('the net: a session that reaches the station unseated (§7.4 (c))', () 
       "This line is 0.4 mm from bend 1's line: too close for a new bend. To bend bend 1 further, bend it on.",
     );
     expect(beside.station.pending.seat).toMatchObject({ key: 't1', number: 1, label: 'Bend 1 on instead' });
-    // Tab 1's segment left out: the line bends tab 2 as a new bend.
-    const station = brakeStation({ model, session: exact.session, advise: false });
-    const s = brakePatch(exact.session, { skip: [0] }, station);
-    const tab2 = brakeStation({ model, session: s, advise: false }).pending;
-    expect([tab2.error, tab2.again, tab2.seat, 'seated' in s]).toEqual([undefined, undefined, undefined, false]);
-    expect(tab2.data).toHaveLength(1);
-    expect(Math.min(tab2.data[0].a[1], tab2.data[0].b[1])).toBeGreaterThan(159);
-    expect(tab2.refusals).toEqual([]);
+    // Tab 1 put back in the hit: the net, with Bend 1 on instead.
+    const s = brakePatch(exact.session, { skip: [] }, exact.station);
+    expect('seated' in s).toBe(false);
+    const net = brakeStation({ model, session: s, advise: false }).pending;
+    expect(net.error).toBe(
+      "This line is bend 1's line, but the pieces in this hit are not the ones bend 1 bends: a made bend is bent on whole, and nothing else with it. Click a piece to bend only it.",
+    );
+    expect(net.seat).toMatchObject({ key: 't1', number: 1, label: 'Bend 1 on instead' });
   });
   it('two tabs made in one stroke: the line 0.4 mm off seats on both', () => {
     const model = modelOf(
@@ -367,7 +371,7 @@ describe('the net: a session that reaches the station unseated (§7.4 (c))', () 
       ]),
     );
     expect(pending.error).toBe(
-      'This line runs across bend 1, which is already made: the brake cannot bend across a formed bend. Click that piece on the flat blank to leave it out of this hit.',
+      'This line runs across bend 1, which is already made: the brake cannot bend across a formed bend. Ctrl+click that piece to leave it out of this hit.',
     );
     expect(pending.seat).toBeUndefined();
   });

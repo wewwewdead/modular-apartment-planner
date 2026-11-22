@@ -84,6 +84,14 @@ import {
   wallUnitsPerPixel,
 } from '@/features/floorplan/components/wall-detail/wallDetailCanvasMath';
 import {
+  isMeasureClick,
+  isSpaceKey,
+  spaceArmsPanLatch,
+  spaceKeyUpTaken,
+  travelledPastClick,
+} from '@/features/floorplan/components/wall-detail/detailCanvasRules';
+import { isTypingTarget } from '@/utils/keyboard';
+import {
   DimensionAcquisitionGraphic,
   DimensionGraphic,
 } from '@/features/floorplan/components/wall-detail/WallDimensionGraphics';
@@ -745,8 +753,7 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
       // An open popover takes Escape for itself (WallDetailUiKit Popover).
       if (isPopoverOpen()) return;
       // Escape in a field throws away what was typed there, and nothing else.
-      const target = event.target;
-      if (target?.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target?.tagName)) return;
+      if (isTypingTarget(event.target)) return;
       event.preventDefault();
       gestureRectRef.current = null;
       setPanelTrace(null);
@@ -755,17 +762,16 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
     return () => window.removeEventListener('keydown', cancelTrace);
   }, [panelTrace]);
 
+  // Space held pans the drawing, anywhere but in a field (detailCanvasRules).
   useEffect(() => {
-    const isEditableTarget = (target) =>
-      target?.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target?.tagName);
     const enableSpacePan = (event) => {
-      if (event.code !== 'Space' || isEditableTarget(event.target)) return;
+      if (!spaceArmsPanLatch(event)) return;
       event.preventDefault();
       setSpacePanActive(true);
     };
     const disableSpacePan = (event) => {
-      if (event.code !== 'Space') return;
-      event.preventDefault();
+      if (!isSpaceKey(event)) return;
+      if (spaceKeyUpTaken(event)) event.preventDefault();
       setSpacePanActive(false);
     };
     const cancelSpacePan = () => setSpacePanActive(false);
@@ -984,6 +990,15 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
     gestureRectRef.current = null;
     if (tool !== CANVAS_TOOLS.TRACE_PANEL) setPanelTrace(null);
     setLightHover(null);
+  };
+
+  // Drops the gesture in flight (a light press included), its pick-up marker
+  // and its pinned rect; the tool stays armed.
+  const dropCanvasGesture = () => {
+    lightPressRef.current = null;
+    setGesture(null);
+    setDimensionAcquisition(null);
+    releaseCanvasRect();
   };
 
   const isCustomMember = (id) => configuration.framing.members.some((member) => member.id === id);
@@ -1222,7 +1237,12 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
     setPanGesture(null);
   };
 
-  const fitCeilingInViewport = () => setViewport({ zoom: 1, panU: 0, panV: 0 });
+  const fitCeilingInViewport = () => {
+    // Fit moves the drawing as zoom does, so a gesture running through it
+    // re-measures too.
+    releaseCanvasRect();
+    setViewport({ zoom: 1, panU: 0, panV: 0 });
+  };
 
   // The pointer as the Light tool reads it: raw ceiling point plus the screen
   // scale, so snapping reach is judged in pixels at any zoom.
@@ -1561,14 +1581,10 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
 
   const commitMovedEntity = (finalGesture) => {
     const moved = movedGestureEntity(finalGesture);
-    const movedDistance = Math.hypot(
-      finalGesture.current.u - finalGesture.start.u,
-      finalGesture.current.v - finalGesture.start.v,
-    );
-    // Judged in pixels, not millimetres: zoomed out, one millimetre is a fraction
-    // of a pixel, so a bare click used to clear this and commit a "drag" — which
-    // on a generated board grid also froze the whole grid into custom boards.
-    if (!moved || movedDistance < Math.max(1, unitPx * 2)) return;
+    // Judged in pixels, not millimetres (detailCanvasRules): on a generated
+    // board grid a "drag" from a bare click froze the whole grid into custom
+    // boards.
+    if (!moved || !travelledPastClick(finalGesture.start, finalGesture.current, unitPx)) return;
     if (finalGesture.type === 'panel') {
       writeCustomPanels(
         seededCustomPanels().map((panel) =>
@@ -1619,6 +1635,9 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
   };
 
   const commitDimensionEndpoint = (finalGesture, event) => {
+    // A grip that was only clicked keeps its end exactly as stored: acquiring
+    // it again would snap, round or level an end that was typed in.
+    if (!travelledPastClick(finalGesture.pressPoint, eventToLocal(event, false), unitPx)) return;
     const acquisition = orthoDimensionEndpoint(
       event,
       finalGesture.endpoint === 'start' ? finalGesture.dimension.end : finalGesture.dimension.start,
@@ -1643,7 +1662,7 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
   const commitDimensionMove = (finalGesture, event) => {
     const current = eventToLocal(event, false);
     const delta = { u: current.u - finalGesture.start.u, v: current.v - finalGesture.start.v };
-    if (Math.hypot(delta.u, delta.v) < Math.max(1, unitPx * 2)) return;
+    if (!travelledPastClick(finalGesture.start, current, unitPx)) return;
     const moved = moveWallDimensionWithinBounds(
       finalGesture.dimension,
       delta,
@@ -1685,14 +1704,11 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
       // A press that never travelled is the FIRST click of a click-click
       // measurement: the gesture stays alive, waiting for the second point, and
       // the pinned rect is let go because the pointer is free again.
-      const dragPixels = Math.hypot(
-        event.clientX - (gesture.screenX ?? event.clientX),
-        event.clientY - (gesture.screenY ?? event.clientY),
-      );
+      const firstOfTwoClicks = isMeasureClick(gesture, event);
       svgRef.current?.releasePointerCapture?.(event.pointerId);
       releaseCanvasRect();
       setDimensionAcquisition(acquisition);
-      if (dragPixels < 5) {
+      if (firstOfTwoClicks) {
         setGesture((value) => (value ? { ...value, awaitingSecondClick: true } : value));
         return;
       }
@@ -1751,6 +1767,9 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
       endpoint,
       current: acquisition.point,
       reference: acquisition.reference,
+      // Where the pointer went down, unsnapped: the release is judged a click
+      // or a drag against this, as a move is.
+      pressPoint: eventToLocal(event, false),
       pointerId: event.pointerId,
     });
   };
@@ -2062,8 +2081,7 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
 
   shortcutHandlerRef.current = (event) => {
     if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
-    const target = event.target;
-    if (target?.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target?.tagName)) return;
+    if (isTypingTarget(event.target)) return;
     if (lightRunLive && adjustLightRun(gesture, event.key)) {
       // Mid-drag the arrows set how many lights the run places, and Shift makes it a grid.
       claimShortcut(event);
@@ -2082,10 +2100,7 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
       if (gesture || lightPressRef.current) {
         // First Escape cancels the in-flight gesture but keeps the tool active.
         event.preventDefault();
-        lightPressRef.current = null;
-        setGesture(null);
-        setDimensionAcquisition(null);
-        releaseCanvasRect();
+        dropCanvasGesture();
         return;
       }
       if (canvasTool === CANVAS_TOOLS.SELECT) return;
@@ -2095,6 +2110,9 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
     }
     if (event.key === 'Delete' || event.key === 'Backspace') {
       claimShortcut(event);
+      // A drag in flight is dropped first: its release would otherwise commit
+      // a move of the piece it picked up at the press, which is no longer there.
+      if (gesture || lightPressRef.current) dropCanvasGesture();
       if (selectionIsDeletable) deleteSelection();
       return;
     }
@@ -3088,7 +3106,12 @@ export const CeilingDetailEditorBody = memo(function CeilingDetailEditorBody({
                     onPointerMove={updateCanvasGesture}
                     onPointerUp={finishCanvasGesture}
                     onDoubleClick={finishPanelTrace}
-                    onPointerLeave={() => setLightHover(null)}
+                    onPointerLeave={() => {
+                      setLightHover(null);
+                      // The pick-up marker follows the pointer; it goes with it,
+                      // unless a measurement is holding on to it.
+                      if (!gesture) setDimensionAcquisition(null);
+                    }}
                     onPointerCancel={() => {
                       lightPressRef.current = null;
                       setGesture(null);

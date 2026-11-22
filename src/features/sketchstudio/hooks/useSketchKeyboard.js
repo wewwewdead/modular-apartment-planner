@@ -18,9 +18,10 @@ import { createPolylineEntity } from '../utils/entityUtils';
 import { getNextActiveLayer } from '../utils/layerUtils';
 import { withIsometricPlaneMeta } from '../utils/isometricUtils';
 import { DEFAULT_FILLET_RADIUS, MAX_FILLET_RADIUS, MIN_FILLET_RADIUS, FILLET_RADIUS_STEP } from '../utils/filletUtils';
-import { applyFillet } from '../utils/filletUtils';
+import { applyFillet, computeSketchFillet } from '../utils/filletUtils';
 import {
   applyChamfer,
+  computeSketchChamfer,
   CHAMFER_DISTANCE_STEP,
   DEFAULT_CHAMFER_DISTANCE,
   MAX_CHAMFER_DISTANCE,
@@ -36,6 +37,7 @@ import {
   buildSketchArrayResult,
   buildSketchMirrorResult,
   isEditableTarget,
+  isPrecisionHudTarget,
   parsePositiveNumber,
 } from './sketchConstants';
 import { SHORTCUT_OVERLAY_TOGGLE_KEY } from '../utils/shortcutManifest';
@@ -74,7 +76,10 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
         return;
       }
 
-      if (isEditableTarget(event.target)) return;
+      // Keys typed into a box stay in the box. Escape in the precision HUD is the
+      // exception: the HUD took the focus without asking, and Escape there means
+      // what it means on the canvas.
+      if (isEditableTarget(event.target) && !(event.key === 'Escape' && isPrecisionHudTarget(event.target))) return;
       if (state.ui.workspaceMode === 'model') return;
 
       if (event.key === SHORTCUT_OVERLAY_TOGGLE_KEY && !hasPrimaryModifier && !event.altKey) {
@@ -83,8 +88,16 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
         return;
       }
 
+      // A drag rewrites the document from the entities it started with on every
+      // move, so a key that changes the selection's entities mid-drag (group,
+      // Delete, a nudge) is either undone by the next move or brings deleted
+      // entities back. Those keys wait for the release, as tool shortcuts do.
+      const gestureInFlight = isInteractionInFlight(state.interaction.mode);
+
       if (hasPrimaryModifier && !event.altKey && key === 'g') {
-        if (event.shiftKey) {
+        if (gestureInFlight) {
+          event.preventDefault();
+        } else if (event.shiftKey) {
           if (
             state.document.entities.some(
               (entity) => state.selection.selectedIds.includes(entity.id) && Boolean(entity.meta?.groupId),
@@ -134,24 +147,33 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
             ? Math.min(MAX_CHAMFER_DISTANCE, currentDistance + CHAMFER_DISTANCE_STEP)
             : Math.max(MIN_CHAMFER_DISTANCE, currentDistance - CHAMFER_DISTANCE_STEP);
         dispatch(setPrecisionInput({ distance: String(nextDistance) }));
+        // The preview is rebuilt now, not on the next mouse move, so it shows
+        // the new size and Enter applies the size a click would.
+        if (state.draft.hoveredCorner) {
+          dispatch(patchDraft({ previewGeometry: computeSketchChamfer(state.draft.hoveredCorner, nextDistance) }));
+        }
         return;
       }
 
       if (event.key === ']' && state.draft.type === 'fillet') {
         event.preventDefault();
         const currentRadius = parsePositiveNumber(state.draft.precisionInput?.radius) ?? DEFAULT_FILLET_RADIUS;
-        dispatch(
-          setPrecisionInput({ radius: String(Math.min(MAX_FILLET_RADIUS, currentRadius + FILLET_RADIUS_STEP)) }),
-        );
+        const nextRadius = Math.min(MAX_FILLET_RADIUS, currentRadius + FILLET_RADIUS_STEP);
+        dispatch(setPrecisionInput({ radius: String(nextRadius) }));
+        if (state.draft.hoveredCorner) {
+          dispatch(patchDraft({ previewGeometry: computeSketchFillet(state.draft.hoveredCorner, nextRadius) }));
+        }
         return;
       }
 
       if (event.key === '[' && state.draft.type === 'fillet') {
         event.preventDefault();
         const currentRadius = parsePositiveNumber(state.draft.precisionInput?.radius) ?? DEFAULT_FILLET_RADIUS;
-        dispatch(
-          setPrecisionInput({ radius: String(Math.max(MIN_FILLET_RADIUS, currentRadius - FILLET_RADIUS_STEP)) }),
-        );
+        const nextRadius = Math.max(MIN_FILLET_RADIUS, currentRadius - FILLET_RADIUS_STEP);
+        dispatch(setPrecisionInput({ radius: String(nextRadius) }));
+        if (state.draft.hoveredCorner) {
+          dispatch(patchDraft({ previewGeometry: computeSketchFillet(state.draft.hoveredCorner, nextRadius) }));
+        }
         return;
       }
 
@@ -163,12 +185,7 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
           // clears the selection. Escape only abandons the drag, so the
           // selection the drag started with comes back with the geometry.
           if (getInteractionEnd(mode, 'escape') === 'cancel') {
-            const drag =
-              mode === 'transform'
-                ? state.interaction.transform
-                : mode === 'handle-drag'
-                  ? state.interaction.handleDrag
-                  : state.interaction.anchorDrag;
+            const drag = mode === 'transform' ? state.interaction.transform : state.interaction.handleDrag;
             dispatch(setSelection(drag?.startSelectedIds ?? state.selection.selectedIds));
           }
           // The button is still down, so the release that follows would land as
@@ -210,7 +227,7 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
 
       if ((event.key === 'Delete' || event.key === 'Backspace') && state.selection.selectedIds.length) {
         event.preventDefault();
-        dispatch(deleteSelected());
+        if (!gestureInFlight) dispatch(deleteSelected());
         return;
       }
 
@@ -219,6 +236,7 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
         state.selection.selectedIds.length
       ) {
         event.preventDefault();
+        if (gestureInFlight) return;
         const step = event.shiftKey ? 10 : 1;
         const delta = {
           ArrowUp: { x: 0, y: -step },
@@ -318,12 +336,16 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
 
         if (state.draft.type === 'polyline' && state.draft.points.length >= 2) {
           event.preventDefault();
+          // Closed only under the rule a click on the first point uses: three
+          // points at least, and the cursor on the first. Anything else is
+          // committed open, which only Enter can do.
+          const closed = state.draft.points.length >= 3 && state.draft.closedPreview === true;
           const nextEntity = withIsometricPlaneMeta(
             createPolylineEntity(
               state.draft.points,
               state.document.entities,
               getNextActiveLayer(state.document, state.ui.activeLayerId),
-              state.draft.closedPreview,
+              closed,
             ),
             state.ui.viewMode,
             state.ui.isometricPlane,
@@ -345,8 +367,13 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
       isSpacePanActiveRef.current = false;
     };
 
+    // Leaving the window (Alt+Tab, an OS dialog) can swallow the release, and
+    // the drag would then follow the cursor with no button held. Blur ends it
+    // the way a pointer-cancel does.
     const handleWindowBlur = () => {
       isSpacePanActiveRef.current = false;
+      const endAction = interactionEndAction(state.interaction.mode, 'abort');
+      if (endAction) dispatch(endAction);
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -370,7 +397,6 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
     state.interaction.mode,
     state.interaction.panButton,
     state.interaction.handleDrag,
-    state.interaction.anchorDrag,
     state.interaction.transform,
     state.selection.selectedIds,
     state.ui.activeLayerId,

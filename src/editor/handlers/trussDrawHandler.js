@@ -3,6 +3,7 @@ import {
   createTrussInstance,
   createTrussSystemForProject,
   getDefaultTrussTypes,
+  getNextTrussSystemName,
   resolveTrussType,
   TRUSS_SUPPORT_MODES,
 } from '@/domain/trussModels';
@@ -47,6 +48,7 @@ export function createTrussDrawHandler({
   dispatch,
   editorDispatch,
   getFloor,
+  getProject = null,
   activeFloorId,
   trussSystems,
   viewport,
@@ -170,6 +172,7 @@ export function createTrussDrawHandler({
         });
       } else {
         const nextTrussSystem = createTrussSystemForProject(null, floor.id, {
+          name: getNextTrussSystemName(getProject?.() || { trussSystems }),
           baseElevation: support.baseElevation,
           phaseId: activePhaseId || null,
           trussInstances: [nextInstance],
@@ -179,7 +182,15 @@ export function createTrussDrawHandler({
 
       editorDispatch({ type: 'SELECT_OBJECT', id: nextInstance.id, objectType: 'trussInstance' });
       clearDrawState(editorDispatch);
-      editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Truss created above the selected beams.' });
+      // Says which way the draw went (docs/multi-roof.md §5.4): a run that
+      // joined a system shares that system's one roof, a new system can carry
+      // its own.
+      editorDispatch({
+        type: 'SET_STATUS_MESSAGE',
+        message: targetSystem
+          ? `Truss added to ${targetSystem.name || 'Truss System'}.`
+          : 'New truss system created above the selected beams.',
+      });
     },
 
     onMouseUp() {},

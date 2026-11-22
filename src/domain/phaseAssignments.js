@@ -1,3 +1,5 @@
+import { getProjectRoofs } from './projectRoofs';
+
 export const PHASE_ASSIGNABLE_KEYS = [
   'walls',
   'doors',
@@ -38,8 +40,8 @@ export function countObjectsInProjectPhase(project, phaseId) {
     }
   }
 
-  if (project?.roofSystem?.phaseId === phaseId) {
-    count += 1;
+  for (const roofSystem of getProjectRoofs(project)) {
+    if (roofSystem.phaseId === phaseId) count += 1;
   }
   for (const trussSystem of project?.trussSystems || []) {
     if (trussSystem.phaseId === phaseId) count += 1;
@@ -57,7 +59,9 @@ export function clearProjectPhaseReferences(project, phaseId) {
     floors: (project.floors || []).map((floor) =>
       mapPhaseAssignableFloorObjects(floor, (obj) => (obj.phaseId === phaseId ? { ...obj, phaseId: null } : obj)),
     ),
-    roofSystem: project.roofSystem?.phaseId === phaseId ? { ...project.roofSystem, phaseId: null } : project.roofSystem,
+    roofSystems: getProjectRoofs(project).map((roofSystem) =>
+      roofSystem.phaseId === phaseId ? { ...roofSystem, phaseId: null } : roofSystem,
+    ),
     trussSystems: (project.trussSystems || []).map((trussSystem) =>
       trussSystem.phaseId === phaseId ? { ...trussSystem, phaseId: null } : trussSystem,
     ),
@@ -81,10 +85,11 @@ export function sanitizeProjectPhaseReferences(project, validPhaseIds) {
         obj.phaseId == null || validPhaseIds.has(obj.phaseId) ? obj : { ...obj, phaseId: null },
       ),
     ),
-    roofSystem:
-      project.roofSystem?.phaseId == null || validPhaseIds.has(project.roofSystem.phaseId)
-        ? project.roofSystem
-        : { ...project.roofSystem, phaseId: null },
+    roofSystems: getProjectRoofs(project).map((roofSystem) =>
+      roofSystem.phaseId == null || validPhaseIds.has(roofSystem.phaseId)
+        ? roofSystem
+        : { ...roofSystem, phaseId: null },
+    ),
     trussSystems: (project.trussSystems || []).map((trussSystem) =>
       trussSystem.phaseId == null || validPhaseIds.has(trussSystem.phaseId)
         ? trussSystem

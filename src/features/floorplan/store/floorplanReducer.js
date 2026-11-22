@@ -10,6 +10,13 @@ import {
 import { clearProjectPhaseReferences } from '@/domain/phaseAssignments';
 import { sortPhases } from '@/domain/phaseModels';
 import { getRoofAttachmentElevation } from '@/domain/roofModels';
+import {
+  findRoofOwner,
+  getProjectRoof,
+  getProjectRoofs,
+  getRoofForTrussSystem,
+  resolveActiveRoof,
+} from '@/domain/projectRoofs';
 import { DEFAULT_ZOOM } from '@/domain/defaults';
 import {
   normalizePlanStyle,
@@ -24,6 +31,7 @@ import {
   updateCeilings,
   updateFloor,
   updateRoofSystem,
+  updateRoofSystems,
   updateTrussSystems,
 } from '@/domain/projectStateHelpers';
 import {
@@ -40,6 +48,7 @@ import { propagateWallEdit } from '@/domain/modelGraph';
 import { reconcileFloorRooms } from '@/domain/roomReconcile';
 import { BUILDING_COMMANDS, executeBuildingCommand } from '@/domain/buildingCommands';
 import { keepArmedSettings } from '@/editor/toolSession';
+import { filletRadiusPatch } from '@/editor/handlers/filletPlaceHandler';
 import { applySunStudyPatch, createSunStudyState } from '@/analysis/sunStudyState';
 import { applyDaylightPatch, createDaylightState } from '@/analysis/daylightState';
 import { applySolarAccessPatch, createSolarAccessState } from '@/analysis/solarAccessState';
@@ -258,6 +267,31 @@ function clearSelectionState(editorState) {
 }
 
 /**
+ * The editor as it stands when another project takes the place of this one
+ * (Open, New). Everything that names something in the outgoing project goes:
+ * the tool and its flow, the selection and a paste preview, both detail
+ * editors, the section cut on screen, the active roof, the boards stripped in
+ * the 3D preview.
+ * Their ids mean nothing in the next project, or worse, mean something else
+ * when the two share ids (the same file opened again). How the user likes to
+ * look at a plan stays: viewport, grid, snap, plan style, view mode, focus,
+ * the study settings.
+ */
+function leaveProject(editorState) {
+  return {
+    ...clearSelectionState(editorState),
+    activeTool: 'select',
+    toolState: {},
+    wallDetailEditor: null,
+    ceilingDetailEditor: null,
+    activeSectionCutId: null,
+    activeRoofId: null,
+    hiddenWallBoards: {},
+    hiddenCeilingBoards: {},
+  };
+}
+
+/**
  * Forget a run of overhang that belonged to this plate.
  *
  * A run is an INDEX into geometry measured off the plate's boundary, so the
@@ -319,6 +353,11 @@ function createInitialEditorState(activeFloorId = null) {
     showFloorBelowUnderlay: true,
     viewMode: 'plan',
     activeFloorId,
+    // The roof the roof workspace edits (docs/multi-roof.md §5.1), as the plan
+    // edits one active floor. Read through `resolveActiveRoof`, which falls back
+    // to the first roof, so a stale id (the roof deleted, undone away) needs no
+    // cleanup. Set by SET_ACTIVE_ROOF and by every SELECT_OBJECT of a roof.
+    activeRoofId: null,
     activeSheetId: null,
     activeSectionCutId: null,
     statusMessage: null,
@@ -348,9 +387,10 @@ function createInitialEditorState(activeFloorId = null) {
   };
 }
 
-function buildEntityCollections(project, activeFloorId) {
+function buildEntityCollections(project, activeFloorId, activeRoofId = null) {
   const floors = project?.floors || [];
   const activeFloor = floors.find((floor) => floor.id === activeFloorId) || null;
+  const activeRoof = resolveActiveRoof(project, activeRoofId);
 
   return {
     floor: activeFloor,
@@ -369,12 +409,12 @@ function buildEntityCollections(project, activeFloorId) {
     slabs: activeFloor?.slabs || [],
     sectionCuts: activeFloor?.sectionCuts || [],
     railings: activeFloor?.railings || [],
-    roofSystem: project?.roofSystem || null,
-    roofPlanes: project?.roofSystem?.roofPlanes || [],
-    roofEdges: project?.roofSystem?.roofEdges || [],
-    parapets: project?.roofSystem?.parapets || [],
-    drains: project?.roofSystem?.drains || [],
-    roofOpenings: project?.roofSystem?.roofOpenings || [],
+    roofSystem: activeRoof,
+    roofPlanes: activeRoof?.roofPlanes || [],
+    roofEdges: activeRoof?.roofEdges || [],
+    parapets: activeRoof?.parapets || [],
+    drains: activeRoof?.drains || [],
+    roofOpenings: activeRoof?.roofOpenings || [],
     sheets: project?.sheets || [],
     phases: project?.phases || [],
     trussSystems: (project?.trussSystems || []).filter((trussSystem) => trussSystem.floorId === activeFloorId),
@@ -403,11 +443,15 @@ function buildEntityCollections(project, activeFloorId) {
 function syncFloorplanState(state) {
   const project = state.project || null;
   const activeFloorId = state.editor?.activeFloorId || null;
+  const activeRoofId = state.editor?.activeRoofId || null;
   const source = state.entitiesSource;
   const entitiesCurrent =
-    Boolean(state.entities) && source?.project === project && source?.activeFloorId === activeFloorId;
+    Boolean(state.entities) &&
+    source?.project === project &&
+    source?.activeFloorId === activeFloorId &&
+    source?.activeRoofId === activeRoofId;
 
-  const entities = entitiesCurrent ? state.entities : buildEntityCollections(project, activeFloorId);
+  const entities = entitiesCurrent ? state.entities : buildEntityCollections(project, activeFloorId, activeRoofId);
 
   const previousSelection = state.selection;
   const selectionCurrent =
@@ -419,7 +463,7 @@ function syncFloorplanState(state) {
 
   return {
     ...state,
-    entitiesSource: entitiesCurrent ? source : { project, activeFloorId },
+    entitiesSource: entitiesCurrent ? source : { project, activeFloorId, activeRoofId },
     // Every one of these is the same expression `buildEntityCollections` already
     // evaluated, so reading them back off `entities` keeps their identity tied to
     // it instead of minting a new empty array on each pass.
@@ -463,6 +507,31 @@ export function initializeFloorplanState(initialProject) {
   });
 }
 
+/**
+ * The roof a roof action is about (docs/multi-roof.md §3.3): the roof the action
+ * names, else the roof that stores the sub-object it touches, else the only
+ * roof when the project has exactly one. That last step is a safety net: a
+ * dispatch site that does not pass `roofId` yet still edits the one roof, as it
+ * did before roofs became a list. Anything else is ambiguous, and the action
+ * does nothing.
+ *
+ * A `roofId` that is given is the whole answer: one that names no roof (the
+ * roof was deleted, or undone away, after the action was built) does nothing,
+ * and never falls through to "the only roof" — a stale ROOF_DELETE must not
+ * remove whichever roof happens to be left (MR-2, docs/multi-roof.md §10).
+ */
+function resolveRoofActionTarget(project, action, objectType = null, objectId = null) {
+  if (action.roofId) return getProjectRoof(project, action.roofId);
+  const owner = objectType && objectId ? findRoofOwner(project, objectType, objectId) : null;
+  if (owner) return owner;
+  const roofSystems = getProjectRoofs(project);
+  return roofSystems.length === 1 ? roofSystems[0] : null;
+}
+
+function roofActionTargetId(state, action, objectType = null, objectId = null) {
+  return resolveRoofActionTarget(state.project, action, objectType, objectId)?.id || null;
+}
+
 function reduceProjectState(state, action) {
   switch (action.type) {
     case 'PROJECT_NEW': {
@@ -481,8 +550,7 @@ function reduceProjectState(state, action) {
         history: [],
         future: [],
         gesture: createDragGesture(),
-        // Wall and ceiling ids from the outgoing project mean nothing here.
-        editor: { ...state.editor, hiddenWallBoards: {}, hiddenCeilingBoards: {} },
+        editor: leaveProject(state.editor),
         derived: {
           ...computeDerivedModels(newProject),
           lastCommand: null,
@@ -506,8 +574,7 @@ function reduceProjectState(state, action) {
         history: [],
         future: [],
         gesture: createDragGesture(),
-        // Wall and ceiling ids from the outgoing project mean nothing here.
-        editor: { ...state.editor, hiddenWallBoards: {}, hiddenCeilingBoards: {} },
+        editor: leaveProject(state.editor),
         derived: {
           ...computeDerivedModels(loadedProject),
           lastCommand: null,
@@ -572,13 +639,32 @@ function reduceProjectState(state, action) {
         updatedAt: new Date().toISOString(),
       });
 
-    case 'ROOF_CREATE':
-      return updateRoofSystem(state, () => action.roofSystem);
+    case 'ROOF_CREATE': {
+      // One roof per truss system: a roof whose id is taken, or whose truss
+      // system already carries another roof, is refused outright, with no
+      // history entry, rather than replacing or doubling up.
+      const roofSystem = action.roofSystem;
+      if (!roofSystem?.id || getProjectRoof(state.project, roofSystem.id)) return state;
+      if (roofSystem.trussAttachmentId && getRoofForTrussSystem(state.project, roofSystem.trussAttachmentId)) {
+        return state;
+      }
+      return updateRoofSystems(state, (roofSystems) => [...roofSystems, roofSystem]);
+    }
 
-    case 'ROOF_UPDATE':
-      return updateRoofSystem(state, (roofSystem) => {
-        if (!roofSystem || roofSystem.id !== action.roofSystem.id) return roofSystem;
+    case 'ROOF_UPDATE': {
+      const currentRoof = getProjectRoof(state.project, action.roofSystem?.id);
+      if (!currentRoof) return state;
+      // Re-attaching onto a truss system that carries another roof would put two
+      // roofs on one system; the edit is refused, as ROOF_CREATE refuses it.
+      const requestedTrussAttachmentId = Object.prototype.hasOwnProperty.call(action.roofSystem, 'trussAttachmentId')
+        ? action.roofSystem.trussAttachmentId || null
+        : null;
+      const trussOwner = requestedTrussAttachmentId
+        ? getRoofForTrussSystem(state.project, requestedTrussAttachmentId)
+        : null;
+      if (trussOwner && trussOwner.id !== currentRoof.id) return state;
 
+      return updateRoofSystem(state, currentRoof.id, (roofSystem) => {
         const mergedRoofSystem = { ...roofSystem, ...action.roofSystem };
         const trussAttachmentChanged =
           Object.prototype.hasOwnProperty.call(action.roofSystem, 'trussAttachmentId') &&
@@ -611,13 +697,20 @@ function reduceProjectState(state, action) {
 
         return mergedRoofSystem;
       });
+    }
 
-    case 'ROOF_DELETE':
+    case 'ROOF_DELETE': {
+      const roofSystem = resolveRoofActionTarget(state.project, action);
+      if (!roofSystem) return state;
+      // Only the stairs that climb through THIS roof's openings lose their roof
+      // access; a stair under another roof keeps its hatch.
+      const roofOpeningIds = (roofSystem.roofOpenings || []).map((roofOpening) => roofOpening.id);
       return applyProjectUpdate(state, {
-        ...clearStairRoofAccessReferences(state.project),
+        ...clearStairRoofAccessReferences(state.project, roofOpeningIds),
         updatedAt: new Date().toISOString(),
-        roofSystem: null,
+        roofSystems: getProjectRoofs(state.project).filter((entry) => entry.id !== roofSystem.id),
       });
+    }
 
     case 'TRUSS_SYSTEM_ADD':
       return updateTrussSystems(state, (trussSystems) => [...trussSystems, action.trussSystem]);
@@ -694,12 +787,12 @@ function reduceProjectState(state, action) {
       );
 
     case 'PARAPET_ADD':
-      return updateRoofSystem(state, (roofSystem) =>
+      return updateRoofSystem(state, roofActionTargetId(state, action), (roofSystem) =>
         roofSystem ? { ...roofSystem, parapets: [...(roofSystem.parapets || []), action.parapet] } : roofSystem,
       );
 
     case 'PARAPET_UPDATE':
-      return updateRoofSystem(state, (roofSystem) =>
+      return updateRoofSystem(state, roofActionTargetId(state, action, 'parapet', action.parapet?.id), (roofSystem) =>
         roofSystem
           ? {
               ...roofSystem,
@@ -711,7 +804,7 @@ function reduceProjectState(state, action) {
       );
 
     case 'PARAPET_DELETE':
-      return updateRoofSystem(state, (roofSystem) =>
+      return updateRoofSystem(state, roofActionTargetId(state, action, 'parapet', action.parapetId), (roofSystem) =>
         roofSystem
           ? {
               ...roofSystem,
@@ -721,12 +814,12 @@ function reduceProjectState(state, action) {
       );
 
     case 'DRAIN_ADD':
-      return updateRoofSystem(state, (roofSystem) =>
+      return updateRoofSystem(state, roofActionTargetId(state, action), (roofSystem) =>
         roofSystem ? { ...roofSystem, drains: [...(roofSystem.drains || []), action.drain] } : roofSystem,
       );
 
     case 'DRAIN_UPDATE':
-      return updateRoofSystem(state, (roofSystem) =>
+      return updateRoofSystem(state, roofActionTargetId(state, action, 'drain', action.drain?.id), (roofSystem) =>
         roofSystem
           ? {
               ...roofSystem,
@@ -738,106 +831,124 @@ function reduceProjectState(state, action) {
       );
 
     case 'DRAIN_DELETE':
-      return updateRoofSystem(state, (roofSystem) =>
+      return updateRoofSystem(state, roofActionTargetId(state, action, 'drain', action.drainId), (roofSystem) =>
         roofSystem
           ? { ...roofSystem, drains: (roofSystem.drains || []).filter((drain) => drain.id !== action.drainId) }
           : roofSystem,
       );
 
     case 'ROOF_OPENING_ADD':
-      return updateRoofSystem(state, (roofSystem) =>
+      return updateRoofSystem(state, roofActionTargetId(state, action), (roofSystem) =>
         roofSystem
           ? { ...roofSystem, roofOpenings: [...(roofSystem.roofOpenings || []), action.roofOpening] }
           : roofSystem,
       );
 
     case 'ROOF_OPENING_UPDATE':
-      return updateRoofSystem(state, (roofSystem) =>
-        roofSystem
-          ? {
-              ...roofSystem,
-              roofOpenings: (roofSystem.roofOpenings || []).map((roofOpening) =>
-                roofOpening.id === action.roofOpening.id ? { ...roofOpening, ...action.roofOpening } : roofOpening,
-              ),
-            }
-          : roofSystem,
+      return updateRoofSystem(
+        state,
+        roofActionTargetId(state, action, 'roofOpening', action.roofOpening?.id),
+        (roofSystem) =>
+          roofSystem
+            ? {
+                ...roofSystem,
+                roofOpenings: (roofSystem.roofOpenings || []).map((roofOpening) =>
+                  roofOpening.id === action.roofOpening.id ? { ...roofOpening, ...action.roofOpening } : roofOpening,
+                ),
+              }
+            : roofSystem,
       );
 
-    case 'ROOF_OPENING_DELETE':
+    case 'ROOF_OPENING_DELETE': {
+      const owner = resolveRoofActionTarget(state.project, action, 'roofOpening', action.roofOpeningId);
+      if (!owner) return state;
       return applyProjectUpdate(
         state,
         clearStairRoofAccessReferences(
           {
             ...state.project,
             updatedAt: new Date().toISOString(),
-            roofSystem: state.project.roofSystem
-              ? {
-                  ...state.project.roofSystem,
-                  roofOpenings: (state.project.roofSystem.roofOpenings || []).filter(
-                    (roofOpening) => roofOpening.id !== action.roofOpeningId,
-                  ),
-                }
-              : null,
+            roofSystems: getProjectRoofs(state.project).map((roofSystem) =>
+              roofSystem.id === owner.id
+                ? {
+                    ...roofSystem,
+                    roofOpenings: (roofSystem.roofOpenings || []).filter(
+                      (roofOpening) => roofOpening.id !== action.roofOpeningId,
+                    ),
+                  }
+                : roofSystem,
+            ),
           },
           action.roofOpeningId,
         ),
       );
+    }
 
     case 'ROOF_PLANE_ADD':
-      return updateRoofSystem(state, (roofSystem) =>
+      return updateRoofSystem(state, roofActionTargetId(state, action), (roofSystem) =>
         roofSystem ? { ...roofSystem, roofPlanes: [...(roofSystem.roofPlanes || []), action.roofPlane] } : roofSystem,
       );
 
     case 'ROOF_PLANE_UPDATE':
-      return updateRoofSystem(state, (roofSystem) =>
-        roofSystem
-          ? {
-              ...roofSystem,
-              roofPlanes: (roofSystem.roofPlanes || []).map((roofPlane) =>
-                roofPlane.id === action.roofPlane.id ? { ...roofPlane, ...action.roofPlane } : roofPlane,
-              ),
-            }
-          : roofSystem,
+      return updateRoofSystem(
+        state,
+        roofActionTargetId(state, action, 'roofPlane', action.roofPlane?.id),
+        (roofSystem) =>
+          roofSystem
+            ? {
+                ...roofSystem,
+                roofPlanes: (roofSystem.roofPlanes || []).map((roofPlane) =>
+                  roofPlane.id === action.roofPlane.id ? { ...roofPlane, ...action.roofPlane } : roofPlane,
+                ),
+              }
+            : roofSystem,
       );
 
     case 'ROOF_PLANE_DELETE':
-      return updateRoofSystem(state, (roofSystem) =>
-        roofSystem
-          ? {
-              ...roofSystem,
-              roofPlanes: (roofSystem.roofPlanes || []).filter((roofPlane) => roofPlane.id !== action.roofPlaneId),
-              roofEdges: (roofSystem.roofEdges || []).filter(
-                (roofEdge) => !(roofEdge.planeIds || []).includes(action.roofPlaneId),
-              ),
-            }
-          : roofSystem,
+      return updateRoofSystem(
+        state,
+        roofActionTargetId(state, action, 'roofPlane', action.roofPlaneId),
+        (roofSystem) =>
+          roofSystem
+            ? {
+                ...roofSystem,
+                roofPlanes: (roofSystem.roofPlanes || []).filter((roofPlane) => roofPlane.id !== action.roofPlaneId),
+                roofEdges: (roofSystem.roofEdges || []).filter(
+                  (roofEdge) => !(roofEdge.planeIds || []).includes(action.roofPlaneId),
+                ),
+              }
+            : roofSystem,
       );
 
     case 'ROOF_EDGE_UPDATE':
-      return updateRoofSystem(state, (roofSystem) => {
-        if (!roofSystem) return roofSystem;
+      return updateRoofSystem(
+        state,
+        roofActionTargetId(state, action, 'roofEdge', action.roofEdge?.id),
+        (roofSystem) => {
+          if (!roofSystem) return roofSystem;
 
-        const existingEdges = roofSystem.roofEdges || [];
-        const existingIndex = existingEdges.findIndex(
-          (roofEdge) =>
-            roofEdge.id === action.roofEdge.id ||
-            (action.roofEdge.geometryKey && roofEdge.geometryKey === action.roofEdge.geometryKey),
-        );
+          const existingEdges = roofSystem.roofEdges || [];
+          const existingIndex = existingEdges.findIndex(
+            (roofEdge) =>
+              roofEdge.id === action.roofEdge.id ||
+              (action.roofEdge.geometryKey && roofEdge.geometryKey === action.roofEdge.geometryKey),
+          );
 
-        if (existingIndex === -1) {
-          return { ...roofSystem, roofEdges: [...existingEdges, action.roofEdge] };
-        }
+          if (existingIndex === -1) {
+            return { ...roofSystem, roofEdges: [...existingEdges, action.roofEdge] };
+          }
 
-        return {
-          ...roofSystem,
-          roofEdges: existingEdges.map((roofEdge, index) =>
-            index === existingIndex ? { ...roofEdge, ...action.roofEdge } : roofEdge,
-          ),
-        };
-      });
+          return {
+            ...roofSystem,
+            roofEdges: existingEdges.map((roofEdge, index) =>
+              index === existingIndex ? { ...roofEdge, ...action.roofEdge } : roofEdge,
+            ),
+          };
+        },
+      );
 
     case 'ROOF_EDGE_DELETE':
-      return updateRoofSystem(state, (roofSystem) =>
+      return updateRoofSystem(state, roofActionTargetId(state, action, 'roofEdge', action.roofEdgeId), (roofSystem) =>
         roofSystem
           ? {
               ...roofSystem,
@@ -1528,9 +1639,12 @@ function reduceProjectState(state, action) {
 
 function reduceEditorState(editorState, action) {
   switch (action.type) {
+    // Opening a detail editor selects what it opened, through the one selection
+    // reset: an overhang run, a region or a paste preview left over from before
+    // would otherwise ride into the editor and out again.
     case 'OPEN_WALL_DETAIL_EDITOR':
       return {
-        ...editorState,
+        ...clearSelectionState(editorState),
         wallDetailEditor: {
           floorId: action.floorId,
           wallId: action.wallId,
@@ -1546,7 +1660,7 @@ function reduceEditorState(editorState, action) {
 
     case 'OPEN_CEILING_DETAIL_EDITOR':
       return {
-        ...editorState,
+        ...clearSelectionState(editorState),
         ceilingDetailEditor: { ceilingId: action.ceilingId },
         selectedId: action.ceilingId,
         selectedType: 'ceiling',
@@ -1605,12 +1719,20 @@ function reduceEditorState(editorState, action) {
         statusMessage: null,
       };
 
+    // Selecting a roof makes it the active roof, here rather than at each call
+    // site, so every route that selects one — the sidebar, the canvas, a 3D
+    // pick, creation — also hands it to the roof workspace.
     case 'SELECT_OBJECT':
       return {
         ...clearSelectionState(editorState),
         selectedId: action.id,
         selectedType: action.objectType,
+        ...(action.objectType === 'roofSystem' && action.id ? { activeRoofId: action.id } : {}),
       };
+
+    case 'SET_ACTIVE_ROOF':
+      if ((editorState.activeRoofId || null) === (action.roofId || null)) return editorState;
+      return { ...editorState, activeRoofId: action.roofId || null };
 
     /**
      * Clicking an overhang indicator: the plate is selected, AND the run that
@@ -1657,6 +1779,17 @@ function reduceEditorState(editorState, action) {
         ...editorState,
         toolState: nextToolState,
       };
+    }
+
+    // The properties panel's Radius field. Only the store knows which corner is
+    // under the cursor (the panel does not follow the pointer), so the preview
+    // is redrawn here, by the computation the [ and ] keys use.
+    case 'SET_FILLET_RADIUS': {
+      const nextToolState = mergeIfChanged(
+        editorState.toolState,
+        filletRadiusPatch(editorState.toolState, action.radius),
+      );
+      return nextToolState === editorState.toolState ? editorState : { ...editorState, toolState: nextToolState };
     }
 
     case 'SET_VIEWPORT':
@@ -1820,12 +1953,13 @@ function reduceEditorState(editorState, action) {
       if (!editorState.statusMessage) return editorState;
       return { ...editorState, statusMessage: null };
 
+    // While the preview is up the canvas sends presses to the paste, never to
+    // the tool, so a flow the tool had under way could only resume later from a
+    // stale first point. It ends here; what the tool is armed with stays.
     case 'START_PASTE_PREVIEW':
       return {
-        ...editorState,
-        selectedId: null,
-        selectedType: null,
-        regionSelection: null,
+        ...clearSelectionState(editorState),
+        toolState: keepArmedSettings(editorState.toolState),
         pastePreview: {
           active: true,
           point: action.point ?? null,

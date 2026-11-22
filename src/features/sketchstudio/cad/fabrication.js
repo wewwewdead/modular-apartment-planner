@@ -1,6 +1,6 @@
-import { memberMetrics, numeric, resolveParameters, positive } from './model.js';
+import { blankBaseName, memberMetrics, numeric, resolveParameters, positive } from './model.js';
 import { hardwareNote, threadNote } from './hardware.js';
-import { foldSheet } from './sheetMetal.js';
+import { foldSheet, twinKey } from './sheetMetal.js';
 import { SHEET_STOCK } from './shopCatalog.js';
 
 // A hole row's drilling note counts its holes (Phase K): "4 × M6 …".
@@ -10,58 +10,77 @@ const rowPrefix = (feature, parameters) => {
   return count > 1 ? `${count} × ` : '';
 };
 
+// Sheet-metal twins (docs/sketch-studio-own-bends.md §4.8): one piece of metal
+// is one part, so five identical trays are five parts; twins (twinKey equal,
+// and the same material) are one row — the first part's id, name (without
+// its " #k") and geometry, the quantity their instances together. A tray
+// bent differently is its own line. Every other part is a row of its own.
 export function buildCutList(model, snapshot) {
   const parameters = resolveParameters(model.parameters);
   const quantities = new Map();
   for (const instance of model.instances) quantities.set(instance.partId, (quantities.get(instance.partId) || 0) + 1);
-  return model.parts
-    .filter((p) => quantities.has(p.id))
-    .map((part) => {
-      const geometry = snapshot.parts.find((p) => p.id === part.id);
-      if (!geometry) throw new Error(`No current geometry for ${part.name}.`);
-      const features = part.features.filter((f) => !f.suppressed),
-        f = features[0];
-      const sourceMember = f?.type === 'member' ? memberMetrics(f, parameters) : null;
-      const modifiedEnds =
-        sourceMember &&
-        features.slice(1).some((f) => !['hole', 'pocket', 'fillet', 'chamfer', 'transform'].includes(f.type));
-      // A later extrusion, Boolean or pattern can change length, section or
-      // number of bodies. Never schedule the original member as the final cut.
-      const member = modifiedEnds ? null : sourceMember;
-      // A sheet-metal part is cut flat (docs/sketch-studio-fab-shop.md §9 SM-1 item 7).
-      const sheet = f?.type === 'sheetmetal' ? sheetRow(model, f, parameters) : null;
-      return {
-        partId: part.id,
-        name: part.name,
-        material: part.material || 'Unspecified',
-        quantity: quantities.get(part.id),
-        dimensions: geometry.bounds[1].map((value, i) => value - geometry.bounds[0][i]),
-        volume: geometry.volume,
-        grain: part.grain,
-        member,
-        sourceMember: modifiedEnds ? sourceMember : null,
-        modifiedEnds,
-        note: [
-          // A bought-in item (shop floor §5.4) is bought, not cut: no profile, never nested.
-          part.purchased ? `Bought in${part.purchased.reference ? `: ${part.purchased.reference}` : ''}` : '',
-          f?.type === 'hardware' ? hardwareNote(f) : '',
-          ...features
-            .filter((f) => f.holeSpec)
-            .map(
-              (f) =>
-                `${rowPrefix(f, parameters)}${threadNote(f)}; drill Ø${numeric(f.diameter, parameters)} mm${f.holeSpec.mode === 'tap' ? '; thread depth unspecified' : ''}`,
-            ),
-          modifiedEnds
-            ? 'Modified member: final stock length and cuts require the part STEP and detail drawing. Excluded from automatic linear stock allocation.'
-            : '',
-        ]
-          .filter(Boolean)
-          .join('; '),
-        section: sourceMember ? JSON.stringify(sourceMember.section) : '',
-        blankLength: member ? member.longPoint + numeric(model.fabrication.allowance, parameters) : null,
-        ...(sheet ? { sheet } : {}),
-      };
-    });
+  const twins = new Map();
+  const merged = new Set();
+  const listed = model.parts.filter((p) => {
+    if (!quantities.has(p.id)) return false;
+    const key = twinKey(p);
+    if (key == null) return true;
+    const full = `${p.material || ''}|${key}`;
+    const first = twins.get(full);
+    if (!first) {
+      twins.set(full, p);
+      return true;
+    }
+    quantities.set(first.id, quantities.get(first.id) + quantities.get(p.id));
+    merged.add(first.id);
+    return false;
+  });
+  return listed.map((part) => {
+    const geometry = snapshot.parts.find((p) => p.id === part.id);
+    if (!geometry) throw new Error(`No current geometry for ${part.name}.`);
+    const features = part.features.filter((f) => !f.suppressed),
+      f = features[0];
+    const sourceMember = f?.type === 'member' ? memberMetrics(f, parameters) : null;
+    const modifiedEnds =
+      sourceMember &&
+      features.slice(1).some((f) => !['hole', 'pocket', 'fillet', 'chamfer', 'transform'].includes(f.type));
+    // A later extrusion, Boolean or pattern can change length, section or
+    // number of bodies. Never schedule the original member as the final cut.
+    const member = modifiedEnds ? null : sourceMember;
+    // A sheet-metal part is cut flat (docs/sketch-studio-fab-shop.md §9 SM-1 item 7).
+    const sheet = f?.type === 'sheetmetal' ? sheetRow(model, f, parameters) : null;
+    return {
+      partId: part.id,
+      name: merged.has(part.id) ? blankBaseName(part.name) : part.name,
+      material: part.material || 'Unspecified',
+      quantity: quantities.get(part.id),
+      dimensions: geometry.bounds[1].map((value, i) => value - geometry.bounds[0][i]),
+      volume: geometry.volume,
+      grain: part.grain,
+      member,
+      sourceMember: modifiedEnds ? sourceMember : null,
+      modifiedEnds,
+      note: [
+        // A bought-in item (shop floor §5.4) is bought, not cut: no profile, never nested.
+        part.purchased ? `Bought in${part.purchased.reference ? `: ${part.purchased.reference}` : ''}` : '',
+        f?.type === 'hardware' ? hardwareNote(f) : '',
+        ...features
+          .filter((f) => f.holeSpec)
+          .map(
+            (f) =>
+              `${rowPrefix(f, parameters)}${threadNote(f)}; drill Ø${numeric(f.diameter, parameters)} mm${f.holeSpec.mode === 'tap' ? '; thread depth unspecified' : ''}`,
+          ),
+        modifiedEnds
+          ? 'Modified member: final stock length and cuts require the part STEP and detail drawing. Excluded from automatic linear stock allocation.'
+          : '',
+      ]
+        .filter(Boolean)
+        .join('; '),
+      section: sourceMember ? JSON.stringify(sourceMember.section) : '',
+      blankLength: member ? member.longPoint + numeric(model.fabrication.allowance, parameters) : null,
+      ...(sheet ? { sheet } : {}),
+    };
+  });
 }
 
 // The flat blank a sheet-metal part is cut from: size, thickness, stock,

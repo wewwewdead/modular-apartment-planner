@@ -77,6 +77,53 @@ function readGate() {
 
 export const PREVIEW_PERF_ENABLED = readGate();
 
+/*
+ * What each scene rebuild cost, kept beside the frame ring because a plan drag
+ * is where it bites: how many scene descriptors were made since the last build
+ * (the panel memo runs on every project commit; the build is throttled), how
+ * long they took, how many descriptor objects in them were made afresh rather
+ * than handed back from the last descriptor, and what the cache build plus
+ * `setWorld` took. Module-level rather than per viewport: the panel records it
+ * and the viewport's recorder publishes it, and there is one measured pane.
+ */
+const REBUILD_HISTORY = 120;
+const rebuildRing = [];
+const pendingDescriptors = { count: 0, totalMs: 0, maxMs: 0, objects: 0, regenerated: 0 };
+// floorId → the `objects` array the last descriptor carried for it.
+const lastFloorObjects = new Map();
+
+/**
+ * Note one scene descriptor (a no-op unless the gate is on): its time, and how
+ * many of its objects arrived in a different array from the last descriptor's
+ * for the same floor — which is to say, were generated again.
+ */
+export function noteSceneDescriptor(descriptor, ms) {
+  if (!PREVIEW_PERF_ENABLED) return;
+  pendingDescriptors.count += 1;
+  pendingDescriptors.totalMs += ms;
+  pendingDescriptors.maxMs = Math.max(pendingDescriptors.maxMs, ms);
+  for (const floor of descriptor?.floors || []) {
+    pendingDescriptors.objects += floor.objects.length;
+    if (lastFloorObjects.get(floor.floorId) !== floor.objects) pendingDescriptors.regenerated += floor.objects.length;
+    lastFloorObjects.set(floor.floorId, floor.objects);
+  }
+}
+
+/** Record one scene rebuild, with the descriptors noted since the last (a no-op unless the gate is on). */
+export function recordSceneRebuild(entry) {
+  if (!PREVIEW_PERF_ENABLED) return;
+  rebuildRing.push({
+    ...entry,
+    descriptors: pendingDescriptors.count,
+    descriptorMs: round(pendingDescriptors.totalMs),
+    descriptorMaxMs: round(pendingDescriptors.maxMs),
+    descriptorObjects: pendingDescriptors.objects,
+    regeneratedObjects: pendingDescriptors.regenerated,
+  });
+  if (rebuildRing.length > REBUILD_HISTORY) rebuildRing.shift();
+  Object.assign(pendingDescriptors, { count: 0, totalMs: 0, maxMs: 0, objects: 0, regenerated: 0 });
+}
+
 /**
  * The per-viewport recorder.
  *
@@ -126,12 +173,22 @@ export function createPreviewPerfRecorder({
   const summarise = () => {
     const interactive = [];
     const refine = [];
+    // Gaps between two moving frames in a row: the frame rate a person
+    // dragging the camera actually saw, and what the render-scale governor
+    // reads (it is stricter — it also leaves out scene rebuilds and the first
+    // frame of each gesture — so these are the raw figures it starts from).
+    const movingGaps = [];
+    let previousAction = '';
     let maxGap = 0;
     let maxWalkStep = 0;
     let walkTotal = 0;
     let walkFrames = 0;
 
     each((slot) => {
+      if (actions[slot] === 'interactive' && previousAction === 'interactive' && gaps[slot] > 0) {
+        movingGaps.push(gaps[slot]);
+      }
+      previousAction = actions[slot];
       if (gaps[slot] > maxGap) maxGap = gaps[slot];
       if (walkSteps[slot] > 0) {
         walkFrames += 1;
@@ -145,6 +202,14 @@ export function createPreviewPerfRecorder({
     return {
       frames: filled,
       maxFrameGapMs: round(maxGap),
+      interactiveGap: {
+        count: movingGaps.length,
+        p50Ms: round(percentile(movingGaps, 0.5)),
+        p95Ms: round(percentile(movingGaps, 0.95)),
+        over20MsFraction: round(
+          movingGaps.length ? movingGaps.filter((gap) => gap > 20).length / movingGaps.length : 0,
+        ),
+      },
       interactive: {
         count: interactive.length,
         medianMs: round(percentile(interactive, 0.5)),
@@ -199,6 +264,8 @@ export function createPreviewPerfRecorder({
           points: info.points,
           frame: info.frame,
         },
+        // Carries the governed scale of a moving frame (`interactiveScale`) and
+        // the governor's own state alongside the refine figures.
         progressive: progressive.getStats(),
         viewPreset: getViewPreset ? getViewPreset() : null,
         ...summarise(),
@@ -298,12 +365,18 @@ export function createPreviewPerfRecorder({
       return out;
     },
 
+    /** The scene rebuilds since the last `reset`, oldest first (see `recordSceneRebuild`). */
+    rebuilds() {
+      return rebuildRing.map((entry) => ({ ...entry }));
+    },
+
     /** Start a fresh measurement without reloading the page. */
     reset() {
       write = 0;
       filled = 0;
       previousTimestamp = 0;
       walkStepMs = 0;
+      rebuildRing.length = 0;
     },
   };
 

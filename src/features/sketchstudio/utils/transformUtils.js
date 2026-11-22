@@ -479,10 +479,19 @@ export function computeSelectionBounds(entities, allEntities) {
     return null;
   }
 
-  return {
-    minX: Math.min(...boxes.map((box) => box.minX)),
-    minY: Math.min(...boxes.map((box) => box.minY)),
-    maxX: Math.max(...boxes.map((box) => box.maxX)),
-    maxY: Math.max(...boxes.map((box) => box.maxY)),
-  };
+  // A fold rather than `Math.min(...array)`: the same answer (NaN and -0
+  // included), without spreading thousands of arguments for a large selection.
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const box of boxes) {
+    minX = Math.min(minX, box.minX);
+    minY = Math.min(minY, box.minY);
+    maxX = Math.max(maxX, box.maxX);
+    maxY = Math.max(maxY, box.maxY);
+  }
+
+  return { minX, minY, maxX, maxY };
 }

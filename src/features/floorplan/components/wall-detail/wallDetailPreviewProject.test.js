@@ -18,7 +18,7 @@ describe('createWallDetailPreviewProject', () => {
     ];
     floor.windows = [{ id: 'target-window', wallId: targetWall.id }];
     floor.slabs = [createSlab(floor.id, [])];
-    project.roofSystem = { id: 'roof' };
+    project.roofSystems = [{ id: 'roof' }];
     project.trussSystems = [{ id: 'truss', floorId: floor.id }];
     project.ceilings = [{ id: 'ceiling', floorId: floor.id }];
 
@@ -30,7 +30,7 @@ describe('createWallDetailPreviewProject', () => {
     expect(preview.floors[0].doors.map((entry) => entry.id)).toEqual(['target-door']);
     expect(preview.floors[0].windows.map((entry) => entry.id)).toEqual(['target-window']);
     expect(preview.floors[0].slabs).toEqual([]);
-    expect(preview.roofSystem).toBeNull();
+    expect(preview.roofSystems).toEqual([]);
     expect(preview.trussSystems).toEqual([]);
     expect(preview.ceilings).toEqual([]);
   });

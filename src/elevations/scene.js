@@ -7,6 +7,8 @@ import { computeLandingElevation, landingOutline } from '@/geometry/landingGeome
 import { buildRailingElevationElements } from '@/geometry/railingElevationGeometry';
 import { buildRoofElevationElements } from '@/geometry/roofElevationGeometry';
 import { resolveRoofEdgeKitContext } from '@/roof/roofEdgeKit';
+import { scopeRoofElementIds } from '@/roof/roofElementScope';
+import { getProjectRoofs } from '@/domain/projectRoofs';
 import { buildTrussElevationElements } from '@/geometry/trussElevationGeometry';
 import { getStairRenderData } from '@/geometry/stairGeometry';
 import { doorOutlineOnWall, windowOutlineOnWall } from '@/geometry/wallGeometry';
@@ -268,7 +270,8 @@ function buildFloorElevationElements(floor, view) {
   };
 }
 
-function buildElevationSceneFromFloors(floors, viewMode, roofSystem = null, project = null) {
+// `roofSystems` is every roof in the view, drawn together.
+function buildElevationSceneFromFloors(floors, viewMode, roofSystems = [], project = null) {
   const view = getElevationView(viewMode);
   const stackBounds = getFloorStackBounds(floors);
   const floorElevationContent = floors.map((floor) => buildFloorElevationElements(floor, view));
@@ -277,14 +280,22 @@ function buildElevationSceneFromFloors(floors, viewMode, roofSystem = null, proj
     .sort((a, b) => b.depth - a.depth);
   const floorLineElements = floorElevationContent.flatMap((content) => content.lineElements || []);
   const trussElevationContent = project
-    ? floors.map((floor) => buildTrussElevationElements(getProjectTrussSystems(project, floor.id), view, roofSystem))
+    ? floors.map((floor) => buildTrussElevationElements(getProjectTrussSystems(project, floor.id), view, roofSystems))
     : [];
   const trussLineElements = trussElevationContent.flatMap((content) => content.lineElements || []);
   // Gable-end infill (RT-2): filled polygons on the end trusses' planes.
   const trussPolygonElements = trussElevationContent.flatMap((content) => content.polygonElements || []);
-  const roofElements = roofSystem
-    ? buildRoofElevationElements(roofSystem, view, project ? resolveRoofEdgeKitContext(project, roofSystem) : null)
-    : { elements: [], polygonElements: [], lineElements: [] };
+  const roofElements = { elements: [], polygonElements: [], lineElements: [] };
+  for (const roofSystem of roofSystems) {
+    const content = buildRoofElevationElements(
+      roofSystem,
+      view,
+      project ? resolveRoofEdgeKitContext(project, roofSystem) : null,
+    );
+    for (const key of Object.keys(roofElements)) {
+      roofElements[key].push(...scopeRoofElementIds(content[key] || [], roofSystem, roofSystems.length));
+    }
+  }
   const elements = [...floorElements, ...(roofElements.elements || [])].sort((a, b) => b.depth - a.depth);
   const polygonElements = [...trussPolygonElements, ...(roofElements.polygonElements || [])].sort(
     (a, b) => b.depth - a.depth,
@@ -312,7 +323,7 @@ export function buildElevationScene(floor, viewMode) {
 export function buildProjectElevationScene(project, sourceFloorId, viewMode) {
   const sourceFloor = resolveProjectFloor(project, sourceFloorId);
   if (!sourceFloor) return null;
-  return buildElevationSceneFromFloors(getOrderedFloors(project), viewMode, project?.roofSystem || null, project);
+  return buildElevationSceneFromFloors(getOrderedFloors(project), viewMode, getProjectRoofs(project), project);
 }
 
 export function buildRoofOnlyElevationScene(roofSystem, viewMode) {
@@ -328,6 +339,38 @@ export function buildRoofOnlyElevationScene(roofSystem, viewMode) {
   return {
     viewKey: view.key,
     title: `${titleBase} ${view.label}`,
+    elements,
+    polygonElements,
+    lineElements,
+    bounds: computeSceneBounds(elements, polygonElements, lineElements, null),
+    groundLevel: null,
+  };
+}
+
+/**
+ * Every roof in one roof-only elevation (a sheet's roof elevation viewport).
+ * One roof is exactly `buildRoofOnlyElevationScene`; several are drawn together
+ * under one title, their element ids scoped by roof.
+ */
+export function buildRoofsOnlyElevationScene(roofSystems = [], viewMode) {
+  if (!roofSystems.length) return null;
+  if (roofSystems.length === 1) return buildRoofOnlyElevationScene(roofSystems[0], viewMode);
+
+  const view = getElevationView(viewMode);
+  const roofElements = { elements: [], polygonElements: [], lineElements: [] };
+  for (const roofSystem of roofSystems) {
+    const content = buildRoofElevationElements(roofSystem, view);
+    for (const key of Object.keys(roofElements)) {
+      roofElements[key].push(...scopeRoofElementIds(content[key] || [], roofSystem, roofSystems.length));
+    }
+  }
+  const elements = roofElements.elements.sort((a, b) => b.depth - a.depth);
+  const polygonElements = roofElements.polygonElements.sort((a, b) => b.depth - a.depth);
+  const lineElements = roofElements.lineElements.sort((a, b) => b.depth - a.depth);
+
+  return {
+    viewKey: view.key,
+    title: `Roof ${view.label}`,
     elements,
     polygonElements,
     lineElements,

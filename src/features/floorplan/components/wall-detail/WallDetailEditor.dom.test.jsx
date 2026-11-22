@@ -681,6 +681,166 @@ describe('WallDetailEditor clicking a piece on the elevation', () => {
     dragShape(measurement, { to: { x: 400, y: 240 } });
     expect(committedDimensions()[0].start.v).toBeGreaterThan(1000);
   });
+
+  it('leaves a measurement’s end where it was when its grip is only clicked', () => {
+    giveWallAMeasurement();
+    const { container } = render(<WallDetailEditor />);
+    const measurement = shapeWithTitle(container, 'User dimension · ');
+    fireEvent.pointerDown(measurement, at);
+    fireEvent.pointerUp(measurement, at);
+    const figure = container.querySelector('svg[data-tool] g[data-source="custom"]');
+    const [startGrip] = figure.querySelectorAll(':scope > g');
+    expect(startGrip).toBeTruthy();
+
+    // A press and release on the grip with the pointer drifting a pixel: a
+    // click, which must not re-acquire (snap, round, level) the stored end.
+    fireEvent.pointerDown(startGrip, at);
+    fireEvent.pointerUp(startGrip, { ...at, clientX: 401 });
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+
+    // A real drag of the grip still moves that end.
+    fireEvent.pointerDown(startGrip, at);
+    fireEvent.pointerMove(startGrip, { ...at, clientX: 340 });
+    fireEvent.pointerUp(startGrip, { ...at, clientX: 340 });
+    expect(committedDimensions()).toHaveLength(1);
+  });
+});
+
+/**
+ * Space held pans the drawing, even with a tool button focused — which is
+ * where focus is after clicking one. Pick a tool, hold Space, drag: that must
+ * pan, not press the button again. Enter still presses a focused button.
+ */
+describe('WallDetailEditor Space with a tool button focused', () => {
+  it('pans, and the tool stays as it was', () => {
+    const { container } = render(<WallDetailEditor />);
+    const frame = container.querySelector('[data-space-pan]');
+    const canvas = container.querySelector('svg[data-tool]');
+    const button = container.querySelector('button[title^="Draw stud"]');
+    fireEvent.click(button);
+    button.focus();
+    expect(canvas.getAttribute('data-tool')).toBe('draw_stud');
+
+    // fireEvent answers false when the default was prevented: the key is the
+    // pan's, so the browser does not press the button with it.
+    expect(fireEvent.keyDown(button, { key: ' ', code: 'Space' })).toBe(false);
+    expect(frame.getAttribute('data-space-pan')).toBe('true');
+    expect(fireEvent.keyUp(button, { key: ' ', code: 'Space' })).toBe(false);
+    expect(frame.getAttribute('data-space-pan')).toBe('false');
+    expect(canvas.getAttribute('data-tool')).toBe('draw_stud');
+  });
+});
+
+describe('WallDetailEditor Delete in the middle of a drag', () => {
+  it('drops the drag before deleting, so the release brings nothing back', () => {
+    const { container } = render(<WallDetailEditor />);
+    const stud = shapeWithTitle(container, 'Stud · 50 × 3000 mm · Light-gauge steel · 75 mm deep · centre U 400');
+    const base = { button: 0, pointerId: 1 };
+    fireEvent.pointerDown(stud, { ...base, clientX: 400, clientY: 300 });
+    fireEvent.pointerMove(stud, { ...base, clientX: 280, clientY: 300 });
+
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(mocks.dispatch).toHaveBeenCalledTimes(1);
+
+    fireEvent.pointerUp(stud, { ...base, clientX: 280, clientY: 300 });
+    expect(mocks.dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops a Ctrl-drag copy too, so the deleted piece is not put back as a new one', () => {
+    const { container } = render(<WallDetailEditor />);
+    const stud = shapeWithTitle(container, 'Stud · 50 × 3000 mm · Light-gauge steel · 75 mm deep · centre U 400');
+    const base = { button: 0, pointerId: 1, ctrlKey: true };
+    fireEvent.pointerDown(stud, { ...base, clientX: 400, clientY: 300 });
+    fireEvent.pointerMove(stud, { ...base, clientX: 280, clientY: 300 });
+
+    fireEvent.keyDown(window, { key: 'Delete' });
+    fireEvent.pointerUp(stud, { ...base, clientX: 280, clientY: 300 });
+    expect(mocks.dispatch).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * A tool that stops being offered — the Accent tool on a face that takes no
+ * accents — hands the canvas back to Select rather than staying armed and
+ * doing nothing.
+ */
+describe('WallDetailEditor tool that becomes unavailable', () => {
+  const canvas = (container) => container.querySelector('svg[data-tool]');
+  const outsideButton = (container) =>
+    [...container.querySelectorAll('button')].find((node) => node.textContent === 'Outside face');
+
+  it('drops the Accent tool when the face turned to takes no accents', () => {
+    const wall = mocks.project.floors[0].walls[0];
+    wall.assembly = { ...wall.assembly, exterior: { material: 'none', thickness: 0, layerCount: 0 } };
+    const { container } = render(<WallDetailEditor />);
+    fireEvent.keyDown(window, { key: 'a' });
+    expect(canvas(container).getAttribute('data-tool')).toBe('draw_accent');
+
+    fireEvent.click(outsideButton(container));
+
+    expect(container.querySelector('button[title^="Draw accent panel"]').disabled).toBe(true);
+    expect(canvas(container).getAttribute('data-tool')).toBe('select');
+  });
+});
+
+/**
+ * The System picker offers CHB masonry, which has no frame at all. The editor
+ * has to go on drawing the wall, with the framing tools off.
+ */
+describe('WallDetailEditor on a wall turned to masonry', () => {
+  const canvas = (container) => container.querySelector('svg[data-tool]');
+
+  /** Choose CHB masonry, and hand the editor back the wall as the store would. */
+  function chooseMasonry(container, rerender) {
+    const system = [...container.querySelectorAll('label')]
+      .find((node) => node.firstElementChild?.textContent === 'System')
+      .querySelector('select');
+    fireEvent.change(system, { target: { value: 'chb' } });
+    const update = mocks.dispatch.mock.calls.at(-1)[0];
+    expect(update.wall.assembly.framing).toBeNull();
+    const floor = mocks.project.floors[0];
+    mocks.project = {
+      ...mocks.project,
+      floors: [{ ...floor, walls: floor.walls.map((wall) => ({ ...wall, ...update.wall })) }],
+    };
+    rerender(<WallDetailEditor />);
+  }
+
+  it('keeps drawing the wall, with the framing tools off', () => {
+    const { container, rerender } = render(<WallDetailEditor />);
+    chooseMasonry(container, rerender);
+
+    expect(canvas(container)).not.toBeNull();
+    expect(container.querySelector('button[title^="Draw stud"]').disabled).toBe(true);
+    expect(container.querySelector('button[title^="Draw noggin"]').disabled).toBe(true);
+  });
+
+  it('hands an armed Stud or Noggin tool back to Select', () => {
+    const { container, rerender } = render(<WallDetailEditor />);
+    fireEvent.keyDown(window, { key: 's' });
+    expect(canvas(container).getAttribute('data-tool')).toBe('draw_stud');
+
+    chooseMasonry(container, rerender);
+
+    expect(canvas(container).getAttribute('data-tool')).toBe('select');
+    fireEvent.keyDown(window, { key: 'n' });
+    expect(canvas(container).getAttribute('data-tool')).toBe('select');
+  });
+
+  it('still draws a board on it', () => {
+    const { container, rerender } = render(<WallDetailEditor />);
+    chooseMasonry(container, rerender);
+    const dispatched = mocks.dispatch.mock.calls.length;
+    fireEvent.keyDown(window, { key: 'p' });
+    const svg = canvas(container);
+    fireEvent.pointerDown(svg, { button: 0, pointerId: 1, clientX: 300, clientY: 300 });
+    fireEvent.pointerMove(svg, { button: 0, pointerId: 1, clientX: 450, clientY: 450 });
+    fireEvent.pointerUp(svg, { button: 0, pointerId: 1, clientX: 450, clientY: 450 });
+
+    // One commit: the board drawn, beside whatever boards the face already had.
+    expect(mocks.dispatch.mock.calls.length).toBe(dispatched + 1);
+    expect(committedPanels().length).toBeGreaterThan(0);
+  });
 });
 
 /**
@@ -1062,6 +1222,18 @@ describe('WallDetailEditor popovers and Escape', () => {
     expect(canvas(container).getAttribute('data-tool')).toBe('draw_stud');
 
     // Closed, it lets Escape through: the editor returns to Select.
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(canvas(container).getAttribute('data-tool')).toBe('select');
+  });
+
+  it('leaves the Measure tool on the first Escape, though the pointer is hovering the drawing', () => {
+    const { container } = render(<WallDetailEditor />);
+    fireEvent.keyDown(window, { key: 'm' });
+    expect(canvas(container).getAttribute('data-tool')).toBe('draw_dimension');
+    // Hovering draws the pick-up marker; it is not a measurement in progress.
+    fireEvent.pointerMove(canvas(container), { pointerId: 1, clientX: 400, clientY: 300 });
+    expect(canvas(container).querySelector('g[data-snapped]')).not.toBeNull();
+
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(canvas(container).getAttribute('data-tool')).toBe('select');
   });

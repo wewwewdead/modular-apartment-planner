@@ -91,13 +91,22 @@ function yieldToBrowser() {
 /**
  * Runs the scene's visibility job to completion in slices, after the current
  * commit has painted. Resolves true when the result is cached on the scene,
- * false if `isCancelled` said stop first (the job keeps its progress).
+ * false if `isCancelled` said stop first (the job keeps its progress). Rejects
+ * if a slice throws, and forgets that job: a half-stepped job is in no state to
+ * be picked up again, so the next reader starts the scene afresh.
  */
 export async function resolveVisibilityInSlices(kind, scene, { isCancelled = () => false } = {}) {
   await afterPaint();
   const job = jobFor(kind, scene);
   while (!isCancelled()) {
-    if (job.step(VISIBILITY_SLICE_MS).done) return true;
+    let done;
+    try {
+      done = job.step(VISIBILITY_SLICE_MS).done;
+    } catch (error) {
+      if (jobsByScene.get(scene) === job) jobsByScene.delete(scene);
+      throw error;
+    }
+    if (done) return true;
     await yieldToBrowser();
   }
   return false;
@@ -117,6 +126,9 @@ export async function resolveVisibilityInSlices(kind, scene, { isCancelled = () 
  *   edit) — the old drawing stays up under a bar until the new one lands;
  * - `status: 'loading'` with no drawables otherwise: a first entry, or a new
  *   view (another cut, another side), which shows its placeholder.
+ * - `status: 'failed'` when the deferred pass threw for this scene: nothing
+ *   new is coming, so neither the placeholder nor the "Recomputing" pill stays
+ *   up. The last drawing of this view, if there was one, is still handed back.
  */
 export function useVisibleDrawables(kind, scene, { deferred = false, viewKey = null } = {}) {
   const { peek, run } = KINDS[kind];
@@ -125,6 +137,8 @@ export function useVisibleDrawables(kind, scene, { deferred = false, viewKey = n
   const [lastDrawn, setLastDrawn] = useState(null);
   // Bumped when a deferred pass finishes, to read the now-cached result.
   const [, setResolvedScene] = useState(null);
+  // The scene whose deferred pass threw.
+  const [failedScene, setFailedScene] = useState(null);
 
   // Remember what was last on screen, so an edit can keep it there while the
   // new pass runs. Set during render — the derived-state pattern — so the
@@ -137,9 +151,15 @@ export function useVisibleDrawables(kind, scene, { deferred = false, viewKey = n
   useEffect(() => {
     if (!pending) return undefined;
     let cancelled = false;
-    resolveVisibilityInSlices(kind, scene, { isCancelled: () => cancelled }).then((done) => {
-      if (done && !cancelled) setResolvedScene(scene);
-    });
+    resolveVisibilityInSlices(kind, scene, { isCancelled: () => cancelled }).then(
+      (done) => {
+        if (done && !cancelled) setResolvedScene(scene);
+      },
+      (error) => {
+        console.error('The hidden-line pass failed:', error);
+        if (!cancelled) setFailedScene(scene);
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -147,6 +167,10 @@ export function useVisibleDrawables(kind, scene, { deferred = false, viewKey = n
 
   if (!scene) return { status: 'ready', scene: null, drawables: null };
   if (drawables) return { status: 'ready', scene, drawables };
+  if (failedScene === scene) {
+    const kept = lastDrawn && lastDrawn.viewKey === viewKey ? lastDrawn : null;
+    return { status: 'failed', scene: kept?.scene ?? scene, drawables: kept?.drawables ?? null };
+  }
   if (lastDrawn && lastDrawn.viewKey === viewKey) {
     return { status: 'stale', scene: lastDrawn.scene, drawables: lastDrawn.drawables };
   }
